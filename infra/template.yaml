@@ -1,0 +1,120 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: OvalEdge MCP Server — Remote MCP
+
+Parameters:
+  OvalEdgeBaseUrl:
+    Type: String
+  OvalEdgeTokenExchangePath:
+    Type: String
+    Default: /api/user/token/generate
+  OvalEdgeMaxRetries:
+    Type: Number
+    Default: 3
+  OktaDomain:
+    Type: String
+  OktaAuthServerId:
+    Type: String
+  OktaClientId:
+    Type: String
+  OktaAudience:
+    Type: String
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Architectures: [arm64]
+
+Resources:
+  OEMCPFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      DockerTag: oe-mcp
+      DockerContext: ..
+      Dockerfile: Dockerfile
+    Properties:
+      FunctionName: !Sub oe-mcp-${Environment}
+      PackageType: Image
+      ImageConfig:
+        Command: ["entrypoints.lambda_handler.handler"]
+      Environment:
+        Variables:
+          AUTH_MODE: remote
+          OVALEDGE_BASE_URL: !Ref OvalEdgeBaseUrl
+          OVALEDGE_TOKEN_EXCHANGE_PATH: !Ref OvalEdgeTokenExchangePath
+          OVALEDGE_MAX_RETRIES: !Ref OvalEdgeMaxRetries
+          OKTA_DOMAIN: !Ref OktaDomain
+          OKTA_AUTH_SERVER_ID: !Ref OktaAuthServerId
+          OKTA_CLIENT_ID: !Ref OktaClientId
+          OKTA_AUDIENCE: !Ref OktaAudience
+          MCP_PUBLIC_BASE_URL: !Sub
+            - "https://${ApiId}.execute-api.${AWS::Region}.amazonaws.com"
+            - ApiId: !Ref MCPApi
+      Events:
+        MCPPost:
+          Type: HttpApi
+          Properties:
+            Path: /mcp
+            Method: POST
+            ApiId: !Ref MCPApi
+        OAuthDiscovery:
+          Type: HttpApi
+          Properties:
+            Path: /.well-known/oauth-authorization-server
+            Method: GET
+            ApiId: !Ref MCPApi
+        ClientRegistration:
+          Type: HttpApi
+          Properties:
+            Path: /register
+            Method: POST
+            ApiId: !Ref MCPApi
+        HealthCheck:
+          Type: HttpApi
+          Properties:
+            Path: /health
+            Method: GET
+            ApiId: !Ref MCPApi
+
+  MCPApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Name: !Sub oe-mcp-api-${Environment}
+      StageName: $default
+      CorsConfiguration:
+        AllowOrigins:
+          - "https://claude.ai"
+          - "https://cursor.sh"
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+      RouteSettings:
+        "POST /register":
+          ThrottlingBurstLimit: 10
+          ThrottlingRateLimit: 5
+
+Outputs:
+  MCPEndpointUrl:
+    Description: Remote MCP endpoint
+    Value: !Sub
+      - "https://${ApiId}.execute-api.${AWS::Region}.amazonaws.com/mcp"
+      - ApiId: !Ref MCPApi
+  OAuthDiscoveryUrl:
+    Description: OAuth discovery endpoint
+    Value: !Sub
+      - "https://${ApiId}.execute-api.${AWS::Region}.amazonaws.com/.well-known/oauth-authorization-server"
+      - ApiId: !Ref MCPApi
+  HealthUrl:
+    Description: Health check endpoint
+    Value: !Sub
+      - "https://${ApiId}.execute-api.${AWS::Region}.amazonaws.com/health"
+      - ApiId: !Ref MCPApi

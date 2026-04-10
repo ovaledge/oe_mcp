@@ -205,3 +205,10 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# OvalEdge MCP / project-specific (spec §23 merged)
+.aws-sam/
+
+# poetry.lock is committed — do not ignore (template line kept explicit)
+# OS extras
+Thumbs.db
