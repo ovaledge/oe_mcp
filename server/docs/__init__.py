@@ -2,6 +2,8 @@ import pathlib
 
 from fastmcp import FastMCP
 
+from server.constants import DOCS_RESOURCE_URI_PREFIX
+
 DOCS_DIR = pathlib.Path(__file__).parent
 
 
@@ -22,6 +24,6 @@ def register(mcp: FastMCP) -> None:
     """Auto-register all .md files in this directory as MCP doc resources."""
     for md_file in sorted(DOCS_DIR.glob("*.md")):
         doc_name = md_file.stem
-        uri = f"docs://ovaledge/{doc_name}"
+        uri = f"{DOCS_RESOURCE_URI_PREFIX}/{doc_name}"
         content = md_file.read_text(encoding="utf-8")
         _make_doc_resource(mcp, uri, content, doc_name)

@@ -123,13 +123,10 @@ def mock_oe_post() -> object:
 
 _OE_CLIENT_PATCH_TARGETS = (
     "server.tools.catalog.OvalEdgeClient",
-    "server.tools.glossary.OvalEdgeClient",
-    "server.tools.lineage.OvalEdgeClient",
-    "server.tools.relationships.OvalEdgeClient",
     "server.tools.docs.OvalEdgeClient",
+    "server.tools.governance.OvalEdgeClient",
     "server.resources.catalog.OvalEdgeClient",
-    "server.resources.glossary.OvalEdgeClient",
-    "server.resources.lineage.OvalEdgeClient",
+    "server.resources.governance.OvalEdgeClient",
 )
 
 

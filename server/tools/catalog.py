@@ -1,159 +1,203 @@
+"""
+Catalog and related data tools (search, details, column profile, relationships, lineage).
+"""
+
 from typing import Any
 
 from fastmcp import FastMCP
 
 from server.client import OvalEdgeClient, OvalEdgeError
+from server.constants import (
+    MCP_PATH_COLUMN_PROFILE,
+    MCP_PATH_ENTITY_RELATIONSHIPS,
+    MCP_PATH_LINEAGE,
+    MCP_PATH_OBJECT_DETAILS,
+    MCP_PATH_SEARCH_CATALOG,
+)
+
+# Allowed objectType values for search / details per platform API.
+_SEARCH_OBJECT_TYPES = frozenset({"oetable", "oefile", "glossary", "oetag"})
+_TABLE_FILE_TYPES = frozenset({"oetable", "oefile"})
+
+
+def _q(**kwargs: object) -> dict[str, object]:
+    """Omit None values from query params."""
+    return {k: v for k, v in kwargs.items() if v is not None}
 
 
 def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def search_catalog_assets(
-        keywords: list[str],
-        object_types: list[str] | None = None,
-        owner_name: str | None = None,
-        steward_name: str | None = None,
-        dq_score_min: int | None = None,
-        certification_status: str | None = None,
+        search_term: str | None = None,
+        page: int = 1,
+        limit: int = 20,
         connection_name: str | None = None,
-        has_lineage: bool | None = None,
-        is_cde: bool | None = None,
-        sort_by: str = "RELEVANCE",
-        limit: int = 10,
-        offset: int = 0,
+        schema_name: str | None = None,
+        owner: str | None = None,
+        steward: str | None = None,
+        custodian: str | None = None,
+        object_type: str | None = None,
     ) -> dict[str, Any]:
+        f"""
+        Hybrid catalog search (Elasticsearch). Free text, pagination, governance filters,
+        connection/schema scope, and object type filter.
+
+        object_type: oetable | oefile | glossary | oetag (optional).
+
+        GET {MCP_PATH_SEARCH_CATALOG}
         """
-        Primary entry point for metadata discovery.
-        Searches the OvalEdge Data Catalog using hybrid search
-        (vector + BM25 keyword) with optional governance filters.
-
-        Every result includes full governance context:
-        owner, steward, certification_status, dq_score,
-        curation_score, classifications, user_access_context.
-
-        Args:
-            keywords: Search terms — natural language or technical names
-            object_types: Filter by TABLE, FILE, REPORT, COLUMN, API, CODE, GLOSSARY_TERM
-            owner_name: Filter by asset owner name
-            steward_name: Filter by data steward name
-            dq_score_min: Minimum DQ score filter (0-100)
-            certification_status: certified / cautioned / violated / inactive
-            connection_name: Filter by source connector name
-            has_lineage: Filter to assets with lineage mapped
-            is_cde: Filter to Critical Data Elements only
-            sort_by: RELEVANCE (default), POPULARITY, DQ_SCORE, CURATION_SCORE, NAME
-            limit: Max results per page (default 10, max 50)
-            offset: Starting position for pagination (default 0)
-
-        TODO: confirm endpoint path from OvalEdge API docs
-        """
+        if object_type is not None and object_type not in _SEARCH_OBJECT_TYPES:
+            return {
+                "error": (
+                    f"object_type must be one of {sorted(_SEARCH_OBJECT_TYPES)}, "
+                    f"got {object_type!r}"
+                ),
+                "status_code": 400,
+            }
         try:
             async with OvalEdgeClient() as client:
-                return await client.post(
-                    "/api/mcp/catalog/search",  # TODO: confirm path
-                    body={
-                        "keywords": keywords,
-                        "objectTypes": object_types,
-                        "filters": {
-                            "ownerName": owner_name,
-                            "stewardName": steward_name,
-                            "dqScoreMin": dq_score_min,
-                            "certificationStatus": certification_status,
-                            "connectionName": connection_name,
-                            "hasLineage": has_lineage,
-                            "isCde": is_cde,
-                        },
-                        "sortBy": sort_by,
-                        "limit": min(limit, 50),
-                        "offset": max(offset, 0),
-                    },
+                return await client.get(
+                    MCP_PATH_SEARCH_CATALOG,
+                    params=_q(
+                        searchTerm=search_term,
+                        page=max(page, 1),
+                        limit=min(max(limit, 1), 100),
+                        connectionName=connection_name,
+                        schemaName=schema_name,
+                        owner=owner,
+                        steward=steward,
+                        custodian=custodian,
+                        objectType=object_type,
+                    ),
                 )
         except OvalEdgeError as e:
             return {"error": str(e), "status_code": e.status_code}
 
     @mcp.tool()
-    async def get_asset_details(
-        object_id: str,
-        object_type: str,
-        include_columns: bool = False,
-        include_sample_values: bool = False,
+    async def catalog_asset_details(
+        object_id: int | None = None,
+        object_type: str | None = None,
+        fully_qualified_name: str | None = None,
     ) -> dict[str, Any]:
+        f"""
+        Single catalog document (JSON from Elasticsearch, embeddings stripped).
+
+        Exactly one lookup mode:
+        - fully_qualified_name alone, OR
+        - both object_id and object_type together.
+        Do not mix FQN with id/type.
+
+        object_type: oetable | oefile | glossary | oetag.
+
+        GET {MCP_PATH_OBJECT_DETAILS}
         """
-        Returns complete composite metadata for a single data asset.
-        OvalEdge assembles this server-side from multiple internal APIs
-        (Object, Column, Business Glossary, DQ Rule, Governance Roles).
+        has_fqn = fully_qualified_name is not None and str(fully_qualified_name).strip() != ""
+        has_pair = object_id is not None and object_type is not None
+        if has_fqn and (object_id is not None or object_type is not None):
+            return {
+                "error": (
+                    "Use either fully_qualified_name alone, or object_id + object_type "
+                    "— not both."
+                ),
+                "status_code": 400,
+            }
+        if not has_fqn and not has_pair:
+            return {
+                "error": "Provide fully_qualified_name, or both object_id and object_type.",
+                "status_code": 400,
+            }
+        if has_pair:
+            if object_id is None or object_type is None:
+                return {
+                    "error": "object_id and object_type must be provided together.",
+                    "status_code": 400,
+                }
+            if object_type not in _SEARCH_OBJECT_TYPES:
+                return {
+                    "error": (
+                        f"object_type must be one of {sorted(_SEARCH_OBJECT_TYPES)}, "
+                        f"got {object_type!r}"
+                    ),
+                    "status_code": 400,
+                }
+        try:
+            async with OvalEdgeClient() as client:
+                if has_fqn:
+                    od_params: dict[str, object] = _q(
+                        fullyQualifiedName=fully_qualified_name,
+                    )
+                else:
+                    od_params = _q(objectId=object_id, objectType=object_type)
+                return await client.get(MCP_PATH_OBJECT_DETAILS, params=od_params)
+        except OvalEdgeError as e:
+            return {"error": str(e), "status_code": e.status_code}
 
-        Resolves term-inherited properties — if a column is masked or
-        restricted because of a linked glossary term (Glossary-Catalog Sync),
-        the response flags is_masked, is_restricted, and mask_source.
+    @mcp.tool()
+    async def column_profile_statistics(object_id: int, object_type: str) -> dict[str, Any]:
+        f"""
+        Column-level profile statistics for one table or file.
 
-        Args:
-            object_id: OvalEdge internal object identifier
-            object_type: TABLE, FILE, REPORT, COLUMN, FILE_COLUMN,
-                         REPORT_COLUMN, API, API_ATTRIBUTE, CODE
-            include_columns: Include column-level metadata (tables/files/reports)
-            include_sample_values: Include top values per column.
-                                   Requires Data Preview permission.
+        object_type: oetable | oefile only.
 
-        TODO: confirm endpoint path from OvalEdge API docs
+        GET {MCP_PATH_COLUMN_PROFILE}
+        """
+        if object_type not in _TABLE_FILE_TYPES:
+            return {
+                "error": f"object_type must be oetable or oefile, got {object_type!r}",
+                "status_code": 400,
+            }
+        try:
+            async with OvalEdgeClient() as client:
+                return await client.get(
+                    MCP_PATH_COLUMN_PROFILE,
+                    params={"objectId": object_id, "objectType": object_type},
+                )
+        except OvalEdgeError as e:
+            return {"error": str(e), "status_code": e.status_code}
+
+    @mcp.tool()
+    async def table_entity_relationships(object_id: int) -> dict[str, Any]:
+        f"""
+        Table-only: column and pattern entity relationships for the given oetable.
+
+        GET {MCP_PATH_ENTITY_RELATIONSHIPS}
         """
         try:
             async with OvalEdgeClient() as client:
                 return await client.get(
-                    f"/api/mcp/assets/{object_id}/composite",  # TODO: confirm path
-                    params={
-                        "objectType": object_type,
-                        "includeColumns": include_columns,
-                        "includeSampleValues": include_sample_values,
-                    },
+                    MCP_PATH_ENTITY_RELATIONSHIPS,
+                    params={"objectId": object_id},
                 )
         except OvalEdgeError as e:
             return {"error": str(e), "status_code": e.status_code}
 
     @mcp.tool()
-    async def count_catalog_assets(
-        keywords: list[str] | None = None,
-        object_types: list[str] | None = None,
-        owner_name: str | None = None,
-        dq_score_min: int | None = None,
-        certification_status: str | None = None,
-        connection_name: str | None = None,
-        has_lineage: bool | None = None,
-        is_cde: bool | None = None,
+    async def asset_lineage(
+        object_id: int,
+        object_type: str,
+        depth: int = 2,
     ) -> dict[str, Any]:
+        f"""
+        Data lineage graph from the database.
+
+        object_type: oetable | oefile only. depth is clamped server-side.
+
+        GET {MCP_PATH_LINEAGE}
         """
-        Returns a count of catalog assets matching given filters.
-        Does NOT return full result sets — count only.
-
-        Use this for aggregation questions like:
-        'How many certified tables exist in the Finance domain?'
-        'How many assets have lineage mapped?'
-
-        Prevents unnecessary full searches and avoids the 50-result cap
-        when only a count is needed.
-
-        Returns:
-            count: total matching assets
-            object_types_breakdown: count per object type
-            certification_breakdown: count per certification status
-
-        TODO: confirm endpoint path from OvalEdge API docs
-        """
+        if object_type not in _TABLE_FILE_TYPES:
+            return {
+                "error": f"object_type must be oetable or oefile, got {object_type!r}",
+                "status_code": 400,
+            }
         try:
             async with OvalEdgeClient() as client:
-                return await client.post(
-                    "/api/mcp/catalog/count",  # TODO: confirm path
-                    body={
-                        "keywords": keywords,
-                        "objectTypes": object_types,
-                        "filters": {
-                            "ownerName": owner_name,
-                            "dqScoreMin": dq_score_min,
-                            "certificationStatus": certification_status,
-                            "connectionName": connection_name,
-                            "hasLineage": has_lineage,
-                            "isCde": is_cde,
-                        },
+                return await client.get(
+                    MCP_PATH_LINEAGE,
+                    params={
+                        "objectId": object_id,
+                        "objectType": object_type,
+                        "depth": depth,
                     },
                 )
         except OvalEdgeError as e:

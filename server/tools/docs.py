@@ -3,6 +3,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from server.client import OvalEdgeClient, OvalEdgeError
+from server.constants import MCP_PATH_SEARCH_PLATFORM_DOCS
 
 
 def register(mcp: FastMCP) -> None:
@@ -10,36 +11,24 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool()
     async def search_platform_docs(
         query: str,
-        top_k: int = 5,
-        section_filter: str | None = None,
+        limit: int | None = None,
+        num_candidates: int | None = None,
     ) -> dict[str, Any]:
+        f"""
+        Semantic search over EDGI / platform documentation chunks (Elasticsearch + vector KNN).
+
+        limit: optional, default 10, max 50 (maps to k).
+        num_candidates: optional, must be >= limit when both set (server caps at 512).
+
+        GET {MCP_PATH_SEARCH_PLATFORM_DOCS}
         """
-        Retrieves relevant sections from OvalEdge product documentation
-        (docs.ovaledge.com) using semantic search (RAG).
-
-        Answers how-to questions about OvalEdge features, platform
-        terminology, and governance processes. Returns top-k chunks
-        with source citations so answers can be attributed correctly.
-
-        No user-level RBAC on this tool — documentation is public.
-
-        Args:
-            query: User question in natural language
-            top_k: Number of doc chunks to return (default 5, max 10)
-            section_filter: Narrow to: data-catalog, business-glossary,
-                           data-quality, lineage, governance, askedgi
-
-        TODO: confirm endpoint path from OvalEdge API docs
-        """
+        params: dict[str, Any] = {"query": query}
+        if limit is not None:
+            params["limit"] = min(max(limit, 1), 50)
+        if num_candidates is not None:
+            params["numCandidates"] = num_candidates
         try:
             async with OvalEdgeClient() as client:
-                return await client.get(
-                    "/api/mcp/docs/search",  # TODO: confirm path
-                    params={
-                        "q": query,
-                        "topK": min(top_k, 10),
-                        "section": section_filter,
-                    },
-                )
+                return await client.get(MCP_PATH_SEARCH_PLATFORM_DOCS, params=params)
         except OvalEdgeError as e:
             return {"error": str(e), "status_code": e.status_code}

@@ -6,9 +6,8 @@ from server.config import settings
 from server.docs import register as register_docs
 from server.prompts import workflows
 from server.resources import catalog as catalog_res
-from server.resources import glossary as glossary_res
-from server.resources import lineage as lineage_res
-from server.tools import catalog, docs, glossary, lineage, relationships
+from server.resources import governance as governance_res
+from server.tools import catalog, docs, governance
 
 
 def create_mcp(lifespan: Any = None) -> FastMCP:
@@ -24,25 +23,22 @@ def create_mcp(lifespan: Any = None) -> FastMCP:
         instructions=(
             "You are connected to the OvalEdge data governance platform. "
             "Phase 1 — Asset & Metadata Discovery (read-only). "
-            "Use tools to search and retrieve governed metadata. "
-            "Use resources to read specific assets, terms, and lineage by URI. "
+            "Use tools to search the catalog, fetch asset details, lineage, profiles, "
+            "and governance lookups (glossary, tags). "
+            "Use resources for deep links: catalog tables and glossary terms by id. "
             "Use prompts to run pre-packaged governance workflows. "
-            "Every response includes full governance context — ownership, "
-            "certification, DQ score, classifications. Never strip this context. "
+            "Every response includes full governance context where the API provides it. "
             "RBAC is enforced by OvalEdge — users see only what they are entitled to."
         ),
         lifespan=lifespan,
     )
 
     catalog.register(mcp)
-    glossary.register(mcp)
-    lineage.register(mcp)
-    relationships.register(mcp)
+    governance.register(mcp)
     docs.register(mcp)
 
     catalog_res.register(mcp)
-    glossary_res.register(mcp)
-    lineage_res.register(mcp)
+    governance_res.register(mcp)
 
     workflows.register(mcp)
 
