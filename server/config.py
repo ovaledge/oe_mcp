@@ -1,10 +1,17 @@
+from pathlib import Path
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Cursor / IDE MCP subprocesses often start with cwd ≠ project root; a relative
+# ".env" would then be missed and OVALEDGE_BASE_URL falls back to the mock default.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_ENV_FILE = _REPO_ROOT / ".env"
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILE if _ENV_FILE.is_file() else (),
         env_file_encoding="utf-8",
         case_sensitive=False,
     )
@@ -13,6 +20,10 @@ class Settings(BaseSettings):
     # Default supports local tooling/CI; always set OVALEDGE_BASE_URL in real deployments.
     ovaledge_base_url: str = "https://mock.ovaledge.com"
     ovaledge_timeout_seconds: int = 30
+    # Outbound OvalEdge API: Authorization: "<scheme> <jwt>" (e.g. jwt, not Okta Bearer).
+    ovaledge_http_auth_scheme: str = "jwt"
+    # Log full outbound URL (method + resolved URL with query) to stderr for tracing.
+    ovaledge_log_http_requests: bool = True
 
     # Retry config for transient OvalEdge errors
     ovaledge_max_retries: int = 3

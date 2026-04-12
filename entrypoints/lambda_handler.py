@@ -23,6 +23,7 @@ from server.auth.metadata import router as metadata_router
 from server.auth.middleware import AuthMiddleware
 from server.auth.registration import router as registration_router
 from server.config import settings
+from server.logging_config import configure_stderr_logging
 
 mcp_http = mcp.http_app(
     path="/",
@@ -33,6 +34,7 @@ mcp_http = mcp.http_app(
 
 @asynccontextmanager
 async def _fastapi_lifespan(_app: object) -> AsyncIterator[dict[str, Any]]:
+    configure_stderr_logging()
     yield {}
 
 

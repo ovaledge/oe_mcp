@@ -1,3 +1,5 @@
+import json
+import logging
 from typing import Any, cast
 
 import httpx
@@ -9,6 +11,27 @@ from tenacity import (
 )
 
 from server.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+def _log_outbound_request(request: httpx.Request) -> None:
+    if not settings.ovaledge_log_http_requests:
+        return
+    logger.info("OvalEdge outbound %s %s", request.method, request.url)
+
+
+def _ovaledge_authorization(token: str) -> str:
+    return f"{settings.ovaledge_http_auth_scheme} {token}"
+
+
+def _log_inbound_response(response: httpx.Response) -> None:
+    if not settings.ovaledge_log_http_requests:
+        return
+    for hop in response.history:
+        loc = hop.headers.get("location", "")
+        logger.info("OvalEdge redirect hop %s Location=%s", hop.status_code, loc)
+    logger.info("OvalEdge response %s %s", response.status_code, response.url)
 
 
 class OvalEdgeError(Exception):
@@ -27,6 +50,29 @@ class OvalEdgeTransientError(OvalEdgeError):
 
 def _is_transient(exc: BaseException) -> bool:
     return isinstance(exc, OvalEdgeTransientError)
+
+
+def _success_response_as_dict(response: httpx.Response) -> dict[str, Any]:
+    """
+    Parse a successful (2xx) HTTP response body as JSON for tool payloads.
+
+    OvalEdge sometimes returns empty bodies or HTML (e.g. misconfigured base URL,
+    session/login pages). Avoid bare JSONDecodeError bubbling to MCP clients.
+    """
+    if not response.content:
+        return {}
+    try:
+        data = response.json()
+    except json.JSONDecodeError as exc:
+        snippet = (response.text or "")[:400].replace("\n", " ")
+        raise OvalEdgeError(
+            502,
+            f"HTTP {response.status_code} body is not JSON ({exc!s}). "
+            f"Body starts with: {snippet!r}",
+        ) from exc
+    if isinstance(data, dict):
+        return cast(dict[str, Any], data)
+    return {"_json": data}
 
 
 class OvalEdgeClient:
@@ -54,7 +100,7 @@ class OvalEdgeClient:
             )
         self._base_url = settings.ovaledge_base_url
         self._headers = {
-            "Authorization": f"Bearer {jwt}" if jwt else "",
+            "Authorization": _ovaledge_authorization(jwt) if jwt else "",
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
@@ -84,9 +130,10 @@ class OvalEdgeClient:
         from server.auth.token_exchange import get_or_refresh_local_token
 
         token = await get_or_refresh_local_token()
-        self._headers["Authorization"] = f"Bearer {token}"
+        auth = _ovaledge_authorization(token)
+        self._headers["Authorization"] = auth
         if self._client is not None:
-            self._client.headers["Authorization"] = f"Bearer {token}"
+            self._client.headers["Authorization"] = auth
 
     @retry(
         retry=retry_if_exception(_is_transient),
@@ -101,9 +148,12 @@ class OvalEdgeClient:
     async def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         assert self._client is not None, "Use OvalEdgeClient as async context manager"
         await self._ensure_local_token()
-        response = await self._client.get(path, params=params)
+        req = self._client.build_request("GET", path, params=params)
+        _log_outbound_request(req)
+        response = await self._client.send(req)
+        _log_inbound_response(response)
         self._raise_for_status(response)
-        return cast(dict[str, Any], response.json())
+        return _success_response_as_dict(response)
 
     @retry(
         retry=retry_if_exception(_is_transient),
@@ -118,11 +168,22 @@ class OvalEdgeClient:
     async def post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
         assert self._client is not None, "Use OvalEdgeClient as async context manager"
         await self._ensure_local_token()
-        response = await self._client.post(path, json=body)
+        req = self._client.build_request("POST", path, json=body)
+        _log_outbound_request(req)
+        response = await self._client.send(req)
+        _log_inbound_response(response)
         self._raise_for_status(response)
-        return cast(dict[str, Any], response.json())
+        return _success_response_as_dict(response)
 
     def _raise_for_status(self, response: httpx.Response) -> None:
+        if 300 <= response.status_code < 400:
+            loc = response.headers.get("location", "")
+            raise OvalEdgeError(
+                response.status_code,
+                f"HTTP redirect (Location={loc!r}). Spring may require session login "
+                "for this path; ensure /api/v1/mcp/** accepts Authorization: "
+                f"{settings.ovaledge_http_auth_scheme} <jwt> like token/generate.",
+            )
         if response.status_code < 400:
             return
         try:

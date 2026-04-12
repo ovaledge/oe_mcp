@@ -13,6 +13,7 @@ from typing import Any
 from server.app import create_mcp
 from server.auth.context import current_oe_jwt
 from server.auth.token_exchange import get_or_refresh_local_token
+from server.logging_config import configure_stderr_logging
 
 
 @asynccontextmanager
@@ -31,6 +32,7 @@ mcp = create_mcp(lifespan=local_lifespan)
 
 
 def main() -> None:
+    configure_stderr_logging()
     mcp.run(transport="stdio")
 
 

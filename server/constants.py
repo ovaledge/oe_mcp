@@ -36,14 +36,14 @@ CERT_STATUSES = ["certified", "cautioned", "violated", "inactive"]
 SORT_OPTIONS = ["RELEVANCE", "POPULARITY", "DQ_SCORE", "CURATION_SCORE", "NAME"]
 
 # ── OvalEdge MCP HTTP paths (appended to OVALEDGE_BASE_URL) ──────
-MCP_PATH_SEARCH_CATALOG = "/v1/mcp/search-catalog"
-MCP_PATH_OBJECT_DETAILS = "/v1/mcp/object-details"
-MCP_PATH_COLUMN_PROFILE = "/v1/mcp/column-profile"
-MCP_PATH_ENTITY_RELATIONSHIPS = "/v1/mcp/entity-relationships"
-MCP_PATH_LINEAGE = "/v1/mcp/lineage"
-MCP_PATH_GLOSSARY_TERMS = "/v1/mcp/glossary-terms"
-MCP_PATH_TAGS = "/v1/mcp/tags"
-MCP_PATH_SEARCH_PLATFORM_DOCS = "/v1/mcp/search-platform-docs"
+MCP_PATH_SEARCH_CATALOG = "/api/v1/mcp/search-catalog"
+MCP_PATH_OBJECT_DETAILS = "/api/v1/mcp/object-details"
+MCP_PATH_COLUMN_PROFILE = "/api/v1/mcp/column-profile"
+MCP_PATH_ENTITY_RELATIONSHIPS = "/api/v1/mcp/entity-relationships"
+MCP_PATH_LINEAGE = "/api/v1/mcp/lineage"
+MCP_PATH_GLOSSARY_TERMS = "/api/v1/mcp/glossary-terms"
+MCP_PATH_TAGS = "/api/v1/mcp/tags"
+MCP_PATH_SEARCH_PLATFORM_DOCS = "/api/v1/mcp/search-platform-docs"
 
 # ── MCP resource URI templates (FastMCP @resource) ───────────────
 MCP_RESOURCE_CATALOG_TABLE = "ovaledge://catalog/table/{object_id}"
