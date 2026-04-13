@@ -186,6 +186,13 @@ class OvalEdgeClient:
             )
         if response.status_code < 400:
             return
+        if settings.ovaledge_log_http_requests:
+            preview = (response.text or "").replace("\n", " ")[:800]
+            logger.info(
+                "OvalEdge HTTP %s error body (truncated): %s",
+                response.status_code,
+                preview,
+            )
         try:
             detail = response.json().get("message", response.text)
         except Exception:
