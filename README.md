@@ -7,7 +7,7 @@ Python [Model Context Protocol](https://modelcontextprotocol.io/) server for the
 | Mode | Transport | Auth |
 |------|-----------|------|
 | **Local** | stdio (`poetry run oe-mcp-local`) | OvalEdge **user token + user secret** exchange → OvalEdge JWT at process startup (machine principal; not per end-user RBAC like the UI). |
-| **Remote** | Streamable HTTP on AWS Lambda (Mangum) | **Okta** JWT per request → OvalEdge user JWT via token exchange. |
+| **Remote** | Streamable HTTP on AWS Lambda (Mangum) | OAuth **access token** (JWT) per request; IdP from **OIDC / RFC 8414 discovery** (`OAUTH_ISSUER`, `OAUTH_AUDIENCE`) → OvalEdge JWT via token exchange. |
 
 All OvalEdge calls use the JWT in the `current_oe_jwt` context (set by local lifespan or remote middleware). RBAC is enforced only by OvalEdge.
 
@@ -31,7 +31,7 @@ Configure your MCP client to run:
 
 ## Remote (Lambda)
 
-- Build/push the image and deploy SAM: see [`scripts/deploy.sh`](scripts/deploy.sh) and [`infra/template.yaml`](infra/template.yaml).
+- Build/push the image and deploy SAM: see [`scripts/deploy.sh`](scripts/deploy.sh) and [`infra/template.yaml`](infra/template.yaml). Stack parameters are `OAuthIssuer` and `OAuthAudience` (plus OvalEdge settings).
 - Point MCP clients at `https://<api-id>.execute-api.<region>.amazonaws.com/mcp` (OAuth discovery at `/.well-known/oauth-authorization-server`).
 - **Mangum** uses `lifespan="auto"` so the FastMCP streamable-HTTP session manager starts correctly (the raw spec’s `lifespan="off"` would skip ASGI startup and break MCP).
 

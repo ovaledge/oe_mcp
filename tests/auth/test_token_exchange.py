@@ -5,12 +5,12 @@ import pytest
 from server.auth.token_exchange import (
     TokenExchangeError,
     exchange_client_credentials,
-    exchange_okta_token,
+    exchange_oauth_access_token,
 )
 
 
 @pytest.mark.asyncio
-async def test_exchange_okta_token_extracts_access_token() -> None:
+async def test_exchange_oauth_access_token_extracts_access_token() -> None:
     mock_response = MagicMock()
     mock_response.status_code = 200
     mock_response.json.return_value = {"access_token": "oe-from-okta"}
@@ -21,15 +21,15 @@ async def test_exchange_okta_token_extracts_access_token() -> None:
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
     with patch("server.auth.token_exchange.httpx.AsyncClient", return_value=mock_client):
-        token = await exchange_okta_token("okta-jwt")
+        token = await exchange_oauth_access_token("oauth-jwt")
 
     assert token == "oe-from-okta"
     mock_client.post.assert_awaited_once()
-    assert mock_client.post.await_args.kwargs["json"]["userToken"] == "okta-jwt"
+    assert mock_client.post.await_args.kwargs["json"]["userToken"] == "oauth-jwt"
 
 
 @pytest.mark.asyncio
-async def test_exchange_okta_token_failure_raises() -> None:
+async def test_exchange_oauth_access_token_failure_raises() -> None:
     mock_response = MagicMock()
     mock_response.status_code = 500
     mock_response.text = "boom"
@@ -41,7 +41,7 @@ async def test_exchange_okta_token_failure_raises() -> None:
 
     with patch("server.auth.token_exchange.httpx.AsyncClient", return_value=mock_client):
         with pytest.raises(TokenExchangeError):
-            await exchange_okta_token("x")
+            await exchange_oauth_access_token("x")
 
 
 @pytest.mark.asyncio
@@ -65,6 +65,23 @@ async def test_exchange_client_credentials_extracts_token_field() -> None:
 
 
 @pytest.mark.asyncio
+async def test_exchange_rejects_empty_200_body() -> None:
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.content = b""
+    mock_response.text = ""
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    with patch("server.auth.token_exchange.httpx.AsyncClient", return_value=mock_client):
+        with pytest.raises(TokenExchangeError, match="empty body"):
+            await exchange_oauth_access_token("oauth-jwt")
+
+
+@pytest.mark.asyncio
 async def test_exchange_handles_raw_text_token_response() -> None:
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -77,6 +94,6 @@ async def test_exchange_handles_raw_text_token_response() -> None:
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
     with patch("server.auth.token_exchange.httpx.AsyncClient", return_value=mock_client):
-        token = await exchange_okta_token("okta-jwt")
+        token = await exchange_oauth_access_token("oauth-jwt")
 
     assert token == "raw.jwt.token"

@@ -1,6 +1,6 @@
 """
 Remote MCP entrypoint — Streamable HTTP via Mangum.
-Auth: Okta OAuth 2.1 PKCE → Okta JWT → OvalEdge JWT (per request)
+Auth: OAuth 2.x at any OIDC/RFC 8414 IdP → access token → OvalEdge JWT (per request)
 
 Routes:
     GET  /.well-known/oauth-authorization-server  → OAuth discovery
@@ -17,6 +17,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastmcp.utilities.lifespan import combine_lifespans
 from mangum import Mangum
+from starlette.responses import Response
 
 from server.app import mcp
 from server.auth.metadata import router as metadata_router
@@ -47,6 +48,26 @@ app.add_middleware(AuthMiddleware)
 
 app.include_router(metadata_router)
 app.include_router(registration_router)
+
+
+@app.get("/")
+async def root() -> JSONResponse:
+    """Avoid 401 in the browser; MCP traffic still uses POST /mcp with Bearer token."""
+    return JSONResponse(
+        {
+            "service": "OvalEdge MCP",
+            "auth_mode": settings.auth_mode,
+            "health": "/health",
+            "oauth_discovery": "/.well-known/oauth-authorization-server",
+            "mcp": "POST /mcp with Authorization: Bearer <access_token>",
+            "note": "GET / without auth is only this page; /mcp requires Bearer (remote mode).",
+        }
+    )
+
+
+@app.get("/favicon.ico")
+async def favicon() -> Response:
+    return Response(status_code=204)
 
 
 @app.get("/health")

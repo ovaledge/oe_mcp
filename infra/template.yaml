@@ -11,14 +11,20 @@ Parameters:
   OvalEdgeMaxRetries:
     Type: Number
     Default: 3
-  OktaDomain:
+  OAuthIssuer:
     Type: String
-  OktaAuthServerId:
+    Description: >
+      Authorization Server issuer URL (must match JWT iss). Discovery loads
+      /.well-known/openid-configuration or oauth-authorization-server under this base.
+  OAuthAudience:
     Type: String
-  OktaClientId:
+    Description: Resource identifier expected as access token aud claim
+  OvalEdgeForwardIdpToken:
     Type: String
-  OktaAudience:
-    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >
+      If true, skip OvalEdge token/generate and forward the IdP access token to OvalEdge APIs.
   Environment:
     Type: String
     Default: prod
@@ -48,13 +54,12 @@ Resources:
           OVALEDGE_BASE_URL: !Ref OvalEdgeBaseUrl
           OVALEDGE_TOKEN_EXCHANGE_PATH: !Ref OvalEdgeTokenExchangePath
           OVALEDGE_MAX_RETRIES: !Ref OvalEdgeMaxRetries
-          OKTA_DOMAIN: !Ref OktaDomain
-          OKTA_AUTH_SERVER_ID: !Ref OktaAuthServerId
-          OKTA_CLIENT_ID: !Ref OktaClientId
-          OKTA_AUDIENCE: !Ref OktaAudience
+          OAUTH_ISSUER: !Ref OAuthIssuer
+          OAUTH_AUDIENCE: !Ref OAuthAudience
           MCP_PUBLIC_BASE_URL: !Sub
             - "https://${ApiId}.execute-api.${AWS::Region}.amazonaws.com"
             - ApiId: !Ref MCPApi
+          OVALEDGE_REMOTE_FORWARD_IDP_TOKEN: !Ref OvalEdgeForwardIdpToken
       Events:
         MCPPost:
           Type: HttpApi

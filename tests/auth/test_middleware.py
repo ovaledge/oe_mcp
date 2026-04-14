@@ -32,17 +32,35 @@ def test_mcp_with_bearer_calls_verify_and_exchange(minimal_remote_app: FastAPI) 
     with TestClient(minimal_remote_app) as client:
         with (
             patch(
-                "server.auth.middleware.verify_okta_token",
+                "server.auth.middleware.verify_oauth_access_token",
                 new=AsyncMock(return_value={"sub": "u"}),
             ),
             patch(
-                "server.auth.middleware.exchange_okta_token",
+                "server.auth.middleware.exchange_oauth_access_token",
                 new=AsyncMock(return_value="oe-jwt"),
             ),
         ):
             r = client.post("/mcp", headers={"Authorization": "Bearer okta-token"})
     assert r.status_code == 200
     assert r.json() == {"ok": True}
+
+
+def test_mcp_forward_idp_skips_exchange(
+    minimal_remote_app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "ovaledge_remote_forward_idp_token", True)
+    exchange = AsyncMock()
+    with TestClient(minimal_remote_app) as client:
+        with (
+            patch(
+                "server.auth.middleware.verify_oauth_access_token",
+                new=AsyncMock(return_value={"sub": "u"}),
+            ),
+            patch("server.auth.middleware.exchange_oauth_access_token", exchange),
+        ):
+            r = client.post("/mcp", headers={"Authorization": "Bearer idp-token"})
+    assert r.status_code == 200
+    exchange.assert_not_called()
 
 
 def test_lambda_health_route_pattern(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -31,20 +31,26 @@ class Settings(BaseSettings):
 
     # ── Auth mode ────────────────────────────────────────────────
     # "local"  → OvalEdge client_credentials flow (stdio)
-    # "remote" → Okta OAuth 2.1 PKCE flow (Lambda)
+    # "remote" → Bearer OAuth access token (JWT) per request (Lambda)
     auth_mode: str = "local"
 
     # ── Local MCP — OvalEdge user token credentials ──────────────
     ovaledge_user_token: str = ""
     ovaledge_user_secret: str = ""
 
-    # ── Remote MCP — Okta custom auth server ────────────────────
-    okta_domain: str = ""
-    okta_auth_server_id: str = ""
-    okta_client_id: str = ""
-    okta_audience: str = ""
+    # ── Remote MCP — OAuth / OIDC Authorization Server ────────────
+    # Issuer base for MCP ``/.well-known/oauth-authorization-server`` proxy (login / discovery UX).
+    # JWT validation uses the access token's ``iss`` for OIDC discovery (may differ on Auth0
+    # custom domain vs canonical *.auth0.com).
+    oauth_issuer: str = ""
+    # Resource identifier expected as JWT ``aud`` (API audience).
+    oauth_audience: str = ""
     mcp_public_base_url: str = ""
     aws_region: str = "us-east-1"
+    # Remote only: if True, skip POST /api/user/token/generate and send the validated IdP
+    # access token to OvalEdge as Authorization (see ovaledge_http_auth_scheme). If False,
+    # exchange IdP token for an OvalEdge-issued JWT first (legacy).
+    ovaledge_remote_forward_idp_token: bool = False
 
     # ── MCP server identity ──────────────────────────────────────
     mcp_server_name: str = "OvalEdge MCP Server"
@@ -54,6 +60,5 @@ class Settings(BaseSettings):
     @classmethod
     def strip_trailing_slash(cls, v: str) -> str:
         return v.rstrip("/")
-
 
 settings = Settings()

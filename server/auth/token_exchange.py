@@ -1,3 +1,4 @@
+import json
 import time
 from typing import Any, cast
 
@@ -13,21 +14,78 @@ class TokenExchangeError(Exception):
     pass
 
 
-def _extract_token(body: Any) -> str:
-    """Extract token from OvalEdge response (dict or raw JWT string)."""
-    token: str | None
-    if isinstance(body, str):
-        token = body
-    elif isinstance(body, dict):
-        token = body.get("token") or body.get("access_token") or body.get("jwt")
-    else:
-        token = None
-    if not token:
+def _payload_from_token_exchange_response(response: httpx.Response) -> Any:
+    """Parse JSON or raw text; fail clearly on empty 200 responses."""
+    if not response.content or not response.content.strip():
         raise TokenExchangeError(
-            "Token exchange response missing token field "
-            f"or unsupported payload type: {type(body).__name__}"
+            "OvalEdge token exchange returned an empty body (HTTP 200). "
+            "Expected JSON with a token field or a raw JWT. "
+            "Check that POST /api/user/token/generate accepts your payload and returns a token."
         )
-    return str(token)
+    try:
+        return response.json()
+    except Exception:
+        return response.text
+
+
+def _extract_token(body: Any) -> str:
+    """Extract OvalEdge JWT from API response (JSON object, nested fields, or raw JWT text)."""
+    if body is None:
+        raise TokenExchangeError("Token exchange response body is null")
+
+    if isinstance(body, str):
+        s = body.strip()
+        if not s:
+            raise TokenExchangeError(
+                "Token exchange returned an empty body; expected a JWT or JSON with a token field"
+            )
+        if s.startswith("{"):
+            try:
+                return _extract_token(json.loads(s))
+            except (json.JSONDecodeError, TokenExchangeError):
+                pass
+        return s
+
+    if isinstance(body, dict):
+        err_msg = body.get("message") or body.get("error") or body.get("error_description")
+        if body.get("success") is False and err_msg:
+            raise TokenExchangeError(f"OvalEdge token exchange declined: {err_msg}")
+
+        for key in (
+            "token",
+            "access_token",
+            "jwt",
+            "accessToken",
+            "bearerToken",
+            "jwtToken",
+            "userToken",
+            "result",
+        ):
+            val = body.get(key)
+            if val is not None and str(val).strip():
+                if isinstance(val, dict):
+                    return _extract_token(val)
+                return str(val).strip()
+
+        data = body.get("data")
+        if isinstance(data, (dict, str, list)):
+            try:
+                return _extract_token(data)
+            except TokenExchangeError:
+                pass
+
+        keys = sorted(body.keys())
+        raise TokenExchangeError(
+            "Token exchange JSON has no recognizable token field "
+            f"(tried token, access_token, jwt, data, …); keys={keys}"
+        )
+
+    if isinstance(body, list) and len(body) == 1:
+        return _extract_token(body[0])
+
+    raise TokenExchangeError(
+        f"Token exchange response unsupported payload type: {type(body).__name__}"
+    )
 
 
 def is_token_expiring(token: str, leeway_seconds: int = JWT_REFRESH_LEEWAY_SECONDS) -> bool:
@@ -50,10 +108,10 @@ def is_token_expiring(token: str, leeway_seconds: int = JWT_REFRESH_LEEWAY_SECON
     return exp <= (now + leeway_seconds)
 
 
-async def exchange_okta_token(okta_jwt: str) -> str:
+async def exchange_oauth_access_token(oauth_access_token: str) -> str:
     """
     Remote MCP path.
-    Exchange a validated Okta JWT for an OvalEdge user-scoped JWT.
+    Exchange a validated OAuth access token for an OvalEdge user-scoped JWT.
     Called per MCP request — fully stateless.
 
     TODO: confirm exact request body format from OvalEdge API docs.
@@ -66,7 +124,7 @@ async def exchange_okta_token(okta_jwt: str) -> str:
         response = await client.post(
             OVALEDGE_TOKEN_EXCHANGE_PATH,
             json={
-                "userToken": okta_jwt,
+                "userToken": oauth_access_token,
             },
             headers={
                 "Content-Type": "application/json",
@@ -77,11 +135,7 @@ async def exchange_okta_token(okta_jwt: str) -> str:
             raise TokenExchangeError(
                 f"OvalEdge token exchange failed: {response.status_code} {response.text}"
             )
-        # OvalEdge may return either a JSON object or raw JWT text.
-        try:
-            payload: Any = response.json()
-        except Exception:
-            payload = response.text
+        payload = _payload_from_token_exchange_response(response)
         return _extract_token(payload)
 
 
@@ -114,10 +168,7 @@ async def exchange_client_credentials() -> str:
                 f"OvalEdge client_credentials exchange failed: "
                 f"{response.status_code} {response.text}"
             )
-        try:
-            payload: Any = response.json()
-        except Exception:
-            payload = response.text
+        payload = _payload_from_token_exchange_response(response)
         return _extract_token(payload)
 
 

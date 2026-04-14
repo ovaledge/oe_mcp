@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "ovaledge-mcp-remote": {
+      "url": "http://127.0.0.1:8000/mcp",
+      "headers": {
+        "Authorization": "Bearer ${env:OAUTH_ACCESS_TOKEN}"
+      }
+    }
+  }
+}
