@@ -31,12 +31,20 @@ def _extract_token(body: Any) -> str:
 
 
 def is_token_expiring(token: str, leeway_seconds: int = JWT_REFRESH_LEEWAY_SECONDS) -> bool:
-    """Return True when token is expired or expiring soon based on `exp`."""
+    """
+    Return True when the token is expired or within leeway_seconds of expiry.
+
+    If `exp` is missing (opaque or non-JWT token), treat as not expiring so we do not
+    call token/generate on every tool invocation. If parsing fails, refresh to be safe.
+    """
     try:
         claims = cast(dict[str, Any], jwt.get_unverified_claims(token))
-        exp = int(claims.get("exp", 0))
     except Exception:
-        # If claim parsing fails, force refresh for safety.
+        return True
+    if "exp" not in claims:
+        return False
+    exp = int(claims["exp"])
+    if exp <= 0:
         return True
     now = int(time.time())
     return exp <= (now + leeway_seconds)
@@ -120,6 +128,7 @@ async def get_or_refresh_local_token() -> str:
     """
     cached = auth_context.local_cached_oe_jwt
     if cached and not is_token_expiring(cached):
+        auth_context.current_oe_jwt.set(cached)
         return cached
     token = await exchange_client_credentials()
     auth_context.local_cached_oe_jwt = token

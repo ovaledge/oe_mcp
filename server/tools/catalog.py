@@ -2,6 +2,7 @@
 Catalog and related data tools (search, details, column profile, relationships, lineage).
 """
 
+import json
 from typing import Annotated, Any
 
 from fastmcp import FastMCP
@@ -14,6 +15,8 @@ from server.constants import (
     MCP_PATH_LINEAGE,
     MCP_PATH_OBJECT_DETAILS,
     MCP_PATH_SEARCH_CATALOG,
+    MCP_SEARCH_CONTEXT_QUERY_PARAM,
+    MCP_SEARCH_TERMS_PARAM,
 )
 
 # Allowed objectType values for search / details per platform API.
@@ -21,11 +24,16 @@ _SEARCH_OBJECT_TYPES = frozenset({"oetable", "oefile", "glossary", "oetag"})
 _TABLE_FILE_TYPES = frozenset({"oetable", "oefile"})
 
 _DESC_SEARCH = (
-    "Search the OvalEdge catalog (Elasticsearch hybrid search). Use for discovery: "
-    "tables, files, glossary entries, tags. Supports free text, pagination, "
-    "governance filters (owner, steward, custodian), and connection/schema scope.\n\n"
-    f"Backend: GET {MCP_PATH_SEARCH_CATALOG} (query params: searchTerm, page, limit, "
-    "connectionName, schemaName, owner, steward, custodian, objectType).\n\n"
+    "Search the OvalEdge catalog (Elasticsearch hybrid / keyword search plus optional "
+    "server-side vector context). Use for discovery: tables, files, glossary, tags.\n\n"
+    f"Backend: GET {MCP_PATH_SEARCH_CATALOG}\n"
+    f"Query params include {MCP_SEARCH_TERMS_PARAM} as a URL-encoded JSON array of strings, "
+    "page, limit, filters, objectType, and optionally "
+    f"{MCP_SEARCH_CONTEXT_QUERY_PARAM} (full user question for embedding / semantic ranking).\n\n"
+    "Pass search_terms as a JSON array of distinct keywords or short phrases (e.g. "
+    '["customer","revenue","churn"]). Omit or use [] for filter-only paging.\n\n'
+    "Always pass context_query with the user's verbatim question when they asked in natural "
+    "language — alongside search_terms.\n\n"
     "object_type must be one of: oetable, oefile, glossary, oetag — or omit to search all."
 )
 _DESC_DETAILS = (
@@ -58,14 +66,36 @@ def _q(**kwargs: object) -> dict[str, object]:
     return {k: v for k, v in kwargs.items() if v is not None}
 
 
+def _normalize_search_terms(terms: list[str] | None) -> list[str] | None:
+    if not terms:
+        return None
+    out = [t.strip() for t in terms if t and str(t).strip()]
+    return out or None
+
+
 def register(mcp: FastMCP) -> None:
 
     @mcp.tool(description=_DESC_SEARCH)
     async def search_catalog_assets(
-        search_term: Annotated[
+        search_terms: Annotated[
+            list[str] | None,
+            Field(
+                description=(
+                    "Distinct keywords for lexical search; tool argument is a JSON array. "
+                    f"On the wire: one query param {MCP_SEARCH_TERMS_PARAM} with a JSON array "
+                    'string value, e.g. ["payroll","employee"]. Omit or [] for filters only.'
+                ),
+                default=None,
+            ),
+        ] = None,
+        context_query: Annotated[
             str | None,
             Field(
-                description="Free-text search (maps to API searchTerm). Omit to page/filter only.",
+                description=(
+                    "Full user question or contextual NL string for the server (maps to "
+                    f"API {MCP_SEARCH_CONTEXT_QUERY_PARAM}). Use for vector / semantic search "
+                    "or hybrid ranking alongside search_terms. Prefer verbatim user wording."
+                ),
                 default=None,
             ),
         ] = None,
@@ -120,21 +150,22 @@ def register(mcp: FastMCP) -> None:
                 "status_code": 400,
             }
         try:
+            terms = _normalize_search_terms(search_terms)
+            params: dict[str, object] = _q(
+                **{MCP_SEARCH_CONTEXT_QUERY_PARAM: context_query},
+                page=max(page, 1),
+                limit=min(max(limit, 1), 100),
+                connectionName=connection_name,
+                schemaName=schema_name,
+                owner=owner,
+                steward=steward,
+                custodian=custodian,
+                objectType=object_type,
+            )
+            if terms is not None:
+                params[MCP_SEARCH_TERMS_PARAM] = json.dumps(terms, ensure_ascii=False)
             async with OvalEdgeClient() as client:
-                return await client.get(
-                    MCP_PATH_SEARCH_CATALOG,
-                    params=_q(
-                        searchTerm=search_term,
-                        page=max(page, 1),
-                        limit=min(max(limit, 1), 100),
-                        connectionName=connection_name,
-                        schemaName=schema_name,
-                        owner=owner,
-                        steward=steward,
-                        custodian=custodian,
-                        objectType=object_type,
-                    ),
-                )
+                return await client.get(MCP_PATH_SEARCH_CATALOG, params=params)
         except OvalEdgeError as e:
             return {"error": str(e), "status_code": e.status_code}
 

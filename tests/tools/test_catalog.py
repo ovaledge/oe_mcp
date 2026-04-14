@@ -1,3 +1,5 @@
+import json
+
 from fastmcp import FastMCP
 
 from server.client import OvalEdgeError
@@ -6,6 +8,8 @@ from server.constants import (
     MCP_PATH_ENTITY_RELATIONSHIPS,
     MCP_PATH_LINEAGE,
     MCP_PATH_SEARCH_CATALOG,
+    MCP_SEARCH_CONTEXT_QUERY_PARAM,
+    MCP_SEARCH_TERMS_PARAM,
 )
 from server.tools import catalog
 from tests.conftest import MOCK_ASSET_DETAIL, MOCK_LINEAGE_RESPONSE, MOCK_SEARCH_RESPONSE
@@ -20,17 +24,37 @@ class TestSearchCatalogAssets:
         catalog.register(mcp)
 
         tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
-        result = await tool_fn(search_term="customer transactions", object_type="oetable")
+        result = await tool_fn(search_terms=["customer", "transactions"], object_type="oetable")
 
         assert result == MOCK_SEARCH_RESPONSE
         mock_oe_client.get.assert_called_once()
         args, kwargs = mock_oe_client.get.call_args
         assert args[0] == MCP_PATH_SEARCH_CATALOG
         params = kwargs["params"]
-        assert params["searchTerm"] == "customer transactions"
+        assert json.loads(params[MCP_SEARCH_TERMS_PARAM]) == ["customer", "transactions"]
         assert params["objectType"] == "oetable"
         assert params["page"] == 1
         assert "connectionName" not in params
+
+    async def test_context_query_forwarded(self, mock_oe_client: object) -> None:
+        mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        full_q = "Where do we store employee payroll dimensions?"
+        await tool_fn(search_terms=["employee"], context_query=full_q)
+        params = mock_oe_client.get.call_args[1]["params"]
+        assert params[MCP_SEARCH_CONTEXT_QUERY_PARAM] == full_q
+        assert json.loads(params[MCP_SEARCH_TERMS_PARAM]) == ["employee"]
+
+    async def test_omits_search_terms_when_empty(self, mock_oe_client: object) -> None:
+        mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        await tool_fn(search_terms=[], limit=10)
+        params = mock_oe_client.get.call_args[1]["params"]
+        assert MCP_SEARCH_TERMS_PARAM not in params
 
     async def test_limit_capped(self, mock_oe_client: object) -> None:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
@@ -39,7 +63,7 @@ class TestSearchCatalogAssets:
         catalog.register(mcp)
 
         tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
-        await tool_fn(search_term="x", limit=500)
+        await tool_fn(search_terms=["x"], limit=500)
 
         params = mock_oe_client.get.call_args[1]["params"]
         assert params["limit"] == 100
@@ -48,7 +72,7 @@ class TestSearchCatalogAssets:
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
         tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
-        result = await tool_fn(search_term="x", object_type="TABLE")
+        result = await tool_fn(search_terms=["x"], object_type="TABLE")
         assert result["status_code"] == 400
         mock_oe_client.get.assert_not_called()
 
@@ -59,7 +83,7 @@ class TestSearchCatalogAssets:
         catalog.register(mcp)
 
         tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
-        result = await tool_fn(search_term="secret")
+        result = await tool_fn(search_terms=["secret"])
 
         assert "error" in result
         assert result["status_code"] == 403

@@ -45,6 +45,16 @@ MCP_PATH_GLOSSARY_TERMS = "/api/v1/mcp/glossary-terms"
 MCP_PATH_TAGS = "/api/v1/mcp/tags"
 MCP_PATH_SEARCH_PLATFORM_DOCS = "/api/v1/mcp/search-platform-docs"
 
+# search-catalog: optional query param for full NL user text / context (vector search, etc.).
+# Spring: @RequestParam(value = "contextQuery", required = false) String contextQuery
+MCP_SEARCH_CONTEXT_QUERY_PARAM = "contextQuery"
+
+# search-catalog: keywords as one URL query param — JSON array string (URL-encoded by client).
+# Example: ?searchTerms=%5B%22a%22%2C%22b%22%5D  →  ["a","b"]
+# Spring: @RequestParam(value = "searchTerms", required = false) String searchTerms
+#         then parse JSON to List<String> (e.g. ObjectMapper.readValue)
+MCP_SEARCH_TERMS_PARAM = "searchTerms"
+
 # ── MCP resource URI templates (FastMCP @resource) ───────────────
 MCP_RESOURCE_CATALOG_TABLE = "ovaledge://catalog/table/{object_id}"
 MCP_RESOURCE_GOVERNANCE_GLOSSARY_TERM = "ovaledge://governance/glossary-term/{object_id}"

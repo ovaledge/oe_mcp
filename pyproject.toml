@@ -42,6 +42,13 @@ strict = true
 asyncio_mode = "auto"
 testpaths = ["tests"]
 
+# basedpyright/pyright: use ./.venv for import resolution (poetry.toml: in-project venv).
+[tool.pyright]
+include = ["server", "tests", "entrypoints"]
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
