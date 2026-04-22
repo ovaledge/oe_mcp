@@ -20,7 +20,18 @@ from server.constants import (
 )
 
 # Allowed objectType values for search / details per platform API.
-_SEARCH_OBJECT_TYPES = frozenset({"oetable", "oefile", "glossary", "oetag"})
+_SEARCH_OBJECT_TYPES = frozenset(
+    {
+        "oetable",
+        "oecolumn",
+        "oefile",
+        "filecolumn",
+        "oechart",
+        "chartchild",
+        "glossary",
+        "oetag",
+    }
+)
 _TABLE_FILE_TYPES = frozenset({"oetable", "oefile"})
 
 _DESC_SEARCH = (
@@ -42,7 +53,8 @@ _DESC_DETAILS = (
     f"Backend: GET {MCP_PATH_OBJECT_DETAILS}\n\n"
     "Exactly one lookup mode: (1) fully_qualified_name alone, OR "
     "(2) object_id AND object_type together. Never mix FQN with id/type.\n\n"
-    "object_type: oetable | oefile | glossary | oetag."
+    "object_type must be one of: "
+    "oetable, oecolumn, oefile, filecolumn, oechart, chartchild, glossary, oetag."
 )
 _DESC_COLUMN = (
     "Column-level profile statistics for one table or file asset.\n\n"
@@ -181,7 +193,10 @@ def register(mcp: FastMCP) -> None:
         object_type: Annotated[
             str | None,
             Field(
-                description="oetable | oefile | glossary | oetag; pair with object_id.",
+                description=(
+                    "One of: oetable, oecolumn, oefile, filecolumn, oechart, "
+                    "chartchild, glossary, oetag; pair with object_id."
+                ),
                 default=None,
             ),
         ] = None,
