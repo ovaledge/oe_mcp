@@ -1,5 +1,6 @@
 import json
 import logging
+from collections.abc import Callable
 from typing import Any, cast
 
 import httpx
@@ -135,6 +136,29 @@ class OvalEdgeClient:
         if self._client is not None:
             self._client.headers["Authorization"] = auth
 
+    async def _send_with_local_401_retry(
+        self, build_request: Callable[[], httpx.Request]
+    ) -> httpx.Response:
+        assert self._client is not None, "Use OvalEdgeClient as async context manager"
+        retried_401 = False
+        while True:
+            await self._ensure_local_token()
+            req = build_request()
+            _log_outbound_request(req)
+            response = await self._client.send(req)
+            _log_inbound_response(response)
+            if (
+                not retried_401
+                and settings.auth_mode == "local"
+                and response.status_code == 401
+            ):
+                from server.auth.token_exchange import invalidate_local_jwt_cache
+
+                invalidate_local_jwt_cache()
+                retried_401 = True
+                continue
+            return response
+
     @retry(
         retry=retry_if_exception(_is_transient),
         stop=stop_after_attempt(settings.ovaledge_max_retries),
@@ -147,11 +171,12 @@ class OvalEdgeClient:
     )
     async def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         assert self._client is not None, "Use OvalEdgeClient as async context manager"
-        await self._ensure_local_token()
-        req = self._client.build_request("GET", path, params=params)
-        _log_outbound_request(req)
-        response = await self._client.send(req)
-        _log_inbound_response(response)
+
+        def build_request() -> httpx.Request:
+            assert self._client is not None
+            return self._client.build_request("GET", path, params=params)
+
+        response = await self._send_with_local_401_retry(build_request)
         self._raise_for_status(response)
         return _success_response_as_dict(response)
 
@@ -167,11 +192,12 @@ class OvalEdgeClient:
     )
     async def post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
         assert self._client is not None, "Use OvalEdgeClient as async context manager"
-        await self._ensure_local_token()
-        req = self._client.build_request("POST", path, json=body)
-        _log_outbound_request(req)
-        response = await self._client.send(req)
-        _log_inbound_response(response)
+
+        def build_request() -> httpx.Request:
+            assert self._client is not None
+            return self._client.build_request("POST", path, json=body)
+
+        response = await self._send_with_local_401_retry(build_request)
         self._raise_for_status(response)
         return _success_response_as_dict(response)
 

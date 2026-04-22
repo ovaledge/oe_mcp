@@ -172,6 +172,18 @@ async def exchange_client_credentials() -> str:
         return _extract_token(payload)
 
 
+def invalidate_local_jwt_cache() -> None:
+    """
+    Drop the in-memory OvalEdge JWT so the next ``get_or_refresh_local_token``
+    runs client_credentials again.
+
+    Used when OvalEdge returns 401 (e.g. server-side session TTL) but the JWT
+    has no ``exp`` claim, so proactive refresh never ran.
+    """
+    auth_context.local_cached_oe_jwt = ""
+    auth_context.current_oe_jwt.set("")
+
+
 async def get_or_refresh_local_token() -> str:
     """
     Return cached local JWT if still valid, otherwise exchange for a new one.
