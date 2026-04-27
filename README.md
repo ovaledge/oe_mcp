@@ -84,6 +84,20 @@ Developer mode (adds lint/typecheck/tests):
 ./scripts/setup_local_mcp.sh --dev
 ```
 
+## One-Shot Local Setup (Windows PowerShell)
+
+Use the PowerShell setup script after cloning:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\setup_local_mcp.ps1
+```
+
+Developer mode (adds lint/typecheck/tests):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\setup_local_mcp.ps1 -Dev
+```
+
 ## Required Local Environment
 
 Set these in `.env` (or pass via MCP client `env`):
