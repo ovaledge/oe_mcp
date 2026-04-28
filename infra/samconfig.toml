@@ -1,0 +1,13 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "oe-mcp"
+resolve_s3 = true
+s3_prefix = "oe-mcp"
+region = "us-east-1"
+capabilities = "CAPABILITY_IAM"
+image_repositories = ["OEMCPFunction=<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/oe-mcp"]
+confirm_changeset = true
+
+[default.build.parameters]
+use_container = true

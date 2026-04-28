@@ -1,0 +1,146 @@
+import os
+from contextlib import ExitStack
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
+# Settings load on first import of server.config — set env before any server imports.
+os.environ.setdefault("OVALEDGE_BASE_URL", "https://mock.ovaledge.com")
+os.environ.setdefault("AUTH_MODE", "local")
+os.environ.setdefault("OVALEDGE_USER_TOKEN", "test-user-token")
+os.environ.setdefault("OVALEDGE_USER_SECRET", "test-user-secret")
+
+from server.auth.context import current_oe_jwt  # noqa: E402
+
+# ── Sample response payloads ─────────────────────────────────────
+
+MOCK_SEARCH_RESPONSE = {
+    "results": [
+        {
+            "objectId": "obj-001",
+            "objectType": "TABLE",
+            "name": "customer_transactions",
+            "owner": "jane.doe",
+            "steward": "john.smith",
+            "certificationStatus": "certified",
+            "dqScore": 92,
+            "curationScore": 85,
+            "classifications": ["PII", "Financial"],
+        }
+    ],
+    "total": 1,
+    "offset": 0,
+    "limit": 10,
+}
+
+MOCK_ASSET_DETAIL = {
+    "objectId": "obj-001",
+    "objectType": "TABLE",
+    "name": "customer_transactions",
+    "description": "Core transaction table for all customer purchases.",
+    "owner": "jane.doe",
+    "steward": "john.smith",
+    "certificationStatus": "certified",
+    "dqScore": 92,
+    "curationScore": 85,
+    "classifications": ["PII", "Financial"],
+    "columns": [],
+    "linkedTerms": ["term-010"],
+}
+
+MOCK_GLOSSARY_RESULT = {
+    "terms": [
+        {
+            "termId": "term-010",
+            "name": "Customer Lifetime Value",
+            "definition": "Total revenue attributed to a customer over their entire relationship.",
+            "domain": "Marketing",
+            "status": "PUBLISHED",
+            "relationships": [
+                {"type": "calculates-from", "targetTermId": "term-011", "targetName": "Revenue"},
+            ],
+            "dataObjects": [{"objectId": "obj-001", "name": "customer_transactions"}],
+        }
+    ],
+}
+
+MOCK_LINEAGE_RESPONSE = {
+    "rootObjectId": "obj-001",
+    "nodes": [
+        {"id": "obj-001", "name": "customer_transactions", "type": "TABLE", "hop": 0},
+        {
+            "id": "obj-002",
+            "name": "raw_events",
+            "type": "TABLE",
+            "hop": 1,
+            "direction": "UPSTREAM",
+        },
+    ],
+    "edges": [
+        {"fromId": "obj-002", "toId": "obj-001", "lineageType": "auto"},
+    ],
+}
+
+MOCK_COUNT_RESPONSE = {
+    "count": 42,
+    "objectTypesBreakdown": {"TABLE": 30, "FILE": 8, "REPORT": 4},
+    "certificationBreakdown": {"certified": 25, "cautioned": 10, "violated": 5, "inactive": 2},
+}
+
+MOCK_RELATIONSHIPS = {"relationships": [{"fromTable": "a", "toTable": "b"}]}
+
+MOCK_DOCS_SEARCH = {
+    "chunks": [{"text": "How to create a rule", "url": "https://docs.ovaledge.com/x"}]
+}
+
+
+# ── Fixtures ─────────────────────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def set_oe_jwt() -> object:
+    """Set a test JWT in ContextVar for all tests."""
+    token = current_oe_jwt.set("test-jwt-token-for-unit-tests")
+    yield None
+    current_oe_jwt.reset(token)
+
+
+@pytest.fixture
+def mock_oe_get() -> object:
+    """
+    Patch OvalEdgeClient.get to return mock data.
+    """
+    with patch("server.client.OvalEdgeClient.get", new_callable=AsyncMock) as mock:
+        yield mock
+
+
+@pytest.fixture
+def mock_oe_post() -> object:
+    """Patch OvalEdgeClient.post to return mock data."""
+    with patch("server.client.OvalEdgeClient.post", new_callable=AsyncMock) as mock:
+        yield mock
+
+
+_OE_CLIENT_PATCH_TARGETS = (
+    "server.tools.catalog.OvalEdgeClient",
+    "server.tools.docs.OvalEdgeClient",
+    "server.tools.governance.OvalEdgeClient",
+    "server.resources.catalog.OvalEdgeClient",
+    "server.resources.governance.OvalEdgeClient",
+)
+
+
+@pytest.fixture
+def mock_oe_client() -> object:
+    """
+    Patch OvalEdgeClient everywhere it is imported (from-import bindings).
+    """
+    mock_client = AsyncMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    with ExitStack() as stack:
+        for target in _OE_CLIENT_PATCH_TARGETS:
+            p = stack.enter_context(patch(target))
+            p.return_value = mock_client
+        yield mock_client

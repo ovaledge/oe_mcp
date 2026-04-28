@@ -1,0 +1,32 @@
+# Governance model
+
+## Stewardship roles
+
+- **Owner** — Accountable for the asset or definition; typically a business or product owner.
+- **Steward** — Day-to-day curator of metadata, quality, and alignment to standards.
+- **Custodian** — Often IT or platform-focused; ensures technical implementation, access, and platform policy.
+
+Exact titles vary by organization; OvalEdge stores these roles on assets and glossary objects for accountability.
+
+## Certification lifecycle
+
+Common certification states include:
+
+- **certified** — Reviewed and approved for intended use.
+- **cautioned** — Usable with known limitations or pending remediation.
+- **violated** — Failed rules or policy; treat as high risk until resolved.
+- **inactive** — Deprecated or retired; avoid for new use cases.
+
+Certification is enforced and interpreted in OvalEdge; the MCP surfaces values as returned by the API.
+
+## RBAC
+
+Access to catalog assets, glossary content, lineage nodes, and previews is enforced **only** by OvalEdge. The MCP does not bypass, broaden, or reinterpret permissions. If a user cannot see an object in the OvalEdge UI, they should not expect to retrieve it via MCP.
+
+## Glossary–catalog sync and inheritance
+
+Terms in the business glossary can be linked to physical columns and tables. When sync is enabled, governance properties (e.g. classifications, masking, restriction flags) may **inherit** from the term to the asset. Responses may indicate whether masking or restriction came from term sync versus direct assignment on the asset.
+
+## Curation score
+
+Curation reflects how complete and trustworthy metadata is—examples of components include descriptions, ownership, glossary linkage, classifications, and quality signals. It complements DQ score: curation is about metadata health; DQ is about measured data quality.

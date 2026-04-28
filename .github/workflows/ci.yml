@@ -1,0 +1,89 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+env:
+  OVALEDGE_BASE_URL: https://mock.ovaledge.com
+  AUTH_MODE: local
+  OVALEDGE_USER_TOKEN: test-user-token
+  OVALEDGE_USER_SECRET: test-user-secret
+
+jobs:
+  test:
+    name: Lint, Type Check, Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pypoetry
+          key: ${{ runner.os }}-poetry-${{ hashFiles('poetry.lock') }}
+          restore-keys: ${{ runner.os }}-poetry-
+
+      - name: Install dependencies
+        run: poetry install
+
+      - name: Lint
+        run: poetry run ruff check .
+
+      - name: Type check
+        run: poetry run mypy server/ entrypoints/
+
+      - name: Test
+        run: poetry run pytest
+
+  deploy:
+    name: Build and Deploy
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr-login
+
+      - name: Build, tag, push Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          ECR_REPO: oe-mcp
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG .
+          docker tag $ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPO:latest
+          docker push $ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPO:latest
+
+      - uses: aws-actions/setup-sam@v2
+
+      - name: SAM Deploy
+        run: |
+          sam build --template-file infra/template.yaml --use-container
+          sam deploy \
+            --template-file .aws-sam/build/template.yaml \
+            --stack-name oe-mcp \
+            --region us-east-1 \
+            --capabilities CAPABILITY_IAM \
+            --image-repository ${{ steps.ecr-login.outputs.registry }}/oe-mcp \
+            --no-confirm-changeset
