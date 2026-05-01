@@ -9,6 +9,9 @@ runs a local smoke import, and prints an MCP config snippet.
 Usage:
   powershell -ExecutionPolicy Bypass -File .\scripts\setup_local_mcp.ps1
   powershell -ExecutionPolicy Bypass -File .\scripts\setup_local_mcp.ps1 -Dev
+
+Notes:
+  - Requires Python 3.12+ (Python 3.12 or 3.13 recommended).
 #>
 
 [CmdletBinding()]
@@ -38,9 +41,12 @@ function Ensure-Poetry {
         return
     }
 
-    Write-Host "==> Installing Poetry (official installer)..."
+    Write-Host "==> Installing Poetry (official installer via py)..."
     $installer = (Invoke-WebRequest -Uri "https://install.python-poetry.org" -UseBasicParsing).Content
     $installer | py -
+    if ($LASTEXITCODE -ne 0) {
+        Die "Poetry installer failed. Ensure Python 3.12+ is your default 'py' runtime and internet/TLS settings are working."
+    }
 
     $userScripts = Join-Path $env:APPDATA "Python\Scripts"
     if (Test-Path $userScripts) {
@@ -59,7 +65,11 @@ Write-Host "==> Repository: $RepoRoot"
 
 Need-Command py
 
-Write-Host "==> Checking Python >= 3.12..."
+Write-Host "==> Checking Python >= 3.12 (recommended: 3.12/3.13)..."
+$pyVersionOut = py -c "import sys; print(sys.version.split()[0])" 2>$null
+if ($LASTEXITCODE -eq 0 -and $pyVersionOut) {
+    Write-Host "    Found py default: $pyVersionOut"
+}
 $pyCheck = @'
 import sys
 if sys.version_info < (3, 12):
@@ -68,7 +78,7 @@ if sys.version_info < (3, 12):
 '@
 $pyCheck | py - 2>$null
 if ($LASTEXITCODE -ne 0) {
-    Die "Python 3.12+ is required."
+    Die "Python 3.12+ is required. Recommended: Python 3.12 or 3.13."
 }
 
 Ensure-Poetry

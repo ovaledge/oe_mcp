@@ -1,4 +1,5 @@
 from fastmcp import FastMCP
+from fastmcp.prompts.function_prompt import FunctionPrompt
 
 from server.constants import TOOL_LOOKUP_GLOSSARY_TERM, TOOL_SEARCH_CATALOG
 from server.prompts import workflows
@@ -10,6 +11,7 @@ class TestWorkflowPrompts:
         workflows.register(mcp)
         prompt = await mcp.get_prompt("data_discovery")
         assert prompt is not None
+        assert isinstance(prompt, FunctionPrompt)
         messages = prompt.fn("customer data")
         assert len(messages) == 1
         content = messages[0].content

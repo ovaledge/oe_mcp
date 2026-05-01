@@ -1,6 +1,7 @@
 """Local MCP: OvalEdge 401 triggers JWT cache invalidation and one retry."""
 
 import time
+from collections.abc import Generator
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -12,7 +13,7 @@ from server.client import OvalEdgeClient, OvalEdgeError
 
 
 @pytest.fixture(autouse=True)
-def _reset_jwt_cache() -> None:
+def _reset_jwt_cache() -> Generator[None, None, None]:
     token = auth_context.current_oe_jwt.set("")
     auth_context.local_cached_oe_jwt = ""
     yield

@@ -27,22 +27,26 @@ async def _get_jwks(jwks_uri: str) -> dict[str, Any]:
     global _jwks_cache, _jwks_url_cached, _jwks_fetched_at
 
     now = time.monotonic()
+    cached = _jwks_cache
     if (
         _jwks_url_cached == jwks_uri
-        and _jwks_cache is not None
+        and cached is not None
         and (now - _jwks_fetched_at) < _JWKS_TTL_SECONDS
     ):
-        return _jwks_cache
+        return cached
 
     async with httpx.AsyncClient(timeout=10) as client:
         response = await client.get(jwks_uri)
         response.raise_for_status()
         body = response.json()
 
-    _jwks_cache = body
+    if not isinstance(body, dict):
+        raise ValueError("JWKS endpoint returned non-object JSON")
+    jwks: dict[str, Any] = body
+    _jwks_cache = jwks
     _jwks_url_cached = jwks_uri
     _jwks_fetched_at = now
-    return _jwks_cache
+    return jwks
 
 
 async def verify_oauth_access_token(token: str) -> dict[str, Any]:

@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "OvalEdge MCP Server"
 authors = ["Rohit Anand <rohit.anand@ovaledge.com>"]
 readme = "README.md"
-packages = [{ include = "server" }, { include = "entrypoints" }]
+packages = [{ include = "server" }, { include = "entrypoints" }, { include = "evals" }]
 
 [tool.poetry.dependencies]
 python = "^3.12"
@@ -23,6 +23,10 @@ pytest-asyncio = "*"
 pytest-httpx = "*"
 ruff = "*"
 mypy = "*"
+
+
+[tool.poetry.group.eval.dependencies]
+deepeval = "~3.9.9"
 
 [tool.poetry.scripts]
 oe-mcp-local = "entrypoints.local:main"
@@ -44,7 +48,7 @@ testpaths = ["tests"]
 
 # basedpyright/pyright: use ./.venv for import resolution (poetry.toml: in-project venv).
 [tool.pyright]
-include = ["server", "tests", "entrypoints"]
+include = ["server", "tests", "entrypoints", "evals"]
 pythonVersion = "3.12"
 venvPath = "."
 venv = ".venv"

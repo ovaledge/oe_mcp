@@ -193,9 +193,13 @@ poetry -C /absolute/path/to/oe_mcp run oe-mcp-local
 
 ```bash
 poetry run ruff check .
-poetry run mypy server/ entrypoints/
+poetry run mypy server/ entrypoints/ evals/
 poetry run pytest
 ```
+
+### LLM-level MCP evaluation (DeepEval)
+
+Optional Tier-2 checks (`poetry install --with eval`, `pytest evals/test_mcp_deepeval.py` or `python -m evals.run_evals`). User-defined **MCPUse** prompts and tool traces can live in JSON (`--cases-json` / `DEEPEVAL_MCP_USE_CASES_JSON`); details and schema are in [evals/README.md](evals/README.md).
 
 ## Troubleshooting (Local MCP)
 

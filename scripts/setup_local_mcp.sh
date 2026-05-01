@@ -23,7 +23,8 @@ Usage:
   ./scripts/setup_local_mcp.sh --dev    Same as above, then ruff + mypy + pytest.
 
 Notes:
-  - Requires Python 3.12+ on PATH as python3.
+  - Requires Python 3.12+ on PATH as python3 (Python 3.12 or 3.13 recommended).
+  - Homebrew is optional; this script uses the official Poetry installer.
   - Local MCP uses stdio; the IDE starts the process — nothing runs as a background daemon here.
 EOF
       exit 0
@@ -46,8 +47,10 @@ echo "==> Repository: $REPO_ROOT"
 need_cmd curl
 need_cmd python3
 
-echo "==> Checking Python >= 3.12..."
-python3 - <<'PY' || die "Python 3.12+ is required (install via pyenv, Homebrew, or your OS package manager)."
+echo "==> Checking Python >= 3.12 (recommended: 3.12/3.13)..."
+PYTHON_VERSION="$(python3 -c 'import sys; print(sys.version.split()[0])')"
+echo "    Found python3: $PYTHON_VERSION"
+python3 - <<'PY' || die "Python 3.12+ is required. Recommended: Python 3.12 or 3.13 (install via pyenv, Homebrew, or your OS package manager)."
 import sys
 if sys.version_info < (3, 12):
     sys.stderr.write(f"found Python {sys.version.split()[0]}\n")
@@ -66,10 +69,10 @@ ensure_poetry() {
     echo "==> Poetry found at $po_bin/poetry"
     return 0
   fi
-  echo "==> Installing Poetry (official installer)..."
-  curl -sSL https://install.python-poetry.org | python3 -
+  echo "==> Installing Poetry (official installer via python3)..."
+  curl -sSL https://install.python-poetry.org | python3 - || die "Poetry installer failed. Ensure python3 is 3.12+ and TLS/network settings allow downloads."
   export PATH="${po_bin}:$PATH"
-  command -v poetry >/dev/null 2>&1 || die "Poetry install finished but poetry not on PATH; add $po_bin to PATH"
+  command -v poetry >/dev/null 2>&1 || die "Poetry install finished but poetry not on PATH; add $po_bin to PATH and restart your shell"
 }
 
 ensure_poetry

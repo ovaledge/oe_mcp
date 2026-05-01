@@ -1,3 +1,4 @@
+from collections.abc import Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -7,7 +8,7 @@ from server.auth.oauth_discovery import OAuthDiscoveryError
 
 
 @pytest.fixture(autouse=True)
-def clear_caches() -> None:
+def clear_caches() -> Generator[None, None, None]:
     oauth_discovery.clear_metadata_cache()
     bearer_jwt.clear_jwks_cache()
     yield
