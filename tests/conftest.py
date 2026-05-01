@@ -5,10 +5,11 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 # Settings load on first import of server.config — set env before any server imports.
-os.environ.setdefault("OVALEDGE_BASE_URL", "https://mock.ovaledge.com")
-os.environ.setdefault("AUTH_MODE", "local")
-os.environ.setdefault("OVALEDGE_USER_TOKEN", "test-user-token")
-os.environ.setdefault("OVALEDGE_USER_SECRET", "test-user-secret")
+# Force values so a developer `.env` or plugins (e.g. DeepEval) cannot override unit-test mocks.
+os.environ["OVALEDGE_BASE_URL"] = "https://mock.ovaledge.com"
+os.environ["AUTH_MODE"] = "local"
+os.environ["OVALEDGE_USER_TOKEN"] = "test-user-token"
+os.environ["OVALEDGE_USER_SECRET"] = "test-user-secret"
 
 from server.auth.context import current_oe_jwt  # noqa: E402
 

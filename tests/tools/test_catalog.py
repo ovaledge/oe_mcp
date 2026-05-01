@@ -1,4 +1,5 @@
 import json
+from unittest.mock import AsyncMock
 
 from fastmcp import FastMCP
 
@@ -17,7 +18,7 @@ from tests.helpers import get_tool_fn
 
 
 class TestSearchCatalogAssets:
-    async def test_search_get_params(self, mock_oe_client: object) -> None:
+    async def test_search_get_params(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
 
         mcp = FastMCP(name="test", version="0.0.1")
@@ -36,7 +37,7 @@ class TestSearchCatalogAssets:
         assert params["page"] == 1
         assert "connectionName" not in params
 
-    async def test_context_query_forwarded(self, mock_oe_client: object) -> None:
+    async def test_context_query_forwarded(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
@@ -47,7 +48,7 @@ class TestSearchCatalogAssets:
         assert params[MCP_SEARCH_CONTEXT_QUERY_PARAM] == full_q
         assert json.loads(params[MCP_SEARCH_TERMS_PARAM]) == ["employee"]
 
-    async def test_omits_search_terms_when_empty(self, mock_oe_client: object) -> None:
+    async def test_omits_search_terms_when_empty(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
@@ -56,7 +57,7 @@ class TestSearchCatalogAssets:
         params = mock_oe_client.get.call_args[1]["params"]
         assert MCP_SEARCH_TERMS_PARAM not in params
 
-    async def test_limit_capped(self, mock_oe_client: object) -> None:
+    async def test_limit_capped(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
 
         mcp = FastMCP(name="test", version="0.0.1")
@@ -68,7 +69,7 @@ class TestSearchCatalogAssets:
         params = mock_oe_client.get.call_args[1]["params"]
         assert params["limit"] == 100
 
-    async def test_invalid_object_type_returns_400(self, mock_oe_client: object) -> None:
+    async def test_invalid_object_type_returns_400(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
         tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
@@ -76,7 +77,7 @@ class TestSearchCatalogAssets:
         assert result["status_code"] == 400
         mock_oe_client.get.assert_not_called()
 
-    async def test_error_returns_structured_dict(self, mock_oe_client: object) -> None:
+    async def test_error_returns_structured_dict(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.side_effect = OvalEdgeError(403, "Forbidden")
 
         mcp = FastMCP(name="test", version="0.0.1")
@@ -90,7 +91,7 @@ class TestSearchCatalogAssets:
 
 
 class TestCatalogAssetDetails:
-    async def test_fqn_only(self, mock_oe_client: object) -> None:
+    async def test_fqn_only(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = MOCK_ASSET_DETAIL
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
@@ -100,7 +101,7 @@ class TestCatalogAssetDetails:
         params = mock_oe_client.get.call_args[1]["params"]
         assert params == {"fullyQualifiedName": "db.schema.table"}
 
-    async def test_object_id_and_type(self, mock_oe_client: object) -> None:
+    async def test_object_id_and_type(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = MOCK_ASSET_DETAIL
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
@@ -109,7 +110,7 @@ class TestCatalogAssetDetails:
         params = mock_oe_client.get.call_args[1]["params"]
         assert params == {"objectId": 42, "objectType": "oetable"}
 
-    async def test_rejects_mixing_fqn_and_id(self, mock_oe_client: object) -> None:
+    async def test_rejects_mixing_fqn_and_id(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
         tool_fn = await get_tool_fn(mcp, "catalog_asset_details")
@@ -117,9 +118,35 @@ class TestCatalogAssetDetails:
         assert result["status_code"] == 400
         mock_oe_client.get.assert_not_called()
 
+    async def test_rejects_missing_lookup_mode(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "catalog_asset_details")
+        result = await tool_fn()
+        assert result["status_code"] == 400
+        assert "fully_qualified_name" in result["error"]
+        mock_oe_client.get.assert_not_called()
+
+    async def test_rejects_invalid_object_type_with_id(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "catalog_asset_details")
+        result = await tool_fn(object_id=1, object_type="invalid_type")
+        assert result["status_code"] == 400
+        mock_oe_client.get.assert_not_called()
+
+    async def test_oval_edge_error_returns_dict(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.side_effect = OvalEdgeError(502, "Bad gateway")
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "catalog_asset_details")
+        result = await tool_fn(object_id=1, object_type="oetable")
+        assert result["status_code"] == 502
+        assert "502" in result["error"]
+
 
 class TestColumnProfileStatistics:
-    async def test_oetable(self, mock_oe_client: object) -> None:
+    async def test_oetable(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {"columns": []}
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
@@ -130,7 +157,7 @@ class TestColumnProfileStatistics:
             params={"objectId": 7, "objectType": "oetable"},
         )
 
-    async def test_rejects_glossary(self, mock_oe_client: object) -> None:
+    async def test_rejects_glossary(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
         fn = await get_tool_fn(mcp, "column_profile_statistics")
@@ -140,7 +167,7 @@ class TestColumnProfileStatistics:
 
 
 class TestTableEntityRelationships:
-    async def test_forwards_object_id(self, mock_oe_client: object) -> None:
+    async def test_forwards_object_id(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {"relationships": []}
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
@@ -153,7 +180,7 @@ class TestTableEntityRelationships:
 
 
 class TestAssetLineage:
-    async def test_forwards_params(self, mock_oe_client: object) -> None:
+    async def test_forwards_params(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = MOCK_LINEAGE_RESPONSE
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
@@ -164,3 +191,22 @@ class TestAssetLineage:
             MCP_PATH_LINEAGE,
             params={"objectId": 1, "objectType": "oefile", "depth": 4},
         )
+
+    async def test_rejects_non_table_file_object_type(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "asset_lineage")
+        out = await fn(object_id=1, object_type="glossary")
+        assert out["status_code"] == 400
+        mock_oe_client.get.assert_not_called()
+
+
+class TestTableEntityRelationshipsErrors:
+    async def test_oval_edge_error_returns_dict(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.side_effect = OvalEdgeError(503, "Unavailable")
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "table_entity_relationships")
+        out = await fn(object_id=5)
+        assert out["status_code"] == 503
+        assert "503" in out["error"]

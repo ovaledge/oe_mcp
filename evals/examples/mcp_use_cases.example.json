@@ -1,0 +1,22 @@
+{
+  "mcp_use_cases": [
+    {
+      "name": "example_catalog_search",
+      "input": "Find revenue-related certified tables.",
+      "actual_output": "I searched the catalog for revenue keywords and listed certified oetables.",
+      "mcp_tools_called": [
+        {
+          "name": "search_catalog_assets",
+          "args": {
+            "search_terms": ["revenue"],
+            "object_type": "oetable"
+          },
+          "result": {
+            "total": 1,
+            "results": [{ "objectId": "obj-1", "name": "revenue_daily" }]
+          }
+        }
+      ]
+    }
+  ]
+}

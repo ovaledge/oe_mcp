@@ -1,3 +1,4 @@
+from collections.abc import Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -7,7 +8,7 @@ from server.auth.oauth_discovery import OAuthDiscoveryError, get_authorization_s
 
 
 @pytest.fixture(autouse=True)
-def clear_discovery_cache() -> None:
+def clear_discovery_cache() -> Generator[None, None, None]:
     oauth_discovery.clear_metadata_cache()
     yield
     oauth_discovery.clear_metadata_cache()

@@ -1,0 +1,60 @@
+name: Eval nightly (DeepEval MCP)
+
+on:
+  schedule:
+    # 06:15 UTC daily — adjust for your org
+    - cron: "15 6 * * *"
+  workflow_dispatch: {}
+
+env:
+  OVALEDGE_BASE_URL: https://mock.ovaledge.com
+  AUTH_MODE: local
+  OVALEDGE_USER_TOKEN: test-user-token
+  OVALEDGE_USER_SECRET: test-user-secret
+  DEEPEVAL_TELEMETRY_OPT_OUT: "YES"
+
+jobs:
+  deepeval-mcp:
+    name: DeepEval golden MCP metrics
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pypoetry
+          key: ${{ runner.os }}-poetry-${{ hashFiles('poetry.lock') }}
+          restore-keys: ${{ runner.os }}-poetry-
+
+      - name: Install dependencies (with eval)
+        run: poetry install --with eval
+
+      - name: Unit tests (Tier 1)
+        run: poetry run pytest
+
+      - name: Dry-run golden case construction
+        run: poetry run python -m evals.run_evals --dry-run
+
+      - name: LLM eval — pytest + DeepEval (skipped if no API key)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DEEPEVAL_JUDGE_MODEL: ${{ vars.DEEPEVAL_JUDGE_MODEL }}
+        run: |
+          mkdir -p evals/out
+          poetry run pytest evals/test_mcp_deepeval.py -v --junit-xml=evals/out/eval-pytest.xml
+        continue-on-error: true
+
+      - name: Upload eval report artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deepeval-mcp-report
+          path: evals/out/eval-pytest.xml
+          if-no-files-found: ignore
