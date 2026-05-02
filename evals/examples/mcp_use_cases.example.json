@@ -17,6 +17,86 @@
           }
         }
       ]
+    },
+    {
+      "name": "example_empty_catalog_search",
+      "input": "Are there any oetables tagged for dark matter experiments?",
+      "actual_output": "I ran a catalog search; there were no matching oetables.",
+      "mcp_tools_called": [
+        {
+          "name": "search_catalog_assets",
+          "args": {
+            "search_terms": ["dark", "matter"],
+            "object_type": "oetable",
+            "context_query": "Are there any oetables tagged for dark matter experiments?"
+          },
+          "result": { "total": 0, "results": [] }
+        }
+      ]
+    },
+    {
+      "name": "example_glossary_lookup",
+      "input": "What does PII mean in our governance glossary?",
+      "actual_output": "I looked up the glossary term and summarized the official definition.",
+      "mcp_tools_called": [
+        {
+          "name": "lookup_glossary_term",
+          "args": { "term": "PII" },
+          "result": {
+            "term": "PII",
+            "definition": "Personally identifiable information subject to policy X."
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_catalog_then_details",
+      "input": "Find the payroll fact table and show me its catalog document.",
+      "actual_output": "I searched for payroll tables, then loaded details for payroll_fact.",
+      "mcp_tools_called": [
+        {
+          "name": "search_catalog_assets",
+          "args": {
+            "search_terms": ["payroll"],
+            "object_type": "oetable"
+          },
+          "result": {
+            "total": 1,
+            "results": [{ "objectId": "obj-pay-1", "name": "payroll_fact" }]
+          }
+        },
+        {
+          "name": "catalog_asset_details",
+          "args": { "objectId": "obj-pay-1", "object_type": "oetable" },
+          "result": {
+            "objectId": "obj-pay-1",
+            "name": "payroll_fact",
+            "columns": [{ "name": "employee_id", "type": "string" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_multi_keyword_search",
+      "input": "List customer churn datasets we trust for executive dashboards.",
+      "actual_output": "I searched for customer, churn, and certified oetables and returned the top hits.",
+      "mcp_tools_called": [
+        {
+          "name": "search_catalog_assets",
+          "args": {
+            "search_terms": ["customer", "churn", "certified"],
+            "object_type": "oetable",
+            "context_query": "executive dashboards"
+          },
+          "result": {
+            "total": 2,
+            "results": [
+              { "objectId": "obj-a", "name": "churn_scores" },
+              { "objectId": "obj-b", "name": "customer_360" }
+            ]
+          }
+        }
+      ]
     }
   ]
 }
