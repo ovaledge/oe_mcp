@@ -6,6 +6,7 @@ from server.auth.token_exchange import (
     TokenExchangeError,
     exchange_client_credentials,
     exchange_oauth_access_token,
+    exchange_user_credentials,
 )
 
 
@@ -97,3 +98,59 @@ async def test_exchange_handles_raw_text_token_response() -> None:
         token = await exchange_oauth_access_token("oauth-jwt")
 
     assert token == "raw.jwt.token"
+
+
+@pytest.mark.asyncio
+async def test_exchange_user_credentials_extracts_token() -> None:
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {"token": "oe-from-user-creds"}
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    with patch("server.auth.token_exchange.httpx.AsyncClient", return_value=mock_client):
+        token = await exchange_user_credentials("my-token", "my-secret")
+
+    assert token == "oe-from-user-creds"
+    body = mock_client.post.await_args.kwargs["json"]
+    assert body["userToken"] == "my-token"
+    assert body["userSecret"] == "my-secret"
+
+
+@pytest.mark.asyncio
+async def test_exchange_user_credentials_401_sets_status() -> None:
+    mock_response = MagicMock()
+    mock_response.status_code = 401
+    mock_response.text = "nope"
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    with patch("server.auth.token_exchange.httpx.AsyncClient", return_value=mock_client):
+        with pytest.raises(TokenExchangeError) as ei:
+            await exchange_user_credentials("t", "s")
+
+    assert ei.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_exchange_user_credentials_5xx_sets_status() -> None:
+    mock_response = MagicMock()
+    mock_response.status_code = 503
+    mock_response.text = "upstream"
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    with patch("server.auth.token_exchange.httpx.AsyncClient", return_value=mock_client):
+        with pytest.raises(TokenExchangeError) as ei:
+            await exchange_user_credentials("t", "s")
+
+    assert ei.value.status_code == 503

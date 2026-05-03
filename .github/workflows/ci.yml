@@ -77,13 +77,32 @@ jobs:
 
       - uses: aws-actions/setup-sam@v2
 
+      # OvalEdgeBaseUrl is required by infra/template.yaml (no default). Set repository secret
+      # OVALEDGE_BASE_URL to your production OvalEdge origin, e.g. https://tenant.example.com
       - name: SAM Deploy
+        env:
+          OVALEDGE_BASE_URL: ${{ secrets.OVALEDGE_BASE_URL }}
+          SAM_AUTH_MODE: ${{ vars.SAM_AUTH_MODE }}
+          SAM_ENVIRONMENT: ${{ vars.SAM_ENVIRONMENT }}
         run: |
+          set -euo pipefail
+          if [ -z "${OVALEDGE_BASE_URL:-}" ]; then
+            echo "::error::Secret OVALEDGE_BASE_URL must be set for deploy (required CloudFormation parameter OvalEdgeBaseUrl)."
+            exit 1
+          fi
+          AUTH_MODE="${SAM_AUTH_MODE:-remote_credentials}"
+          ENVIRONMENT="${SAM_ENVIRONMENT:-prod}"
           sam build --template-file infra/template.yaml --use-container
           sam deploy \
             --template-file .aws-sam/build/template.yaml \
             --stack-name oe-mcp \
             --region us-east-1 \
             --capabilities CAPABILITY_IAM \
-            --image-repository ${{ steps.ecr-login.outputs.registry }}/oe-mcp \
-            --no-confirm-changeset
+            --resolve-s3 \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --image-repository "${{ steps.ecr-login.outputs.registry }}/oe-mcp" \
+            --parameter-overrides \
+              "AuthMode=${AUTH_MODE}" \
+              "OvalEdgeBaseUrl=${OVALEDGE_BASE_URL}" \
+              "Environment=${ENVIRONMENT}"

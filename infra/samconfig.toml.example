@@ -1,0 +1,16 @@
+# Copy to samconfig.toml and adjust (samconfig.toml is often gitignored locally).
+# For image-based deploys, prefer ./scripts/deploy.sh which passes --image-repository explicitly.
+version = 0.1
+
+[default.build.parameters]
+template = "infra/template.yaml"
+use_container = true
+
+[default.deploy.parameters]
+stack_name = "oe-mcp"
+resolve_s3 = true
+s3_prefix = "oe-mcp"
+region = "us-east-1"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = true
+# image_repositories = ["OEMCPFunction=123456789012.dkr.ecr.us-east-1.amazonaws.com/oe-mcp"]

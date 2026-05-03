@@ -3,6 +3,14 @@ Transform: AWS::Serverless-2016-10-31
 Description: OvalEdge MCP Server — Remote MCP
 
 Parameters:
+  AuthMode:
+    Type: String
+    Default: remote
+    AllowedValues:
+      - remote
+      - remote_credentials
+    Description: >
+      remote = OAuth/OIDC Bearer per request; remote_credentials = X-OvalEdge-Token + Secret headers.
   OvalEdgeBaseUrl:
     Type: String
   OvalEdgeTokenExchangePath:
@@ -13,12 +21,14 @@ Parameters:
     Default: 3
   OAuthIssuer:
     Type: String
+    Default: ""
     Description: >
-      Authorization Server issuer URL (must match JWT iss). Discovery loads
+      (AUTH_MODE=remote) Authorization Server issuer URL (must match JWT iss). Discovery loads
       /.well-known/openid-configuration or oauth-authorization-server under this base.
   OAuthAudience:
     Type: String
-    Description: Resource identifier expected as access token aud claim
+    Default: ""
+    Description: (AUTH_MODE=remote) Resource identifier expected as access token aud claim
   OvalEdgeForwardIdpToken:
     Type: String
     Default: "false"
@@ -29,6 +39,13 @@ Parameters:
     Type: String
     Default: prod
     AllowedValues: [dev, staging, prod]
+  McpHttpStateless:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: >
+      Streamable HTTP stateless mode (default true for Lambda). Set false only if your MCP client
+      requires GET /mcp (SSE); adds session state in the worker.
 
 Globals:
   Function:
@@ -46,20 +63,26 @@ Resources:
     Properties:
       FunctionName: !Sub oe-mcp-${Environment}
       PackageType: Image
+      Tags:
+        Application: oe-mcp
+        Component: mcp-server
+        ManagedBy: SAM
       ImageConfig:
         Command: ["entrypoints.lambda_handler.handler"]
       Environment:
         Variables:
-          AUTH_MODE: remote
+          AUTH_MODE: !Ref AuthMode
           OVALEDGE_BASE_URL: !Ref OvalEdgeBaseUrl
           OVALEDGE_TOKEN_EXCHANGE_PATH: !Ref OvalEdgeTokenExchangePath
           OVALEDGE_MAX_RETRIES: !Ref OvalEdgeMaxRetries
           OAUTH_ISSUER: !Ref OAuthIssuer
           OAUTH_AUDIENCE: !Ref OAuthAudience
-          MCP_PUBLIC_BASE_URL: !Sub
-            - "https://${ApiId}.execute-api.${AWS::Region}.amazonaws.com"
-            - ApiId: !Ref MCPApi
+          # Do not set MCP_PUBLIC_BASE_URL from !Ref MCPApi here — it creates a CloudFormation
+          # circular dependency (function → API → function). Leave unset; metadata uses
+          # Request.base_url (API Gateway / custom domain). Override via Lambda console if needed.
           OVALEDGE_REMOTE_FORWARD_IDP_TOKEN: !Ref OvalEdgeForwardIdpToken
+          CREDENTIALS_CACHE_MAX_ENTRIES: 10000
+          MCP_HTTP_STATELESS: !Ref McpHttpStateless
       Events:
         MCPPost:
           Type: HttpApi
@@ -67,11 +90,53 @@ Resources:
             Path: /mcp
             Method: POST
             ApiId: !Ref MCPApi
+        MCPGet:
+          Type: HttpApi
+          Properties:
+            Path: /mcp
+            Method: GET
+            ApiId: !Ref MCPApi
         OAuthDiscovery:
           Type: HttpApi
           Properties:
             Path: /.well-known/oauth-authorization-server
             Method: GET
+            ApiId: !Ref MCPApi
+        OIDCDiscovery:
+          Type: HttpApi
+          Properties:
+            Path: /.well-known/openid-configuration
+            Method: GET
+            ApiId: !Ref MCPApi
+        OAuthProtectedResource:
+          Type: HttpApi
+          Properties:
+            Path: /.well-known/oauth-protected-resource
+            Method: GET
+            ApiId: !Ref MCPApi
+        OAuthProtectedResourceMcp:
+          Type: HttpApi
+          Properties:
+            Path: /.well-known/oauth-protected-resource/mcp
+            Method: GET
+            ApiId: !Ref MCPApi
+        McpAuthDeclinedGet:
+          Type: HttpApi
+          Properties:
+            Path: /mcp-auth/declined
+            Method: GET
+            ApiId: !Ref MCPApi
+        McpAuthDeclinedPost:
+          Type: HttpApi
+          Properties:
+            Path: /mcp-auth/declined
+            Method: POST
+            ApiId: !Ref MCPApi
+        McpAuthDeclinedOptions:
+          Type: HttpApi
+          Properties:
+            Path: /mcp-auth/declined
+            Method: OPTIONS
             ApiId: !Ref MCPApi
         ClientRegistration:
           Type: HttpApi
@@ -91,6 +156,10 @@ Resources:
     Properties:
       Name: !Sub oe-mcp-api-${Environment}
       StageName: $default
+      # Baseline abuse protection; tighten per route below as needed.
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 200
+        ThrottlingRateLimit: 100
       CorsConfiguration:
         AllowOrigins:
           - "https://claude.ai"
@@ -102,7 +171,12 @@ Resources:
         AllowHeaders:
           - Content-Type
           - Authorization
+          - X-OvalEdge-Token
+          - X-OvalEdge-Secret
       RouteSettings:
+        "POST /mcp":
+          ThrottlingBurstLimit: 100
+          ThrottlingRateLimit: 50
         "POST /register":
           ThrottlingBurstLimit: 10
           ThrottlingRateLimit: 5

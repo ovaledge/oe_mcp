@@ -68,3 +68,19 @@ OVALEDGE_TOKEN_EXCHANGE_PATH = "/api/user/token/generate"
 
 # Refresh local JWT before hard expiry to avoid mid-call failures.
 JWT_REFRESH_LEEWAY_SECONDS = 120
+
+# ── AUTH_MODE=remote_credentials (per-user headers) ─────────────
+HEADER_OE_USER_TOKEN = "X-OvalEdge-Token"
+HEADER_OE_USER_SECRET = "X-OvalEdge-Secret"
+
+# Regenerate cached OvalEdge JWT this many seconds before ``exp``.
+CREDENTIALS_REFRESH_LEEWAY_SECONDS = 60
+
+# In-memory cap for distinct credential-key JWT entries.
+CREDENTIALS_CACHE_MAX_ENTRIES = 10_000
+
+# After JWT ``exp``, drop cache entry this many seconds later (0 = at exp boundary).
+CREDENTIALS_CACHE_POST_EXP_GRACE_SECONDS = 0
+
+# Max length per header value after trim (before exchange).
+CREDENTIALS_HEADER_MAX_LEN = 2048

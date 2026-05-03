@@ -12,6 +12,10 @@ Usage (from repo root):
 
   # Optional: MCP HTTP (uvicorn must be running on MCP_PUBLIC_BASE_URL):
   poetry run python scripts/validate_remote_mcp.py --mcp --token "$OAUTH_TEST_ACCESS_TOKEN"
+
+  # AUTH_MODE=remote_credentials — probe token/generate with user token+secret:
+  export OVALEDGE_USER_TOKEN=... OVALEDGE_USER_SECRET=...
+  poetry run python scripts/validate_remote_mcp.py --credentials
 """
 
 from __future__ import annotations
@@ -44,12 +48,26 @@ async def cmd_settings() -> None:
     print("oauth_audience:", settings.oauth_audience or "(empty)")
     print("mcp_public_base_url:", settings.mcp_public_base_url or "(empty)")
     print("ovaledge_base_url:", settings.ovaledge_base_url)
-    if settings.auth_mode != "remote":
-        print("WARN: auth_mode is not 'remote'; HTTP MCP expects AUTH_MODE=remote")
+    if settings.auth_mode == "remote":
+        pass
+    elif settings.auth_mode == "remote_credentials":
+        print(
+            "INFO: remote_credentials — clients send X-OvalEdge-Token and "
+            "X-OvalEdge-Secret; OAuth discovery is not used."
+        )
+    else:
+        print(
+            "WARN: auth_mode is 'local'; for HTTP MCP set AUTH_MODE=remote or remote_credentials"
+        )
 
 
 async def cmd_discovery() -> None:
     from server.auth.oauth_discovery import OAuthDiscoveryError, get_authorization_server_metadata
+    from server.config import settings
+
+    if settings.auth_mode == "remote_credentials":
+        print("--- IdP discovery --- SKIP (AUTH_MODE=remote_credentials)")
+        return
 
     print("--- IdP discovery (oauth_issuer) ---")
     try:
@@ -126,10 +144,42 @@ async def cmd_ovaledge(token: str | None) -> None:
         print("FAIL:", e)
 
 
+async def cmd_credentials(oe_token: str | None, oe_secret: str | None) -> None:
+    from server.auth.token_exchange import TokenExchangeError, exchange_user_credentials
+    from server.config import settings
+
+    print("--- exchange_user_credentials (remote_credentials path) ---")
+    t = oe_token or os.environ.get("OVALEDGE_USER_TOKEN")
+    s = oe_secret or os.environ.get("OVALEDGE_USER_SECRET")
+    if not t or not s:
+        print(
+            "SKIP: pass --oe-token and --oe-secret or set "
+            "OVALEDGE_USER_TOKEN and OVALEDGE_USER_SECRET"
+        )
+        return
+    print("auth_mode:", settings.auth_mode)
+    if settings.auth_mode != "remote_credentials":
+        print(
+            "WARN: auth_mode is not remote_credentials; still probing POST /api/user/token/generate"
+        )
+    try:
+        oe_jwt = await exchange_user_credentials(t, s)
+        print("OK: OvalEdge JWT length:", len(oe_jwt), "preview:", _redact_jwt(oe_jwt))
+    except TokenExchangeError as e:
+        print("FAIL:", e, "status_code=", getattr(e, "status_code", None))
+
+
 async def cmd_mcp(token: str | None, mcp_url: str | None) -> None:
     import httpx
 
     from server.config import settings
+
+    if settings.auth_mode == "remote_credentials":
+        print(
+            "--- MCP HTTP --- SKIP (--mcp uses OAuth Bearer; for remote_credentials POST /mcp "
+            "with X-OvalEdge-Token and X-OvalEdge-Secret headers)"
+        )
+        return
 
     if not token:
         print("--- MCP HTTP --- SKIP (need --token or OAUTH_TEST_ACCESS_TOKEN)")
@@ -164,7 +214,13 @@ async def main_async(args: argparse.Namespace) -> int:
     token = args.token or os.environ.get("OAUTH_TEST_ACCESS_TOKEN")
 
     run_all = args.all or not any(
-        [args.settings, args.discovery, args.ovaledge, args.mcp]
+        [
+            args.settings,
+            args.discovery,
+            args.ovaledge,
+            args.mcp,
+            args.credentials,
+        ]
     )
 
     if run_all or args.settings:
@@ -175,6 +231,9 @@ async def main_async(args: argparse.Namespace) -> int:
         print()
     if run_all or args.ovaledge:
         await cmd_ovaledge(token)
+        print()
+    if run_all or args.credentials:
+        await cmd_credentials(args.oe_token, args.oe_secret)
         print()
     if run_all or args.mcp:
         await cmd_mcp(token, args.mcp_url)
@@ -193,7 +252,17 @@ def main() -> None:
     p.add_argument("--discovery", action="store_true", help="Fetch OIDC discovery via oauth_issuer")
     p.add_argument("--ovaledge", action="store_true", help="Probe OvalEdge token exchange")
     p.add_argument("--mcp", action="store_true", help="POST initialize to MCP HTTP (needs token)")
+    p.add_argument(
+        "--credentials",
+        action="store_true",
+        help=(
+            "Probe exchange_user_credentials "
+            "(needs --oe-token/--oe-secret or env OvalEdge user creds)"
+        ),
+    )
     p.add_argument("--token", help="Auth0 access token (or env OAUTH_TEST_ACCESS_TOKEN)")
+    p.add_argument("--oe-token", dest="oe_token", help="OvalEdge user token for --credentials")
+    p.add_argument("--oe-secret", dest="oe_secret", help="OvalEdge user secret for --credentials")
     p.add_argument(
         "--mcp-url",
         dest="mcp_url",

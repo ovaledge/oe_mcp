@@ -1,195 +1,55 @@
-# OvalEdge Local MCP Server
+# OvalEdge MCP Server
 
-Local-only documentation for running the OvalEdge MCP server over stdio with Poetry.
+Read-only OvalEdge governance and catalog capabilities exposed to MCP clients (Cursor, Claude Desktop, etc.): search, lineage, glossary, tags, docs, and workflow prompts.
 
-This repository exposes read-only OvalEdge governance/discovery capabilities to MCP clients (Cursor, Claude Desktop, etc.).
+## How to run
 
-## What This Server Provides
+| Mode | Transport | Doc |
+| ---- | ----------- | --- |
+| **Local** | stdio (`poetry run oe-mcp-local`) | [README_LOCAL_MCP.md](README_LOCAL_MCP.md) |
+| **Remote** | HTTP (`uvicorn entrypoints.lambda_handler:app` or AWS Lambda) | [README_REMOTE_MCP.md](README_REMOTE_MCP.md) |
 
-- Catalog discovery and details (`search_catalog_assets`, `catalog_asset_details`)
+**`AUTH_MODE`** in `.env` (or process env) selects behavior: `local`, `remote`, or `remote_credentials`. Full variable reference: [.env.example](.env.example).
+
+**`.env` is not committed.** Copy the example, then edit:
+
+```bash
+cp .env.example .env
+```
+
+Setup scripts (`scripts/setup_local_mcp.sh`, `scripts/setup_local_mcp.ps1`) create `.env` from `.env.example` only if `.env` is missing; they do not overwrite an existing file.
+
+## OAuth remote mode — work in progress
+
+**`AUTH_MODE=remote` (OAuth 2.x / OIDC Bearer) is WIP** and not fully validated end-to-end with real IdPs and MCP clients. Prefer **`remote_credentials`** (HTTP headers to OvalEdge) or **`local`** (stdio) until OAuth is stable. Details: [README_REMOTE_MCP.md](README_REMOTE_MCP.md#work-in-progress-oauth-remote-mode).
+
+## What this server provides
+
+- Catalog search and asset details (`search_catalog_assets`, `catalog_asset_details`)
 - Column profile, entity relationships, lineage
-- Governance lookups (glossary and tags)
+- Glossary and tag lookups
 - Platform documentation search
-- Resource endpoints for deep links (`ovaledge://...`)
-- Pre-built workflow prompts for common analyst tasks
+- Resource URIs (`ovaledge://...`)
+- Workflow prompts for common analyst tasks (see `server/prompts/workflows.py`)
 
-## Local Runtime Architecture
+## Tools, resources, and prompts
 
-Local mode uses machine credentials (`OVALEDGE_USER_TOKEN`, `OVALEDGE_USER_SECRET`) to obtain an OvalEdge JWT and execute API calls.
+### Tools (`server/tools/`)
 
-1. MCP client starts stdio process: `poetry run oe-mcp-local`
-2. `entrypoints/local.py` runs FastMCP with `local_lifespan`
-3. Lifespan calls `get_or_refresh_local_token()`
-4. OvalEdge `POST /api/user/token/generate` returns JWT
-5. JWT is cached in memory and stored in ContextVar
-6. Tools use `OvalEdgeClient` for outbound API calls
-7. Before requests, local token freshness is checked and refreshed when needed
-8. On one-time local 401, cache is invalidated and request is retried once
+- `search_catalog_assets`, `catalog_asset_details`, `column_profile_statistics`
+- `table_entity_relationships`, `asset_lineage`
+- `lookup_glossary_term`, `lookup_tags`, `search_platform_docs`
 
-## Key Code Integrations (Local MCP)
-
-### Entrypoint and app composition
-
-- `entrypoints/local.py`
-  - Defines local FastMCP lifespan
-  - Bootstraps token exchange at startup
-  - Runs stdio transport
-- `server/app.py`
-  - Registers all tools, resources, prompts, and static docs
-  - Builds shared FastMCP application with local lifespan injection
-
-### Authentication and token lifecycle
-
-- `server/auth/token_exchange.py`
-  - `exchange_client_credentials()` calls OvalEdge token endpoint
-  - `get_or_refresh_local_token()` caches token in-process
-  - `is_token_expiring()` applies expiry/leeway logic (`JWT_REFRESH_LEEWAY_SECONDS = 120`)
-  - `invalidate_local_jwt_cache()` clears stale cache for forced refresh
-- `server/auth/context.py`
-  - `current_oe_jwt` ContextVar for request-scoped token access
-  - `local_cached_oe_jwt` in-memory process cache
-- `server/client.py`
-  - `_ensure_local_token()` lazily refreshes token in local mode
-  - `_send_with_local_401_retry()` retries once after cache invalidation on local 401
-  - Retries transient HTTP failures (429/502/503/504) via Tenacity
-
-### Configuration loading
-
-- `server/config.py`
-  - Loads `.env` from repo root (absolute path fallback)
-  - Defines all local-relevant settings (`AUTH_MODE`, base URL, token credentials, HTTP auth scheme, retry controls)
-
-## One-Shot Local Setup (macOS + Linux)
-
-Use the setup script after cloning:
-
-```bash
-chmod +x scripts/setup_local_mcp.sh
-./scripts/setup_local_mcp.sh
-```
-
-What it does:
-
-- Verifies OS (Darwin/Linux)
-- Verifies Python 3.12+
-- Installs Poetry if missing (official installer)
-- Runs `poetry install`
-- Creates `.env` from `.env.example` if absent
-- Runs a local smoke import (`from entrypoints.local import mcp`)
-- Prints a ready-to-edit `mcp.json` snippet
-
-Developer mode (adds lint/typecheck/tests):
-
-```bash
-./scripts/setup_local_mcp.sh --dev
-```
-
-## One-Shot Local Setup (Windows PowerShell)
-
-Use the PowerShell setup script after cloning:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\setup_local_mcp.ps1
-```
-
-Developer mode (adds lint/typecheck/tests):
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\setup_local_mcp.ps1 -Dev
-```
-
-## Required Local Environment
-
-Set these in `.env` (or pass via MCP client `env`):
-
-- `AUTH_MODE=local`
-- `OVALEDGE_BASE_URL=http://<host>:<port>/ovaledge`
-- `OVALEDGE_USER_TOKEN=<your token>`
-- `OVALEDGE_USER_SECRET=<your secret>`
-- `OVALEDGE_HTTP_AUTH_SCHEME=jwt` (default/local expected)
-
-Optional tuning:
-
-- `OVALEDGE_TIMEOUT_SECONDS`
-- `OVALEDGE_MAX_RETRIES`
-- `OVALEDGE_RETRY_BACKOFF_SECONDS`
-- `OVALEDGE_LOG_HTTP_REQUESTS`
-
-## MCP Client Configuration (`mcp.json`)
-
-Use Poetry `-C` style (recommended):
-
-```json
-{
-  "mcpServers": {
-    "ovaledge-local": {
-      "command": "poetry",
-      "args": [
-        "-C",
-        "/absolute/path/to/oe_mcp",
-        "run",
-        "oe-mcp-local"
-      ],
-      "env": {
-        "OVALEDGE_BASE_URL": "http://127.0.0.1:8080/ovaledge",
-        "OVALEDGE_USER_TOKEN": "your-user-token",
-        "OVALEDGE_USER_SECRET": "your-user-secret",
-        "OVALEDGE_HTTP_AUTH_SCHEME": "jwt",
-        "AUTH_MODE": "local"
-      }
-    }
-  }
-}
-```
-
-Notes:
-
-- If `.env` inside the repo is complete, you can omit most `env` entries.
-- Restart your MCP client after config changes.
-
-## Tools, Resources, and Prompts
-
-### Tools
-
-Implemented in `server/tools/`:
-
-- `search_catalog_assets`
-- `catalog_asset_details`
-- `column_profile_statistics`
-- `table_entity_relationships`
-- `asset_lineage`
-- `lookup_glossary_term`
-- `lookup_tags`
-- `search_platform_docs`
-
-### Resources
-
-Implemented in `server/resources/`:
+### Resources (`server/resources/`)
 
 - `ovaledge://catalog/table/{object_id}`
 - `ovaledge://governance/glossary-term/{object_id}`
 
-### Prompts
+### Prompts (`server/prompts/workflows.py`)
 
-Implemented in `server/prompts/workflows.py`:
+Data discovery, explain business term, trust assessment, explore domain, trace lineage, find related assets, platform help.
 
-- Data discovery
-- Explain business term
-- Trust assessment
-- Explore domain
-- Trace lineage
-- Find related assets
-- Platform help
-
-## Local Operations
-
-### Run manually
-
-```bash
-poetry -C /absolute/path/to/oe_mcp run oe-mcp-local
-```
-
-### Quality gates
+## Development
 
 ```bash
 poetry run ruff check .
@@ -197,69 +57,27 @@ poetry run mypy server/ entrypoints/ evals/
 poetry run pytest
 ```
 
-### LLM-level MCP evaluation (DeepEval)
+Optional LLM-level MCP checks: `poetry install --with eval`, then see [evals/README.md](evals/README.md).
 
-Optional Tier-2 checks (`poetry install --with eval`, `pytest evals/test_mcp_deepeval.py` or `python -m evals.run_evals`). User-defined **MCPUse** prompts and tool traces can live in JSON (`--cases-json` / `DEEPEVAL_MCP_USE_CASES_JSON`); details and schema are in [evals/README.md](evals/README.md).
+## Security (summary)
 
-## Troubleshooting (Local MCP)
+See **[SECURITY.md](SECURITY.md)** for reporting, deployment surface, and dependency practices.
 
-### 1) `TokenExchangeError` with HTTP 200 empty body
+- Do not commit real OvalEdge tokens or secrets.
+- Remote header mode (`remote_credentials`) requires **HTTPS** at the edge; see [README_REMOTE_MCP.md](README_REMOTE_MCP.md#security-remote).
+- Local secrets: [README_LOCAL_MCP.md](README_LOCAL_MCP.md#security-local).
 
-Symptom:
+## Repository layout (overview)
 
-- Token endpoint responds 200, but no usable token payload.
+| Path | Role |
+| ---- | ---- |
+| `entrypoints/local.py` | Stdio MCP |
+| `entrypoints/lambda_handler.py` | HTTP MCP (Mangum) |
+| `server/app.py` | FastMCP app assembly |
+| `server/auth/` | Auth, token exchange, middleware |
+| `server/client.py` | OvalEdge HTTP client |
+| `server/tools/`, `server/resources/`, `server/prompts/` | MCP surface |
+| `infra/template.yaml` | SAM sample for remote HTTP |
+| `scripts/` | Setup and validation helpers |
 
-Checks:
-
-- Verify `OVALEDGE_BASE_URL`
-- Verify `POST /api/user/token/generate` contract for your OvalEdge build
-- Verify `OVALEDGE_USER_TOKEN` and `OVALEDGE_USER_SECRET`
-
-### 2) Works initially, then 401 after idle
-
-Behavior:
-
-- Local client now does one-time cache invalidation + retry on local 401.
-- If second attempt still fails, credentials/session are likely invalid server-side.
-
-Checks:
-
-- Confirm token/secret still valid
-- Confirm system clock and JWT expiry behavior on OvalEdge side
-
-### 3) HTML or redirect responses from OvalEdge
-
-Likely cause:
-
-- Wrong base URL/path or session-login endpoint intercepted API route.
-
-Checks:
-
-- Ensure your target path is API-enabled for token-based auth
-- Inspect logs for redirect `Location` in outbound request tracing
-
-### 4) MCP client does not start server
-
-Checks:
-
-- `poetry` is available in PATH of the MCP host process
-- Repo path in `-C` is absolute and correct
-- `AUTH_MODE=local` is set
-- Dependencies installed (`poetry install`)
-
-## Security Notes
-
-- Never commit real `OVALEDGE_USER_TOKEN` / `OVALEDGE_USER_SECRET`.
-- Rotate credentials if accidentally exposed.
-- Use least-privilege OvalEdge account for local MCP usage.
-
-## Repository Layout (Local-relevant)
-
-- `entrypoints/local.py` - stdio entrypoint
-- `server/app.py` - MCP assembly
-- `server/auth/*` - token exchange/context and auth helpers
-- `server/client.py` - outbound OvalEdge client + retry behavior
-- `server/tools/*` - MCP tools
-- `server/resources/*` - MCP resources
-- `server/prompts/workflows.py` - MCP prompts
-- `scripts/setup_local_mcp.sh` - one-shot local setup
+More detail: [README_LOCAL_MCP.md](README_LOCAL_MCP.md#layout-local-relevant-paths) · [README_REMOTE_MCP.md](README_REMOTE_MCP.md#layout-remote-relevant-paths)

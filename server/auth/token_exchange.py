@@ -7,11 +7,29 @@ from jose import jwt  # type: ignore[import-untyped]
 
 from server.auth import context as auth_context
 from server.config import settings
-from server.constants import JWT_REFRESH_LEEWAY_SECONDS, OVALEDGE_TOKEN_EXCHANGE_PATH
+from server.constants import (
+    CREDENTIALS_REFRESH_LEEWAY_SECONDS,
+    JWT_REFRESH_LEEWAY_SECONDS,
+    OVALEDGE_TOKEN_EXCHANGE_PATH,
+)
 
 
 class TokenExchangeError(Exception):
-    pass
+    def __init__(self, message: str, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def jwt_exp_epoch(token: str) -> int:
+    """Unix seconds from JWT ``exp`` claim, or 0 if missing / unparsable."""
+    try:
+        claims = cast(dict[str, Any], jwt.get_unverified_claims(token))
+        exp = claims.get("exp")
+        if exp is None:
+            return 0
+        return int(exp)
+    except Exception:
+        return 0
 
 
 def _payload_from_token_exchange_response(response: httpx.Response) -> Any:
@@ -133,7 +151,8 @@ async def exchange_oauth_access_token(oauth_access_token: str) -> str:
         )
         if response.status_code != 200:
             raise TokenExchangeError(
-                f"OvalEdge token exchange failed: {response.status_code} {response.text}"
+                f"OvalEdge token exchange failed: {response.status_code} {response.text}",
+                status_code=response.status_code,
             )
         payload = _payload_from_token_exchange_response(response)
         return _extract_token(payload)
@@ -166,7 +185,8 @@ async def exchange_client_credentials() -> str:
         if response.status_code != 200:
             raise TokenExchangeError(
                 f"OvalEdge client_credentials exchange failed: "
-                f"{response.status_code} {response.text}"
+                f"{response.status_code} {response.text}",
+                status_code=response.status_code,
             )
         payload = _payload_from_token_exchange_response(response)
         return _extract_token(payload)
@@ -182,6 +202,80 @@ def invalidate_local_jwt_cache() -> None:
     """
     auth_context.local_cached_oe_jwt = ""
     auth_context.current_oe_jwt.set("")
+
+
+async def exchange_user_credentials(user_token: str, user_secret: str) -> str:
+    """
+    Remote multi-user credentials path (headers → OvalEdge JWT).
+
+    Same wire format as ``exchange_client_credentials``, but credentials come from
+    request headers rather than process env. Prefer ``get_or_refresh_user_token`` so
+    JWT is cached per credential key.
+    """
+    async with httpx.AsyncClient(
+        base_url=settings.ovaledge_base_url,
+        timeout=settings.ovaledge_timeout_seconds,
+    ) as client:
+        response = await client.post(
+            OVALEDGE_TOKEN_EXCHANGE_PATH,
+            json={
+                "userToken": user_token,
+                "userSecret": user_secret,
+            },
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+        )
+        if response.status_code == 401:
+            raise TokenExchangeError(
+                "Invalid OvalEdge user token or secret",
+                status_code=401,
+            )
+        if response.status_code != 200:
+            raise TokenExchangeError(
+                f"OvalEdge user-cred exchange failed: {response.status_code} {response.text}",
+                status_code=response.status_code,
+            )
+        payload = _payload_from_token_exchange_response(response)
+        return _extract_token(payload)
+
+
+async def get_or_refresh_user_token(user_token: str, user_secret: str) -> str:
+    """
+    Return cached OvalEdge JWT for this credential key when fresh; otherwise exchange.
+
+    Cache key is ``credential_cache_key(user_token, user_secret)`` — never logged.
+    """
+    from server.auth.credentials_cache import (
+        CachedJwtEntry,
+        credential_cache_key,
+        get_default_credentials_cache,
+    )
+
+    key = credential_cache_key(user_token, user_secret)
+    cache = get_default_credentials_cache()
+
+    entry = await cache.get_entry(key)
+    if entry and not is_token_expiring(
+        entry.jwt,
+        leeway_seconds=CREDENTIALS_REFRESH_LEEWAY_SECONDS,
+    ):
+        return entry.jwt
+
+    async with cache.refresh_lock(key):
+        entry = await cache.get_entry(key)
+        if entry and not is_token_expiring(
+            entry.jwt,
+            leeway_seconds=CREDENTIALS_REFRESH_LEEWAY_SECONDS,
+        ):
+            return entry.jwt
+        new_jwt = await exchange_user_credentials(user_token, user_secret)
+        await cache.set_entry(
+            key,
+            CachedJwtEntry(jwt=new_jwt, exp_epoch=jwt_exp_epoch(new_jwt)),
+        )
+        return new_jwt
 
 
 async def get_or_refresh_local_token() -> str:
