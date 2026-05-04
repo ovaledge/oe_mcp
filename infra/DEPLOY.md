@@ -23,7 +23,7 @@ Optional tuning (same shell, before `./scripts/deploy.sh`):
 
 ```bash
 export STACK_NAME=oe-mcp-prod
-export AWS_REGION=api-south-1
+export AWS_REGION=ap-south-1
 export AUTH_MODE=remote_credentials   # or remote
 export ENVIRONMENT=prod
 export MCP_HTTP_STATELESS=true        # false if your MCP client needs GET/SSE
@@ -59,6 +59,41 @@ sam deploy -t .aws-sam/build/template.yaml \
 ```
 
 Template parameters are defined in [template.yaml](template.yaml).
+
+## Lambda architecture (`x86_64` vs `arm64`)
+
+SAM’s Docker build targets the **same architecture** as the Lambda resource. The template defaults to **`x86_64`** so typical laptops and **GitHub Actions `ubuntu-latest`** (amd64) match without `docker buildx`.
+
+For **Graviton (`arm64`)** images, deploy with:
+
+```bash
+export LAMBDA_ARCHITECTURE=arm64
+```
+
+and build on an **arm64** machine or use **buildx** with `--platform linux/arm64` (see AWS docs for cross-arch Lambda images).
+
+## Docker build: `digest … not found` / `failed to read config content`
+
+Usually a **stale BuildKit or SAM cache** pointing at an old layer blob, or a **pulled-then-pruned** Lambda base image.
+
+From repo root, try in order:
+
+```bash
+docker pull public.ecr.aws/lambda/python:3.12
+rm -rf .aws-sam/cache
+export SAM_BUILD_NO_CACHED=true
+./scripts/deploy.sh
+```
+
+If it still fails, build **without** the SAM container sandbox (works on many Linux hosts; matches Lambda glibc closely enough for pure-Python wheels):
+
+```bash
+export SAM_USE_CONTAINER=false
+export SAM_BUILD_NO_CACHED=true
+./scripts/deploy.sh
+```
+
+Last resort: `docker builder prune -af` (removes **all** build cache on the machine) then rerun `./scripts/deploy.sh`.
 
 ## After deploy
 

@@ -46,12 +46,23 @@ Parameters:
     Description: >
       Streamable HTTP stateless mode (default true for Lambda). Set false only if your MCP client
       requires GET /mcp (SSE); adds session state in the worker.
+  LambdaArchitecture:
+    Type: String
+    Default: x86_64
+    AllowedValues:
+      - x86_64
+      - arm64
+    Description: >
+      Lambda CPU architecture. Default x86_64 matches most laptops and GitHub-hosted runners
+      (docker build / sam build --use-container). Use arm64 for Graviton cost savings; build with
+      docker buildx --platform linux/arm64 (or an arm64 host).
 
 Globals:
   Function:
     Timeout: 30
     MemorySize: 512
-    Architectures: [arm64]
+    Architectures:
+      - !Ref LambdaArchitecture
 
 Resources:
   OEMCPFunction:

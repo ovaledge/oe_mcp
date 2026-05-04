@@ -11,6 +11,10 @@
 #   ENVIRONMENT         dev | staging | prod — suffixes Lambda name (default: dev)
 #   ECR_REPO            ECR repository name (default: oe-mcp); created if missing
 #   MCP_HTTP_STATELESS  true | false (default: true) — see README_REMOTE_MCP.md
+#   SAM_USE_CONTAINER   if "false", omit --use-container (native build; often fixes digest/cache errors on Linux)
+#   SAM_BUILD_NO_CACHED if "true", pass sam build --no-cached (clear bad layer cache)
+#   SAM_SKIP_DOCKER_PULL_BASE  if "true", skip docker pull of the Lambda base image
+#   LAMBDA_ARCHITECTURE  x86_64 | arm64 (default: x86_64) — must match docker build host for sam build
 #
 # OAuth remote mode extras (only when AUTH_MODE=remote):
 #   SAM_OAUTH_ISSUER      maps to template OAuthIssuer
@@ -31,10 +35,15 @@ Required env:
 
 Optional env:
   STACK_NAME, AWS_REGION, AUTH_MODE, ENVIRONMENT, ECR_REPO, MCP_HTTP_STATELESS,
+  SAM_USE_CONTAINER, SAM_BUILD_NO_CACHED,
   IMAGE_REPOSITORY, SAM_OAUTH_ISSUER, SAM_OAUTH_AUDIENCE
 
 Example:
   export OVALEDGE_BASE_URL=https://app.example.com
+  ./scripts/deploy.sh
+
+  # Claude / clients that need GET (SSE-style) on /mcp — set before deploy:
+  export MCP_HTTP_STATELESS=false
   ./scripts/deploy.sh
 EOF
 }
@@ -59,6 +68,7 @@ AUTH_MODE="${AUTH_MODE:-remote_credentials}"
 ENVIRONMENT="${ENVIRONMENT:-dev}"
 ECR_REPO="${ECR_REPO:-oe-mcp}"
 MCP_HTTP_STATELESS="${MCP_HTTP_STATELESS:-true}"
+LAMBDA_ARCHITECTURE="${LAMBDA_ARCHITECTURE:-x86_64}"
 
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}}"
@@ -86,14 +96,28 @@ echo "==> Docker login to ECR ($AWS_REGION)"
 aws ecr get-login-password --region "$AWS_REGION" |
   docker login --username AWS --password-stdin "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
-echo "==> sam build (container image from Dockerfile)"
-sam build -t infra/template.yaml --use-container
+if [[ "${SAM_SKIP_DOCKER_PULL_BASE:-false}" != "true" ]]; then
+  echo "==> Refresh Lambda base image (avoids stale digest NotFound from cache)"
+  docker pull public.ecr.aws/lambda/python:3.12
+fi
+
+BUILD_ARGS=( -t infra/template.yaml )
+if [[ "${SAM_USE_CONTAINER:-true}" != "false" ]]; then
+  BUILD_ARGS+=( --use-container )
+fi
+if [[ "${SAM_BUILD_NO_CACHED:-false}" == "true" ]]; then
+  BUILD_ARGS+=( --no-cached )
+fi
+
+echo "==> sam build (Dockerfile) ${BUILD_ARGS[*]}"
+sam build "${BUILD_ARGS[@]}"
 
 OVERRIDES=(
   "AuthMode=${AUTH_MODE}"
   "OvalEdgeBaseUrl=${OVALEDGE_BASE_URL}"
   "Environment=${ENVIRONMENT}"
   "McpHttpStateless=${MCP_HTTP_STATELESS}"
+  "LambdaArchitecture=${LAMBDA_ARCHITECTURE}"
 )
 if [[ -n "${SAM_OAUTH_ISSUER:-}" ]]; then
   OVERRIDES+=("OAuthIssuer=${SAM_OAUTH_ISSUER}")

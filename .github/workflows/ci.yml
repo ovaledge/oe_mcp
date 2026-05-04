@@ -105,4 +105,5 @@ jobs:
             --parameter-overrides \
               "AuthMode=${AUTH_MODE}" \
               "OvalEdgeBaseUrl=${OVALEDGE_BASE_URL}" \
-              "Environment=${ENVIRONMENT}"
+              "Environment=${ENVIRONMENT}" \
+              "LambdaArchitecture=x86_64"

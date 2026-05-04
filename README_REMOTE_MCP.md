@@ -130,6 +130,34 @@ Each end user should use **their own** token and secret; the server keeps a sepa
 
 The MCP URL may be `http://127.0.0.1:8000/mcp` or `.../mcp/` — the server normalizes slashless `/mcp` so clients are not tripped by Starlette’s **307** redirect to `/mcp/`.
 
+### Claude Code (HTTP MCP)
+
+**Claude (including many Claude Desktop flows) does not rely on MCP Streamable HTTP the way Cursor does.** For HTTP access from **Claude Code** (the CLI-driven product), register the server with **`claude mcp`** using **`--transport http`**.
+
+On the **server**, set **`MCP_HTTP_STATELESS=false`** (SAM parameter **`McpHttpStateless=false`** on Lambda, or `export MCP_HTTP_STATELESS=false` before uvicorn locally) so **`GET /mcp`** is registered and SSE-style fallback works for clients that do not stick to Streamable HTTP POST-only behavior.
+
+**`<MCP_BASE_URL>`** is the full MCP endpoint URL (same as **`MCPEndpointUrl`** from deploy output or `https://…/mcp` / `http://127.0.0.1:8000/mcp`). Use **HTTPS** in production (API Gateway); for plain `http://127.0.0.1` you still need **`X-Forwarded-Proto: https`** on the server — the CLI does not add that automatically, so prefer a **TLS** URL or terminate TLS in front of the app.
+
+**1. Register the remote MCP server**
+
+```bash
+claude mcp add --transport http ovaledge-remote <MCP_BASE_URL> \
+  --header "X-OvalEdge-Token: YOUR_USER_TOKEN" \
+  --header "X-OvalEdge-Secret: YOUR_USER_SECRET"
+```
+
+Replace **`YOUR_USER_TOKEN`** / **`YOUR_USER_SECRET`** with real OvalEdge credentials (avoid committing them or pasting them into shared logs).
+
+**2. Use Claude Code**
+
+Open **Claude Code** and run your usual sessions or commands; the **`ovaledge-remote`** MCP definition is picked up from the CLI configuration.
+
+**3. Remove the remote MCP configuration**
+
+```bash
+claude mcp remove ovaledge-remote
+```
+
 ## Validation script
 
 From repo root:
