@@ -6,6 +6,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from jose import jwt as jose_jwt  # type: ignore[import-untyped]
 from starlette.responses import Response
+from starlette.types import Receive, Send
 
 from server.auth.bearer_jwt import verify_oauth_access_token
 from server.auth.context import current_oe_credential_cache_key, current_oe_jwt
@@ -248,7 +249,7 @@ class AuthMiddleware:
     def __init__(self, app: Callable[..., Awaitable[Any]]) -> None:
         self.app = app
 
-    async def __call__(self, scope: dict[str, Any], receive: Callable, send: Callable) -> None:
+    async def __call__(self, scope: dict[str, Any], receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return

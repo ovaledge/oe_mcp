@@ -3,6 +3,8 @@
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from starlette.types import Receive, Send
+
 ASGIApp = Callable[..., Awaitable[None]]
 
 
@@ -16,7 +18,7 @@ class NormalizeMcpMountSlashMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
-    async def __call__(self, scope: dict[str, Any], receive: Callable, send: Callable) -> None:
+    async def __call__(self, scope: dict[str, Any], receive: Receive, send: Send) -> None:
         if scope["type"] == "http" and scope.get("path") == "/mcp":
             scope = dict(scope)
             scope["path"] = "/mcp/"
