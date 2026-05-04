@@ -2,7 +2,7 @@
 
 Run the OvalEdge MCP server as a **stdio** subprocess with **`AUTH_MODE=local`**. The MCP client (Cursor, Claude Desktop, etc.) starts `poetry run oe-mcp-local` and talks JSON-RPC over stdin/stdout.
 
-← [Back to main README](README.md) · [Remote MCP (HTTP)](README_REMOTE_MCP.md)
+← [Back to main README](README.md) · [Remote MCP (HTTP)](README_REMOTE_MCP.md) (OAuth 2.x **`remote`** mode: **WIP**)
 
 ## Runtime architecture
 

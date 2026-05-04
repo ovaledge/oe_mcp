@@ -2,22 +2,24 @@
 
 Run the same MCP tools over **HTTP** with FastAPI + Mangum (`entrypoints/lambda_handler.py`). Auth is selected with **`AUTH_MODE`** at process startup (Lambda environment, SAM template, or `.env` when using uvicorn).
 
+**OAuth 2.x / OIDC remote MCP (`AUTH_MODE=remote`) is work in progress (WIP)** — not production-ready; prefer **`remote_credentials`** (header auth to OvalEdge) unless you are explicitly exercising the OAuth stack.
+
 ← [Back to main README](README.md) · [Local MCP (stdio)](README_LOCAL_MCP.md)
 
 ## Auth modes
 
-| `AUTH_MODE` | Client credentials | OAuth routes | Notes |
-| ------------- | -------------------- | ------------ | ----- |
-| `remote` | `Authorization: Bearer <IdP access_token>` | `/.well-known/oauth-authorization-server`, `POST /register` | **WIP** — see below |
+| `AUTH_MODE` | Client credentials | OAuth / discovery routes | Notes |
+| ------------- | -------------------- | -------------------------- | ----- |
+| `remote` | `Authorization: Bearer <IdP access_token>` | `/.well-known/oauth-authorization-server`, `POST /register` | **OAuth 2.x remote MCP — WIP** — see below |
 | `remote_credentials` | `X-OvalEdge-Token` + `X-OvalEdge-Secret` on each request | Minimal `/.well-known/*` stubs (no browser OAuth) | Per-user OvalEdge JWT cached server-side by credential key; many users share one process; use **HTTPS** |
 
 Shared: `POST /mcp` (streamable HTTP), `GET /health`, `GET /`.
 
 All variables are documented in [.env.example](.env.example).
 
-## Work in progress: OAuth remote mode
+## Work in progress: OAuth 2.x remote MCP
 
-**WIP — not fully working end-to-end today.** `AUTH_MODE=remote` (OAuth 2.x / OIDC Bearer) — the `remote` stack (OIDC discovery, dynamic client registration, JWT validation against IdP JWKS, optional `POST /api/user/token/generate` to obtain an OvalEdge JWT, or forwarding the IdP token) is present in code but real IdP + MCP client flows still need validation.
+**WIP — not fully working end-to-end today.** `AUTH_MODE=remote` (OAuth 2.x / OIDC Bearer for this remote HTTP MCP server) — the `remote` stack (OIDC discovery, dynamic client registration, JWT validation against IdP JWKS, optional `POST /api/user/token/generate` to obtain an OvalEdge JWT, or forwarding the IdP token) is present in code but real IdP + MCP client flows still need validation.
 
 Until stable, prefer **`remote_credentials`** or local stdio (**`AUTH_MODE=local`** — [README_LOCAL_MCP.md](README_LOCAL_MCP.md)).
 
@@ -34,9 +36,9 @@ Until stable, prefer **`remote_credentials`** or local stdio (**`AUTH_MODE=local
 
 ## Entrypoint and deployment
 
-- **App:** `entrypoints/lambda_handler.py` — `app` is shared; full OAuth routers are included **only** when `settings.auth_mode == "remote"`. `remote_credentials` adds `server/auth/remote_credentials_discovery.py` only.
+- **App:** `entrypoints/lambda_handler.py` — `app` is shared; full OAuth routers ( **`remote` only — WIP** ) are included **only** when `settings.auth_mode == "remote"`. `remote_credentials` adds `server/auth/remote_credentials_discovery.py` only.
 - **`MCP_HTTP_STATELESS`:** default **true** (good for Lambda). For **Cursor** (and similar) over plain HTTP, set **`MCP_HTTP_STATELESS=false`** so the MCP stack registers **GET** on `/mcp` for SSE fallback after Streamable HTTP negotiation. Without this, clients may get wrong `Content-Type` on GET.
-- **Lambda / SAM:** [infra/template.yaml](infra/template.yaml) — `AuthMode` parameter (`remote` | `remote_credentials`), CORS allows the OvalEdge header names, optional empty defaults for `OAuthIssuer` / `OAuthAudience` when using credentials-only stacks.
+- **Lambda / SAM:** [infra/template.yaml](infra/template.yaml) — `AuthMode` parameter (`remote` **(OAuth WIP)** | `remote_credentials`), CORS allows the OvalEdge header names, optional empty defaults for `OAuthIssuer` / `OAuthAudience` when using credentials-only stacks.
 - **One-shot deploy:** from repo root, set `OVALEDGE_BASE_URL` and run [`scripts/deploy.sh`](scripts/deploy.sh) (`./scripts/deploy.sh --help` for env vars). Step-by-step copy-paste: [infra/DEPLOY.md](infra/DEPLOY.md).
 - **Local HTTP (uvicorn):**
 
@@ -134,6 +136,24 @@ The MCP URL may be `http://127.0.0.1:8000/mcp` or `.../mcp/` — the server norm
 
 **Claude (including many Claude Desktop flows) does not rely on MCP Streamable HTTP the way Cursor does.** For HTTP access from **Claude Code** (the CLI-driven product), register the server with **`claude mcp`** using **`--transport http`**.
 
+**Install Claude Code (CLI)** — the `claude mcp` subcommands require the Claude Code binary on your `PATH`. Official options (see [Claude Code setup](https://code.claude.com/docs/en/setup) for requirements and troubleshooting):
+
+**macOS, Linux, or WSL:**
+
+```bash
+curl -fsSL https://claude.ai/install.sh | bash
+```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://claude.ai/install.ps1 | iex
+```
+
+**Alternatives:** Homebrew — `brew install --cask claude-code`; Windows WinGet — `winget install Anthropic.ClaudeCode`.
+
+After install, run **`claude`** once and complete Anthropic’s login / subscription flow before using **`claude mcp`**.
+
 On the **server**, set **`MCP_HTTP_STATELESS=false`** (SAM parameter **`McpHttpStateless=false`** on Lambda, or `export MCP_HTTP_STATELESS=false` before uvicorn locally) so **`GET /mcp`** is registered and SSE-style fallback works for clients that do not stick to Streamable HTTP POST-only behavior.
 
 **`<MCP_BASE_URL>`** is the full MCP endpoint URL (same as **`MCPEndpointUrl`** from deploy output or `https://…/mcp` / `http://127.0.0.1:8000/mcp`). Use **HTTPS** in production (API Gateway); for plain `http://127.0.0.1` you still need **`X-Forwarded-Proto: https`** on the server — the CLI does not add that automatically, so prefer a **TLS** URL or terminate TLS in front of the app.
@@ -164,21 +184,22 @@ From repo root:
 
 ```bash
 poetry run python scripts/validate_remote_mcp.py --settings
-poetry run python scripts/validate_remote_mcp.py --credentials   # needs OvalEdge user token+secret
-poetry run python scripts/validate_remote_mcp.py --all --token "$OAUTH_TEST_ACCESS_TOKEN"   # OAuth remote path
+poetry run python scripts/validate_remote_mcp.py --credentials   # remote_credentials: needs OvalEdge user token+secret
+# OAuth 2.x remote MCP (WIP): set AUTH_MODE=remote and IdP/OAuth env from .env.example, then:
+poetry run python scripts/validate_remote_mcp.py --all --token "$OAUTH_TEST_ACCESS_TOKEN"
 ```
 
-See script docstring for flags (`--discovery`, `--ovaledge`, `--mcp`, etc.).
+`--all` runs settings, OIDC discovery, OvalEdge exchange, optional `--credentials`, and `--mcp` if a token is provided. See the script docstring for flags (`--discovery`, `--ovaledge`, `--mcp`, etc.).
 
 ## Security (remote)
 
 - **`remote_credentials`:** long-lived OvalEdge credentials travel in **headers** — terminate TLS at the edge (API Gateway, ALB); never log header values.
-- **`remote`:** treat IdP tokens like secrets in transit; configure `OAUTH_AUDIENCE` / issuer discovery carefully once OAuth is out of WIP.
+- **`remote` (OAuth 2.x remote MCP, WIP):** treat IdP tokens like secrets in transit; configure `OAUTH_AUDIENCE` / issuer discovery carefully once OAuth remote MCP is out of WIP.
 
 ## Layout (remote-relevant paths)
 
 - `entrypoints/lambda_handler.py` — HTTP app + Mangum handler
 - `server/auth/middleware.py` — mode branches
-- `server/auth/metadata.py`, `server/auth/registration.py` — OAuth `remote` only
+- `server/auth/metadata.py`, `server/auth/registration.py` — OAuth `remote` only (**WIP**)
 - `server/auth/remote_credentials_discovery.py` — `remote_credentials` only (well-known stubs + declined)
 - `infra/template.yaml` — sample deploy
