@@ -1,8 +1,24 @@
 {
   "mcpServers": {
-    "ovaledge-mcp-remote": {
+    "ovaledge-remote-local": {
       "url": "http://127.0.0.1:8000/mcp",
       "headers": {
+        "X-Forwarded-Proto": "https",
+        "X-OvalEdge-Token": "${env:OVALEDGE_USER_TOKEN}",
+        "X-OvalEdge-Secret": "${env:OVALEDGE_USER_SECRET}"
+      }
+    },
+    "ovaledge-remote-lambda": {
+      "url": "https://YOUR_API_ID.execute-api.YOUR_REGION.amazonaws.com/mcp",
+      "headers": {
+        "X-OvalEdge-Token": "${env:OVALEDGE_USER_TOKEN}",
+        "X-OvalEdge-Secret": "${env:OVALEDGE_USER_SECRET}"
+      }
+    },
+    "ovaledge-remote-oauth-wip": {
+      "url": "http://127.0.0.1:8000/mcp",
+      "headers": {
+        "X-Forwarded-Proto": "https",
         "Authorization": "Bearer ${env:OAUTH_ACCESS_TOKEN}"
       }
     }

@@ -17,8 +17,10 @@ Parameters:
     Type: String
     Default: /api/user/token/generate
   OvalEdgeMaxRetries:
-    Type: Number
-    Default: 3
+    Type: String
+    Default: "3"
+    AllowedPattern: "^[0-9]+$"
+    Description: Max retries for outbound OvalEdge HTTP (integer as string for SAM schema compatibility).
   OAuthIssuer:
     Type: String
     Default: ""
@@ -85,6 +87,7 @@ Resources:
           AUTH_MODE: !Ref AuthMode
           OVALEDGE_BASE_URL: !Ref OvalEdgeBaseUrl
           OVALEDGE_TOKEN_EXCHANGE_PATH: !Ref OvalEdgeTokenExchangePath
+          # Lambda env values must be strings (SAM / CFN strict validation).
           OVALEDGE_MAX_RETRIES: !Ref OvalEdgeMaxRetries
           OAUTH_ISSUER: !Ref OAuthIssuer
           OAUTH_AUDIENCE: !Ref OAuthAudience
@@ -92,7 +95,7 @@ Resources:
           # circular dependency (function → API → function). Leave unset; metadata uses
           # Request.base_url (API Gateway / custom domain). Override via Lambda console if needed.
           OVALEDGE_REMOTE_FORWARD_IDP_TOKEN: !Ref OvalEdgeForwardIdpToken
-          CREDENTIALS_CACHE_MAX_ENTRIES: 10000
+          CREDENTIALS_CACHE_MAX_ENTRIES: "10000"
           MCP_HTTP_STATELESS: !Ref McpHttpStateless
       Events:
         MCPPost:

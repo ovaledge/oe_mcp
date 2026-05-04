@@ -1,6 +1,7 @@
 """AUTH_MODE=remote_credentials — headers, TLS, OvalEdge JWT."""
 
 import time
+from collections.abc import Iterator
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -35,7 +36,7 @@ def rc_app(monkeypatch: pytest.MonkeyPatch) -> FastAPI:
 
 
 @pytest.fixture(autouse=True)
-def _https_and_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+def _https_and_cache(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setattr("server.auth.middleware._request_is_https", lambda _r: True)
     from server.auth.credentials_cache import reset_default_credentials_cache
 

@@ -2,6 +2,7 @@
 
 import asyncio
 import time
+from collections.abc import Iterator
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -18,7 +19,7 @@ from server.constants import CREDENTIALS_REFRESH_LEEWAY_SECONDS
 
 
 @pytest.fixture(autouse=True)
-def _reset_cache() -> None:
+def _reset_cache() -> Iterator[None]:
     reset_default_credentials_cache()
     yield
     reset_default_credentials_cache()
