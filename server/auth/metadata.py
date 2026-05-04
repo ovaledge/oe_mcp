@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from server.auth.oauth_discovery import OAuthDiscoveryError, get_authorization_server_metadata
 from server.config import settings
@@ -8,8 +8,16 @@ from server.config import settings
 router = APIRouter()
 
 
+def _mcp_public_origin(request: Request) -> str:
+    """RFC 8414 ``registration_endpoint`` must be absolute. Prefer setting; else request URL."""
+    configured = (settings.mcp_public_base_url or "").strip().rstrip("/")
+    if configured:
+        return configured
+    return str(request.base_url).rstrip("/")
+
+
 @router.get("/.well-known/oauth-authorization-server")
-async def oauth_metadata() -> dict[str, Any]:
+async def oauth_metadata(request: Request) -> dict[str, Any]:
     """
     RFC 8414 OAuth 2.0 Authorization Server Metadata (proxy).
 
@@ -22,7 +30,7 @@ async def oauth_metadata() -> dict[str, Any]:
     except OAuthDiscoveryError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
 
-    registration = f"{settings.mcp_public_base_url.rstrip('/')}/register"
+    registration = f"{_mcp_public_origin(request)}/register"
     return {
         "issuer": doc["issuer"],
         "authorization_endpoint": doc["authorization_endpoint"],

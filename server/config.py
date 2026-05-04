@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -30,9 +31,18 @@ class Settings(BaseSettings):
     ovaledge_retry_backoff_seconds: float = 0.5
 
     # ── Auth mode ────────────────────────────────────────────────
-    # "local"  → OvalEdge client_credentials flow (stdio)
-    # "remote" → Bearer OAuth access token (JWT) per request (Lambda)
-    auth_mode: str = "local"
+    # "local"               → OvalEdge client_credentials flow (stdio)
+    # "remote"              → Bearer OAuth access token (JWT) per request (Lambda)
+    # "remote_credentials"  → X-OvalEdge-Token + X-OvalEdge-Secret per request (Lambda)
+    auth_mode: Literal["local", "remote", "remote_credentials"] = "local"
+
+    # remote_credentials only: max distinct credential-key JWT entries in memory
+    credentials_cache_max_entries: int = 10_000
+
+    # Streamable HTTP: ``True`` = POST/DELETE only per request (good for Lambda). ``False`` =
+    # enables GET on ``/mcp`` for long-lived sessions — required for Cursor (and similar)
+    # clients that fall back to SSE / GET after Streamable HTTP negotiation.
+    mcp_http_stateless: bool = True
 
     # ── Local MCP — OvalEdge user token credentials ──────────────
     ovaledge_user_token: str = ""
@@ -60,5 +70,14 @@ class Settings(BaseSettings):
     @classmethod
     def strip_trailing_slash(cls, v: str) -> str:
         return v.rstrip("/")
+
+    @field_validator("auth_mode", mode="before")
+    @classmethod
+    def normalize_auth_mode(cls, v: object) -> str:
+        if isinstance(v, str):
+            s = v.strip().lower()
+            if s in ("local", "remote", "remote_credentials"):
+                return s
+        return v if isinstance(v, str) else "local"
 
 settings = Settings()

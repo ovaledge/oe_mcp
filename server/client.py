@@ -136,7 +136,7 @@ class OvalEdgeClient:
         if self._client is not None:
             self._client.headers["Authorization"] = auth
 
-    async def _send_with_local_401_retry(
+    async def _send_with_401_handling(
         self, build_request: Callable[[], httpx.Request]
     ) -> httpx.Response:
         assert self._client is not None, "Use OvalEdgeClient as async context manager"
@@ -157,6 +157,15 @@ class OvalEdgeClient:
                 invalidate_local_jwt_cache()
                 retried_401 = True
                 continue
+
+            if settings.auth_mode == "remote_credentials" and response.status_code == 401:
+                from server.auth.context import current_oe_credential_cache_key
+                from server.auth.credentials_cache import get_default_credentials_cache
+
+                cache_key = current_oe_credential_cache_key.get()
+                if cache_key:
+                    await get_default_credentials_cache().delete_entry(cache_key)
+
             return response
 
     @retry(
@@ -176,7 +185,7 @@ class OvalEdgeClient:
             assert self._client is not None
             return self._client.build_request("GET", path, params=params)
 
-        response = await self._send_with_local_401_retry(build_request)
+        response = await self._send_with_401_handling(build_request)
         self._raise_for_status(response)
         return _success_response_as_dict(response)
 
@@ -197,7 +206,7 @@ class OvalEdgeClient:
             assert self._client is not None
             return self._client.build_request("POST", path, json=body)
 
-        response = await self._send_with_local_401_retry(build_request)
+        response = await self._send_with_401_handling(build_request)
         self._raise_for_status(response)
         return _success_response_as_dict(response)
 
