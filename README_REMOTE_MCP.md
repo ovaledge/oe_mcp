@@ -132,6 +132,51 @@ Each end user should use **their own** token and secret; the server keeps a sepa
 
 The MCP URL may be `http://127.0.0.1:8000/mcp` or `.../mcp/` — the server normalizes slashless `/mcp` so clients are not tripped by Starlette’s **307** redirect to `/mcp/`.
 
+### VS Code + GitHub Copilot (HTTP MCP)
+
+VS Code does **not** use Cursor’s `mcpServers` shape. GitHub Copilot reads **`mcp.json`** with a top-level **`servers`** object and HTTP entries need **`"type": "http"`**. See [Add and manage MCP servers in VS Code](https://code.visualstudio.com/docs/copilot/customization/mcp-servers) and the [MCP configuration reference](https://code.visualstudio.com/docs/copilot/reference/mcp-configuration).
+
+- **Workspace:** create or edit **`.vscode/mcp.json`** in your project.  
+- **User-wide:** Command Palette → **MCP: Open User Configuration** (opens profile `mcp.json`).  
+- **Guided:** Command Palette → **MCP: Add Server**.
+
+Use **`MCP_HTTP_STATELESS=false`** on the server when your client needs **GET `/mcp`** (same as Cursor / Claude Code above).
+
+On **`https://…execute-api…/mcp`** (API Gateway), **`X-Forwarded-Proto`** is usually unnecessary; keep it if you see **`tls_required`** from middleware.
+
+**`gh` (GitHub CLI)** does not configure VS Code MCP servers for your Lambda URL—configure **`mcp.json`** in VS Code (or use Cursor’s config in Cursor).
+
+Example **`.vscode/mcp.json`** for `remote_credentials` (replace the URL; prefer **`inputs`** over hardcoding secrets—see reference *Input variables for sensitive data*):
+
+```json
+{
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "ovaledge-token",
+      "description": "OvalEdge user token",
+      "password": true
+    },
+    {
+      "type": "promptString",
+      "id": "ovaledge-secret",
+      "description": "OvalEdge user secret",
+      "password": true
+    }
+  ],
+  "servers": {
+    "ovaledge-remote": {
+      "type": "http",
+      "url": "https://YOUR_API_ID.execute-api.REGION.amazonaws.com/mcp",
+      "headers": {
+        "X-OvalEdge-Token": "${input:ovaledge-token}",
+        "X-OvalEdge-Secret": "${input:ovaledge-secret}"
+      }
+    }
+  }
+}
+```
+
 ### Claude Code (HTTP MCP)
 
 **Claude (including many Claude Desktop flows) does not rely on MCP Streamable HTTP the way Cursor does.** For HTTP access from **Claude Code** (the CLI-driven product), register the server with **`claude mcp`** using **`--transport http`**.
