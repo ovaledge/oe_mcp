@@ -205,6 +205,8 @@ On the **server**, set **`MCP_HTTP_STATELESS=false`** (SAM parameter **`McpHttpS
 
 **1. Register the remote MCP server**
 
+Run this command from the same project/workspace folder where you will use Claude Code. If you run it from a different directory/profile, the MCP entry may be saved in a different scope and won’t appear in the workspace you expect.
+
 ```bash
 claude mcp add --transport http ovaledge-remote <MCP_BASE_URL> \
   --header "X-OvalEdge-Token: YOUR_USER_TOKEN" \
