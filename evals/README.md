@@ -2,6 +2,8 @@
 
 LLM-as-judge checks on **how well an agent uses MCP** (tool choice, arguments, multi-turn flows). Tier 1 remains `pytest` + FastMCP in-process tests under `tests/`.
 
+Main project docs: [README.md](../README.md) (local stdio, remote HTTP, **OAuth 2.x remote MCP — WIP**).
+
 ## Install
 
 ```bash

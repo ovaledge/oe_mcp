@@ -7,9 +7,9 @@ Read-only OvalEdge governance and catalog capabilities exposed to MCP clients (C
 | Mode | Transport | Doc |
 | ---- | ----------- | --- |
 | **Local** | stdio (`poetry run oe-mcp-local`) | [README_LOCAL_MCP.md](README_LOCAL_MCP.md) |
-| **Remote** | HTTP (`uvicorn entrypoints.lambda_handler:app` or AWS Lambda) | [README_REMOTE_MCP.md](README_REMOTE_MCP.md) |
+| **Remote (HTTP)** | `uvicorn entrypoints.lambda_handler:app` or AWS Lambda (Mangum) | [README_REMOTE_MCP.md](README_REMOTE_MCP.md) — use **`remote_credentials`** for supported header auth; **OAuth 2.x / OIDC (`AUTH_MODE=remote`) is WIP** |
 
-**`AUTH_MODE`** in `.env` (or process env) selects behavior: `local`, `remote`, or `remote_credentials`. Full variable reference: [.env.example](.env.example).
+**`AUTH_MODE`** in `.env` (or process env) selects behavior: `local`, **`remote` (OAuth 2.x remote MCP — WIP)**, or `remote_credentials`. Full variable reference: [.env.example](.env.example).
 
 **`.env` is not committed.** Copy the example, then edit:
 
@@ -19,9 +19,9 @@ cp .env.example .env
 
 Setup scripts (`scripts/setup_local_mcp.sh`, `scripts/setup_local_mcp.ps1`) create `.env` from `.env.example` only if `.env` is missing; they do not overwrite an existing file.
 
-## OAuth remote mode — work in progress
+## OAuth 2.x remote MCP — work in progress
 
-**`AUTH_MODE=remote` (OAuth 2.x / OIDC Bearer) is WIP** and not fully validated end-to-end with real IdPs and MCP clients. Prefer **`remote_credentials`** (HTTP headers to OvalEdge) or **`local`** (stdio) until OAuth is stable. Details: [README_REMOTE_MCP.md](README_REMOTE_MCP.md#work-in-progress-oauth-remote-mode).
+**`AUTH_MODE=remote` (OAuth 2.x / OIDC Bearer for remote HTTP MCP) is WIP** and not fully validated end-to-end with real IdPs and MCP clients. Prefer **`remote_credentials`** (HTTP headers to OvalEdge) or **`local`** (stdio) until OAuth remote MCP is stable. Details: [README_REMOTE_MCP.md](README_REMOTE_MCP.md#work-in-progress-oauth-remote-mode).
 
 ## What this server provides
 
@@ -77,7 +77,7 @@ See **[SECURITY.md](SECURITY.md)** for reporting, deployment surface, and depend
 | `server/auth/` | Auth, token exchange, middleware |
 | `server/client.py` | OvalEdge HTTP client |
 | `server/tools/`, `server/resources/`, `server/prompts/` | MCP surface |
-| `infra/template.yaml` | SAM sample for remote HTTP |
+| `infra/template.yaml` | SAM sample for remote HTTP (`AuthMode`: `remote_credentials` or OAuth **`remote` (WIP)**) |
 | `scripts/` | Setup and validation helpers |
 
 More detail: [README_LOCAL_MCP.md](README_LOCAL_MCP.md#layout-local-relevant-paths) · [README_REMOTE_MCP.md](README_REMOTE_MCP.md#layout-remote-relevant-paths)
