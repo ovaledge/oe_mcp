@@ -79,6 +79,12 @@ CREDENTIALS_REFRESH_LEEWAY_SECONDS = 60
 # In-memory cap for distinct credential-key JWT entries.
 CREDENTIALS_CACHE_MAX_ENTRIES = 10_000
 
+# Temporary block after token/generate returns 401 (same credential key).
+NEGATIVE_CREDENTIALS_CACHE_TTL_SECONDS = 30
+
+# Cap distinct blocked keys (LRU eviction).
+NEGATIVE_CREDENTIALS_CACHE_MAX_ENTRIES = 10_000
+
 # After JWT ``exp``, drop cache entry this many seconds later (0 = at exp boundary).
 CREDENTIALS_CACHE_POST_EXP_GRACE_SECONDS = 0
 

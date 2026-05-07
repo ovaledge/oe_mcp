@@ -11,10 +11,15 @@ from jose import jwt as jose_jwt
 from server.auth.credentials_cache import (
     CachedJwtEntry,
     InMemoryCredentialsCache,
+    InMemoryNegativeCredentialsCache,
     credential_cache_key,
     reset_default_credentials_cache,
 )
-from server.auth.token_exchange import get_or_refresh_user_token, is_token_expiring
+from server.auth.token_exchange import (
+    TokenExchangeError,
+    get_or_refresh_user_token,
+    is_token_expiring,
+)
 from server.constants import CREDENTIALS_REFRESH_LEEWAY_SECONDS
 
 
@@ -184,4 +189,85 @@ async def test_secret_rotation_changes_cache_key() -> None:
         a = await get_or_refresh_user_token("u", "oldsecret")
         b = await get_or_refresh_user_token("u", "newsecret")
     assert a == j1 and b == j2
+    assert ex.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_negative_cache_skips_second_exchange_on_401() -> None:
+    err = TokenExchangeError("Invalid OvalEdge user token or secret", status_code=401)
+    with patch(
+        "server.auth.token_exchange.exchange_user_credentials",
+        new_callable=AsyncMock,
+        side_effect=err,
+    ) as ex:
+        with patch("server.auth.credentials_cache.time.time", return_value=1_000_000.0):
+            with pytest.raises(TokenExchangeError):
+                await get_or_refresh_user_token("bad", "cred")
+            with pytest.raises(TokenExchangeError):
+                await get_or_refresh_user_token("bad", "cred")
+    ex.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_negative_cache_expires_after_ttl_seconds() -> None:
+    err = TokenExchangeError("Invalid OvalEdge user token or secret", status_code=401)
+    clock: list[float] = [1_000_000.0]
+
+    def fake_time() -> float:
+        return clock[0]
+
+    with patch(
+        "server.auth.token_exchange.exchange_user_credentials",
+        new_callable=AsyncMock,
+        side_effect=err,
+    ) as ex:
+        with patch("server.auth.credentials_cache.time.time", fake_time):
+            with pytest.raises(TokenExchangeError):
+                await get_or_refresh_user_token("bad", "cred")
+            with pytest.raises(TokenExchangeError):
+                await get_or_refresh_user_token("bad", "cred")
+    ex.assert_awaited_once()
+
+    clock[0] = 1_000_031.0
+    with patch(
+        "server.auth.token_exchange.exchange_user_credentials",
+        new_callable=AsyncMock,
+        side_effect=err,
+    ) as ex2:
+        with patch("server.auth.credentials_cache.time.time", fake_time):
+            with pytest.raises(TokenExchangeError):
+                await get_or_refresh_user_token("bad", "cred")
+    ex2.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_success_clears_negative_block_for_key() -> None:
+    neg = InMemoryNegativeCredentialsCache(ttl_seconds=30)
+    k = "abc"
+    await neg.mark_blocked(k)
+    assert await neg.is_blocked(k) is True
+    await neg.forget(k)
+    assert await neg.is_blocked(k) is False
+
+
+@pytest.mark.asyncio
+async def test_success_after_401_retries_exchange_after_ttl() -> None:
+    err = TokenExchangeError("Invalid OvalEdge user token or secret", status_code=401)
+    ok = _fresh_jwt()
+    clock: list[float] = [999_998.0]
+
+    def fake_time() -> float:
+        return clock[0]
+
+    with patch(
+        "server.auth.token_exchange.exchange_user_credentials",
+        new_callable=AsyncMock,
+        side_effect=[err, ok],
+    ) as ex:
+        with patch("server.auth.credentials_cache.time.time", fake_time):
+            with pytest.raises(TokenExchangeError):
+                await get_or_refresh_user_token("good", "pair")
+            clock[0] = 1_000_029.0
+            out = await get_or_refresh_user_token("good", "pair")
+    assert out == ok
     assert ex.await_count == 2

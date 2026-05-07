@@ -49,6 +49,48 @@ class OvalEdgeTransientError(OvalEdgeError):
     pass
 
 
+def _response_body_text_for_auth_heuristic(response: httpx.Response) -> str:
+    """Best-effort string for OvalEdge revoked-JWT detection; supports JSON or plain text."""
+    if not response.content:
+        return ""
+    try:
+        data = response.json()
+    except json.JSONDecodeError:
+        return response.text or ""
+    if isinstance(data, dict):
+        parts: list[str] = []
+        for k in ("message", "error", "error_description", "detail"):
+            v = data.get(k)
+            if v is not None and str(v).strip():
+                parts.append(str(v))
+        return " ".join(parts) if parts else (response.text or "")
+    return str(data)
+
+
+def _suggests_revoked_oval_edge_session_jwt(body_text: str) -> bool:
+    """
+    OvalEdge may return HTTP 400 (not only 401) when the JWT was superseded elsewhere
+    (single active token per user token+secret). Match common API copy without being too broad.
+    """
+    t = body_text.lower()
+    return "invalid token" in t or "please generate a new token" in t
+
+
+def _oval_edge_revoked_session_jwt_response(response: httpx.Response) -> bool:
+    if response.status_code not in (400, 401):
+        return False
+    return _suggests_revoked_oval_edge_session_jwt(_response_body_text_for_auth_heuristic(response))
+
+
+async def _evict_remote_credentials_jwt_cache() -> None:
+    from server.auth.context import current_oe_credential_cache_key
+    from server.auth.credentials_cache import get_default_credentials_cache
+
+    cache_key = current_oe_credential_cache_key.get()
+    if cache_key:
+        await get_default_credentials_cache().delete_entry(cache_key)
+
+
 def _is_transient(exc: BaseException) -> bool:
     return isinstance(exc, OvalEdgeTransientError)
 
@@ -136,11 +178,44 @@ class OvalEdgeClient:
         if self._client is not None:
             self._client.headers["Authorization"] = auth
 
+    async def _try_refresh_remote_oe_jwt(self) -> bool:
+        """
+        After cache eviction, call token/generate again and update client headers.
+
+        Requires ``current_oe_user_token`` / ``current_oe_user_secret`` set by remote auth middleware.
+        """
+        from server.auth.context import current_oe_jwt, current_oe_user_secret, current_oe_user_token
+        from server.auth.token_exchange import TokenExchangeError, get_or_refresh_user_token
+
+        ut = current_oe_user_token.get()
+        us = current_oe_user_secret.get()
+        if not ut or not us:
+            logger.warning(
+                "Cannot refresh OvalEdge JWT: missing credential context "
+                "(current_oe_user_token / current_oe_user_secret)"
+            )
+            return False
+        try:
+            new_jwt = await get_or_refresh_user_token(ut, us)
+        except TokenExchangeError as e:
+            logger.warning("OvalEdge JWT refresh after revoked session failed: %s", e)
+            return False
+        except Exception as e:
+            logger.warning("OvalEdge JWT refresh after revoked session unexpected error: %s", e)
+            return False
+        current_oe_jwt.set(new_jwt)
+        auth = _ovaledge_authorization(new_jwt)
+        self._headers["Authorization"] = auth
+        if self._client is not None:
+            self._client.headers["Authorization"] = auth
+        return True
+
     async def _send_with_401_handling(
         self, build_request: Callable[[], httpx.Request]
     ) -> httpx.Response:
         assert self._client is not None, "Use OvalEdgeClient as async context manager"
-        retried_401 = False
+        retried_401_local = False
+        retried_remote_revoked_jwt = False
         while True:
             await self._ensure_local_token()
             req = build_request()
@@ -148,23 +223,27 @@ class OvalEdgeClient:
             response = await self._client.send(req)
             _log_inbound_response(response)
             if (
-                not retried_401
+                not retried_401_local
                 and settings.auth_mode == "local"
                 and response.status_code == 401
             ):
                 from server.auth.token_exchange import invalidate_local_jwt_cache
 
                 invalidate_local_jwt_cache()
-                retried_401 = True
+                retried_401_local = True
                 continue
 
-            if settings.auth_mode == "remote_credentials" and response.status_code == 401:
-                from server.auth.context import current_oe_credential_cache_key
-                from server.auth.credentials_cache import get_default_credentials_cache
-
-                cache_key = current_oe_credential_cache_key.get()
-                if cache_key:
-                    await get_default_credentials_cache().delete_entry(cache_key)
+            if settings.auth_mode == "remote_credentials":
+                invalidated_elsewhere = _oval_edge_revoked_session_jwt_response(response)
+                if response.status_code == 401 or invalidated_elsewhere:
+                    await _evict_remote_credentials_jwt_cache()
+                if (
+                    invalidated_elsewhere
+                    and not retried_remote_revoked_jwt
+                    and await self._try_refresh_remote_oe_jwt()
+                ):
+                    retried_remote_revoked_jwt = True
+                    continue
 
             return response
 
