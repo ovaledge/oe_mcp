@@ -251,10 +251,18 @@ async def get_or_refresh_user_token(user_token: str, user_secret: str) -> str:
         CachedJwtEntry,
         credential_cache_key,
         get_default_credentials_cache,
+        get_default_negative_credentials_cache,
     )
 
     key = credential_cache_key(user_token, user_secret)
     cache = get_default_credentials_cache()
+    negative = get_default_negative_credentials_cache()
+
+    if await negative.is_blocked(key):
+        raise TokenExchangeError(
+            "Invalid OvalEdge user token or secret",
+            status_code=401,
+        )
 
     entry = await cache.get_entry(key)
     if entry and not is_token_expiring(
@@ -264,13 +272,24 @@ async def get_or_refresh_user_token(user_token: str, user_secret: str) -> str:
         return entry.jwt
 
     async with cache.refresh_lock(key):
+        if await negative.is_blocked(key):
+            raise TokenExchangeError(
+                "Invalid OvalEdge user token or secret",
+                status_code=401,
+            )
         entry = await cache.get_entry(key)
         if entry and not is_token_expiring(
             entry.jwt,
             leeway_seconds=CREDENTIALS_REFRESH_LEEWAY_SECONDS,
         ):
             return entry.jwt
-        new_jwt = await exchange_user_credentials(user_token, user_secret)
+        try:
+            new_jwt = await exchange_user_credentials(user_token, user_secret)
+        except TokenExchangeError as e:
+            if e.status_code == 401:
+                await negative.mark_blocked(key)
+            raise
+        await negative.forget(key)
         await cache.set_entry(
             key,
             CachedJwtEntry(jwt=new_jwt, exp_epoch=jwt_exp_epoch(new_jwt)),

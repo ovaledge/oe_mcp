@@ -58,6 +58,19 @@ Parameters:
       Lambda CPU architecture. Default x86_64 matches most laptops and GitHub-hosted runners
       (docker build / sam build --use-container). Use arm64 for Graviton cost savings; build with
       docker buildx --platform linux/arm64 (or an arm64 host).
+  OvalEdgeHttpAuthScheme:
+    Type: String
+    Default: jwt
+    Description: >
+      Outbound OvalEdge API Authorization scheme (e.g. jwt, Bearer). Must match what
+      /api/v1/mcp/** expects after token exchange.
+  CredentialsCacheMaxEntries:
+    Type: String
+    Default: "10000"
+    AllowedPattern: "^[0-9]+$"
+    Description: >
+      AUTH_MODE=remote_credentials only — max distinct credential-key JWT entries per Lambda
+      instance (in-memory LRU).
 
 Globals:
   Function:
@@ -95,7 +108,8 @@ Resources:
           # circular dependency (function → API → function). Leave unset; metadata uses
           # Request.base_url (API Gateway / custom domain). Override via Lambda console if needed.
           OVALEDGE_REMOTE_FORWARD_IDP_TOKEN: !Ref OvalEdgeForwardIdpToken
-          CREDENTIALS_CACHE_MAX_ENTRIES: "10000"
+          OVALEDGE_HTTP_AUTH_SCHEME: !Ref OvalEdgeHttpAuthScheme
+          CREDENTIALS_CACHE_MAX_ENTRIES: !Ref CredentialsCacheMaxEntries
           MCP_HTTP_STATELESS: !Ref McpHttpStateless
       Events:
         MCPPost:

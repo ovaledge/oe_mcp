@@ -15,10 +15,19 @@
 #   SAM_BUILD_NO_CACHED if "true", pass sam build --no-cached (clear bad layer cache)
 #   SAM_SKIP_DOCKER_PULL_BASE  if "true", skip docker pull of the Lambda base image
 #   LAMBDA_ARCHITECTURE  x86_64 | arm64 (default: x86_64) — must match docker build host for sam build
+#   OVALEDGE_HTTP_AUTH_SCHEME   jwt | Bearer | … (default: jwt) → Lambda OVALEDGE_HTTP_AUTH_SCHEME
+#   CREDENTIALS_CACHE_MAX_ENTRIES  integer (default: 10000) → remote_credentials LRU cap per instance
 #
 # OAuth remote mode extras (only when AUTH_MODE=remote):
 #   SAM_OAUTH_ISSUER      maps to template OAuthIssuer
 #   SAM_OAUTH_AUDIENCE  maps to template OAuthAudience
+#
+# CLI (optional; overrides env for that run):
+#   ./scripts/deploy.sh --oval-edge-auth-scheme jwt \\
+#       --credentials-cache-max-entries 5000 \\
+#       --mcp-http-stateless false \\
+#       --environment prod \\
+#       --auth-mode remote_credentials
 #
 # Usage:
 #   export OVALEDGE_BASE_URL=https://your-tenant.example.com
@@ -35,8 +44,16 @@ Required env:
 
 Optional env:
   STACK_NAME, AWS_REGION, AUTH_MODE, ENVIRONMENT, ECR_REPO, MCP_HTTP_STATELESS,
+  OVALEDGE_HTTP_AUTH_SCHEME, CREDENTIALS_CACHE_MAX_ENTRIES,
   SAM_USE_CONTAINER, SAM_BUILD_NO_CACHED,
   IMAGE_REPOSITORY, SAM_OAUTH_ISSUER, SAM_OAUTH_AUDIENCE
+
+Optional CLI flags (override env for this invocation):
+  --oval-edge-auth-scheme <scheme>
+  --credentials-cache-max-entries <n>
+  --mcp-http-stateless <true|false>
+  --environment <dev|staging|prod>
+  --auth-mode <remote|remote_credentials>
 
 Example:
   export OVALEDGE_BASE_URL=https://app.example.com
@@ -45,13 +62,44 @@ Example:
   # Claude / clients that need GET (SSE-style) on /mcp — set before deploy:
   export MCP_HTTP_STATELESS=false
   ./scripts/deploy.sh
+
+  # Same flags on the command line:
+  ./scripts/deploy.sh --mcp-http-stateless false --oval-edge-auth-scheme jwt
 EOF
 }
 
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  usage
-  exit 0
-fi
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    --oval-edge-auth-scheme)
+      OVALEDGE_HTTP_AUTH_SCHEME="${2:-}"
+      shift 2
+      ;;
+    --credentials-cache-max-entries)
+      CREDENTIALS_CACHE_MAX_ENTRIES="${2:-}"
+      shift 2
+      ;;
+    --mcp-http-stateless)
+      MCP_HTTP_STATELESS="${2:-}"
+      shift 2
+      ;;
+    --environment)
+      ENVIRONMENT="${2:-}"
+      shift 2
+      ;;
+    --auth-mode)
+      AUTH_MODE="${2:-}"
+      shift 2
+      ;;
+    *)
+      echo "error: unknown argument: $1 (try --help)" >&2
+      exit 1
+      ;;
+  esac
+done
 
 if [[ -z "${OVALEDGE_BASE_URL:-}" ]]; then
   echo "error: set OVALEDGE_BASE_URL (see --help)" >&2
@@ -66,6 +114,7 @@ AWS_REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-1}}"
 export AWS_DEFAULT_REGION="$AWS_REGION"
 AUTH_MODE="${AUTH_MODE:-remote_credentials}"
 OVALEDGE_HTTP_AUTH_SCHEME="${OVALEDGE_HTTP_AUTH_SCHEME:-jwt}"
+CREDENTIALS_CACHE_MAX_ENTRIES="${CREDENTIALS_CACHE_MAX_ENTRIES:-10000}"
 ENVIRONMENT="${ENVIRONMENT:-dev}"
 ECR_REPO="${ECR_REPO:-oe-mcp}"
 MCP_HTTP_STATELESS="${MCP_HTTP_STATELESS:-true}"
@@ -119,6 +168,8 @@ OVERRIDES=(
   "Environment=${ENVIRONMENT}"
   "McpHttpStateless=${MCP_HTTP_STATELESS}"
   "LambdaArchitecture=${LAMBDA_ARCHITECTURE}"
+  "OvalEdgeHttpAuthScheme=${OVALEDGE_HTTP_AUTH_SCHEME}"
+  "CredentialsCacheMaxEntries=${CREDENTIALS_CACHE_MAX_ENTRIES}"
 )
 if [[ -n "${SAM_OAUTH_ISSUER:-}" ]]; then
   OVERRIDES+=("OAuthIssuer=${SAM_OAUTH_ISSUER}")

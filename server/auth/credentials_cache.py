@@ -18,6 +18,8 @@ from typing import Protocol, runtime_checkable
 from server.constants import (
     CREDENTIALS_CACHE_MAX_ENTRIES,
     CREDENTIALS_CACHE_POST_EXP_GRACE_SECONDS,
+    NEGATIVE_CREDENTIALS_CACHE_MAX_ENTRIES,
+    NEGATIVE_CREDENTIALS_CACHE_TTL_SECONDS,
 )
 
 
@@ -121,7 +123,63 @@ class InMemoryCredentialsCache:
         self._key_locks.clear()
 
 
+class InMemoryNegativeCredentialsCache:
+    """
+    Short-lived blocklist for credential keys that recently failed token/generate with 401.
+
+    Reduces repeated upstream calls from misconfigured or abusive clients while keeping TTL
+    low so legitimate credential rotation is not delayed long.
+    """
+
+    def __init__(
+        self,
+        *,
+        ttl_seconds: int = NEGATIVE_CREDENTIALS_CACHE_TTL_SECONDS,
+        max_entries: int = NEGATIVE_CREDENTIALS_CACHE_MAX_ENTRIES,
+    ) -> None:
+        self._ttl = ttl_seconds
+        self._max_entries = max_entries
+        self._until: OrderedDict[str, int] = OrderedDict()
+        self._structure_lock = asyncio.Lock()
+
+    def _purge_expired_unlocked(self, now: int) -> None:
+        stale = [k for k, exp in self._until.items() if now >= exp]
+        for k in stale:
+            del self._until[k]
+
+    async def is_blocked(self, key: str) -> bool:
+        now = int(time.time())
+        async with self._structure_lock:
+            self._purge_expired_unlocked(now)
+            exp = self._until.get(key)
+            if exp is None:
+                return False
+            if now >= exp:
+                del self._until[key]
+                return False
+            self._until.move_to_end(key)
+            return True
+
+    async def mark_blocked(self, key: str) -> None:
+        now = int(time.time())
+        expiry = now + self._ttl
+        async with self._structure_lock:
+            self._purge_expired_unlocked(now)
+            self._until[key] = expiry
+            self._until.move_to_end(key)
+            while len(self._until) > self._max_entries:
+                self._until.popitem(last=False)
+
+    async def forget(self, key: str) -> None:
+        async with self._structure_lock:
+            self._until.pop(key, None)
+
+    def clear_all(self) -> None:
+        self._until.clear()
+
+
 _default_credentials_cache: InMemoryCredentialsCache | None = None
+_default_negative_credentials_cache: InMemoryNegativeCredentialsCache | None = None
 
 
 def get_default_credentials_cache() -> InMemoryCredentialsCache:
@@ -135,9 +193,28 @@ def get_default_credentials_cache() -> InMemoryCredentialsCache:
     return _default_credentials_cache
 
 
+def get_default_negative_credentials_cache() -> InMemoryNegativeCredentialsCache:
+    global _default_negative_credentials_cache
+    if _default_negative_credentials_cache is None:
+        _default_negative_credentials_cache = InMemoryNegativeCredentialsCache(
+            ttl_seconds=NEGATIVE_CREDENTIALS_CACHE_TTL_SECONDS,
+            max_entries=NEGATIVE_CREDENTIALS_CACHE_MAX_ENTRIES,
+        )
+    return _default_negative_credentials_cache
+
+
+def reset_default_negative_credentials_cache() -> None:
+    """Test helper: next ``get_default_negative_credentials_cache()`` starts empty."""
+    global _default_negative_credentials_cache
+    if _default_negative_credentials_cache is not None:
+        _default_negative_credentials_cache.clear_all()
+    _default_negative_credentials_cache = None
+
+
 def reset_default_credentials_cache() -> None:
     """Test helper: next ``get_default_credentials_cache()`` starts empty."""
     global _default_credentials_cache
     if _default_credentials_cache is not None:
         _default_credentials_cache.clear_all()
     _default_credentials_cache = None
+    reset_default_negative_credentials_cache()

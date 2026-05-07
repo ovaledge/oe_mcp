@@ -57,6 +57,8 @@ poetry run mypy server/ entrypoints/ evals/
 poetry run pytest
 ```
 
+Once after clone, run `poetry run pre-commit install` to run `poetry run ruff check .` before each commit (see `.pre-commit-config.yaml`).
+
 Optional LLM-level MCP checks: `poetry install --with eval`, then see [evals/README.md](evals/README.md).
 
 ## Security (summary)

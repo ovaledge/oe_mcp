@@ -9,7 +9,12 @@ from starlette.responses import Response
 from starlette.types import Receive, Send
 
 from server.auth.bearer_jwt import verify_oauth_access_token
-from server.auth.context import current_oe_credential_cache_key, current_oe_jwt
+from server.auth.context import (
+    current_oe_credential_cache_key,
+    current_oe_jwt,
+    current_oe_user_secret,
+    current_oe_user_token,
+)
 from server.auth.credentials_cache import credential_cache_key
 from server.auth.oauth_discovery import OAuthDiscoveryError
 from server.auth.token_exchange import (
@@ -155,6 +160,8 @@ async def _auth_response_or_none(request: Request) -> Response | None:
 
         current_oe_jwt.set(oe_jwt)
         current_oe_credential_cache_key.set(credential_cache_key(user_token, user_secret))
+        current_oe_user_token.set(user_token)
+        current_oe_user_secret.set(user_secret)
         return None
 
     if request.url.path in _UNPROTECTED:
