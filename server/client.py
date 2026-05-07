@@ -182,10 +182,18 @@ class OvalEdgeClient:
         """
         After cache eviction, call token/generate again and update client headers.
 
-        Requires ``current_oe_user_token`` / ``current_oe_user_secret`` set by remote auth middleware.
+        Requires ``current_oe_user_token`` / ``current_oe_user_secret`` set by
+        remote auth middleware.
         """
-        from server.auth.context import current_oe_jwt, current_oe_user_secret, current_oe_user_token
-        from server.auth.token_exchange import TokenExchangeError, get_or_refresh_user_token
+        from server.auth.context import (
+            current_oe_jwt,
+            current_oe_user_secret,
+            current_oe_user_token,
+        )
+        from server.auth.token_exchange import (
+            TokenExchangeError,
+            get_or_refresh_user_token,
+        )
 
         ut = current_oe_user_token.get()
         us = current_oe_user_secret.get()

@@ -1,4 +1,4 @@
-"""remote_credentials: eviction of cached OvalEdge JWT on 401; retry on revoked-session style 400."""
+"""remote_credentials: evict cached OvalEdge JWT on 401; retry revoked-session 400."""
 
 import time
 from collections.abc import Generator
