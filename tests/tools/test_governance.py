@@ -3,7 +3,12 @@ from unittest.mock import AsyncMock
 from fastmcp import FastMCP
 
 from server.client import OvalEdgeError
-from server.constants import MCP_PATH_GLOSSARY_TERMS, MCP_PATH_TAGS
+from server.constants import (
+    MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
+    MCP_GLOSSARY_TAGS_LIMIT_MAX,
+    MCP_PATH_GLOSSARY_TERMS,
+    MCP_PATH_TAGS,
+)
 from server.tools import governance
 from tests.conftest import MOCK_GLOSSARY_RESULT
 from tests.helpers import get_tool_fn
@@ -19,7 +24,7 @@ class TestLookupGlossaryTerm:
         assert out == MOCK_GLOSSARY_RESULT
         mock_oe_client.get.assert_called_once_with(
             MCP_PATH_GLOSSARY_TERMS,
-            params={"termName": "churn"},
+            params={"termName": "churn", "limit": MCP_GLOSSARY_TAGS_LIMIT_DEFAULT},
         )
 
     async def test_rejects_both_id_and_name(self, mock_oe_client: AsyncMock) -> None:
@@ -39,7 +44,29 @@ class TestLookupGlossaryTerm:
         assert out == MOCK_GLOSSARY_RESULT
         mock_oe_client.get.assert_called_once_with(
             MCP_PATH_GLOSSARY_TERMS,
-            params={"objectId": 99},
+            params={"objectId": 99, "limit": MCP_GLOSSARY_TAGS_LIMIT_DEFAULT},
+        )
+
+    async def test_custom_limit_forwarded(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = MOCK_GLOSSARY_RESULT
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_glossary_term")
+        await fn(term_name="x", limit=5)
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_GLOSSARY_TERMS,
+            params={"termName": "x", "limit": 5},
+        )
+
+    async def test_limit_capped_at_max(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = MOCK_GLOSSARY_RESULT
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_glossary_term")
+        await fn(term_name="x", limit=999)
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_GLOSSARY_TERMS,
+            params={"termName": "x", "limit": MCP_GLOSSARY_TAGS_LIMIT_MAX},
         )
 
     async def test_rejects_neither_id_nor_name(self, mock_oe_client: AsyncMock) -> None:
@@ -76,7 +103,18 @@ class TestLookupTags:
         await fn(object_id=3)
         mock_oe_client.get.assert_called_once_with(
             MCP_PATH_TAGS,
-            params={"objectId": 3},
+            params={"objectId": 3, "limit": MCP_GLOSSARY_TAGS_LIMIT_DEFAULT},
+        )
+
+    async def test_custom_limit_forwarded(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {"tag": "t"}
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_tags")
+        await fn(tag_name="PII", limit=7)
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_TAGS,
+            params={"tagName": "PII", "limit": 7},
         )
 
     async def test_rejects_both_id_and_name(self, mock_oe_client: AsyncMock) -> None:

@@ -37,6 +37,21 @@ Help:
 ./scripts/deploy.sh --help
 ```
 
+## Uninstall (stack + optional ECR)
+
+From repo root:
+
+```bash
+./scripts/uninstall.sh
+```
+
+Useful options:
+
+```bash
+./scripts/uninstall.sh --yes          # non-interactive
+./scripts/uninstall.sh --keep-ecr     # remove stack only, keep container images
+```
+
 ## Manual SAM (same result)
 
 ```bash

@@ -1,6 +1,6 @@
 """
-Canonical tool and resource names.
-Prompts reference these constants — rename here, not in prompt strings.
+Canonical tool and resource names, MCP paths, and catalog objectType allow-lists.
+Prompts reference tool name constants — rename here, not in prompt strings.
 """
 
 # ── Tool names ───────────────────────────────────────────────────
@@ -13,27 +13,26 @@ TOOL_LOOKUP_GLOSSARY_TERM = "lookup_glossary_term"
 TOOL_LOOKUP_TAGS = "lookup_tags"
 TOOL_SEARCH_DOCS = "search_platform_docs"
 
-# ── Object type labels (catalog / UI) ────────────────────────────
-OBJECT_TYPES = [
-    "TABLE",
-    "VIEW",
-    "COLUMN",
-    "SCHEMA",
-    "DATABASE",
-    "REPORT",
-    "FILE",
-    "FILE_COLUMN",
-    "REPORT_COLUMN",
-    "API",
-    "API_ATTRIBUTE",
-    "CODE",
-]
-
-# ── Certification statuses ───────────────────────────────────────
-CERT_STATUSES = ["certified", "cautioned", "violated", "inactive"]
-
-# ── Sort options ─────────────────────────────────────────────────
-SORT_OPTIONS = ["RELEVANCE", "POPULARITY", "DQ_SCORE", "CURATION_SCORE", "NAME"]
+# Lowercase objectType for MCP search-catalog and object-details (matches OvalEdge API).
+MCP_CATALOG_OBJECT_TYPES = frozenset(
+    {
+        "oeschema",
+        "oetable",
+        "oecolumn",
+        "oefile",
+        "filecolumn",
+        "oechart",
+        "chartchild",
+        "oeapi",
+        "oeapicolumn",
+        "oequery",
+        "dp_product",
+        "glossary",
+        "oetag",
+        "oestory",
+    }
+)
+MCP_CATALOG_OBJECT_TYPES_DOC = ", ".join(sorted(MCP_CATALOG_OBJECT_TYPES))
 
 # ── OvalEdge MCP HTTP paths (appended to OVALEDGE_BASE_URL) ──────
 MCP_PATH_SEARCH_CATALOG = "/api/v1/mcp/search-catalog"
@@ -43,6 +42,9 @@ MCP_PATH_ENTITY_RELATIONSHIPS = "/api/v1/mcp/entity-relationships"
 MCP_PATH_LINEAGE = "/api/v1/mcp/lineage"
 MCP_PATH_GLOSSARY_TERMS = "/api/v1/mcp/glossary-terms"
 MCP_PATH_TAGS = "/api/v1/mcp/tags"
+# Optional on glossary-terms and tags (Spring default 20).
+MCP_GLOSSARY_TAGS_LIMIT_DEFAULT = 20
+MCP_GLOSSARY_TAGS_LIMIT_MAX = 100
 MCP_PATH_SEARCH_PLATFORM_DOCS = "/api/v1/mcp/search-platform-docs"
 
 # search-catalog: optional query param for full NL user text / context (vector search, etc.).

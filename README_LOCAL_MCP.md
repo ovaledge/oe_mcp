@@ -73,34 +73,9 @@ Set in `.env` or via MCP client `env` (see [.env.example](.env.example)):
 
 Optional: `OVALEDGE_TIMEOUT_SECONDS`, `OVALEDGE_MAX_RETRIES`, `OVALEDGE_RETRY_BACKOFF_SECONDS`, `OVALEDGE_LOG_HTTP_REQUESTS`
 
-## MCP client configuration (`mcp.json`)
+## MCP clients (stdio)
 
-Use Poetry `-C` (recommended):
-
-```json
-{
-  "mcpServers": {
-    "ovaledge-local": {
-      "command": "poetry",
-      "args": [
-        "-C",
-        "/absolute/path/to/oe_mcp",
-        "run",
-        "oe-mcp-local"
-      ],
-      "env": {
-        "OVALEDGE_BASE_URL": "http://127.0.0.1:8080/ovaledge",
-        "OVALEDGE_USER_TOKEN": "your-user-token",
-        "OVALEDGE_USER_SECRET": "your-user-secret",
-        "OVALEDGE_HTTP_AUTH_SCHEME": "jwt",
-        "AUTH_MODE": "local"
-      }
-    }
-  }
-}
-```
-
-If `.env` in the repo is complete, you can omit most `env` entries. Restart the MCP client after changes.
+Copy-paste **`mcp.json` / `mcpServers`** examples and paths per editor: **[docs/client-setup/README.md](docs/client-setup/README.md)** (e.g. [Cursor](docs/client-setup/SETUP_CURSOR.md#local-stdio-configuration), [Kiro](docs/client-setup/SETUP_KIRO.md#local-stdio-configuration), [Claude Desktop](docs/client-setup/SETUP_CLAUDE.md)).
 
 ## Run manually
 
