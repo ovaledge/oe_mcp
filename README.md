@@ -9,6 +9,8 @@ Read-only OvalEdge governance and catalog capabilities exposed to MCP clients (C
 | **Local** | stdio (`poetry run oe-mcp-local`) | [README_LOCAL_MCP.md](README_LOCAL_MCP.md) |
 | **Remote (HTTP)** | `uvicorn entrypoints.lambda_handler:app` or AWS Lambda (Mangum) | [README_REMOTE_MCP.md](README_REMOTE_MCP.md) — use **`remote_credentials`** for supported header auth; **OAuth 2.x / OIDC (`AUTH_MODE=remote`) is WIP** |
 
+**Editor / assistant connection:** [docs/client-setup/README.md](docs/client-setup/README.md) (Cursor, Kiro, Claude, VS Code + Copilot).
+
 **`AUTH_MODE`** in `.env` (or process env) selects behavior: `local`, **`remote` (OAuth 2.x remote MCP — WIP)**, or `remote_credentials`. Full variable reference: [.env.example](.env.example).
 
 **`.env` is not committed.** Copy the example, then edit:

@@ -69,13 +69,14 @@ class TestSearchCatalogAssets:
         params = mock_oe_client.get.call_args[1]["params"]
         assert params["limit"] == 100
 
-    async def test_invalid_object_type_returns_400(self, mock_oe_client: AsyncMock) -> None:
+    async def test_search_accepts_extended_object_type(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
         tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
-        result = await tool_fn(search_terms=["x"], object_type="TABLE")
-        assert result["status_code"] == 400
-        mock_oe_client.get.assert_not_called()
+        await tool_fn(search_terms=["q"], object_type="oequery")
+        params = mock_oe_client.get.call_args[1]["params"]
+        assert params["objectType"] == "oequery"
 
     async def test_error_returns_structured_dict(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.side_effect = OvalEdgeError(403, "Forbidden")

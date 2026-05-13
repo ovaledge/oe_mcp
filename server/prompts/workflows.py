@@ -2,6 +2,7 @@ from fastmcp import FastMCP
 from fastmcp.prompts import Message
 
 from server.constants import (
+    MCP_CATALOG_OBJECT_TYPES_DOC,
     TOOL_ASSET_LINEAGE,
     TOOL_CATALOG_ASSET_DETAILS,
     TOOL_COLUMN_PROFILE,
@@ -32,7 +33,7 @@ def register(mcp: FastMCP) -> None:
             f"1. Extract search keywords from the query\n"
             f"2. Call {TOOL_SEARCH_CATALOG} with search_terms as a JSON array of those keywords, "
             f"and context_query set verbatim to: '{query}' (for server vector/semantic search); "
-            f"optionally set object_type to oetable, oefile, glossary, or oetag\n"
+            f"optionally set object_type to one of: {MCP_CATALOG_OBJECT_TYPES_DOC}\n"
             f"3. Call {TOOL_LOOKUP_GLOSSARY_TERM} with term_name for each key business concept\n"
             f"4. Cross-reference glossary-linked objects against catalog hits\n"
             f"5. Use pagination or repeat search with filters "
@@ -63,8 +64,8 @@ def register(mcp: FastMCP) -> None:
             f"2. Traverse related-term and synonym fields from the response one level\n"
             f"3. For up to two linked physical objects, call {TOOL_CATALOG_ASSET_DETAILS} "
             f"with object_id and object_type from the payload "
-            f"(supported: oetable, oecolumn, oefile, filecolumn, oechart, chartchild, "
-            f"glossary, oetag; prefer oetable/oefile for physical data)\n"
+            f"(supported object_type values: {MCP_CATALOG_OBJECT_TYPES_DOC}; "
+            f"prefer oetable/oefile for physical data)\n"
             f"4. Synthesise and present:\n"
             f"   - Organisational definition (not a generic one)\n"
             f"   - Calculation or method if described\n"

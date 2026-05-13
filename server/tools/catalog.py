@@ -10,6 +10,8 @@ from pydantic import Field
 
 from server.client import OvalEdgeClient, OvalEdgeError
 from server.constants import (
+    MCP_CATALOG_OBJECT_TYPES,
+    MCP_CATALOG_OBJECT_TYPES_DOC,
     MCP_PATH_COLUMN_PROFILE,
     MCP_PATH_ENTITY_RELATIONSHIPS,
     MCP_PATH_LINEAGE,
@@ -19,24 +21,12 @@ from server.constants import (
     MCP_SEARCH_TERMS_PARAM,
 )
 
-# Allowed objectType values for search / details per platform API.
-_SEARCH_OBJECT_TYPES = frozenset(
-    {
-        "oetable",
-        "oecolumn",
-        "oefile",
-        "filecolumn",
-        "oechart",
-        "chartchild",
-        "glossary",
-        "oetag",
-    }
-)
 _TABLE_FILE_TYPES = frozenset({"oetable", "oefile"})
 
 _DESC_SEARCH = (
     "Search the OvalEdge catalog (Elasticsearch hybrid / keyword search plus optional "
-    "server-side vector context). Use for discovery: tables, files, glossary, tags.\n\n"
+    "server-side vector context). Use for discovery: schemas, tables, columns, files, charts, "
+    "APIs, queries, data products, glossary, tags, and stories.\n\n"
     f"Backend: GET {MCP_PATH_SEARCH_CATALOG}\n"
     f"Query params include {MCP_SEARCH_TERMS_PARAM} as a URL-encoded JSON array of strings, "
     "page, limit, filters, objectType, and optionally "
@@ -45,7 +35,9 @@ _DESC_SEARCH = (
     '["customer","revenue","churn"]). Omit or use [] for filter-only paging.\n\n'
     "Always pass context_query with the user's verbatim question when they asked in natural "
     "language — alongside search_terms.\n\n"
-    "object_type must be one of: oetable, oefile, glossary, oetag — or omit to search all."
+    "object_type must be one of: "
+    + MCP_CATALOG_OBJECT_TYPES_DOC
+    + " — or omit to search all."
 )
 _DESC_DETAILS = (
     "Fetch one catalog document (JSON from Elasticsearch; embeddings removed). "
@@ -54,7 +46,8 @@ _DESC_DETAILS = (
     "Exactly one lookup mode: (1) fully_qualified_name alone, OR "
     "(2) object_id AND object_type together. Never mix FQN with id/type.\n\n"
     "object_type must be one of: "
-    "oetable, oecolumn, oefile, filecolumn, oechart, chartchild, glossary, oetag."
+    + MCP_CATALOG_OBJECT_TYPES_DOC
+    + "."
 )
 _DESC_COLUMN = (
     "Column-level profile statistics for one table or file asset.\n\n"
@@ -146,17 +139,19 @@ def register(mcp: FastMCP) -> None:
             str | None,
             Field(
                 description=(
-                    "Restrict to one type: oetable, oefile, glossary, oetag. Omit for all types."
+                    "Restrict to one catalog object type: "
+                    + MCP_CATALOG_OBJECT_TYPES_DOC
+                    + ". Omit for all types."
                 ),
                 default=None,
             ),
         ] = None,
     ) -> dict[str, Any]:
         """OvalEdge catalog search (see MCP tool description)."""
-        if object_type is not None and object_type not in _SEARCH_OBJECT_TYPES:
+        if object_type is not None and object_type not in MCP_CATALOG_OBJECT_TYPES:
             return {
                 "error": (
-                    f"object_type must be one of {sorted(_SEARCH_OBJECT_TYPES)}, "
+                    f"object_type must be one of {sorted(MCP_CATALOG_OBJECT_TYPES)}, "
                     f"got {object_type!r}"
                 ),
                 "status_code": 400,
@@ -194,8 +189,9 @@ def register(mcp: FastMCP) -> None:
             str | None,
             Field(
                 description=(
-                    "One of: oetable, oecolumn, oefile, filecolumn, oechart, "
-                    "chartchild, glossary, oetag; pair with object_id."
+                    "One of: "
+                    + MCP_CATALOG_OBJECT_TYPES_DOC
+                    + "; pair with object_id."
                 ),
                 default=None,
             ),
@@ -230,10 +226,10 @@ def register(mcp: FastMCP) -> None:
                     "error": "object_id and object_type must be provided together.",
                     "status_code": 400,
                 }
-            if object_type not in _SEARCH_OBJECT_TYPES:
+            if object_type not in MCP_CATALOG_OBJECT_TYPES:
                 return {
                     "error": (
-                        f"object_type must be one of {sorted(_SEARCH_OBJECT_TYPES)}, "
+                        f"object_type must be one of {sorted(MCP_CATALOG_OBJECT_TYPES)}, "
                         f"got {object_type!r}"
                     ),
                     "status_code": 400,

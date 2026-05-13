@@ -4,16 +4,25 @@ from fastmcp import FastMCP
 from pydantic import Field
 
 from server.client import OvalEdgeClient, OvalEdgeError
-from server.constants import MCP_PATH_GLOSSARY_TERMS, MCP_PATH_TAGS
+from server.constants import (
+    MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
+    MCP_GLOSSARY_TAGS_LIMIT_MAX,
+    MCP_PATH_GLOSSARY_TERMS,
+    MCP_PATH_TAGS,
+)
 
 _DESC_GLOSSARY = (
     "Look up one business glossary term. Server object type is always glossary.\n\n"
-    f"Backend: GET {MCP_PATH_GLOSSARY_TERMS} (objectId OR termName — mutually exclusive).\n\n"
+    f"Backend: GET {MCP_PATH_GLOSSARY_TERMS} (objectId OR termName — mutually exclusive).\n"
+    f"Optional query param limit (default {MCP_GLOSSARY_TAGS_LIMIT_DEFAULT} on server; "
+    f"this client caps at {MCP_GLOSSARY_TAGS_LIMIT_MAX}).\n\n"
     "Provide either term_name (search by name) or object_id (by id), never both."
 )
 _DESC_TAGS = (
     "Look up one OETAG (tag) document from Elasticsearch.\n\n"
-    f"Backend: GET {MCP_PATH_TAGS} (objectId OR tagName — mutually exclusive).\n\n"
+    f"Backend: GET {MCP_PATH_TAGS} (objectId OR tagName — mutually exclusive).\n"
+    f"Optional query param limit (default {MCP_GLOSSARY_TAGS_LIMIT_DEFAULT} on server; "
+    f"this client caps at {MCP_GLOSSARY_TAGS_LIMIT_MAX}).\n\n"
     "Provide either tag_name or object_id, never both."
 )
 
@@ -37,6 +46,16 @@ def register(mcp: FastMCP) -> None:
                 default=None,
             ),
         ] = None,
+        limit: Annotated[
+            int,
+            Field(
+                description=(
+                    f"Max hits to return (default {MCP_GLOSSARY_TAGS_LIMIT_DEFAULT}; "
+                    f"capped at {MCP_GLOSSARY_TAGS_LIMIT_MAX})."
+                ),
+                ge=1,
+            ),
+        ] = MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
     ) -> dict[str, Any]:
         """Glossary lookup (see MCP tool description)."""
         has_id = object_id is not None
@@ -51,11 +70,12 @@ def register(mcp: FastMCP) -> None:
                 "error": "Provide object_id or term_name.",
                 "status_code": 400,
             }
+        lim = min(max(limit, 1), MCP_GLOSSARY_TAGS_LIMIT_MAX)
         try:
             async with OvalEdgeClient() as client:
                 return await client.get(
                     MCP_PATH_GLOSSARY_TERMS,
-                    params=_q(objectId=object_id, termName=term_name),
+                    params=_q(objectId=object_id, termName=term_name, limit=lim),
                 )
         except OvalEdgeError as e:
             return {"error": str(e), "status_code": e.status_code}
@@ -70,6 +90,16 @@ def register(mcp: FastMCP) -> None:
             str | None,
             Field(description="Tag name to look up; omit if using object_id.", default=None),
         ] = None,
+        limit: Annotated[
+            int,
+            Field(
+                description=(
+                    f"Max hits to return (default {MCP_GLOSSARY_TAGS_LIMIT_DEFAULT}; "
+                    f"capped at {MCP_GLOSSARY_TAGS_LIMIT_MAX})."
+                ),
+                ge=1,
+            ),
+        ] = MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
     ) -> dict[str, Any]:
         """Tag lookup (see MCP tool description)."""
         has_id = object_id is not None
@@ -84,11 +114,12 @@ def register(mcp: FastMCP) -> None:
                 "error": "Provide object_id or tag_name.",
                 "status_code": 400,
             }
+        lim = min(max(limit, 1), MCP_GLOSSARY_TAGS_LIMIT_MAX)
         try:
             async with OvalEdgeClient() as client:
                 return await client.get(
                     MCP_PATH_TAGS,
-                    params=_q(objectId=object_id, tagName=tag_name),
+                    params=_q(objectId=object_id, tagName=tag_name, limit=lim),
                 )
         except OvalEdgeError as e:
             return {"error": str(e), "status_code": e.status_code}
