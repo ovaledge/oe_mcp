@@ -31,6 +31,26 @@ export MCP_HTTP_STATELESS=true        # false if your MCP client needs GET/SSE
 
 First run creates the **ECR** repository `oe-mcp` (override with `ECR_REPO`) if it does not exist. The script runs `sam build` then `sam deploy` with `--resolve-s3` and prints **CloudFormation outputs** (including `MCPEndpointUrl`).
 
+## Lambda ZIP (no container image / no ECR)
+
+Same HTTP API, routes, env vars, and handler as the image stack, but the function is packaged as a **Python 3.12 ZIP** built by SAM (`BuildMethod: python3.12`). Use this when you do not want ECR or a Dockerfile build.
+
+From the repository root:
+
+```bash
+export OVALEDGE_BASE_URL=https://your-oval-edge-host.example.com
+./scripts/deploy-zip.sh
+```
+
+Template: [template-zip.yaml](template-zip.yaml). Runtime dependencies are listed in [lambda-requirements.txt](lambda-requirements.txt); the repo root [requirements.txt](../requirements.txt) includes that file for SAM’s default pip manifest.
+
+- **Native build (default):** `sam build --no-use-container` — no Docker required; suitable on many Linux CI hosts.
+- **Containerized pip (optional):** `SAM_USE_CONTAINER=true ./scripts/deploy-zip.sh` — uses Docker so wheels match Amazon Linux (useful on macOS if native install fails).
+
+Updating the same stack from **image → ZIP** (or the reverse) is a CloudFormation change to `PackageType`; prefer a new `STACK_NAME` or plan a one-time stack update.
+
+**ZIP template physical names:** `infra/template-zip.yaml` names the Lambda and HTTP API as ``{StackName}-{Environment}-lambda`` and ``{StackName}-{Environment}-httpapi`` so a second stack (e.g. `oe-mcp-zip`) does not collide with the image stack’s fixed names (`oe-mcp-{Environment}`, `oe-mcp-api-{Environment}`).
+
 Help:
 
 ```bash
