@@ -1,0 +1,3 @@
+# SAM Lambda ZIP builds only (infra/template-zip.yaml, scripts/deploy-zip.sh).
+# Application source of truth for versions remains pyproject.toml / poetry.lock.
+-r infra/lambda-requirements.txt
