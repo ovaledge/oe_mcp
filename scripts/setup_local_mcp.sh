@@ -92,6 +92,10 @@ fi
 echo "==> Smoke check (import local MCP entrypoint)..."
 poetry run python -c "from entrypoints.local import mcp; assert mcp is not None"
 
+if [[ -x "$REPO_ROOT/scripts/setup_git_hooks.sh" ]]; then
+  "$REPO_ROOT/scripts/setup_git_hooks.sh"
+fi
+
 if [[ "$RUN_DEV" -eq 1 ]]; then
   echo "==> Running ruff..."
   poetry run ruff check .

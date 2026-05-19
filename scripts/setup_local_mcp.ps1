@@ -100,6 +100,11 @@ if (-not (Test-Path $envPath)) {
 Write-Host "==> Smoke check (import local MCP entrypoint)..."
 poetry run python -c "from entrypoints.local import mcp; assert mcp is not None"
 
+$hooksScript = Join-Path $RepoRoot "scripts" "setup_git_hooks.ps1"
+if (Test-Path $hooksScript) {
+    & $hooksScript
+}
+
 if ($Dev) {
     Write-Host "==> Running ruff..."
     poetry run ruff check .

@@ -21,7 +21,9 @@ from server.constants import (
 
 
 def _part_is_valid(value: str) -> bool:
-    return bool(value) and len(value) <= CREDENTIALS_HEADER_MAX_LEN and not any(c.isspace() for c in value)
+    if not value or len(value) > CREDENTIALS_HEADER_MAX_LEN:
+        return False
+    return not any(c.isspace() for c in value)
 
 
 def _parse_combined(raw: str) -> tuple[str, str] | None:

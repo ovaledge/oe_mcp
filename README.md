@@ -59,12 +59,14 @@ poetry run mypy server/ entrypoints/ evals/
 poetry run pytest
 ```
 
-Once after clone, install git hooks (see `.pre-commit-config.yaml`):
+Git hooks (ruff on **commit**, full **pytest** on **push**) are installed automatically when you run `./scripts/setup_local_mcp.sh` in a git clone. To install or refresh hooks only:
 
 ```bash
-poetry run pre-commit install                          # ruff check before each commit
-poetry run pre-commit install --hook-type pre-push     # full pytest suite before each push
+chmod +x scripts/setup_git_hooks.sh   # once, if needed
+./scripts/setup_git_hooks.sh
 ```
+
+See `.pre-commit-config.yaml` for hook definitions.
 
 Optional LLM-level MCP checks: `poetry install --with eval`, then see [evals/README.md](evals/README.md).
 
