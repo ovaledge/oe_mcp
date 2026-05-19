@@ -52,8 +52,8 @@ async def cmd_settings() -> None:
         pass
     elif settings.auth_mode == "remote_credentials":
         print(
-            "INFO: remote_credentials — clients send X-OvalEdge-Token and "
-            "X-OvalEdge-Secret; OAuth discovery is not used."
+            "INFO: remote_credentials — clients send X-OvalEdge-Credentials (token::secret) "
+            "and/or X-OvalEdge-Token + X-OvalEdge-Secret; OAuth discovery is not used."
         )
     else:
         print(
@@ -177,7 +177,7 @@ async def cmd_mcp(token: str | None, mcp_url: str | None) -> None:
     if settings.auth_mode == "remote_credentials":
         print(
             "--- MCP HTTP --- SKIP (--mcp uses OAuth Bearer; for remote_credentials POST /mcp "
-            "with X-OvalEdge-Token and X-OvalEdge-Secret headers)"
+            "with X-OvalEdge-Credentials or X-OvalEdge-Token + X-OvalEdge-Secret headers)"
         )
         return
 

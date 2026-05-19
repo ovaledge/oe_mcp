@@ -6,7 +6,8 @@ Auth depends on ``AUTH_MODE``:
 - ``remote``: OAuth 2.x / OIDC ``Authorization: Bearer`` → OvalEdge JWT (per request).
   Registers OAuth discovery + dynamic registration routes.
 
-- ``remote_credentials``: ``X-OvalEdge-Token`` + ``X-OvalEdge-Secret`` → cached OvalEdge JWT.
+- ``remote_credentials``: ``X-OvalEdge-Credentials`` (``token::secret``) or
+  ``X-OvalEdge-Token`` + ``X-OvalEdge-Secret`` → cached OvalEdge JWT.
   Set ``AUTH_MODE=remote_credentials`` in the process environment (Lambda console, SAM template,
   or ``.env`` when using uvicorn). Same ``app`` object as other modes; mounts discovery stubs only
   (not full OAuth) so MCP HTTP clients do not see 404 on ``/.well-known/oauth-*``.

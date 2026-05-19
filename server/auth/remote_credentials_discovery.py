@@ -4,7 +4,7 @@ RFC 8414 / RFC 9728 discovery stubs for ``AUTH_MODE=remote_credentials``.
 MCP HTTP clients (including Cursor) probe ``/.well-known/oauth-*`` before Streamable HTTP.
 Without these routes, FastAPI returns ``{"detail":"Not Found"}``, which some clients misparse
 as an OAuth error. OAuth is **not** used in this mode; clients must send
-``X-OvalEdge-Token`` / ``X-OvalEdge-Secret`` on ``POST /mcp``.
+``X-OvalEdge-Credentials`` (``token::secret``) or ``X-OvalEdge-Token`` / ``X-OvalEdge-Secret`` on ``POST /mcp``.
 
 The metadata points ``authorization_endpoint`` / ``token_endpoint`` at ``/mcp-auth/declined``,
 which returns a standard OAuth 2.0 error JSON (400) if hit.
@@ -90,7 +90,8 @@ async def oauth_declined_stub() -> JSONResponse:
             "error": "unsupported_grant_type",
             "error_description": (
                 "This deployment uses AUTH_MODE=remote_credentials. "
-                "Send X-OvalEdge-Token and X-OvalEdge-Secret on MCP HTTP requests instead of OAuth."
+                "Send X-OvalEdge-Credentials (token::secret) or X-OvalEdge-Token and "
+                "X-OvalEdge-Secret on MCP HTTP requests instead of OAuth."
             ),
         },
         status_code=400,

@@ -13,7 +13,11 @@ from server.auth.middleware import AuthMiddleware
 from server.auth.remote_credentials_discovery import router as remote_credentials_discovery_router
 from server.auth.token_exchange import TokenExchangeError
 from server.config import settings
-from server.constants import HEADER_OE_USER_SECRET, HEADER_OE_USER_TOKEN
+from server.constants import (
+    HEADER_OE_USER_COMBINED,
+    HEADER_OE_USER_SECRET,
+    HEADER_OE_USER_TOKEN,
+)
 
 
 @pytest.fixture
@@ -170,4 +174,26 @@ def test_whitespace_inside_header_value_401(rc_app: FastAPI) -> None:
                 HEADER_OE_USER_SECRET: "sec",
             },
         )
+    assert r.status_code == 401
+
+
+def test_combined_credentials_header_success(rc_app: FastAPI) -> None:
+    valid = jose_jwt.encode({"exp": int(time.time()) + 3600, "sub": "s"}, "k", algorithm="HS256")
+    with (
+        TestClient(rc_app) as client,
+        patch(
+            "server.auth.middleware.get_or_refresh_user_token",
+            new=AsyncMock(return_value=valid),
+        ),
+    ):
+        r = client.post(
+            "/mcp",
+            headers={HEADER_OE_USER_COMBINED: "t::s"},
+        )
+    assert r.status_code == 200
+
+
+def test_combined_credentials_malformed_401(rc_app: FastAPI) -> None:
+    with TestClient(rc_app) as client:
+        r = client.post("/mcp", headers={HEADER_OE_USER_COMBINED: "only-token"})
     assert r.status_code == 401

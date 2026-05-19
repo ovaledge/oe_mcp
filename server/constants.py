@@ -74,6 +74,10 @@ JWT_REFRESH_LEEWAY_SECONDS = 120
 # ── AUTH_MODE=remote_credentials (per-user headers) ─────────────
 HEADER_OE_USER_TOKEN = "X-OvalEdge-Token"
 HEADER_OE_USER_SECRET = "X-OvalEdge-Secret"
+# Single header for clients that allow one API key (e.g. Microsoft Copilot Studio).
+# Value: ``<token>::<secret>`` — OvalEdge tokens/secrets do not contain ``::``.
+HEADER_OE_USER_COMBINED = "X-OvalEdge-Credentials"
+CREDENTIALS_COMBINED_SEPARATOR = "::"
 
 # Regenerate cached OvalEdge JWT this many seconds before ``exp``.
 CREDENTIALS_REFRESH_LEEWAY_SECONDS = 60
@@ -92,3 +96,8 @@ CREDENTIALS_CACHE_POST_EXP_GRACE_SECONDS = 0
 
 # Max length per header value after trim (before exchange).
 CREDENTIALS_HEADER_MAX_LEN = 2048
+
+# Max length for combined header value (token + separator + secret).
+CREDENTIALS_COMBINED_MAX_LEN = (
+    2 * CREDENTIALS_HEADER_MAX_LEN + len(CREDENTIALS_COMBINED_SEPARATOR)
+)

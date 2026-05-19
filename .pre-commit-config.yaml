@@ -1,4 +1,12 @@
-# https://pre-commit.com — install: `poetry run pre-commit install`
+# https://pre-commit.com
+#
+# Install (once per clone):
+#   poetry run pre-commit install                          # ruff on git commit
+#   poetry run pre-commit install --hook-type pre-push     # pytest on git push
+#
+# Run manually:
+#   poetry run pre-commit run --all-files
+#   poetry run pre-commit run --hook-stage pre-push pytest
 repos:
   - repo: local
     hooks:
@@ -8,3 +16,11 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+
+      - id: pytest
+        name: pytest (tests/)
+        entry: poetry run pytest
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

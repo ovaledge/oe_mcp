@@ -9,7 +9,7 @@ Read-only OvalEdge governance and catalog capabilities exposed to MCP clients (C
 | **Local** | stdio (`poetry run oe-mcp-local`) | [README_LOCAL_MCP.md](README_LOCAL_MCP.md) |
 | **Remote (HTTP)** | `uvicorn entrypoints.lambda_handler:app` or AWS Lambda (Mangum) | [README_REMOTE_MCP.md](README_REMOTE_MCP.md) — use **`remote_credentials`** for supported header auth; **OAuth 2.x / OIDC (`AUTH_MODE=remote`) is WIP** |
 
-**Editor / assistant connection:** [docs/client-setup/README.md](docs/client-setup/README.md) (Cursor, Kiro, Claude, VS Code + Copilot).
+**Editor / assistant connection:** [docs/client-setup/README.md](docs/client-setup/README.md) (Cursor, Kiro, Claude, GitHub Copilot in VS Code, Microsoft Copilot in Studio — separate guides).
 
 **`AUTH_MODE`** in `.env` (or process env) selects behavior: `local`, **`remote` (OAuth 2.x remote MCP — WIP)**, or `remote_credentials`. Full variable reference: [.env.example](.env.example).
 
@@ -59,7 +59,12 @@ poetry run mypy server/ entrypoints/ evals/
 poetry run pytest
 ```
 
-Once after clone, run `poetry run pre-commit install` to run `poetry run ruff check .` before each commit (see `.pre-commit-config.yaml`).
+Once after clone, install git hooks (see `.pre-commit-config.yaml`):
+
+```bash
+poetry run pre-commit install                          # ruff check before each commit
+poetry run pre-commit install --hook-type pre-push     # full pytest suite before each push
+```
 
 Optional LLM-level MCP checks: `poetry install --with eval`, then see [evals/README.md](evals/README.md).
 

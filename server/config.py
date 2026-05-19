@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     # ── Auth mode ────────────────────────────────────────────────
     # "local"               → OvalEdge client_credentials flow (stdio)
     # "remote"              → Bearer OAuth access token (JWT) per request (Lambda)
-    # "remote_credentials"  → X-OvalEdge-Token + X-OvalEdge-Secret per request (Lambda)
+    # "remote_credentials"  → X-OvalEdge-Credentials or Token + Secret per request (Lambda)
     auth_mode: Literal["local", "remote", "remote_credentials"] = "local"
 
     # remote_credentials only: max distinct credential-key JWT entries in memory
