@@ -35,5 +35,5 @@ poetry run pre-commit install --hook-type pre-push
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "==> Git hooks ready:"
-Write-Host "    commit -> ruff check"
-Write-Host "    push   -> pytest (tests/)"
+Write-Host "    git commit -> ruff check + pytest (tests/)"
+Write-Host "    git push   -> pytest again (if you use pre-push hook)"

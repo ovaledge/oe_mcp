@@ -29,5 +29,5 @@ poetry run pre-commit install
 poetry run pre-commit install --hook-type pre-push
 
 echo "==> Git hooks ready:"
-echo "    commit → ruff check"
-echo "    push   → pytest (tests/)"
+echo "    git commit → ruff check + pytest (tests/)"
+echo "    git push   → pytest again (if you use pre-push hook)"

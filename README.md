@@ -59,7 +59,7 @@ poetry run mypy server/ entrypoints/ evals/
 poetry run pytest
 ```
 
-Git hooks (ruff on **commit**, full **pytest** on **push**) are installed automatically when you run `./scripts/setup_local_mcp.sh` in a git clone. To install or refresh hooks only:
+Git hooks (**ruff** + full **pytest** on each **commit**; optional pytest again on **push**) are installed automatically when you run `./scripts/setup_local_mcp.sh` in a git clone. To install or refresh hooks only:
 
 ```bash
 chmod +x scripts/setup_git_hooks.sh   # once, if needed

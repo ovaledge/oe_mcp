@@ -2,11 +2,14 @@
 #
 # Install (automated on clone via scripts/setup_local_mcp.sh or manual):
 #   ./scripts/setup_git_hooks.sh
-#   # or: poetry run pre-commit install && poetry run pre-commit install --hook-type pre-push
+#   # or: poetry run pre-commit install
+#
+# On each `git commit`: ruff check + pytest (tests/).
+# Optional second hook file for push-only re-check:
+#   poetry run pre-commit install --hook-type pre-push
 #
 # Run manually:
 #   poetry run pre-commit run --all-files
-#   poetry run pre-commit run --hook-stage pre-push pytest
 repos:
   - repo: local
     hooks:
@@ -23,4 +26,4 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
-        stages: [pre-push]
+        stages: [pre-commit, pre-push]
