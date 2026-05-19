@@ -10,7 +10,7 @@ Parameters:
       - remote
       - remote_credentials
     Description: >
-      remote = OAuth/OIDC Bearer per request; remote_credentials = X-OvalEdge-Token + Secret headers.
+      remote = OAuth/OIDC Bearer per request; remote_credentials = X-OvalEdge-Credentials or Token + Secret headers.
   OvalEdgeBaseUrl:
     Type: String
   OvalEdgeTokenExchangePath:
@@ -199,6 +199,7 @@ Resources:
         AllowHeaders:
           - Content-Type
           - Authorization
+          - X-OvalEdge-Credentials
           - X-OvalEdge-Token
           - X-OvalEdge-Secret
       RouteSettings:

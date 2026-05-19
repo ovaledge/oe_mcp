@@ -11,7 +11,7 @@ Run the same MCP tools over **HTTP** with FastAPI + Mangum (`entrypoints/lambda_
 | `AUTH_MODE` | Client credentials | OAuth / discovery routes | Notes |
 | ------------- | -------------------- | -------------------------- | ----- |
 | `remote` | `Authorization: Bearer <IdP access_token>` | `/.well-known/oauth-authorization-server`, `POST /register` | **OAuth 2.x remote MCP — WIP** — see below |
-| `remote_credentials` | `X-OvalEdge-Token` + `X-OvalEdge-Secret` on each request | Minimal `/.well-known/*` stubs (no browser OAuth) | Per-user OvalEdge JWT cached server-side by credential key; many users share one process; use **HTTPS** |
+| `remote_credentials` | `X-OvalEdge-Credentials` (`token::secret`) **or** `X-OvalEdge-Token` + `X-OvalEdge-Secret` | Minimal `/.well-known/*` stubs (no browser OAuth) | Per-user OvalEdge JWT cached server-side by credential key; many users share one process; use **HTTPS** |
 
 Shared: `POST /mcp` (streamable HTTP), `GET /health`, `GET /`.
 
@@ -27,7 +27,7 @@ Until stable, prefer **`remote_credentials`** or local stdio (**`AUTH_MODE=local
 
 ## `remote_credentials` (header auth)
 
-- Middleware reads **`X-OvalEdge-Token`** and **`X-OvalEdge-Secret`**, exchanges with OvalEdge, caches JWTs keyed by a digest of token+secret, sets `current_oe_jwt` and `current_oe_credential_cache_key` for the request.
+- Middleware reads **`X-OvalEdge-Credentials`** (`<token>::<secret>`) **or** **`X-OvalEdge-Token`** + **`X-OvalEdge-Secret`**, exchanges with OvalEdge, caches JWTs keyed by a digest of token+secret, sets `current_oe_jwt` and `current_oe_credential_cache_key` for the request. OvalEdge issuance does not include `::` in token or secret.
 - **HTTPS** is enforced for protected routes (`request.url.scheme` or `X-Forwarded-Proto: https`). Plain HTTP returns **400** `tls_required`.
 - On downstream **401** from OvalEdge APIs, the in-memory cache entry for that credential key is dropped; the MCP client should **retry the same request** (headers unchanged) so the next call re-exchanges.
 - Tunables: `CREDENTIALS_CACHE_MAX_ENTRIES` (see `server/config.py` / `.env.example`).
@@ -90,8 +90,8 @@ curl -sS -D - http://127.0.0.1:8000/health \
 
 curl -sS -D - http://127.0.0.1:8000/mcp \
   -H 'X-Forwarded-Proto: https' \
-  -H 'X-OvalEdge-Token: YOUR_USER_TOKEN' \
-  -H 'X-OvalEdge-Secret: YOUR_USER_SECRET' \
+  -H 'X-OvalEdge-Credentials: YOUR_USER_TOKEN::YOUR_USER_SECRET' \
+  # or: -H 'X-OvalEdge-Token: ...' -H 'X-OvalEdge-Secret: ...' \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
   --data-binary '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"curl","version":"0.0.1"}}}'
@@ -109,7 +109,7 @@ poetry run pytest tests/auth/test_middleware_remote_credentials.py tests/auth/te
 
 ## MCP clients (HTTP)
 
-Cursor, Kiro, Claude (Desktop / Code), and VS Code + GitHub Copilot each use different config files and JSON shapes. Step-by-step snippets: **[docs/client-setup/README.md](docs/client-setup/README.md)**.
+Cursor, Kiro, Claude (Desktop / Code), VS Code + GitHub Copilot, and Microsoft Copilot (Studio) each use different config surfaces. Step-by-step snippets: **[docs/client-setup/README.md](docs/client-setup/README.md)** (GitHub vs Microsoft guides are separate).
 
 ## Validation script
 

@@ -17,6 +17,10 @@ from server.auth.context import (
 )
 from server.auth.credentials_cache import credential_cache_key
 from server.auth.oauth_discovery import OAuthDiscoveryError
+from server.auth.remote_credentials_parse import (
+    parse_remote_user_credentials,
+    remote_credentials_auth_hint,
+)
 from server.auth.token_exchange import (
     TokenExchangeError,
     exchange_oauth_access_token,
@@ -24,7 +28,7 @@ from server.auth.token_exchange import (
 )
 from server.config import settings
 from server.constants import (
-    CREDENTIALS_HEADER_MAX_LEN,
+    HEADER_OE_USER_COMBINED,
     HEADER_OE_USER_SECRET,
     HEADER_OE_USER_TOKEN,
 )
@@ -73,24 +77,33 @@ async def _auth_response_or_none(request: Request) -> Response | None:
         if request.url.path in _UNPROTECTED:
             return None
 
-        token_hdr = request.headers.get(HEADER_OE_USER_TOKEN, "")
-        secret_hdr = request.headers.get(HEADER_OE_USER_SECRET, "")
-        user_token = token_hdr.strip()
-        user_secret = secret_hdr.strip()
+        parsed = parse_remote_user_credentials(
+            combined_hdr=request.headers.get(HEADER_OE_USER_COMBINED, ""),
+            token_hdr=request.headers.get(HEADER_OE_USER_TOKEN, ""),
+            secret_hdr=request.headers.get(HEADER_OE_USER_SECRET, ""),
+        )
+        has_any_credential_header = any(
+            request.headers.get(h, "").strip()
+            for h in (
+                HEADER_OE_USER_COMBINED,
+                HEADER_OE_USER_TOKEN,
+                HEADER_OE_USER_SECRET,
+            )
+        )
 
         accept = (request.headers.get("accept") or "").lower()
         wants_event_stream = "text/event-stream" in accept
         if (
             request.method == "GET"
             and _is_mcp_mount_root(request.url.path)
-            and not user_token
+            and not has_any_credential_header
             and not wants_event_stream
         ):
             return JSONResponse(
                 {
                     "message": (
                         "MCP over HTTP expects POST with "
-                        f"{HEADER_OE_USER_TOKEN} and {HEADER_OE_USER_SECRET}."
+                        f"{remote_credentials_auth_hint()}."
                     ),
                     "see_also": "/",
                 },
@@ -106,24 +119,18 @@ async def _auth_response_or_none(request: Request) -> Response | None:
                 status_code=400,
             )
 
-        if (
-            not user_token
-            or not user_secret
-            or len(user_token) > CREDENTIALS_HEADER_MAX_LEN
-            or len(user_secret) > CREDENTIALS_HEADER_MAX_LEN
-            or any(c.isspace() for c in user_token)
-            or any(c.isspace() for c in user_secret)
-        ):
+        if parsed is None:
             return JSONResponse(
                 {
                     "error": "unauthorized",
                     "error_description": (
-                        f"Missing or invalid {HEADER_OE_USER_TOKEN} or "
-                        f"{HEADER_OE_USER_SECRET} header"
+                        f"Missing or invalid credential headers ({remote_credentials_auth_hint()})"
                     ),
                 },
                 status_code=401,
             )
+
+        user_token, user_secret = parsed
 
         try:
             oe_jwt = await get_or_refresh_user_token(user_token, user_secret)
@@ -244,7 +251,8 @@ class AuthMiddleware:
            exchange via OvalEdge token/generate, then set current_oe_jwt ContextVar
 
     Remote credentials (auth_mode=remote_credentials):
-        X-OvalEdge-Token + X-OvalEdge-Secret → cached OvalEdge JWT in ContextVar
+        X-OvalEdge-Credentials (token::secret) or X-OvalEdge-Token + X-OvalEdge-Secret
+        → cached OvalEdge JWT in ContextVar
 
     Local (auth_mode=local):
         OvalEdge JWT already set in ContextVar via lifespan (stdio); middleware is a no-op.

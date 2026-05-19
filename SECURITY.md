@@ -7,7 +7,7 @@ Report suspected vulnerabilities through your organization’s standard channel 
 ## Credentials and data handling
 
 - **Never commit** `.env`, API keys, OvalEdge user tokens/secrets, or IdP client secrets. `.gitignore` excludes `.env`.
-- **`remote_credentials`:** `X-OvalEdge-Token` and `X-OvalEdge-Secret` are sensitive. Terminate TLS at the edge (API Gateway, ALB). Do not log header values or full outbound URLs that embed secrets.
+- **`remote_credentials`:** `X-OvalEdge-Credentials` and/or `X-OvalEdge-Token` / `X-OvalEdge-Secret` are sensitive. Terminate TLS at the edge (API Gateway, ALB). Do not log header values or full outbound URLs that embed secrets.
 - **`remote` (OAuth WIP):** Treat Bearer tokens like secrets in transit; validate `aud` / issuer configuration before production use.
 
 ## Deployment surface

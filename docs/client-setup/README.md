@@ -7,7 +7,10 @@ Guides for connecting **OvalEdge MCP** from common editors and assistants.
 | **Cursor** | [SETUP_CURSOR.md](SETUP_CURSOR.md#local-stdio-configuration) | [SETUP_CURSOR.md](SETUP_CURSOR.md#remote-http-configuration) |
 | **Kiro** | [SETUP_KIRO.md](SETUP_KIRO.md#local-stdio-configuration) | [SETUP_KIRO.md](SETUP_KIRO.md#remote-http-configuration) |
 | **Claude** (Desktop, Chat, Code) | [SETUP_CLAUDE.md](SETUP_CLAUDE.md) (Desktop: `mcp-remote`; local stdio: same Poetry pattern as Cursor) | [SETUP_CLAUDE.md](SETUP_CLAUDE.md) |
-| **VS Code + GitHub Copilot** | — (Copilot MCP is HTTP-first; use local stdio only if your workflow supports a command server) | [SETUP_VSCODE_GITHUB_COPILOT.md](SETUP_VSCODE_GITHUB_COPILOT.md) |
+| **VS Code + GitHub Copilot** | — (HTTP-first; optional stdio) | [SETUP_VSCODE_GITHUB_COPILOT.md](SETUP_VSCODE_GITHUB_COPILOT.md) |
+| **Microsoft Copilot** (Studio / Teams / M365 agents) | — | [SETUP_MICROSOFT_COPILOT.md](SETUP_MICROSOFT_COPILOT.md) |
+
+**Do not mix guides:** GitHub Copilot (VS Code `mcp.json`) and Microsoft Copilot (Copilot Studio wizard) use different hosts, config surfaces, and auth UI.
 
 **Shared references**
 
