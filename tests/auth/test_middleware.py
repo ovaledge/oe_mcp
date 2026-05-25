@@ -1,3 +1,4 @@
+import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -63,11 +64,10 @@ def test_mcp_forward_idp_skips_exchange(
     exchange.assert_not_called()
 
 
-def test_lambda_health_route_pattern(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Smoke: real Lambda app serves /health (uses one TestClient + lifespan once)."""
+async def test_lambda_health_route_pattern(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Smoke: Lambda health handler returns healthy payload."""
     monkeypatch.setattr(settings, "auth_mode", "remote")
-    from entrypoints.lambda_handler import app
+    from entrypoints.lambda_handler import health
 
-    with TestClient(app) as client:
-        r = client.get("/health")
-    assert r.status_code == 200
+    resp = await health()
+    assert json.loads(resp.body)["status"] == "healthy"

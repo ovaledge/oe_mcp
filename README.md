@@ -59,6 +59,8 @@ poetry run mypy server/ entrypoints/ evals/
 poetry run pytest
 ```
 
+Unit tests measure coverage for `server/` and `entrypoints/` (report-only threshold for now; see `[tool.coverage.*]` in `pyproject.toml`). HTML report: `poetry run pytest --cov-report=html` then open `htmlcov/index.html`.
+
 Git hooks (**ruff** + full **pytest** on each **commit**; optional pytest again on **push**) are installed automatically when you run `./scripts/setup_local_mcp.sh` in a git clone. To install or refresh hooks only:
 
 ```bash
