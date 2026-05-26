@@ -11,6 +11,7 @@ TOOL_TABLE_ENTITY_RELATIONSHIPS = "table_entity_relationships"
 TOOL_ASSET_LINEAGE = "asset_lineage"
 TOOL_LOOKUP_GLOSSARY_TERM = "lookup_glossary_term"
 TOOL_LOOKUP_TAGS = "lookup_tags"
+TOOL_LOOKUP_DATASTORY = "lookup_datastory"
 TOOL_SEARCH_DOCS = "search_platform_docs"
 
 # Lowercase objectType for MCP search-catalog and object-details (matches OvalEdge API).
@@ -42,6 +43,7 @@ MCP_PATH_ENTITY_RELATIONSHIPS = "/api/v1/mcp/entity-relationships"
 MCP_PATH_LINEAGE = "/api/v1/mcp/lineage"
 MCP_PATH_GLOSSARY_TERMS = "/api/v1/mcp/glossary-terms"
 MCP_PATH_TAGS = "/api/v1/mcp/tags"
+MCP_PATH_LOOKUP_DATASTORY = "/api/v1/mcp/lookup-datastory"
 # Optional on glossary-terms and tags (Spring default 20).
 MCP_GLOSSARY_TAGS_LIMIT_DEFAULT = 20
 MCP_GLOSSARY_TAGS_LIMIT_MAX = 100
