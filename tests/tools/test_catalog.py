@@ -8,6 +8,7 @@ from server.constants import (
     MCP_PATH_COLUMN_PROFILE,
     MCP_PATH_ENTITY_RELATIONSHIPS,
     MCP_PATH_LINEAGE,
+    MCP_PATH_METADATA_CHANGES_BETWEEN_CRAWLS,
     MCP_PATH_SEARCH_CATALOG,
     MCP_SEARCH_CONTEXT_QUERY_PARAM,
     MCP_SEARCH_TERMS_PARAM,
@@ -211,3 +212,57 @@ class TestTableEntityRelationshipsErrors:
         out = await fn(object_id=5)
         assert out["status_code"] == 503
         assert "503" in out["error"]
+
+
+class TestMetadataChangesBetweenCrawls:
+    async def test_forwards_body(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.return_value = {"ok": True, "data": {"changeSummary": "x"}}
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "get_metadata_changes_between_crawls")
+        out = await fn(
+            question="What changed in CUSTOMER schema after the latest crawl?",
+            connection_name="Snowflake PROD",
+            schema_names=["CUSTOMER"],
+            table_names=["CUSTOMER_PROFILE"],
+            last_n_days=2,
+            from_crawl_id=101,
+            to_crawl_id=102,
+        )
+        assert out["ok"] is True
+        mock_oe_client.post.assert_called_once_with(
+            MCP_PATH_METADATA_CHANGES_BETWEEN_CRAWLS,
+            body={
+                "question": "What changed in CUSTOMER schema after the latest crawl?",
+                "connectionName": "Snowflake PROD",
+                "schemaNames": ["CUSTOMER"],
+                "tableNames": ["CUSTOMER_PROFILE"],
+                "lastNDays": 2,
+                "fromCrawlId": 101,
+                "toCrawlId": 102,
+            },
+        )
+
+    async def test_rejects_days_and_weeks_together(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "get_metadata_changes_between_crawls")
+        out = await fn(last_n_days=1, last_n_weeks=1)
+        assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
+    async def test_rejects_invalid_crawl_range(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "get_metadata_changes_between_crawls")
+        out = await fn(from_crawl_id=10, to_crawl_id=9)
+        assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
+    async def test_error_returns_structured_dict(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.side_effect = OvalEdgeError(500, "Internal error")
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "get_metadata_changes_between_crawls")
+        out = await fn(question="Show drift")
+        assert out["status_code"] == 500
