@@ -7,7 +7,7 @@ from server.docs import register as register_docs
 from server.prompts import workflows
 from server.resources import catalog as catalog_res
 from server.resources import governance as governance_res
-from server.tools import catalog, docs, governance
+from server.tools import catalog, data_access_management, docs, governance
 
 
 def create_mcp(lifespan: Any = None) -> FastMCP:
@@ -25,6 +25,8 @@ def create_mcp(lifespan: Any = None) -> FastMCP:
             "Phase 1 — Asset & Metadata Discovery (read-only). "
             "Use tools to search the catalog, fetch asset details, lineage, profiles, "
             "and governance lookups (glossary, tags). "
+            "For native Redshift/Snowflake/Tableau grants (not OvalEdge catalog ACLs), "
+            "use get_source_system_access. "
             "Use resources for deep links: catalog tables and glossary terms by id. "
             "Use prompts to run pre-packaged governance workflows. "
             "Every response includes full governance context where the API provides it. "
@@ -34,6 +36,7 @@ def create_mcp(lifespan: Any = None) -> FastMCP:
     )
 
     catalog.register(mcp)
+    data_access_management.register(mcp)
     governance.register(mcp)
     docs.register(mcp)
 
