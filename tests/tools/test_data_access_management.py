@@ -5,6 +5,7 @@ from fastmcp import FastMCP
 from server.client import OvalEdgeError
 from server.constants import MCP_PATH_SOURCE_SYSTEM_ACCESS
 from server.tools import rdam
+from server.tools import data_access_management
 from tests.helpers import get_tool_fn
 
 
@@ -14,6 +15,8 @@ class TestGetSourceSystemAccess:
         mcp = FastMCP(name="test", version="0.0.1")
         rdam.register(mcp)
         fn = await get_tool_fn(mcp, "source_system_access")
+        data_access_management.register(mcp)
+        fn = await get_tool_fn(mcp, "get_source_system_access")
         out = await fn(
             source_system="redshift",
             query_direction="user_to_objects",
@@ -34,6 +37,8 @@ class TestGetSourceSystemAccess:
         mcp = FastMCP(name="test", version="0.0.1")
         rdam.register(mcp)
         fn = await get_tool_fn(mcp, "source_system_access")
+        data_access_management.register(mcp)
+        fn = await get_tool_fn(mcp, "get_source_system_access")
         await fn(
             source_system="redshift",
             query_direction="object_to_users",
@@ -52,6 +57,8 @@ class TestGetSourceSystemAccess:
         mcp = FastMCP(name="test", version="0.0.1")
         rdam.register(mcp)
         fn = await get_tool_fn(mcp, "source_system_access")
+        data_access_management.register(mcp)
+        fn = await get_tool_fn(mcp, "get_source_system_access")
         out = await fn(
             source_system="postgres",
             query_direction="user_to_objects",
@@ -64,6 +71,8 @@ class TestGetSourceSystemAccess:
         mcp = FastMCP(name="test", version="0.0.1")
         rdam.register(mcp)
         fn = await get_tool_fn(mcp, "source_system_access")
+        data_access_management.register(mcp)
+        fn = await get_tool_fn(mcp, "get_source_system_access")
         out = await fn(source_system="snowflake", query_direction="user_to_objects")
         assert out["status_code"] == 400
         mock_oe_client.get.assert_not_called()
@@ -72,6 +81,8 @@ class TestGetSourceSystemAccess:
         mcp = FastMCP(name="test", version="0.0.1")
         rdam.register(mcp)
         fn = await get_tool_fn(mcp, "source_system_access")
+        data_access_management.register(mcp)
+        fn = await get_tool_fn(mcp, "get_source_system_access")
         out = await fn(source_system="tableau", query_direction="object_to_users")
         assert out["status_code"] == 400
         mock_oe_client.get.assert_not_called()
@@ -84,6 +95,8 @@ class TestGetSourceSystemAccess:
         mcp = FastMCP(name="test", version="0.0.1")
         rdam.register(mcp)
         fn = await get_tool_fn(mcp, "source_system_access")
+        data_access_management.register(mcp)
+        fn = await get_tool_fn(mcp, "get_source_system_access")
         out = await fn(
             source_system="snowflake",
             query_direction="user_to_objects",

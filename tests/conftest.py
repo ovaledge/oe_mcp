@@ -121,6 +121,16 @@ def mock_oe_post() -> object:
         yield mock
 
 
+_OE_CLIENT_PATCH_TARGETS = (
+    "server.tools.catalog.OvalEdgeClient",
+    "server.tools.data_access_management.OvalEdgeClient",
+    "server.tools.docs.OvalEdgeClient",
+    "server.tools.governance.OvalEdgeClient",
+    "server.resources.catalog.OvalEdgeClient",
+    "server.resources.governance.OvalEdgeClient",
+)
+
+
 @pytest.fixture
 def mock_oe_client() -> object:
     """

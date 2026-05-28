@@ -4,6 +4,11 @@ from fastmcp import FastMCP
 
 from server.config import settings
 from server.mcp import register_all
+from server.docs import register as register_docs
+from server.prompts import workflows
+from server.resources import catalog as catalog_res
+from server.resources import governance as governance_res
+from server.tools import catalog, data_access_management, docs, governance
 
 
 def create_mcp(lifespan: Any = None) -> FastMCP:
@@ -42,6 +47,8 @@ def create_mcp(lifespan: Any = None) -> FastMCP:
             "for physical datasets; when hits include oestory, follow with lookup_datastory. "
             "For native Redshift/Snowflake/Tableau grants (not OvalEdge catalog ACLs), "
             "use source_system_access. "
+            "For native Redshift/Snowflake/Tableau grants (not OvalEdge catalog ACLs), "
+            "use get_source_system_access. "
             "Use resources for deep links when you already have object ids: "
             "ovaledge://catalog/table/{id}, ovaledge://catalog/file/{id}, "
             "ovaledge://governance/glossary-term/{id}, "
@@ -57,6 +64,18 @@ def create_mcp(lifespan: Any = None) -> FastMCP:
     )
 
     register_all(mcp)
+    catalog.register(mcp)
+    data_access_management.register(mcp)
+    governance.register(mcp)
+    docs.register(mcp)
+
+    catalog_res.register(mcp)
+    governance_res.register(mcp)
+
+    workflows.register(mcp)
+
+    register_docs(mcp)
+
     return mcp
 
 

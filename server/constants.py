@@ -20,6 +20,7 @@ TOOL_UPDATE_ASSET_DESCRIPTIONS = "update_asset_descriptions"
 TOOL_UPDATE_GOVERNANCE_ROLES = "update_governance_roles"
 TOOL_LOOKUP_DQ_RULE = "lookup_dq_rule"
 TOOL_SOURCE_SYSTEM_ACCESS = "source_system_access"
+TOOL_GET_SOURCE_SYSTEM_ACCESS = "get_source_system_access"
 
 # Lowercase objectType for MCP search-catalog and object-details (matches OvalEdge API).
 MCP_CATALOG_OBJECT_TYPES = frozenset(
@@ -71,6 +72,9 @@ SELECTION_PHASE_MASTER_REQUIRED = "MASTER_REQUIRED"
 SELECTION_PHASE_PARENT_OPTIONAL = "PARENT_OPTIONAL"
 # create_tag guidance (not an error — tag not created yet).
 STATUS_AWAITING_USER_SELECTION = "awaiting_user_selection"
+MCP_PATH_SEARCH_PLATFORM_DOCS = "/api/v1/mcp/search-platform-docs"
+MCP_PATH_SOURCE_SYSTEM_ACCESS = "/api/v1/mcp/source-system-access"
+
 # Optional on glossary-terms and tags (Spring default 20).
 MCP_GLOSSARY_TAGS_LIMIT_DEFAULT = 20
 MCP_GLOSSARY_TAGS_LIMIT_MAX = 100
@@ -96,6 +100,14 @@ MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES_DOC = ", ".join(
     sorted(MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES)
 )
 
+# get_source_system_access — must match backend McpSourceSystemAccessReadService.
+MCP_SOURCE_SYSTEMS = frozenset({"redshift", "snowflake", "tableau"})
+MCP_SOURCE_SYSTEMS_DOC = ", ".join(sorted(MCP_SOURCE_SYSTEMS))
+MCP_QUERY_DIRECTIONS = frozenset({"user_to_objects", "object_to_users"})
+MCP_QUERY_DIRECTIONS_DOC = "user_to_objects | object_to_users"
+MCP_GRANT_MECHANISMS = frozenset({"direct", "group", "role"})
+
+# search-catalog: optional query param for full NL user text / context (vector search, etc.).
 # source_system_access — must match backend McpSourceSystemAccessReadService.
 MCP_SOURCE_SYSTEMS = frozenset({"redshift", "snowflake", "tableau"})
 MCP_SOURCE_SYSTEMS_DOC = ", ".join(sorted(MCP_SOURCE_SYSTEMS))
