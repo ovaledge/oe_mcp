@@ -41,9 +41,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastmcp.utilities.lifespan import combine_lifespans
 from mangum import Mangum
-from starlette.applications import Starlette
 from starlette.responses import Response
-from starlette.routing import Route
 
 from server.app import mcp
 from server.asgi_normalize_mcp_path import NormalizeMcpMountSlashMiddleware
@@ -132,13 +130,19 @@ async def favicon() -> Response:
 
 @app.get("/health")
 async def health() -> JSONResponse:
-    return JSONResponse(
-        {
-            "status": "healthy",
-            "version": settings.mcp_server_version,
-            "auth_mode": settings.auth_mode,
-        }
-    )
+    ready = mcp_lifespan_ready()
+    payload: dict[str, object] = {
+        "status": "healthy" if ready or not _running_on_aws_lambda() else "degraded",
+        "version": settings.mcp_server_version,
+        "auth_mode": settings.auth_mode,
+        "mcp_lifespan_ready": ready,
+    }
+    if _running_on_aws_lambda() and not ready:
+        payload["mcp_lifespan_detail"] = (
+            "MCP HTTP lifespan not started yet on this Lambda instance "
+            "(cold start or holder task failed)."
+        )
+    return JSONResponse(payload)
 
 
 app.mount("/mcp", mcp_http)
@@ -147,18 +151,25 @@ _mangum = Mangum(app, lifespan="off" if _running_on_aws_lambda() else "auto")
 
 _mcp_holder_lock = threading.Lock()
 _mcp_holder_task: asyncio.Task[Any] | None = None
+_mcp_holder_started = threading.Event()
+
+_LAMBDA_MCP_LIFESPAN_STARTUP_TIMEOUT_SECONDS = 15.0
 
 
-def _streamable_http_session_manager(starlette_app: Starlette) -> Any:
-    """Reach FastMCP's ``StreamableHTTPSessionManager`` so we can wait for ``_task_group``."""
-    from fastmcp.server.http import StreamableHTTPASGIApp
+def mcp_lifespan_ready() -> bool:
+    """
+    Whether Streamable HTTP MCP is ready to accept requests.
 
-    for route in starlette_app.routes:
-        if isinstance(route, Route) and isinstance(route.endpoint, StreamableHTTPASGIApp):
-            return route.endpoint.session_manager
-    raise RuntimeError(
-        "StreamableHTTPASGIApp route not found on mcp_http — FastMCP layout may have changed"
-    )
+    On Lambda, True after the pinned ``mcp_http`` lifespan context has started.
+    Off Lambda, True (uvicorn runs ``combine_lifespans`` for the mounted app).
+    """
+    if not _running_on_aws_lambda():
+        return True
+    if not _mcp_holder_started.is_set():
+        return False
+    if _mcp_holder_task is None or _mcp_holder_task.done():
+        return False
+    return True
 
 
 def _ensure_lambda_mcp_http_lifespan_pinned() -> None:
@@ -170,9 +181,7 @@ def _ensure_lambda_mcp_http_lifespan_pinned() -> None:
     global _mcp_holder_task
     with _mcp_holder_lock:
         if _mcp_holder_task is not None and not _mcp_holder_task.done():
-            sm = _streamable_http_session_manager(mcp_http)
-            # StreamableHTTPSessionManager does not expose a public readiness API.
-            if getattr(sm, "_task_group", None) is not None:
+            if _mcp_holder_started.is_set():
                 return
 
         if _mcp_holder_task is not None and _mcp_holder_task.done():
@@ -180,24 +189,36 @@ def _ensure_lambda_mcp_http_lifespan_pinned() -> None:
             if exc is not None:
                 logger.exception("MCP http lifespan holder task ended with error", exc_info=exc)
             _mcp_holder_task = None
+            _mcp_holder_started.clear()
 
         loop = asyncio.get_event_loop()
 
         async def _hold_mcp_http_lifespan_forever() -> None:
             async with mcp_http.router.lifespan_context(mcp_http):
+                _mcp_holder_started.set()
                 await asyncio.Event().wait()
 
+        _mcp_holder_started.clear()
         _mcp_holder_task = loop.create_task(_hold_mcp_http_lifespan_forever())
-        sm = _streamable_http_session_manager(mcp_http)
-        deadline = time.monotonic() + 15.0
+        deadline = time.monotonic() + _LAMBDA_MCP_LIFESPAN_STARTUP_TIMEOUT_SECONDS
         while time.monotonic() < deadline:
-            if getattr(sm, "_task_group", None) is not None:
-                logger.info("MCP StreamableHTTP session manager ready (Lambda pinned lifespan)")
+            if _mcp_holder_started.is_set():
+                logger.info("MCP HTTP lifespan pinned and ready (Lambda)")
                 return
+            if _mcp_holder_task.done():
+                exc = _mcp_holder_task.exception()
+                if exc is not None:
+                    raise RuntimeError(
+                        "MCP HTTP lifespan holder task failed during startup"
+                    ) from exc
+                raise RuntimeError("MCP HTTP lifespan holder task exited during startup")
             loop.run_until_complete(asyncio.sleep(0.01))
 
         raise RuntimeError(
-            "StreamableHTTPSessionManager did not start within 15s — check FastMCP / MCP versions"
+            "MCP HTTP lifespan did not enter within "
+            f"{_LAMBDA_MCP_LIFESPAN_STARTUP_TIMEOUT_SECONDS:.0f}s on this Lambda instance. "
+            "The pinned mcp_http lifespan task may be stuck; check CloudWatch for holder "
+            "task errors and confirm FastMCP streamable-http startup is compatible."
         )
 
 
