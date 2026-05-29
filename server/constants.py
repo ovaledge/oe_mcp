@@ -9,8 +9,10 @@ TOOL_CATALOG_ASSET_DETAILS = "catalog_asset_details"
 TOOL_COLUMN_PROFILE = "column_profile_statistics"
 TOOL_TABLE_ENTITY_RELATIONSHIPS = "table_entity_relationships"
 TOOL_ASSET_LINEAGE = "asset_lineage"
+TOOL_METADATA_CHANGES_BETWEEN_CRAWLS = "get_metadata_changes_between_crawls"
 TOOL_LOOKUP_GLOSSARY_TERM = "lookup_glossary_term"
 TOOL_LOOKUP_TAGS = "lookup_tags"
+TOOL_LOOKUP_DATASTORY = "lookup_datastory"
 TOOL_SEARCH_DOCS = "search_platform_docs"
 TOOL_GET_SOURCE_SYSTEM_ACCESS = "get_source_system_access"
 
@@ -41,11 +43,15 @@ MCP_PATH_OBJECT_DETAILS = "/api/v1/mcp/object-details"
 MCP_PATH_COLUMN_PROFILE = "/api/v1/mcp/column-profile"
 MCP_PATH_ENTITY_RELATIONSHIPS = "/api/v1/mcp/entity-relationships"
 MCP_PATH_LINEAGE = "/api/v1/mcp/lineage"
+MCP_PATH_METADATA_CHANGES_BETWEEN_CRAWLS = (
+    "/api/v1/mcp/metadata-changes-between-crawls"
+)
 MCP_PATH_GLOSSARY_TERMS = "/api/v1/mcp/glossary-terms"
 MCP_PATH_TAGS = "/api/v1/mcp/tags"
 MCP_PATH_SEARCH_PLATFORM_DOCS = "/api/v1/mcp/search-platform-docs"
 MCP_PATH_SOURCE_SYSTEM_ACCESS = "/api/v1/mcp/source-system-access"
 
+MCP_PATH_LOOKUP_DATASTORY = "/api/v1/mcp/lookup-datastory"
 # Optional on glossary-terms and tags (Spring default 20).
 MCP_GLOSSARY_TAGS_LIMIT_DEFAULT = 20
 MCP_GLOSSARY_TAGS_LIMIT_MAX = 100
