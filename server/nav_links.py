@@ -2,9 +2,26 @@
 
 from __future__ import annotations
 
+import os
+
 from server.config import settings
 
 _HASH_PREFIX = "#nav/"
+
+
+def get_link_base_url() -> str:
+    """
+    Base URL for user-facing links (tag summary, redirect, audit).
+
+    Uses OVALEDGE_LINK_BASE_URL when set (pod/custom hostname), else OVALEDGE_BASE_URL.
+    For local dev, 127.0.0.1 is rewritten to localhost so links match typical browser URLs.
+    """
+    override = (os.getenv("OVALEDGE_LINK_BASE_URL") or "").strip().rstrip("/")
+    base = override or settings.ovaledge_base_url.strip().rstrip("/")
+    prefer_localhost = os.getenv("OVALEDGE_PREFER_LOCALHOST_LINKS", "true").strip().lower()
+    if prefer_localhost in ("1", "true", "yes") and "127.0.0.1" in base:
+        base = base.replace("127.0.0.1", "localhost")
+    return base
 
 
 def extract_hash_nav_link(nav: str | None) -> str:
@@ -19,12 +36,21 @@ def extract_hash_nav_link(nav: str | None) -> str:
 
 
 def build_absolute_nav_url(relative: str | None) -> str:
-    """Build a full URL: {OVALEDGE_BASE_URL}/#nav/..."""
+    """Build a full URL: {link_base}/#nav/..."""
     rel = extract_hash_nav_link(relative)
     if not rel:
         return ""
-    base = settings.ovaledge_base_url.strip().rstrip("/") + "/"
+    base = get_link_base_url() + "/"
     return base + rel
+
+
+def markdown_link(label: str, url: str) -> str:
+    """Markdown hyperlink for chat clients that render MD."""
+    safe_label = (label or "link").replace("[", "\\[").replace("]", "\\]")
+    trimmed = (url or "").strip()
+    if not trimmed:
+        return safe_label
+    return f"[{safe_label}]({trimmed})"
 
 
 def normalize_nav_link(
