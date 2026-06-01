@@ -40,7 +40,7 @@ Setup scripts (`scripts/setup_local_mcp.sh`, `scripts/setup_local_mcp.ps1`) crea
 
 - `search_catalog_assets`, `catalog_asset_details`, `column_profile_statistics`
 - `table_entity_relationships`, `asset_lineage`
-- `lookup_glossary_term`, `lookup_tags`, `lookup_datastory`, `search_platform_docs`
+- `lookup_glossary_term`, `lookup_tags`, `create_tag`, `lookup_datastory`, `search_platform_docs`
 
 ### Resources (`server/resources/`)
 
