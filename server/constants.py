@@ -13,6 +13,7 @@ TOOL_LOOKUP_GLOSSARY_TERM = "lookup_glossary_term"
 TOOL_LOOKUP_TAGS = "lookup_tags"
 TOOL_LOOKUP_DATASTORY = "lookup_datastory"
 TOOL_SEARCH_DOCS = "search_platform_docs"
+TOOL_UPDATE_ASSET_DESCRIPTIONS = "update_asset_descriptions"
 
 # Lowercase objectType for MCP search-catalog and object-details (matches OvalEdge API).
 MCP_CATALOG_OBJECT_TYPES = frozenset(
@@ -48,6 +49,7 @@ MCP_PATH_LOOKUP_DATASTORY = "/api/v1/mcp/lookup-datastory"
 MCP_GLOSSARY_TAGS_LIMIT_DEFAULT = 20
 MCP_GLOSSARY_TAGS_LIMIT_MAX = 100
 MCP_PATH_SEARCH_PLATFORM_DOCS = "/api/v1/mcp/search-platform-docs"
+MCP_PATH_UPDATE_ASSET_DESCRIPTIONS = "/api/v1/mcp/update-asset-descriptions"
 
 # search-catalog: optional query param for full NL user text / context (vector search, etc.).
 # Spring: @RequestParam(value = "contextQuery", required = false) String contextQuery

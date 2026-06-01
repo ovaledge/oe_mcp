@@ -22,9 +22,9 @@ def create_mcp(lifespan: Any = None) -> FastMCP:
         version=settings.mcp_server_version,
         instructions=(
             "You are connected to the OvalEdge data governance platform. "
-            "Phase 1 — Asset & Metadata Discovery (read-only). "
-            "Use tools to search the catalog, fetch asset details, lineage, profiles, "
-            "and governance lookups (glossary, tags). "
+            "Phase 1 — Asset & Metadata Discovery (read-mostly). "
+            "Use tools to search the catalog, fetch asset details, update descriptions "
+            "(when permitted), lineage, profiles, and governance lookups (glossary, tags). "
             "Use resources for deep links: catalog tables and glossary terms by id. "
             "Use prompts to run pre-packaged governance workflows. "
             "Every response includes full governance context where the API provides it. "

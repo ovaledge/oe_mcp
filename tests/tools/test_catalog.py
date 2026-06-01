@@ -9,6 +9,7 @@ from server.constants import (
     MCP_PATH_ENTITY_RELATIONSHIPS,
     MCP_PATH_LINEAGE,
     MCP_PATH_SEARCH_CATALOG,
+    MCP_PATH_UPDATE_ASSET_DESCRIPTIONS,
     MCP_SEARCH_CONTEXT_QUERY_PARAM,
     MCP_SEARCH_TERMS_PARAM,
 )
@@ -211,3 +212,91 @@ class TestTableEntityRelationshipsErrors:
         out = await fn(object_id=5)
         assert out["status_code"] == 503
         assert "503" in out["error"]
+
+
+MOCK_UPDATE_DESCRIPTIONS_RESPONSE = {
+    "status": "success",
+    "target": {
+        "objectId": 42,
+        "objectType": "oetable",
+        "redirectUrl": "https://host/#nav/table?id=42",
+    },
+    "requestedFields": ["businessDescription"],
+    "updatedFields": ["businessDescription"],
+    "blockedFields": [],
+    "blockedReasons": [],
+    "audit": {"source": "OE-MCP"},
+}
+
+
+class TestUpdateAssetDescriptions:
+    async def test_post_body_and_formatted_response(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.return_value = dict(MOCK_UPDATE_DESCRIPTIONS_RESPONSE)
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_asset_descriptions")
+        out = await fn(
+            object_id=42,
+            object_type="oetable",
+            business_description="Updated business text",
+            reason="MCP test",
+        )
+        assert out["status"] == "success"
+        assert "formattedResponse" in out
+        assert "42" in out["formattedResponse"]
+        mock_oe_client.post.assert_called_once_with(
+            MCP_PATH_UPDATE_ASSET_DESCRIPTIONS,
+            {
+                "target": {"objectId": 42, "objectType": "oetable"},
+                "descriptions": {"businessDescription": "Updated business text"},
+                "clientContext": {"reason": "MCP test"},
+            },
+        )
+
+    async def test_multiple_description_fields(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.return_value = {"status": "success"}
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_asset_descriptions")
+        await fn(
+            object_id=1,
+            object_type="oecolumn",
+            business_description="biz",
+            technical_description="tech",
+            dry_run=True,
+        )
+        body = mock_oe_client.post.call_args[0][1]
+        assert body["descriptions"] == {
+            "businessDescription": "biz",
+            "technicalDescription": "tech",
+        }
+        assert body["options"] == {"dryRun": True}
+
+    async def test_rejects_no_description_fields(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_asset_descriptions")
+        out = await fn(object_id=1, object_type="oetable")
+        assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
+    async def test_rejects_invalid_object_type(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_asset_descriptions")
+        out = await fn(
+            object_id=1,
+            object_type="not_a_type",
+            business_description="x",
+        )
+        assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
+    async def test_oval_edge_error_returns_dict(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.side_effect = OvalEdgeError(403, "Forbidden")
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_asset_descriptions")
+        out = await fn(object_id=1, object_type="oetable", business_description="x")
+        assert out["status_code"] == 403
+        assert "403" in out["error"]
