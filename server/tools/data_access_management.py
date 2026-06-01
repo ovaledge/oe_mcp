@@ -51,9 +51,19 @@ _DESC_GET_SOURCE_SYSTEM_ACCESS = (
     "- Redshift column (opt-in): `database.schema.table.column` — set include_columns=true.\n"
     "- Tableau project: `Project Name` or path segment.\n"
     "- Tableau report: `Project/Report Name`.\n\n"
-    "Response includes **grant_mechanism** per entry: direct | group | role, native "
-    "**privileges** (SELECT, INSERT, …), and **contributing_group** / **contributing_role** "
-    "when access is indirect.\n\n"
+    "Response includes **grant_mechanism** per entry: direct | group | role, **principal_type** "
+    "(user | role | group — use this to tell logins from role/group names in principal_name), "
+    "native **privileges** (SELECT, INSERT, …), and **contributing_group** / "
+    "**contributing_role** when access is indirect.\n\n"
+    "**summary** (server-computed): `totalGrants`, `byObjectLevel` "
+    "(database/schema/table/column for RS/SF; project/report for Tableau), "
+    "`byGrantMechanism` (direct/group/role).\n\n"
+    "Partial-path disambiguation (**object_to_users** and optional **object_path** on "
+    "**user_to_objects**): when the path is not exact and multiple assets match, returns "
+    "**matchCandidates** or **resolve_all_matches=true** (max 50).\n"
+    "Redshift/Snowflake: database, schema, table, column (by `.` segment count). "
+    "Tableau: project (`rdam_reportgroup_privilege`) and report (`rdam_report_privilege` + "
+    "`chart`/`domain` catalog); use `/` for reports (e.g. `Executive/Revenue Dashboard`).\n\n"
     "Read-only. Returns validation errors for unsupported source_system; not-found when "
     "username or object_path is absent from harvested metadata."
 )
@@ -157,6 +167,17 @@ def register(mcp: FastMCP) -> None:
                 default=None,
             ),
         ] = None,
+        resolve_all_matches: Annotated[
+            bool,
+            Field(
+                description=(
+                    "When object_path matches multiple catalog objects (same name across "
+                    "connections/schemas/tables/columns or Tableau projects/reports), return "
+                    "native access for all matches. Default false returns matchCandidates."
+                ),
+                default=False,
+            ),
+        ] = False,
     ) -> dict[str, Any]:
         """Native source-system access (see MCP tool description)."""
         err = _validate_source_system_access_args(
@@ -171,6 +192,7 @@ def register(mcp: FastMCP) -> None:
             objectPath=object_path.strip() if object_path else None,
             includeColumns=include_columns if include_columns else None,
             connectionId=connection_id,
+            resolveAllMatches=resolve_all_matches if resolve_all_matches else None,
         )
         try:
             async with OvalEdgeClient() as client:

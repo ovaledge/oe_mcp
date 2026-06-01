@@ -163,7 +163,9 @@ class TestGetSourceSystemAccess:
                 "grants": [
                     {
                         "objectPath": "Executive/Revenue Dashboard",
+                        "objectLevel": "report",
                         "grantMechanism": "direct",
+                        "principalType": "user",
                         "principalName": "svc_bi",
                         "privileges": ["READ"],
                     }
@@ -179,7 +181,69 @@ class TestGetSourceSystemAccess:
             object_path="Executive/Revenue Dashboard",
         )
         assert out["ok"] is True
-        assert out["data"]["grants"][0]["grantMechanism"] == "direct"
+        grant = out["data"]["grants"][0]
+        assert grant["grantMechanism"] == "direct"
+        assert grant["principalType"] == "user"
+        assert grant["objectLevel"] == "report"
+
+    async def test_forwards_resolve_all_matches(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [],
+                "ambiguousMatch": True,
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        data_access_management.register(mcp)
+        fn = await get_tool_fn(mcp, "get_source_system_access")
+        await fn(
+            source_system="redshift",
+            query_direction="object_to_users",
+            object_path="accountbalance",
+            resolve_all_matches=True,
+        )
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_SOURCE_SYSTEM_ACCESS,
+            params={
+                "sourceSystem": "redshift",
+                "queryDirection": "object_to_users",
+                "objectPath": "accountbalance",
+                "resolveAllMatches": True,
+            },
+        )
+
+    async def test_passes_through_summary_from_api(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [],
+                "summary": {
+                    "totalGrants": 16,
+                    "byObjectLevel": {
+                        "database": 0,
+                        "schema": 2,
+                        "table": 14,
+                        "column": 0,
+                    },
+                    "byGrantMechanism": {
+                        "direct": 15,
+                        "group": 1,
+                        "role": 0,
+                    },
+                },
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        data_access_management.register(mcp)
+        fn = await get_tool_fn(mcp, "get_source_system_access")
+        out = await fn(
+            source_system="redshift",
+            query_direction="user_to_objects",
+            username="sithik",
+        )
+        assert out["data"]["summary"]["totalGrants"] == 16
+        assert out["data"]["summary"]["byObjectLevel"]["table"] == 14
 
     async def test_snowflake_user_to_objects(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {

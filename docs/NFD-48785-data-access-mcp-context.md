@@ -35,6 +35,7 @@ One MCP tool: **`get_source_system_access`**
 | `objectPath` | object_to_users | See formats below |
 | `includeColumns` | no | Redshift only; default `false` |
 | `connectionId` | no | Scope to one OvalEdge connection |
+| `resolveAllMatches` | no | When partial `objectPath` matches multiple catalog objects, return grants for all (default: return `matchCandidates` only) |
 
 ### `object_path` formats
 
@@ -60,15 +61,34 @@ One MCP tool: **`get_source_system_access`**
         "objectLevel": "table",
         "privileges": ["SELECT"],
         "grantMechanism": "role",
+        "principalType": "user",
         "principalName": "svc_analytics",
         "contributingRole": "role_read_only",
         "contributingRoles": ["role_read_only", "role_analytics"],
         "connectionId": 42
       }
-    ]
+    ],
+    "summary": {
+      "totalGrants": 1,
+      "byObjectLevel": {
+        "database": 0,
+        "schema": 0,
+        "table": 1,
+        "column": 0
+      },
+      "byGrantMechanism": {
+        "direct": 0,
+        "group": 0,
+        "role": 1
+      }
+    }
   }
 }
 ```
+
+`summary` counts rows in `grants` after merge (not distinct object paths). `byObjectLevel` always includes `database`, `schema`, `table`, `column` (0 when none); Tableau `project` / `report` appear as extra keys when present.
+
+Partial `object_path` (**object_to_users**, or optional filter on **user_to_objects**): if multiple catalog objects match, response sets `ambiguousMatch`, `matchCandidates`, and `advisoryMessage`. Pick one full path + `connectionId`, or pass `resolveAllMatches=true`. Covers Redshift/Snowflake (database, schema, table, column) and Tableau (project, report). Up to 50 candidates.
 
 `grantMechanism`: `direct` | `group` | `role` (Redshift may return multiple rows per object).
 
@@ -78,7 +98,7 @@ One MCP tool: **`get_source_system_access`**
 |--------|------------|------------------|
 | Redshift | direct, group (`rdam_usergroup`), role (`rdam_userrole`) | `rdam_tableprivilege`, `rdam_schemaprivilege`, `rdam_columnprivilege` |
 | Snowflake | role only | same |
-| Tableau | direct user on project/report | `rdam_folderprivilege` |
+| Tableau | direct user/service account on project and report | `rdam_reportgroup_privilege`, `rdam_report_privilege` (+ `rdam_reportprivilege_ext` for paths) |
 
 Filter: `source = 'Remote'` (native harvest only).
 
@@ -132,9 +152,18 @@ curl -G "http://127.0.0.1:8080/ovaledge/api/v1/mcp/source-system-access" \
 
 Restart Cursor MCP after backend deploy.
 
+## Tableau RDAM tables (Liquibase / `oemcpdb`)
+
+| Table | Purpose |
+|-------|---------|
+| `rdam_report_privilege` | Native report-level grants (`source = Remote`) |
+| `rdam_reportgroup_privilege` | Native project (report group) grants |
+| `rdam_reportprivilege_ext` | Crawled report metadata (`reportgroupname`, `reportname`, workspace) |
+| `rdam_reportgroup_privilege_ext` | Extended project privilege metadata |
+
+Workspace tables (`rdam_workspace*`, `oeworkspace`) are site/workspace crawl metadata — not used by this MCP read path.
+
 ## Follow-ups
 
-- Database-level privilege queries (`rdam_dbprivilege`)
-- Tableau report-level join via `oechart` / `chart` tables
 - Postman entry in `McpApi.postman_collection.json`
-- Integration tests against seeded `oe-rdam` test SQL
+- Integration tests against seeded `oe-rdam` test SQL (Tableau `rdam_report_*` fixtures)
