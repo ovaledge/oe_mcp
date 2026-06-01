@@ -1,6 +1,8 @@
-"""Public HTTP routes on entrypoints.lambda_handler (direct handlers, no MCP lifespan)."""
+"""Public HTTP routes and Lambda lifespan pinning on entrypoints.lambda_handler."""
 
+import asyncio
 import json
+from contextlib import asynccontextmanager
 from unittest.mock import patch
 
 import pytest
@@ -8,14 +10,42 @@ import pytest
 from server.config import settings
 
 
+def _reset_lambda_mcp_holder_state() -> None:
+    import entrypoints.lambda_handler as lh
+
+    if lh._mcp_holder_task is not None and not lh._mcp_holder_task.done():
+        lh._mcp_holder_task.cancel()
+    lh._mcp_holder_task = None
+    lh._mcp_holder_started.clear()
+
+
 class TestLambdaHandlerPublicRoutes:
-    async def test_health(self) -> None:
+    async def test_health_non_lambda_reports_mcp_ready(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.delenv("AWS_LAMBDA_FUNCTION_NAME", raising=False)
         from entrypoints.lambda_handler import health
 
         resp = await health()
         body = json.loads(resp.body)
         assert body["status"] == "healthy"
+        assert body["mcp_lifespan_ready"] is True
         assert "auth_mode" in body
+
+    async def test_health_lambda_not_ready_before_pin(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "fn")
+        _reset_lambda_mcp_holder_state()
+        from entrypoints.lambda_handler import health
+
+        resp = await health()
+        body = json.loads(resp.body)
+        assert body["mcp_lifespan_ready"] is False
+        assert body["status"] == "degraded"
+        assert "mcp_lifespan_detail" in body
 
     async def test_favicon_no_content(self) -> None:
         from entrypoints.lambda_handler import favicon
@@ -77,3 +107,70 @@ class TestLambdaHandlerEntry:
 
                 handler({}, None)
         pin.assert_called_once()
+
+
+class TestLambdaMcpLifespanPinning:
+    def test_ensure_pin_sets_ready_when_lifespan_enters(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import entrypoints.lambda_handler as lh
+
+        monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "fn")
+        _reset_lambda_mcp_holder_state()
+
+        @asynccontextmanager
+        async def fake_lifespan(_app: object):
+            yield
+
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            with patch.object(lh.mcp_http.router, "lifespan_context", fake_lifespan):
+                lh._ensure_lambda_mcp_http_lifespan_pinned()
+            assert lh._mcp_holder_started.is_set()
+            assert lh.mcp_lifespan_ready() is True
+        finally:
+            if lh._mcp_holder_task is not None and not lh._mcp_holder_task.done():
+                lh._mcp_holder_task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    loop.run_until_complete(lh._mcp_holder_task)
+            _reset_lambda_mcp_holder_state()
+            loop.close()
+
+    def test_ensure_pin_timeout_error_is_actionable(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import entrypoints.lambda_handler as lh
+
+        monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "fn")
+        _reset_lambda_mcp_holder_state()
+
+        @asynccontextmanager
+        async def hanging_lifespan(_app: object):
+            await asyncio.Event().wait()
+            yield  # pragma: no cover
+
+        loop = asyncio.new_event_loop()
+        clock = {"t": 0.0}
+
+        def fake_monotonic() -> float:
+            clock["t"] += 5.0
+            return clock["t"]
+
+        try:
+            asyncio.set_event_loop(loop)
+            with (
+                patch.object(lh.mcp_http.router, "lifespan_context", hanging_lifespan),
+                patch.object(lh.time, "monotonic", fake_monotonic),
+            ):
+                with pytest.raises(RuntimeError, match="MCP HTTP lifespan did not enter within"):
+                    lh._ensure_lambda_mcp_http_lifespan_pinned()
+        finally:
+            if lh._mcp_holder_task is not None and not lh._mcp_holder_task.done():
+                lh._mcp_holder_task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    loop.run_until_complete(lh._mcp_holder_task)
+            _reset_lambda_mcp_holder_state()
+            loop.close()
