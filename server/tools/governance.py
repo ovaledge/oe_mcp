@@ -9,11 +9,14 @@ from server.client import OvalEdgeClient, OvalEdgeError
 from server.constants import (
     MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
     MCP_GLOSSARY_TAGS_LIMIT_MAX,
+    MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES_DOC,
+    MCP_GOVERNANCE_STEWARD_ONLY_OBJECT_TYPES,
     MCP_PATH_GLOSSARY_TERMS,
     MCP_PATH_LOOKUP_DATASTORY,
+    MCP_PATH_LOOKUP_DQ_RULES,
     MCP_PATH_TAGS,
+    MCP_PATH_UPDATE_GOVERNANCE_ROLES,
 )
-from server.nav_links import build_absolute_nav_url, extract_hash_nav_link
 
 _DESC_GLOSSARY = (
     "Look up one business glossary term. Server object type is always glossary.\n\n"
@@ -48,6 +51,38 @@ _DESC_DATASTORY = (
     "search hits alone.\n\n"
     "Not found (404) if no match or the story is not visible to the authenticated user. "
     "Do not use for glossary, tags, or tables."
+)
+
+_DESC_LOOKUP_DQ_RULE = (
+    "Look up Data Quality rules by name or id (not in search_catalog_assets).\n\n"
+    f"Backend: GET {MCP_PATH_LOOKUP_DQ_RULES}\n\n"
+    "Provide either rule_name (partial match) or object_id, never both.\n\n"
+    "Each hit includes objectId, objectType (dqrule), objectName, steward, redirectUrl. "
+    "Use with update_governance_roles: only steward may be updated on DQ rules."
+)
+
+_DESC_UPDATE_GOVERNANCE_ROLES = (
+    "Assign, update, or remove governance responsibilities (Owner, Steward, Custodian, "
+    "Governance Role 4/5/6) on supported OvalEdge assets.\n\n"
+    f"Backend: POST {MCP_PATH_UPDATE_GOVERNANCE_ROLES}\n\n"
+    "Workflow — resolve the target first:\n"
+    "- Catalog assets (tables, columns, files, schemas, reports, APIs, queries, glossary, "
+    "tags, stories): use search_catalog_assets, then pass items[].objectId and objectType.\n"
+    "- Data Quality rules: use lookup_dq_rule (search_catalog_assets does NOT index dqrule). "
+    "Then update_governance_roles with object_type dqrule and role_updates.steward only.\n"
+    "- Other non-catalog governance targets (if you already have ids): "
+    f"object_type one of {MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES_DOC}.\n\n"
+    "Role updates are passed in one request via role_updates. Each key is a role name and "
+    "each value is either a user login/team id (assign/update) or null (remove).\n\n"
+    "Role keys (case-insensitive): owner, steward, custodian, governance_role_4, "
+    "governance_role_5, governance_role_6.\n\n"
+    f"Steward-only object types: {', '.join(sorted(MCP_GOVERNANCE_STEWARD_ONLY_OBJECT_TYPES))} "
+    "(owner/custodian/gov 4–6 are rejected with HTTP 400).\n\n"
+    "The server enforces RBAC and governance propagation rules. If a role is inherited from "
+    "a glossary term via a 'Copy <Role> to Catalog' setting, that role update will be blocked "
+    "and returned in blockedRoles with reasonCode=GLOSSARY_PROPAGATED_GOVERNANCE_ROLE. "
+    "Multi-role requests may return partial_success.\n\n"
+    "Responses include a redirectUrl to open the target object in OvalEdge."
 )
 
 
@@ -145,45 +180,14 @@ def _format_datastory_display(body: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip()
 
 
-def _normalize_datastory_nav_links(body: dict[str, Any]) -> dict[str, Any]:
-    """Ensure navLink (hash) and hyperlink (absolute) are consistent; pass through API payload."""
+def _enrich_datastory_response(body: dict[str, Any]) -> dict[str, Any]:
+    """Add formattedResponse only; navigation URLs must come from the API unchanged."""
     if not body.get("ok"):
         return body
-    data = body.get("data")
-    if not isinstance(data, dict):
-        return body
-    meta = data.get("metadata") if isinstance(data.get("metadata"), dict) else None
-    nav = extract_hash_nav_link(str(data.get("navLink") or data.get("hyperlink") or ""))
-    if not nav and meta is not None:
-        oid = meta.get("objectId")
-        if isinstance(oid, int) and oid > 0:
-            nav = f"#nav/story?id={oid}"
-    if nav:
-        absolute = build_absolute_nav_url(nav)
-        data["navLink"] = nav
-        data["hyperlink"] = absolute
-        data["navUrl"] = absolute
-        body["navLink"] = nav
-        body["hyperlink"] = absolute
-        body["navUrl"] = absolute
-        if meta is not None:
-            name = str(meta.get("storyName") or meta.get("story_name") or "").strip()
-            zone_name = _story_zone_name(meta)
-            if zone_name:
-                body["storyZoneName"] = zone_name
-                data["storyZoneName"] = zone_name
-            if name:
-                body["storyTitleLink"] = f"[{name}]({nav})"
-                data["storyTitleLink"] = body["storyTitleLink"]
-                citation = _story_citation(body["storyTitleLink"], zone_name)
-                if citation:
-                    body["storyCitation"] = citation
-                    data["storyCitation"] = citation
-                    body["storyOpeningLine"] = citation
-                    data["storyOpeningLine"] = citation
     formatted = _format_datastory_display(body)
     if formatted:
         body["formattedResponse"] = formatted
+        data = body.get("data")
         if isinstance(data, dict):
             data["formattedResponse"] = formatted
     return body
@@ -191,6 +195,94 @@ def _normalize_datastory_nav_links(body: dict[str, Any]) -> dict[str, Any]:
 
 def _q(**kwargs: object) -> dict[str, object]:
     return {k: v for k, v in kwargs.items() if v is not None}
+
+
+_ROLE_KEYS_CANONICAL: dict[str, str] = {
+    "owner": "owner",
+    "steward": "steward",
+    "custodian": "custodian",
+    "governance_role_4": "governance_role_4",
+    "governance_role_5": "governance_role_5",
+    "governance_role_6": "governance_role_6",
+}
+
+
+def _normalize_role_updates(
+    role_updates: dict[str, str | None] | None,
+) -> tuple[dict[str, str | None] | None, str | None]:
+    """
+    Return (normalized_updates_or_none, error_or_none).
+
+    The tool accepts a dict whose keys are role names; we normalize keys to the canonical set.
+    """
+    if role_updates is None:
+        return None, "Provide role_updates with at least one role."
+    if not isinstance(role_updates, dict) or not role_updates:
+        return None, "Provide role_updates with at least one role."
+    normalized: dict[str, str | None] = {}
+    invalid: list[str] = []
+    for k, v in role_updates.items():
+        key = str(k or "").strip().lower()
+        canon = _ROLE_KEYS_CANONICAL.get(key)
+        if not canon:
+            invalid.append(str(k))
+            continue
+        if v is None:
+            normalized[canon] = None
+        else:
+            user = str(v).strip()
+            if user == "":
+                normalized[canon] = None
+            else:
+                normalized[canon] = user
+    if invalid:
+        return (
+            None,
+            "Invalid governance role type(s): "
+            + ", ".join(sorted({s for s in invalid if str(s).strip()})),
+        )
+    if not normalized:
+        return None, "Provide role_updates with at least one valid role."
+    return normalized, None
+
+
+def _format_update_governance_roles_response(body: dict[str, Any]) -> str:
+    status = str(body.get("status") or "").strip()
+    lines: list[str] = []
+    if status:
+        lines.append(f"**Status:** {status}")
+    target = body.get("target")
+    if isinstance(target, dict):
+        oid = target.get("objectId")
+        otype = target.get("objectType")
+        if oid is not None and otype:
+            lines.append(f"**Target:** {otype} (id {oid})")
+        redirect = str(target.get("redirectUrl") or "").strip()
+        if redirect:
+            lines.append(f"**Open in OvalEdge:** {redirect}")
+
+    reason_code = str(body.get("reasonCode") or "").strip()
+    if reason_code:
+        lines.append(f"**Reason code:** {reason_code}")
+
+    updated = body.get("updatedRoles")
+    if isinstance(updated, list) and updated:
+        lines.append(f"**Updated roles:** {', '.join(str(r) for r in updated)}")
+    blocked = body.get("blockedRoles")
+    if isinstance(blocked, list) and blocked:
+        lines.append(f"**Blocked roles:** {', '.join(str(r) for r in blocked)}")
+
+    message = str(body.get("message") or "").strip()
+    if message:
+        lines.append(message)
+    return "\n".join(lines).strip()
+
+
+def _enrich_update_governance_roles_response(body: dict[str, Any]) -> dict[str, Any]:
+    formatted = _format_update_governance_roles_response(body)
+    if formatted:
+        body["formattedResponse"] = formatted
+    return body
 
 
 def register(mcp: FastMCP) -> None:
@@ -357,7 +449,165 @@ def register(mcp: FastMCP) -> None:
                     ),
                 )
                 if isinstance(body, dict):
-                    return _normalize_datastory_nav_links(body)
+                    return _enrich_datastory_response(body)
                 return body
+        except OvalEdgeError as e:
+            return {"error": str(e), "status_code": e.status_code}
+
+    @mcp.tool(description=_DESC_LOOKUP_DQ_RULE)
+    async def lookup_dq_rule(
+        object_id: Annotated[
+            int | None,
+            Field(description="DQ rule id (dqruleid); omit if using rule_name.", default=None),
+        ] = None,
+        rule_name: Annotated[
+            str | None,
+            Field(
+                description="Rule name or substring (e.g. Null Data Density Check).",
+                default=None,
+            ),
+        ] = None,
+        limit: Annotated[
+            int,
+            Field(
+                description="Max hits for name search (default 20; server max 100).",
+                default=MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
+                ge=1,
+            ),
+        ] = MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
+    ) -> dict[str, Any]:
+        """Resolve Data Quality rules for governance updates (see MCP tool description)."""
+        has_id = object_id is not None and object_id > 0
+        has_name = rule_name is not None and str(rule_name).strip() != ""
+        if has_id and has_name:
+            return {
+                "error": "Provide either rule_name or object_id for DQ rule lookup, not both.",
+                "status_code": 400,
+            }
+        if not has_id and not has_name:
+            return {"error": "Provide rule_name or object_id.", "status_code": 400}
+        capped = min(limit, MCP_GLOSSARY_TAGS_LIMIT_MAX)
+        try:
+            async with OvalEdgeClient() as client:
+                body = await client.get(
+                    MCP_PATH_LOOKUP_DQ_RULES,
+                    params=_q(
+                        objectId=object_id if has_id else None,
+                        ruleName=rule_name.strip() if has_name else None,
+                        limit=capped,
+                    ),
+                )
+                return body if isinstance(body, dict) else {"data": body}
+        except OvalEdgeError as e:
+            return {"error": str(e), "status_code": e.status_code}
+
+    @mcp.tool(description=_DESC_UPDATE_GOVERNANCE_ROLES)
+    async def update_governance_roles(
+        object_id: Annotated[
+            int,
+            Field(
+                description=(
+                    "Internal object id from search_catalog_assets, lookup_dq_rule, "
+                    "lookup_glossary_term, or lookup_tags."
+                ),
+                ge=1,
+            ),
+        ],
+        object_type: Annotated[
+            str,
+            Field(
+                description=(
+                    "OvalEdge objectType: catalog types (oetable, oecolumn, glossary, …) or "
+                    "non-catalog governance types (dqrule, dqscheme, dag, policy, …). "
+                    "Use lookup_dq_rule for dqrule — not search_catalog_assets."
+                ),
+            ),
+        ],
+        role_updates: Annotated[
+            dict[str, str | None] | None,
+            Field(
+                description=(
+                    "Map of role -> user identifier. Value is a user (assign/update) or null "
+                    "(remove). Keys: owner, steward, custodian, governance_role_4/5/6."
+                ),
+                default=None,
+            ),
+        ] = None,
+        prompt: Annotated[
+            str | None,
+            Field(
+                description="Original user prompt for audit (clientContext.prompt).",
+                default=None,
+            ),
+        ] = None,
+        reason: Annotated[
+            str | None,
+            Field(
+                description="Short reason for the change (clientContext.reason).",
+                default=None,
+            ),
+        ] = None,
+        dry_run: Annotated[
+            bool | None,
+            Field(description="If true, validate only; do not persist.", default=None),
+        ] = None,
+        idempotency_key: Annotated[
+            str | None,
+            Field(description="Optional client key to dedupe retries.", default=None),
+        ] = None,
+    ) -> dict[str, Any]:
+        """
+        Update governance responsibilities (see MCP tool description).
+
+        Validation of RBAC, propagated-role restrictions, approvals, and audit is handled
+        by the OvalEdge backend MCP API.
+        """
+        if object_type is None or str(object_type).strip() == "":
+            return {"error": "object_type is required.", "status_code": 400}
+        normalized_updates, err = _normalize_role_updates(role_updates)
+        if err:
+            return {"error": err, "status_code": 400}
+
+        otype_key = str(object_type).strip().lower()
+        if otype_key in MCP_GOVERNANCE_STEWARD_ONLY_OBJECT_TYPES and normalized_updates:
+            invalid_roles = [
+                role
+                for role in normalized_updates
+                if role != "steward"
+            ]
+            if invalid_roles:
+                return {
+                    "error": (
+                        f"Only steward may be updated on {otype_key}. "
+                        f"Invalid role(s): {', '.join(sorted(invalid_roles))}."
+                    ),
+                    "status_code": 400,
+                }
+
+        body: dict[str, Any] = {
+            "target": {"objectId": object_id, "objectType": str(object_type).strip()},
+            "roleUpdates": normalized_updates,
+        }
+        options: dict[str, Any] = {}
+        if dry_run is not None:
+            options["dryRun"] = dry_run
+        if idempotency_key is not None and str(idempotency_key).strip():
+            options["idempotencyKey"] = str(idempotency_key).strip()
+        if options:
+            body["options"] = options
+        client_context: dict[str, str] = {}
+        if prompt is not None and str(prompt).strip():
+            client_context["prompt"] = str(prompt).strip()
+        if reason is not None and str(reason).strip():
+            client_context["reason"] = str(reason).strip()
+        if client_context:
+            body["clientContext"] = client_context
+
+        try:
+            async with OvalEdgeClient() as client:
+                result = await client.post(MCP_PATH_UPDATE_GOVERNANCE_ROLES, body)
+                if isinstance(result, dict):
+                    return _enrich_update_governance_roles_response(result)
+                return result
         except OvalEdgeError as e:
             return {"error": str(e), "status_code": e.status_code}

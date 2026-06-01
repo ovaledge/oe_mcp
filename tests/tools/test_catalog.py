@@ -238,7 +238,8 @@ class TestUpdateAssetDescriptions:
         out = await fn(
             object_id=42,
             object_type="oetable",
-            business_description="Updated business text",
+            description_field="business_description",
+            description_text="Updated business text",
             reason="MCP test",
         )
         assert out["status"] == "success"
@@ -248,7 +249,10 @@ class TestUpdateAssetDescriptions:
             MCP_PATH_UPDATE_ASSET_DESCRIPTIONS,
             {
                 "target": {"objectId": 42, "objectType": "oetable"},
-                "descriptions": {"businessDescription": "Updated business text"},
+                "descriptions": {
+                    "description": "Updated business text",
+                    "descriptionField": "businessDescription",
+                },
                 "clientContext": {"reason": "MCP test"},
             },
         )
@@ -280,6 +284,77 @@ class TestUpdateAssetDescriptions:
         assert out["status_code"] == 400
         mock_oe_client.post.assert_not_called()
 
+    async def test_description_text_requires_description_field(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_asset_descriptions")
+        out = await fn(
+            object_id=1,
+            object_type="oetable",
+            description_text="ambiguous description only",
+        )
+        assert out["status_code"] == 400
+        assert "description_field" in out["error"]
+        mock_oe_client.post.assert_not_called()
+
+    async def test_rejects_ambiguous_column_description_without_slot_in_prompt(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_asset_descriptions")
+        out = await fn(
+            object_id=1,
+            object_type="oecolumn",
+            business_description="guessed business",
+            prompt="Update the description on a column called fieldname",
+        )
+        assert out["status_code"] == 400
+        assert "multiple description slots" in out["error"]
+        mock_oe_client.post.assert_not_called()
+
+    async def test_allows_technical_when_prompt_names_technical(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {"status": "success"}
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_asset_descriptions")
+        out = await fn(
+            object_id=1,
+            object_type="oetable",
+            technical_description="A description from MCP tool via cursor.",
+            prompt="Update the technical description of workflowtemplate table",
+        )
+        assert out.get("status_code") != 400
+        mock_oe_client.post.assert_called_once()
+        body = mock_oe_client.post.call_args[0][1]
+        assert body["descriptions"]["technicalDescription"] == (
+            "A description from MCP tool via cursor."
+        )
+        assert "technical description" in body["clientContext"]["prompt"].lower()
+
+    async def test_description_field_and_text_maps_to_api(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {"status": "success"}
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_asset_descriptions")
+        await fn(
+            object_id=1,
+            object_type="oetable",
+            description_field="business_description",
+            description_text="via generic pair",
+        )
+        body = mock_oe_client.post.call_args[0][1]
+        assert body["descriptions"] == {
+            "description": "via generic pair",
+            "descriptionField": "businessDescription",
+        }
+
     async def test_rejects_invalid_object_type(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
@@ -297,6 +372,11 @@ class TestUpdateAssetDescriptions:
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
         fn = await get_tool_fn(mcp, "update_asset_descriptions")
-        out = await fn(object_id=1, object_type="oetable", business_description="x")
+        out = await fn(
+            object_id=1,
+            object_type="oetable",
+            description_field="business_description",
+            description_text="x",
+        )
         assert out["status_code"] == 403
         assert "403" in out["error"]

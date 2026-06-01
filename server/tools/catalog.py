@@ -74,7 +74,15 @@ _DESC_UPDATE_DESCRIPTIONS = (
     "Workflow: call search_catalog_assets first, then pass items[].objectId as object_id "
     "and items[].objectType as object_type (API returns camelCase; this tool uses snake_case "
     "arguments). Do not guess ids.\n\n"
-    "Required: object_id, object_type, and at least one description field.\n\n"
+    "Required: object_id, object_type, and an explicit description slot.\n\n"
+    "When the user says only \"description\" (not business vs technical), you MUST ask which "
+    "slot applies, then call with description_field + description_text. Do NOT guess "
+    "business_description or technical_description.\n\n"
+    "When the user explicitly says \"technical description\" or \"business description\", pass "
+    "that typed argument AND set prompt to the user's exact words (clientContext.prompt) so "
+    "the API can verify the slot was named.\n\n"
+    "For multi-slot object types, a lone typed field without prompt naming the slot is rejected "
+    "(HTTP 400). Updating both business and technical in one call is allowed.\n\n"
     "Field applicability by object_type (server rejects unsupported combinations with 400):\n"
     "- Catalog assets (oeschema, oetable, oecolumn, oefile, oefilecolumn, oechart, chartchild, "
     "apiobject, apicolumn, oequery): business_description, technical_description only — "
@@ -115,6 +123,143 @@ _DESCRIPTION_API_KEYS: tuple[tuple[str, str], ...] = (
     ("master_tag_description", "masterTagDescription"),
 )
 
+_SNAKE_TO_API_FIELD: dict[str, str] = dict(_DESCRIPTION_API_KEYS)
+
+# Supported description_field values per object_type (snake_case tool args).
+_DESCRIPTION_FIELDS_BY_OBJECT_TYPE: dict[str, tuple[str, ...]] = {
+    "oeschema": ("business_description", "technical_description"),
+    "oetable": ("business_description", "technical_description"),
+    "oecolumn": ("business_description", "technical_description"),
+    "oefile": ("business_description", "technical_description"),
+    "oefilecolumn": ("business_description", "technical_description"),
+    "oechart": ("business_description", "technical_description"),
+    "chartchild": ("business_description", "technical_description"),
+    "oeapi": ("business_description", "technical_description"),
+    "oeapicolumn": ("business_description", "technical_description"),
+    "oequery": ("business_description", "technical_description"),
+    "glossary": ("business_description", "detailed_description"),
+    "dp_product": ("business_description", "detailed_description"),
+    "oeglobaldomain": ("domain_description",),
+    "dp_domain": ("domain_description",),
+    "oetag": ("tag_description",),
+    "mastertag": ("master_tag_description",),
+}
+
+# Tool-facing aliases sent to the OvalEdge API as canonical objectType values.
+_OBJECT_TYPE_TO_API: dict[str, str] = {
+    "filecolumn": "oefilecolumn",
+}
+
+
+def _api_object_type(object_type: str) -> str:
+    return _OBJECT_TYPE_TO_API.get(object_type, object_type)
+
+
+_PROMPT_SLOT_PHRASES: dict[str, tuple[str, ...]] = {
+    "business_description": ("business description", "business desc"),
+    "technical_description": ("technical description", "technical desc"),
+    "detailed_description": ("detailed description", "detailed desc"),
+    "domain_description": ("domain description", "domain desc"),
+    "tag_description": ("tag description", "tag desc"),
+    "master_tag_description": ("master tag description", "master tag desc"),
+}
+
+
+def _prompt_names_slot(user_prompt: str | None, slot: str) -> bool:
+    if not user_prompt or not str(user_prompt).strip():
+        return False
+    p = user_prompt.lower()
+    for phrase in _PROMPT_SLOT_PHRASES.get(slot, ()):
+        if phrase in p:
+            return True
+    return False
+
+
+def _description_field_hint(object_type: str) -> str:
+    fields = _DESCRIPTION_FIELDS_BY_OBJECT_TYPE.get(object_type)
+    if not fields:
+        return "See tool description for supported object types."
+    if len(fields) == 1:
+        return f"use description_field={fields[0]!r} with description_text"
+    return "use description_field as one of: " + ", ".join(fields)
+
+
+def _validate_description_inputs(
+    object_type: str,
+    *,
+    description_field: str | None,
+    description_text: str | None,
+    business_description: str | None,
+    technical_description: str | None,
+    detailed_description: str | None,
+    domain_description: str | None,
+    tag_description: str | None,
+    master_tag_description: str | None,
+    prompt: str | None = None,
+) -> dict[str, Any] | None:
+    """Return a client-side 400 payload when description arguments are ambiguous."""
+    typed_set = [
+        name
+        for name, value in (
+            ("business_description", business_description),
+            ("technical_description", technical_description),
+            ("detailed_description", detailed_description),
+            ("domain_description", domain_description),
+            ("tag_description", tag_description),
+            ("master_tag_description", master_tag_description),
+        )
+        if value is not None
+    ]
+    has_generic = description_text is not None
+    field = (description_field or "").strip().lower().replace("-", "_")
+
+    if has_generic and not field:
+        return {
+            "error": (
+                "description_field is required with description_text when the user did not "
+                f"name business vs technical. For {object_type}: "
+                f"{_description_field_hint(object_type)}."
+            ),
+            "status_code": 400,
+        }
+    if field and not has_generic:
+        return {
+            "error": "description_text is required when description_field is provided.",
+            "status_code": 400,
+        }
+    if field and typed_set:
+        return {
+            "error": (
+                "Use either description_field + description_text, or one typed description "
+                "argument, not both."
+            ),
+            "status_code": 400,
+        }
+    if field:
+        allowed = _DESCRIPTION_FIELDS_BY_OBJECT_TYPE.get(object_type, ())
+        if field not in allowed:
+            return {
+                "error": (
+                    f"description_field {description_field!r} is not valid for object_type "
+                    f"{object_type!r}. {_description_field_hint(object_type)}."
+                ),
+                "status_code": 400,
+            }
+    allowed = _DESCRIPTION_FIELDS_BY_OBJECT_TYPE.get(object_type, ())
+    if len(allowed) > 1 and len(typed_set) == 1 and not (has_generic and field):
+        only_slot = typed_set[0]
+        if not _prompt_names_slot(prompt, only_slot):
+            return {
+                "error": (
+                    f"object_type {object_type!r} has multiple description slots and the "
+                    "request did not name which to update. Ask the user (business vs technical, "
+                    "etc.), or pass prompt with explicit wording like 'technical description'. "
+                    f"{_description_field_hint(object_type)}."
+                ),
+                "status_code": 400,
+            }
+    return None
+
 
 def _build_update_descriptions_body(
     object_id: int,
@@ -126,6 +271,8 @@ def _build_update_descriptions_body(
     domain_description: str | None = None,
     tag_description: str | None = None,
     master_tag_description: str | None = None,
+    description_field: str | None = None,
+    description_text: str | None = None,
     dry_run: bool | None = None,
     fail_on_blocked_field: bool | None = None,
     idempotency_key: str | None = None,
@@ -133,12 +280,16 @@ def _build_update_descriptions_body(
     reason: str | None = None,
 ) -> dict[str, Any]:
     descriptions: dict[str, str] = {}
+    field = (description_field or "").strip().lower().replace("-", "_")
+    if description_text is not None and field:
+        descriptions["description"] = description_text
+        descriptions["descriptionField"] = _SNAKE_TO_API_FIELD[field]
     for arg_name, api_key in _DESCRIPTION_API_KEYS:
         value = locals()[arg_name]
         if value is not None:
             descriptions[api_key] = value
     body: dict[str, Any] = {
-        "target": {"objectId": object_id, "objectType": object_type},
+        "target": {"objectId": object_id, "objectType": _api_object_type(object_type)},
         "descriptions": descriptions,
     }
     options: dict[str, Any] = {}
@@ -175,8 +326,11 @@ def _format_update_descriptions_response(body: dict[str, Any]) -> str:
         if redirect:
             lines.append(f"**Open in OvalEdge:** {redirect}")
     updated = body.get("updatedFields")
+    requested = body.get("requestedFields")
     if isinstance(updated, list) and updated:
         lines.append(f"**Updated fields:** {', '.join(str(f) for f in updated)}")
+    elif isinstance(requested, list) and requested:
+        lines.append("**No changes:** description(s) already match the current value.")
     blocked = body.get("blockedFields")
     if isinstance(blocked, list) and blocked:
         lines.append(f"**Blocked fields:** {', '.join(str(f) for f in blocked)}")
@@ -487,6 +641,28 @@ def register(mcp: FastMCP) -> None:
             str | None,
             Field(description="Master tag description.", default=None),
         ] = None,
+        description_field: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Which description slot to update (snake_case): business_description, "
+                    "technical_description, detailed_description, domain_description, "
+                    "tag_description, or master_tag_description. REQUIRED with "
+                    "description_text when the user did not specify business vs technical."
+                ),
+                default=None,
+            ),
+        ] = None,
+        description_text: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Description text to write. Pair with description_field when the user "
+                    "says 'description' without naming the slot."
+                ),
+                default=None,
+            ),
+        ] = None,
         dry_run: Annotated[
             bool | None,
             Field(description="If true, validate only; do not persist.", default=None),
@@ -526,6 +702,20 @@ def register(mcp: FastMCP) -> None:
                 ),
                 "status_code": 400,
             }
+        validation_error = _validate_description_inputs(
+            object_type,
+            description_field=description_field,
+            description_text=description_text,
+            business_description=business_description,
+            technical_description=technical_description,
+            detailed_description=detailed_description,
+            domain_description=domain_description,
+            tag_description=tag_description,
+            master_tag_description=master_tag_description,
+            prompt=prompt,
+        )
+        if validation_error:
+            return validation_error
         body = _build_update_descriptions_body(
             object_id,
             object_type,
@@ -535,6 +725,8 @@ def register(mcp: FastMCP) -> None:
             domain_description=domain_description,
             tag_description=tag_description,
             master_tag_description=master_tag_description,
+            description_field=description_field,
+            description_text=description_text,
             dry_run=dry_run,
             fail_on_blocked_field=fail_on_blocked_field,
             idempotency_key=idempotency_key,
@@ -544,9 +736,8 @@ def register(mcp: FastMCP) -> None:
         if not body.get("descriptions"):
             return {
                 "error": (
-                    "Provide at least one description field "
-                    "(business_description, technical_description, detailed_description, "
-                    "domain_description, tag_description, or master_tag_description)."
+                    "Provide description_field + description_text, or one typed description "
+                    f"field. For {object_type}: {_description_field_hint(object_type)}."
                 ),
                 "status_code": 400,
             }
