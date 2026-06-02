@@ -22,6 +22,12 @@ from server.constants import (
     MCP_PATH_UPDATE_GOVERNANCE_ROLES,
 )
 from server.tools.common import (
+    as_dict as _as_dict,
+)
+from server.tools.common import (
+    blank as _blank,
+)
+from server.tools.common import (
     drop_none as _q,
 )
 from server.tools.common import (
@@ -37,8 +43,6 @@ from server.tools.governance.helpers import (
     _DESC_LOOKUP_DQ_RULE,
     _DESC_TAGS,
     _DESC_UPDATE_GOVERNANCE_ROLES,
-    _as_dict,
-    _blank,
     _block_llm_master_selection,
     _block_llm_parent_selection,
     _consume_parent_picker_shown,
@@ -1120,11 +1124,22 @@ def register(mcp: FastMCP) -> None:
                     )
                 if not _consume_parent_picker_shown(name):
                     if secure_mode:
+                        if master_tag_id is None or master_tag_id <= 0:
+                            return {
+                                "ok": False,
+                                "status_code": 422,
+                                "message": (
+                                    "Secure mode requires master_tag_id for parent "
+                                    "picker replay."
+                                ),
+                                "doNotCreateTag": True,
+                            }
+                        resolved_master_id = master_tag_id
                         master_name, parents = await _fetch_parent_choices_for_master(
-                            client, master_tag_id, secure_guidance
+                            client, resolved_master_id, secure_guidance
                         )
                         out = _format_parent_selection_guidance(
-                            master_tag_id=master_tag_id,
+                            master_tag_id=resolved_master_id,
                             master_tag_name=master_name,
                             parents=parents,
                             tag_name=name,
