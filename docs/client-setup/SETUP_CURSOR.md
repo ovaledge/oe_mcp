@@ -73,7 +73,17 @@ The path may be **`/mcp`** or **`/mcp/`** — the server normalizes slashless **
 
 ## Workflow prompts and docs
 
-With the server connected, Cursor can list **MCP prompts** (e.g. `data_discovery`, `organizational_knowledge`, `create_governance_tag`) and **resources** (`ovaledge://catalog/table/{id}`, `docs://ovaledge/mcp_workflows`). Use prompts when you want a fixed multi-tool playbook; see [server/docs/mcp_workflows.md](../../server/docs/mcp_workflows.md).
+With the server connected, Cursor can list **MCP prompts**, **resources**, and **doc resources**:
+
+| Need | Start with |
+| ---- | ---------- |
+| Internal policy / playbook / narrative | Prompt `organizational_knowledge` or tool `lookup_datastory` |
+| Find tables, files, reports | Prompt `data_discovery` or `search_catalog_assets` |
+| Create tag or glossary term | Prompt `create_governance_tag` / `create_business_glossary_term` (confirm preview, then `create_confirmed_by_user=true`) |
+| OvalEdge product how-to | Prompt `platform_help` or `search_platform_docs` |
+| Deep link by id | `ovaledge://catalog/table/{id}`, `ovaledge://governance/data-story/{id}`, … |
+
+Full index: [server/docs/mcp_workflows.md](../../server/docs/mcp_workflows.md) (`docs://ovaledge/mcp_workflows`). Agent rules: [README.md](../../README.md#agent-guidance-mirrors-serverapppy-instructions).
 
 ## Security
 

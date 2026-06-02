@@ -71,7 +71,7 @@
       "actual_output": "I listed native Redshift grants for svc_analytics.",
       "mcp_tools_called": [
         {
-          "name": "source_system_access",
+          "name": "user_object_access",
           "args": {
             "source_system": "redshift",
             "query_direction": "user_to_objects",

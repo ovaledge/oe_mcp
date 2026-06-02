@@ -25,7 +25,7 @@ from server.constants import (
     TOOL_CATALOG_ASSET_DETAILS,
     TOOL_LOOKUP_DATASTORY,
     TOOL_SEARCH_CATALOG,
-    TOOL_SOURCE_SYSTEM_ACCESS,
+    TOOL_USER_OBJECT_ACCESS,
 )
 
 _DATA_DISCOVERY_PROMPT_TEXT = (
@@ -351,21 +351,21 @@ def golden_mcp_use_organizational_knowledge_prompt() -> LLMTestCase:
 
 
 def golden_mcp_use_native_source_access() -> LLMTestCase:
-    """Single-turn: native Redshift grants via source_system_access."""
-    srv = ovaledge_eval_mcp_server(tool_names=frozenset({TOOL_SOURCE_SYSTEM_ACCESS}))
+    """Single-turn: native Redshift grants via user_object_access."""
+    srv = ovaledge_eval_mcp_server(tool_names=frozenset({TOOL_USER_OBJECT_ACCESS}))
     return LLMTestCase(
         name="mcp_use_native_source_access",
         input="What tables can svc_analytics query in Redshift?",
         actual_output=(
             "This asks for native database grants (not OvalEdge catalog ACLs), so I used "
-            "source_system_access with source_system=redshift, query_direction=user_to_objects, "
+            "user_object_access with source_system=redshift, query_direction=user_to_objects, "
             "and username=svc_analytics. I did not use search_catalog_assets, which indexes "
             "governance metadata rather than Redshift privilege tables."
         ),
         mcp_servers=[srv],
         mcp_tools_called=[
             MCPToolCall(
-                name=TOOL_SOURCE_SYSTEM_ACCESS,
+                name=TOOL_USER_OBJECT_ACCESS,
                 args={
                     "source_system": "redshift",
                     "query_direction": "user_to_objects",

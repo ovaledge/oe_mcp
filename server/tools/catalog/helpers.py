@@ -74,7 +74,10 @@ _DESC_SEARCH = (
     + MCP_CATALOG_OBJECT_TYPES_DOC
     + " — or omit for all types.\n\n"
     "Each hit in items[] includes objectId and objectType (camelCase). Use those values "
-    "with update_asset_descriptions when the user asks to change descriptions."
+    "with update_asset_descriptions when the user asks to change descriptions.\n\n"
+    "When results include oestory (data story), call lookup_datastory (object_id or "
+    "content_query) for full narrative and storyCitation — do not answer from search "
+    "snippets alone."
 )
 _DESC_DETAILS = (
     "Fetch one catalog document (JSON from Elasticsearch; embeddings removed). "
@@ -105,6 +108,13 @@ _DESC_UPDATE_DESCRIPTIONS = (
     "Update one or more description fields on a catalog asset (RBAC and governance rules "
     "apply on the server).\n\n"
     f"Backend: POST {MCP_PATH_UPDATE_ASSET_DESCRIPTIONS}\n\n"
+    "**Human confirmation (same pattern as create_glossary_term / create_tag):** "
+    "When ready to persist (and dry_run is not true), call without "
+    "create_confirmed_by_user to receive a confirm_update preview (doNotUpdate=true). "
+    "Show formattedResponse; wait for explicit user approval. Re-call with "
+    "create_confirmed_by_user=true and the same object_id, object_type, description "
+    "fields, and clientContext — then POST. Never set create_confirmed_by_user until "
+    "the user confirms.\n\n"
     "Workflow: call search_catalog_assets first, then pass items[].objectId as object_id "
     "and items[].objectType as object_type (API returns camelCase; this tool uses snake_case "
     "arguments). Do not guess ids.\n\n"
@@ -399,6 +409,61 @@ def _enrich_update_descriptions_response(body: dict[str, Any]) -> dict[str, Any]
     if formatted:
         body["formattedResponse"] = formatted
     return body
+
+
+_UPDATE_CONFIRM_AGENT_INSTRUCTION = (
+    "Show formattedResponse and wait for explicit user approval. "
+    "Do not set create_confirmed_by_user=true until the user confirms. "
+    "Then re-call with create_confirmed_by_user=true and the same parameters."
+)
+
+
+def _summarize_description_updates(body: dict[str, Any]) -> list[str]:
+    descriptions = body.get("descriptions")
+    if not isinstance(descriptions, dict):
+        return []
+    lines: list[str] = []
+    for api_key, value in descriptions.items():
+        if value is None:
+            continue
+        text = str(value).strip()
+        preview = text if len(text) <= 120 else text[:117] + "..."
+        lines.append(f"- **{api_key}:** {preview}")
+    return lines
+
+
+def _format_update_descriptions_confirmation_preview(
+    body: dict[str, Any],
+) -> dict[str, Any]:
+    target = body.get("target")
+    oid = otype = None
+    if isinstance(target, dict):
+        oid = target.get("objectId")
+        otype = target.get("objectType")
+    field_lines = _summarize_description_updates(body)
+    fields_block = "\n".join(field_lines) if field_lines else "- (no description fields in request)"
+    dry = body.get("options", {})
+    dry_note = ""
+    if isinstance(dry, dict) and dry.get("dryRun"):
+        dry_note = "\n- **Note:** dry_run=true — preview only; no persist on confirm.\n"
+    return {
+        "ok": True,
+        "awaitingUserConfirmation": True,
+        "workflowPhase": "confirm_update",
+        "doNotUpdate": True,
+        "createConfirmedByUser": False,
+        "formattedResponse": (
+            "**Confirm description update**\n\n"
+            f"- **Target:** {otype} (id {oid})\n"
+            f"{fields_block}\n"
+            f"{dry_note}\n"
+            "Ask the user to confirm. After they approve, call again with "
+            "`create_confirmed_by_user=true` and the same object_id, object_type, "
+            "description fields, and clientContext."
+        ),
+        "agentInstruction": _UPDATE_CONFIRM_AGENT_INSTRUCTION,
+        "pendingUpdate": {"target": target, "descriptions": body.get("descriptions")},
+    }
 
 def _resolve_server_type(raw: str | None) -> str | None:
     """Return canonical serverType for API, or None when unset (no filter)."""

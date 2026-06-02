@@ -2,7 +2,7 @@
 Native source-system access helpers (NFD-48785).
 
 Queries OvalEdge-harvested RDAM privilege metadata — not OvalEdge catalog ACLs
-(see get_user_object_access when that ships) and not catalog data-sources.
+(see get_catalog_object_access when that ships) and not catalog data-sources.
 
 Backend: GET /api/v1/mcp/source-system-access
   → McpSourceSystemAccessReadService (oe-api) over rdam_*privilege tables.
@@ -21,7 +21,7 @@ from server.constants import (
 )
 from server.tools.common import blank, error_payload
 
-_DESC_GET_SOURCE_SYSTEM_ACCESS = (
+_DESC_USER_OBJECT_ACCESS = (
     "Resolve **native** access grants harvested from Redshift, Snowflake, or Tableau — "
     "independent of OvalEdge catalog permissions.\n\n"
     "Use for questions like:\n"
@@ -30,7 +30,9 @@ _DESC_GET_SOURCE_SYSTEM_ACCESS = (
     '- "Which Snowflake roles give john.doe access?"\n'
     '- "Who can view the Revenue Dashboard in Tableau?"\n\n'
     f"Backend: GET {MCP_PATH_SOURCE_SYSTEM_ACCESS}\n\n"
-    "**Not** OvalEdge `get_user_object_access` (catalog ACL layer).\n\n"
+    "This MCP tool is **user_object_access** (native DB/BI grants). "
+    "A separate **catalog ACL** capability (`get_catalog_object_access`) may ship "
+    "later for in-app OvalEdge permissions — do not confuse the two.\n\n"
     "**source_system** (required): "
     + MCP_SOURCE_SYSTEMS_DOC
     + ".\n\n"
@@ -68,7 +70,7 @@ _DESC_GET_SOURCE_SYSTEM_ACCESS = (
 )
 
 
-def validate_source_system_access_args(
+def validate_user_object_access_args(
     source_system: str,
     query_direction: str,
     username: str | None,
@@ -88,9 +90,7 @@ def validate_source_system_access_args(
     has_user = not blank(username)
     has_path = not blank(object_path)
     if qd == "user_to_objects" and not has_user:
-        return error_payload(
-            "username is required when query_direction is user_to_objects.",
-        )
+        return error_payload("username is required when query_direction is user_to_objects.")
     if qd == "object_to_users":
         if not has_path:
             return error_payload(

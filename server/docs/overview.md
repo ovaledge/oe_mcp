@@ -25,12 +25,17 @@ OvalEdge is a data governance platform that helps organizations find, understand
 
 ## MCP agents
 
-This repository ships an MCP server that exposes catalog search, lineage, glossary, tags, **data stories**, platform docs, metadata drift, native access previews, and governed writes. Agents should use:
+This repository ships an MCP server (see `server/app.py` **instructions**) for catalog discovery, lineage, glossary, tags, **data stories**, platform docs, metadata drift, native access previews, and governed writes. Routing summary:
 
-- **`lookup_datastory`** for organization-specific narrative knowledge (not product docs)
-- **Workflow prompts** and **resources** documented in [mcp_workflows](mcp_workflows)
+| Intent | Tool / prompt |
+|--------|----------------|
+| Organizational policy, playbook, onboarding narrative | **`lookup_datastory`** (`content_query`); prompt **`organizational_knowledge`** |
+| OvalEdge product UI / features / configuration | **`search_platform_docs`**; prompt **`platform_help`** |
+| Tables, files, columns, reports | **`search_catalog_assets`** → **`catalog_asset_details`** |
+| Native Redshift / Snowflake / Tableau grants | **`user_object_access`** (not catalog ACLs) |
+| Create glossary term or tag | **`create_glossary_term`** / **`create_tag`** with picker flow; POST only after **`create_confirmed_by_user=true`** |
 
-Static guides in `server/docs/` are available to clients as `docs://ovaledge/{name}` resources.
+Present **`formattedResponse`** and **`storyCitation`** from data-story tools verbatim when provided. Do not invent glossary **descriptions**. Workflow prompts and resource URIs: [mcp_workflows](mcp_workflows). Static guides: `docs://ovaledge/{name}`.
 
 ## Bridge Client
 

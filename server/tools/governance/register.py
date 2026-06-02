@@ -57,6 +57,7 @@ from server.tools.governance.helpers import (
     _format_parent_selection_guidance,
     _format_placement_options,
     _format_tag_create_confirmation_preview,
+    _format_update_governance_roles_confirmation_preview,
     _load_secure_create_guidance,
     _lookup_tag_after_create,
     _master_tag_ids_from_guidance_data,
@@ -1370,6 +1371,17 @@ def register(mcp: FastMCP) -> None:
             str | None,
             Field(description="Optional client key to dedupe retries.", default=None),
         ] = None,
+        create_confirmed_by_user: Annotated[
+            bool,
+            Field(
+                description=(
+                    "Final update gate: true only after the user explicitly approved "
+                    "the confirm_update preview. Re-call with the same object_id, "
+                    "object_type, role_updates, and clientContext."
+                ),
+                default=False,
+            ),
+        ] = False,
     ) -> dict[str, Any]:
         """
         Update governance responsibilities (see MCP tool description).
@@ -1417,6 +1429,10 @@ def register(mcp: FastMCP) -> None:
             client_context["reason"] = str(reason).strip()
         if client_context:
             body["clientContext"] = client_context
+
+        is_dry = dry_run is True
+        if not is_dry and not create_confirmed_by_user:
+            return _format_update_governance_roles_confirmation_preview(body)
 
         try:
             async with ovaledge_client() as client:

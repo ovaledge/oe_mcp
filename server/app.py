@@ -18,7 +18,6 @@ def create_mcp(lifespan: Any = None) -> FastMCP:
         version=settings.mcp_server_version,
         instructions=(
             "You are connected to the OvalEdge data governance platform. "
-            "Phase 1 — Asset & Metadata Discovery (catalog read; glossary create supported). "
             "Use tools to search the catalog, fetch asset details, lineage, profiles, and "
             "governance (glossary lookup, create_glossary_term guided flow, tags). "
             "For new glossary terms: use create_glossary_term (domain → category when "
@@ -32,6 +31,8 @@ def create_mcp(lifespan: Any = None) -> FastMCP:
             "metadata drift), governance lookups (glossary, tags, data stories), "
             "source-system access previews, and governed write operations where the "
             "API allows (e.g. create_tag, update_asset_descriptions, update_governance_roles). "
+            "Governed writes require create_confirmed_by_user=true after the user approves "
+            "the confirm_create or confirm_update preview. "
             "Organizational knowledge (policies, playbooks, onboarding narratives, domain "
             "context documented in OvalEdge data stories): call lookup_datastory first — "
             "usually content_query set to the user's question; add story_zone_name or "
@@ -41,7 +42,7 @@ def create_mcp(lifespan: Any = None) -> FastMCP:
             "configuration), not for org-specific story content. Use search_catalog_assets "
             "for physical datasets; when hits include oestory, follow with lookup_datastory. "
             "For native Redshift/Snowflake/Tableau grants (not OvalEdge catalog ACLs), "
-            "use source_system_access. "
+            "use user_object_access. "
             "Use resources for deep links when you already have object ids: "
             "ovaledge://catalog/table/{id}, ovaledge://catalog/file/{id}, "
             "ovaledge://governance/glossary-term/{id}, "

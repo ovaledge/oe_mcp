@@ -2,7 +2,7 @@
 
 LLM-as-judge checks on **how well an agent uses MCP** (tool choice, arguments, multi-turn flows). Tier 1 remains `pytest` + FastMCP in-process tests under `tests/`.
 
-Main project docs: [README.md](../README.md) (local stdio, remote HTTP, **OAuth 2.x remote MCP — WIP**).
+Main project docs: [README.md](../README.md) (local stdio, remote HTTP, **OAuth 2.x remote MCP — WIP**). Agent routing (data stories vs platform docs, confirm-before-create): [README.md#agent-guidance](../README.md#agent-guidance-mirrors-serverapppy-instructions).
 
 ## Install
 
@@ -81,7 +81,7 @@ poetry run python -m evals.run_evals --output evals/out/report.json
 
 Defined in `golden_cases.py`:
 
-- `MCPUseMetric` — five single-turn goldens: catalog search, `data_discovery` prompt + search, `lookup_datastory`, `organizational_knowledge` prompt + datastory, `source_system_access`.
+- `MCPUseMetric` — five single-turn goldens: catalog search, `data_discovery` prompt + search, `lookup_datastory`, `organizational_knowledge` prompt + datastory, `user_object_access`.
 - `MCPTaskCompletionMetric` — conversational discovery with expected outcome.
 - `MultiTurnMCPUseMetric` — follow-up user turn with resource read.
 

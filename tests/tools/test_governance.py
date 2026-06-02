@@ -1868,6 +1868,19 @@ class TestUpdateGovernanceRoles:
         assert out["status_code"] == 400
         mock_oe_client.post.assert_not_called()
 
+    async def test_confirm_preview_blocks_post(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_governance_roles")
+        out = await fn(
+            object_id=99,
+            object_type="oetable",
+            role_updates={"owner": "mike"},
+        )
+        assert out["workflowPhase"] == "confirm_update"
+        assert out["doNotUpdate"] is True
+        mock_oe_client.post.assert_not_called()
+
     async def test_posts_body_and_enriches_response(
         self, mock_oe_client: AsyncMock
     ) -> None:
@@ -1893,6 +1906,7 @@ class TestUpdateGovernanceRoles:
             role_updates={"Owner": "mike", "Steward": "john"},
             prompt="Assign John as Steward and Mike as Owner",
             reason="Ownership update request",
+            create_confirmed_by_user=True,
         )
 
         assert out["status"] == "partial_success"
@@ -1925,7 +1939,12 @@ class TestUpdateGovernanceRoles:
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
         fn = await get_tool_fn(mcp, "update_governance_roles")
-        await fn(object_id=1, object_type="oetable", role_updates={"custodian": ""})
+        await fn(
+            object_id=1,
+            object_type="oetable",
+            role_updates={"custodian": ""},
+            create_confirmed_by_user=True,
+        )
         mock_oe_client.post.assert_called_once_with(
             MCP_PATH_UPDATE_GOVERNANCE_ROLES,
             {
@@ -1943,6 +1962,7 @@ class TestUpdateGovernanceRoles:
             object_id=1,
             object_type="oetable",
             role_updates={"owner": "sarah"},
+            create_confirmed_by_user=True,
         )
         assert out["status_code"] == 403
 

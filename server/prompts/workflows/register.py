@@ -15,10 +15,10 @@ from server.constants import (
     TOOL_METADATA_CHANGES_BETWEEN_CRAWLS,
     TOOL_SEARCH_CATALOG,
     TOOL_SEARCH_DOCS,
-    TOOL_SOURCE_SYSTEM_ACCESS,
     TOOL_TABLE_ENTITY_RELATIONSHIPS,
     TOOL_UPDATE_ASSET_DESCRIPTIONS,
     TOOL_UPDATE_GOVERNANCE_ROLES,
+    TOOL_USER_OBJECT_ACCESS,
 )
 
 
@@ -284,7 +284,7 @@ def register(mcp: FastMCP) -> None:
             f"Steps:\n"
             f"1. Decide query_direction: user_to_objects (needs username) vs object_to_users "
             f"(needs object_path)\n"
-            f"2. Call {TOOL_SOURCE_SYSTEM_ACCESS} with source_system='{source_system}', "
+            f"2. Call {TOOL_USER_OBJECT_ACCESS} with source_system='{source_system}', "
             f"the correct query_direction, and username or object_path from the question\n"
             f"3. Present grants with grant_mechanism (direct/group/role) and privileges; use "
             f"summary counts when returned\n"
@@ -399,9 +399,10 @@ def register(mcp: FastMCP) -> None:
             f"2. Call {TOOL_CATALOG_ASSET_DETAILS} to read current descriptions and governance\n"
             f"3. Draft description text from the user intent — do not invent facts beyond "
             f"what the user or catalog already states\n"
-            f"4. Confirm the draft with the user before calling {TOOL_UPDATE_ASSET_DESCRIPTIONS}\n"
-            f"5. Pass object_id, object_type, description_field, and new text; report "
-            f"updatedFields or blockedFields from the response"
+            f"4. Confirm the draft with the user; call {TOOL_UPDATE_ASSET_DESCRIPTIONS} "
+            f"without create_confirmed_by_user for confirm_update preview\n"
+            f"5. Re-call with create_confirmed_by_user=true and the same parameters to POST\n"
+            f"6. Report updatedFields or blockedFields from the response"
         )
         return [Message(text)]
 
@@ -423,10 +424,10 @@ def register(mcp: FastMCP) -> None:
             f"otherwise {TOOL_SEARCH_CATALOG} then {TOOL_CATALOG_ASSET_DETAILS}\n"
             f"2. Confirm object_id, object_type, and role_changes with the user (owner, steward, "
             f"custodian, governance_role_4–6; null removes)\n"
-            f"3. Call {TOOL_UPDATE_GOVERNANCE_ROLES} with role_updates; "
-            f"DQ rules allow steward only\n"
-            f"4. Report partial_success, blockedRoles (e.g. glossary-propagated), and redirectUrl\n"
-            f"5. Do not update roles without explicit user confirmation of principals"
+            f"3. Call {TOOL_UPDATE_GOVERNANCE_ROLES} without create_confirmed_by_user for "
+            f"confirm_update preview; wait for user approval\n"
+            f"4. Re-call with create_confirmed_by_user=true and the same role_updates to POST\n"
+            f"5. Report partial_success, blockedRoles (e.g. glossary-propagated), and redirectUrl"
         )
         return [Message(text)]
 

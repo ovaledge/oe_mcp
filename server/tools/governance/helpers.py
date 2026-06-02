@@ -34,14 +34,16 @@ from server.tools.common import as_dict as _as_dict
 from server.tools.common import blank as _blank
 
 _DESC_GLOSSARY = (
-    "Look up one business glossary term. Server object type is always glossary.\n\n"
+    "Look up business glossary term(s) by id or name. Server object type is always "
+    "glossary; name search may return multiple hits.\n\n"
     f"Backend: GET {MCP_PATH_GLOSSARY_TERMS} (objectId OR termName — mutually exclusive).\n"
     f"Optional query param limit (default {MCP_GLOSSARY_TAGS_LIMIT_DEFAULT} on server; "
     f"this client caps at {MCP_GLOSSARY_TAGS_LIMIT_MAX}).\n\n"
     "Provide either term_name (search by name) or object_id (by id), never both."
 )
 _DESC_TAGS = (
-    "Look up one OETAG (tag) document from Elasticsearch.\n\n"
+    "Look up OETAG (tag) document(s) by id or name from Elasticsearch; name search "
+    "may return multiple hits.\n\n"
     f"Backend: GET {MCP_PATH_TAGS} (objectId OR tagName — mutually exclusive).\n"
     f"Optional query param limit (default {MCP_GLOSSARY_TAGS_LIMIT_DEFAULT} on server; "
     f"this client caps at {MCP_GLOSSARY_TAGS_LIMIT_MAX}).\n\n"
@@ -95,6 +97,9 @@ _DESC_CREATE_TAG = (
     "parent_step_completed_by_user=true (POST uses masterTagId only, like UI under master).\n"
     "   - Under a parent: parent_tag_id + parent_tag_id_confirmed_by_user=true + "
     "parent_step_completed_by_user=true.\n\n"
+    "**Parameter create_directly_under_master (name is shared; meaning depends on mode):**\n"
+    "- SECURE: create as a direct child of the chosen masterTagId (no parentTagId).\n"
+    "- OPEN: create a root tag with no parent (do not send masterTagId).\n\n"
     "OPEN mode (no master step; parent list optional):\n"
     "1) tag_name only → PARENT_OPTIONAL: show ALL userSelectableParents. Ask the human "
     "whether to use a parent BEFORE calling POST. Never create on this call.\n"
@@ -149,6 +154,13 @@ _DESC_UPDATE_GOVERNANCE_ROLES = (
     "Assign, update, or remove governance responsibilities (Owner, Steward, Custodian, "
     "Governance Role 4/5/6) on supported OvalEdge assets.\n\n"
     f"Backend: POST {MCP_PATH_UPDATE_GOVERNANCE_ROLES}\n\n"
+    "**Human confirmation (same pattern as create_glossary_term / create_tag):** "
+    "When ready to persist (and dry_run is not true), call without "
+    "create_confirmed_by_user to receive a confirm_update preview (doNotUpdate=true). "
+    "Show formattedResponse; wait for explicit user approval. Re-call with "
+    "create_confirmed_by_user=true and the same object_id, object_type, role_updates, "
+    "and clientContext — then POST. Never set create_confirmed_by_user until the user "
+    "confirms.\n\n"
     "Workflow — resolve the target first:\n"
     "- Catalog assets (tables, columns, files, schemas, reports, APIs, queries, glossary, "
     "tags, stories): use search_catalog_assets, then pass items[].objectId and objectType.\n"
@@ -912,6 +924,50 @@ def _enrich_update_governance_roles_response(body: dict[str, Any]) -> dict[str, 
     if formatted:
         body["formattedResponse"] = formatted
     return body
+
+
+def _format_update_governance_roles_confirmation_preview(
+    body: dict[str, Any],
+) -> dict[str, Any]:
+    target = body.get("target")
+    oid = otype = None
+    if isinstance(target, dict):
+        oid = target.get("objectId")
+        otype = target.get("objectType")
+    role_updates = body.get("roleUpdates")
+    role_lines: list[str] = []
+    if isinstance(role_updates, dict):
+        for role, principal in sorted(role_updates.items()):
+            if principal is None:
+                role_lines.append(f"- **{role}:** (remove)")
+            else:
+                role_lines.append(f"- **{role}:** {principal}")
+    roles_block = "\n".join(role_lines) if role_lines else "- (no role_updates)"
+    dry = body.get("options", {})
+    dry_note = ""
+    if isinstance(dry, dict) and dry.get("dryRun"):
+        dry_note = "\n- **Note:** dry_run=true — validate only on confirm.\n"
+    return {
+        "ok": True,
+        "awaitingUserConfirmation": True,
+        "workflowPhase": "confirm_update",
+        "doNotUpdate": True,
+        "createConfirmedByUser": False,
+        "formattedResponse": (
+            "**Confirm governance role update**\n\n"
+            f"- **Target:** {otype} (id {oid})\n"
+            f"{roles_block}\n"
+            f"{dry_note}\n"
+            "Ask the user to confirm. After they approve, call again with "
+            "`create_confirmed_by_user=true` and the same object_id, object_type, "
+            "role_updates, and clientContext."
+        ),
+        "agentInstruction": _CREATE_CONFIRM_AGENT_INSTRUCTION,
+        "pendingUpdate": {
+            "target": target,
+            "roleUpdates": role_updates,
+        },
+    }
 
 # In-memory proof that step 1 (parent picker) ran for a tag name — not exposed to clients.
 _PENDING_PARENT_PICKER_TTL_SEC = 3600
