@@ -34,10 +34,10 @@ jobs:
           restore-keys: ${{ runner.os }}-poetry-
 
       - name: Install dependencies (with eval)
-        run: poetry install --with eval
+        run: poetry install --with dev --with eval
 
       - name: Unit tests (Tier 1)
-        run: poetry run pytest
+        run: bash scripts/run_tests.sh --no-cov -q
 
       - name: Dry-run golden case construction
         run: poetry run python -m evals.run_evals --dry-run

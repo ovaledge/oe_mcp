@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     # exchange IdP token for an OvalEdge-issued JWT first (legacy).
     ovaledge_remote_forward_idp_token: bool = False
 
+    # When create_tag omits description, MCP builds wiki HTML from tag name (+ hierarchy).
+    # Set false to preserve legacy behavior (POST with no description field).
+    ovaledge_tag_auto_description: bool = True
+
     # ── MCP server identity ──────────────────────────────────────
     mcp_server_name: str = "OvalEdge MCP Server"
     mcp_server_version: str = "0.1.0"

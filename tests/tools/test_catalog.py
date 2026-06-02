@@ -8,9 +8,15 @@ from server.constants import (
     MCP_PATH_COLUMN_PROFILE,
     MCP_PATH_ENTITY_RELATIONSHIPS,
     MCP_PATH_LINEAGE,
+    MCP_PATH_METADATA_CHANGES_BETWEEN_CRAWLS,
     MCP_PATH_SEARCH_CATALOG,
     MCP_PATH_UPDATE_ASSET_DESCRIPTIONS,
     MCP_SEARCH_CONTEXT_QUERY_PARAM,
+    MCP_SEARCH_CUSTOM_FIELDS_PARAM,
+    MCP_SEARCH_DATA_PRODUCTS_PARAM,
+    MCP_SEARCH_GLOSSARY_TERMS_PARAM,
+    MCP_SEARCH_SERVER_TYPE_PARAM,
+    MCP_SEARCH_TAGS_PARAM,
     MCP_SEARCH_TERMS_PARAM,
 )
 from server.tools import catalog
@@ -57,6 +63,87 @@ class TestSearchCatalogAssets:
         await tool_fn(search_terms=[], limit=10)
         params = mock_oe_client.get.call_args[1]["params"]
         assert MCP_SEARCH_TERMS_PARAM not in params
+
+    async def test_lexical_arrays_tags_terms_custom_fields_data_products(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        await tool_fn(
+            tags=["Operations"],
+            terms=["Revenue"],
+            custom_fields=["Confidential"],
+            data_products=["Customer 360"],
+            context_query="Find assets with Operations tag and Revenue term",
+        )
+        params = mock_oe_client.get.call_args[1]["params"]
+        assert json.loads(params[MCP_SEARCH_TAGS_PARAM]) == ["Operations"]
+        assert json.loads(params[MCP_SEARCH_GLOSSARY_TERMS_PARAM]) == ["Revenue"]
+        assert json.loads(params[MCP_SEARCH_CUSTOM_FIELDS_PARAM]) == ["Confidential"]
+        assert json.loads(params[MCP_SEARCH_DATA_PRODUCTS_PARAM]) == ["Customer 360"]
+        assert params[MCP_SEARCH_CONTEXT_QUERY_PARAM].startswith("Find assets")
+        assert MCP_SEARCH_TERMS_PARAM not in params
+
+    async def test_filters_forwarded(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        await tool_fn(
+            schema_name="sakila",
+            connection_name="ovaledgedb",
+            owner="admin",
+            steward="steward@example.com",
+            custodian="custodian@example.com",
+        )
+        params = mock_oe_client.get.call_args[1]["params"]
+        assert params["schemaName"] == "sakila"
+        assert params["connectionName"] == "ovaledgedb"
+        assert params["owner"] == "admin"
+        assert params["steward"] == "steward@example.com"
+        assert params["custodian"] == "custodian@example.com"
+
+    async def test_server_type_forwarded(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        await tool_fn(
+            context_query="Find all assets related to MySQL databases",
+            server_type="mysql",
+        )
+        params = mock_oe_client.get.call_args[1]["params"]
+        assert params[MCP_SEARCH_SERVER_TYPE_PARAM] == "mysql"
+        assert params[MCP_SEARCH_CONTEXT_QUERY_PARAM].startswith("Find all assets")
+
+    async def test_server_type_case_insensitive(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        await tool_fn(server_type="MySQL")
+        params = mock_oe_client.get.call_args[1]["params"]
+        assert params[MCP_SEARCH_SERVER_TYPE_PARAM] == "mysql"
+
+    async def test_server_type_omitted_when_unset(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        await tool_fn(search_terms=["customer"])
+        params = mock_oe_client.get.call_args[1]["params"]
+        assert MCP_SEARCH_SERVER_TYPE_PARAM not in params
+
+    async def test_server_type_invalid_returns_400(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        result = await tool_fn(server_type="not-a-real-connector")
+        assert result["status_code"] == 400
+        assert "server_type" in result["error"]
+        mock_oe_client.get.assert_not_called()
 
     async def test_limit_capped(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
@@ -380,3 +467,56 @@ class TestUpdateAssetDescriptions:
         )
         assert out["status_code"] == 403
         assert "403" in out["error"]
+
+class TestMetadataChangesBetweenCrawls:
+    async def test_forwards_body(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.return_value = {"ok": True, "data": {"changeSummary": "x"}}
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "get_metadata_changes_between_crawls")
+        out = await fn(
+            question="What changed in CUSTOMER schema after the latest crawl?",
+            connection_name="Snowflake PROD",
+            schema_names=["CUSTOMER"],
+            table_names=["CUSTOMER_PROFILE"],
+            last_n_days=2,
+            from_crawl_id=101,
+            to_crawl_id=102,
+        )
+        assert out["ok"] is True
+        mock_oe_client.post.assert_called_once_with(
+            MCP_PATH_METADATA_CHANGES_BETWEEN_CRAWLS,
+            body={
+                "question": "What changed in CUSTOMER schema after the latest crawl?",
+                "connectionName": "Snowflake PROD",
+                "schemaNames": ["CUSTOMER"],
+                "tableNames": ["CUSTOMER_PROFILE"],
+                "lastNDays": 2,
+                "fromCrawlId": 101,
+                "toCrawlId": 102,
+            },
+        )
+
+    async def test_rejects_days_and_weeks_together(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "get_metadata_changes_between_crawls")
+        out = await fn(last_n_days=1, last_n_weeks=1)
+        assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
+    async def test_rejects_invalid_crawl_range(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "get_metadata_changes_between_crawls")
+        out = await fn(from_crawl_id=10, to_crawl_id=9)
+        assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
+    async def test_error_returns_structured_dict(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.side_effect = OvalEdgeError(500, "Internal error")
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "get_metadata_changes_between_crawls")
+        out = await fn(question="Show drift")
+        assert out["status_code"] == 500

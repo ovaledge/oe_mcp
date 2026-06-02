@@ -1,6 +1,6 @@
 # OvalEdge MCP Server
 
-OvalEdge governance and catalog capabilities exposed to MCP clients (Cursor, Claude Desktop, etc.): search, lineage, glossary, tags, docs, asset description updates, and workflow prompts.
+OvalEdge governance and catalog MCP server for MCP clients (Cursor, Claude Desktop, etc.): discovery, lineage, glossary and tags, metadata change analysis, platform docs, workflow prompts, and selected governed write operations (e.g. tag creation, asset description updates, governance role updates), all subject to OvalEdge RBAC.
 
 ## How to run
 
@@ -27,20 +27,26 @@ Setup scripts (`scripts/setup_local_mcp.sh`, `scripts/setup_local_mcp.ps1`) crea
 
 ## What this server provides
 
-- Catalog search, asset details, and description updates (`search_catalog_assets`, `catalog_asset_details`, `update_asset_descriptions`)
-- Column profile, entity relationships, lineage
-- Glossary and tag lookups
-- Platform documentation search
+- Catalog search and asset details (`search_catalog_assets`, `catalog_asset_details`)
+- Column profile, entity relationships, lineage, metadata drift (`get_metadata_changes_between_crawls`)
+- Glossary and tag lookups; tag creation (`create_tag`) and other governed writes as exposed by the API
+- Native source-system grant previews (`get_source_system_access`)
+- Platform documentation search and data story lookup
+- Asset description updates (`update_asset_descriptions`) and governance role updates (`update_governance_roles`)
 - Resource URIs (`ovaledge://...`)
 - Workflow prompts for common analyst tasks (see `server/prompts/workflows.py`)
+
+Read and write tools both honor OvalEdge permissions — the MCP does not bypass RBAC.
 
 ## Tools, resources, and prompts
 
 ### Tools (`server/tools/`)
 
-- `search_catalog_assets`, `catalog_asset_details`, `update_asset_descriptions`, `column_profile_statistics`
-- `table_entity_relationships`, `asset_lineage`
-- `lookup_glossary_term`, `lookup_tags`, `lookup_datastory`, `search_platform_docs`
+- `search_catalog_assets`, `catalog_asset_details`, `column_profile_statistics`
+- `table_entity_relationships`, `asset_lineage`, `get_metadata_changes_between_crawls`
+- `lookup_glossary_term`, `lookup_tags`, `create_tag`, `lookup_datastory`, `search_platform_docs`
+- `get_source_system_access` (Redshift / Snowflake / Tableau grant previews)
+- `update_asset_descriptions`, `update_governance_roles`, `lookup_dq_rule`
 
 ### Resources (`server/resources/`)
 
@@ -56,10 +62,13 @@ Data discovery, explain business term, trust assessment, explore domain, trace l
 ```bash
 poetry run ruff check .
 poetry run mypy server/ entrypoints/ evals/
-poetry run pytest
+./scripts/run_tests.sh          # recommended: Poetry venv + coverage
+# or: poetry run pytest         # fast, no coverage (after poetry install --with dev)
 ```
 
-Unit tests measure coverage for `server/` and `entrypoints/` (report-only threshold for now; see `[tool.coverage.*]` in `pyproject.toml`). HTML report: `poetry run pytest --cov-report=html` then open `htmlcov/index.html`.
+Use `./scripts/run_tests.sh` on macOS and Linux so tests always run in the project `.venv` with coverage. Plain `pytest` on system Python can pick up this repo’s config but lacks dev plugins — prefer `poetry run pytest` or the script.
+
+Unit tests measure coverage for `server/` and `entrypoints/` (report-only threshold for now; see `[tool.coverage.*]` in `pyproject.toml`). HTML report: `./scripts/run_tests.sh --cov-report=html` then open `htmlcov/index.html`.
 
 Git hooks (**ruff** + full **pytest** on each **commit**; optional pytest again on **push**) are installed automatically when you run `./scripts/setup_local_mcp.sh` in a git clone. To install or refresh hooks only:
 

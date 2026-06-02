@@ -30,6 +30,7 @@ class TestMcpClientTools:
         assert "catalog_asset_details" in names
         assert "lookup_glossary_term" in names
         assert "lookup_datastory" in names
+        assert "create_tag" in names
 
     async def test_call_tool_search_catalog_assets(
         self,
