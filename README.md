@@ -29,7 +29,7 @@ Setup scripts (`scripts/setup_local_mcp.sh`, `scripts/setup_local_mcp.ps1`) crea
 
 - Catalog search and asset details (`search_catalog_assets`, `catalog_asset_details`)
 - Column profile, entity relationships, lineage
-- Glossary and tag lookups
+- Glossary lookup, guided term creation (`create_glossary_term`), and tag lookups
 - Platform documentation search
 - Resource URIs (`ovaledge://...`)
 - Workflow prompts for common analyst tasks (see `server/prompts/workflows.py`)
@@ -40,7 +40,9 @@ Setup scripts (`scripts/setup_local_mcp.sh`, `scripts/setup_local_mcp.ps1`) crea
 
 - `search_catalog_assets`, `catalog_asset_details`, `column_profile_statistics`
 - `table_entity_relationships`, `asset_lineage`
-- `lookup_glossary_term`, `lookup_tags`, `lookup_datastory`, `search_platform_docs`
+- `lookup_glossary_term`, `create_glossary_term`, `lookup_tags`, `lookup_datastory`, `search_platform_docs`
+
+**`create_glossary_term` workflow:** (1) `term_name` → domain picker; (2) `term_name` + `domain_id` → category picker when categories exist under the domain (skip only after user says skip: `skip_category=true` + `category_skip_confirmed=true`); (3) if category chosen and subcategories exist → subcategory picker (optional, `skip_subcategory=true`); (4) create only with non-blank `description` (tool blocks create without it). Manual pickers: `search_on=oeglobaldomain|category|subcategory`.
 
 ### Resources (`server/resources/`)
 
