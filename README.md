@@ -1,6 +1,6 @@
 # OvalEdge MCP Server
 
-OvalEdge governance and catalog MCP server for MCP clients (Cursor, Claude Desktop, etc.): discovery, lineage, glossary and tags, metadata change analysis, platform docs, workflow prompts, and selected write operations (e.g. tag creation), all subject to OvalEdge RBAC.
+OvalEdge governance and catalog MCP server for MCP clients (Cursor, Claude Desktop, etc.): discovery, lineage, glossary and tags, metadata change analysis, platform docs, workflow prompts, and selected governed write operations (e.g. tag creation, asset description updates, governance role updates), all subject to OvalEdge RBAC.
 
 ## How to run
 
@@ -32,6 +32,7 @@ Setup scripts (`scripts/setup_local_mcp.sh`, `scripts/setup_local_mcp.ps1`) crea
 - Glossary and tag lookups; tag creation (`create_tag`) and other governed writes as exposed by the API
 - Native source-system grant previews (`get_source_system_access`)
 - Platform documentation search and data story lookup
+- Asset description updates (`update_asset_descriptions`) and governance role updates (`update_governance_roles`)
 - Resource URIs (`ovaledge://...`)
 - Workflow prompts for common analyst tasks (see `server/prompts/workflows.py`)
 
@@ -45,6 +46,7 @@ Read and write tools both honor OvalEdge permissions — the MCP does not bypass
 - `table_entity_relationships`, `asset_lineage`, `get_metadata_changes_between_crawls`
 - `lookup_glossary_term`, `lookup_tags`, `create_tag`, `lookup_datastory`, `search_platform_docs`
 - `get_source_system_access` (Redshift / Snowflake / Tableau grant previews)
+- `update_asset_descriptions`, `update_governance_roles`, `lookup_dq_rule`
 
 ### Resources (`server/resources/`)
 

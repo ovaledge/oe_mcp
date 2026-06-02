@@ -15,6 +15,9 @@ TOOL_LOOKUP_TAGS = "lookup_tags"
 TOOL_CREATE_TAG = "create_tag"
 TOOL_LOOKUP_DATASTORY = "lookup_datastory"
 TOOL_SEARCH_DOCS = "search_platform_docs"
+TOOL_UPDATE_ASSET_DESCRIPTIONS = "update_asset_descriptions"
+TOOL_UPDATE_GOVERNANCE_ROLES = "update_governance_roles"
+TOOL_LOOKUP_DQ_RULE = "lookup_dq_rule"
 TOOL_GET_SOURCE_SYSTEM_ACCESS = "get_source_system_access"
 
 # Lowercase objectType for MCP search-catalog and object-details (matches OvalEdge API).
@@ -63,6 +66,27 @@ STATUS_AWAITING_USER_SELECTION = "awaiting_user_selection"
 # Optional on glossary-terms and tags (Spring default 20).
 MCP_GLOSSARY_TAGS_LIMIT_DEFAULT = 20
 MCP_GLOSSARY_TAGS_LIMIT_MAX = 100
+MCP_PATH_UPDATE_ASSET_DESCRIPTIONS = "/api/v1/mcp/update-asset-descriptions"
+MCP_PATH_UPDATE_GOVERNANCE_ROLES = "/api/v1/mcp/update-governance-roles"
+MCP_PATH_LOOKUP_DQ_RULES = "/api/v1/mcp/lookup-dq-rules"
+
+# objectType values for update_governance_roles that are NOT in search_catalog_assets.
+MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES = frozenset(
+    {
+        "dqrule",
+        "dqscheme",
+        "dag",
+        "policy",
+        "oeglobaldomain",
+        "processing_activity",
+        "ropa_report",
+    }
+)
+# Steward-only governance updates (UI parity).
+MCP_GOVERNANCE_STEWARD_ONLY_OBJECT_TYPES = frozenset({"dqrule", "dqscheme"})
+MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES_DOC = ", ".join(
+    sorted(MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES)
+)
 
 # get_source_system_access — must match backend McpSourceSystemAccessReadService.
 MCP_SOURCE_SYSTEMS = frozenset({"redshift", "snowflake", "tableau"})

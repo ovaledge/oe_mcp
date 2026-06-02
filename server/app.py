@@ -25,7 +25,7 @@ def create_mcp(lifespan: Any = None) -> FastMCP:
             "Use tools for catalog discovery (search, details, profiles, lineage, "
             "metadata drift), governance lookups (glossary, tags, data stories), "
             "source-system access previews, and governed write operations where the "
-            "API allows (e.g. create_tag). "
+            "API allows (e.g. create_tag, update_asset_descriptions, update_governance_roles). "
             "For native Redshift/Snowflake/Tableau grants (not OvalEdge catalog ACLs), "
             "use get_source_system_access. "
             "Use resources for deep links: catalog tables and glossary terms by id. "
