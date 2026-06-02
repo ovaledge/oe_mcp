@@ -51,4 +51,16 @@ Some OvalEdge surfaces use these uppercase type labels (not interchangeable with
 - **Integration context** — Use `oeapi` / `oeapicolumn` for service-oriented assets.
 - **Governance** — Use `glossary` or `oetag` for business terms and tags; `oestory` for narrative data products.
 
+## MCP resources by type
+
+When you already have a numeric `object_id`, MCP resources fetch the object-details JSON:
+
+| objectType | Resource URI |
+|------------|----------------|
+| `oetable` | `ovaledge://catalog/table/{object_id}` |
+| `oefile` | `ovaledge://catalog/file/{object_id}` |
+| `glossary` | `ovaledge://governance/glossary-term/{object_id}` |
+| `oestory` | `ovaledge://governance/data-story/{object_id}` |
+| `oetag` | `ovaledge://governance/tag/{object_id}` |
+
 Always pair `object_id` with the correct `object_type` when calling asset detail APIs so OvalEdge resolves the right entity.

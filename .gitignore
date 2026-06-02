@@ -213,3 +213,6 @@ __marimo__/
 # poetry.lock is committed — do not ignore (template line kept explicit)
 # OS extras
 Thumbs.db
+
+# macOS
+.DS_Store

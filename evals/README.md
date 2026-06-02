@@ -2,7 +2,7 @@
 
 LLM-as-judge checks on **how well an agent uses MCP** (tool choice, arguments, multi-turn flows). Tier 1 remains `pytest` + FastMCP in-process tests under `tests/`.
 
-Main project docs: [README.md](../README.md) (local stdio, remote HTTP, **OAuth 2.x remote MCP — WIP**).
+Main project docs: [README.md](../README.md) (local stdio, remote HTTP, **OAuth 2.x remote MCP — WIP**). Agent routing (data stories vs platform docs, confirm-before-create): [README.md#agent-guidance](../README.md#agent-guidance-mirrors-serverapppy-instructions).
 
 ## Install
 
@@ -49,7 +49,7 @@ DeepEval does not run arbitrary JSON by itself. You describe each scenario in JS
    poetry run pytest evals/test_mcp_deepeval.py::test_mcp_use_metric_from_user_json_file -v
    ```
 
-Example schema: `evals/examples/mcp_use_cases.example.json`. **v1 JSON** covers **tools** only (`mcp_prompts_called` / `mcp_resources_called` / full multi-turn transcripts stay in Python until you extend the loader).
+Example schema: `evals/examples/mcp_use_cases.example.json`. **v1 JSON** covers **tools** only (`mcp_prompts_called` / `mcp_resources_called` for file-driven cases stay in Python `golden_cases.py` until you extend the loader). Tool names must appear in `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 
 ## Commands
 
@@ -81,11 +81,33 @@ poetry run python -m evals.run_evals --output evals/out/report.json
 
 Defined in `golden_cases.py`:
 
-- `MCPUseMetric` — single-turn catalog search and prompt+search scenarios.
+- `MCPUseMetric` — five single-turn goldens: catalog search, `data_discovery` prompt + search, `lookup_datastory`, `organizational_knowledge` prompt + datastory, `user_object_access`.
 - `MCPTaskCompletionMetric` — conversational discovery with expected outcome.
 - `MultiTurnMCPUseMetric` — follow-up user turn with resource read.
 
-`mcp_eval_helpers.py` builds `MCPServer` metadata compatible with `mcp.types` (`Tool`, `Resource`, `Prompt`).
+`mcp_eval_helpers.py` registers **all** tools, workflow prompts, and OvalEdge resource templates from `server/mcp_surface.py` for judge context.
+
+## Interpreting judge scores
+
+All metrics use an LLM judge (`DEEPEVAL_JUDGE_MODEL`, default `gpt-4o-mini`). **`success: true` means `score >= threshold`** (default `0.5`), not a perfect run.
+
+Typical patterns in reports:
+
+| Score band | Meaning |
+|------------|---------|
+| **1.0** | Judge fully agrees tool choice, args, and outcome (see `task_completion_discovery`). |
+| **0.75** | Correct primary tool; judge nitpicks optional follow-ups (e.g. “could also call catalog_asset_details”). |
+| **0.5** | Passes threshold but judge wanted a different tool or richer args — often because the golden registered **all** MCP tools and the judge prefers alternates. |
+
+Goldens now pass **subset** `tool_names` / `prompt_names` into `ovaledge_eval_mcp_server()` so the judge only sees relevant tools. **`actual_output`** text explicitly states why other tools were *not* used (e.g. data stories vs `search_platform_docs`).
+
+**MultiTurnMCPUseMetric** at `0.5` is common even when passing; treat as advisory ([DeepEval #2579](https://github.com/confident-ai/deepeval/issues/2579)). The lineage golden now calls **`asset_lineage`** plus a catalog resource read.
+
+Re-run after golden tweaks:
+
+```bash
+poetry run python -m evals.run_evals --output evals/out/report.json
+```
 
 ## Score thresholds and governance
 

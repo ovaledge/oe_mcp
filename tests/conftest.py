@@ -1,5 +1,4 @@
 import os
-from contextlib import ExitStack
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -122,26 +121,17 @@ def mock_oe_post() -> object:
         yield mock
 
 
-_OE_CLIENT_PATCH_TARGETS = (
-    "server.tools.catalog.OvalEdgeClient",
-    "server.tools.docs.OvalEdgeClient",
-    "server.tools.governance.OvalEdgeClient",
-    "server.resources.catalog.OvalEdgeClient",
-    "server.resources.governance.OvalEdgeClient",
-)
-
-
 @pytest.fixture
 def mock_oe_client() -> object:
     """
-    Patch OvalEdgeClient everywhere it is imported (from-import bindings).
+    Patch the shared OvalEdge client factory (tools, resources, and helpers).
     """
     mock_client = AsyncMock()
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
-    with ExitStack() as stack:
-        for target in _OE_CLIENT_PATCH_TARGETS:
-            p = stack.enter_context(patch(target))
-            p.return_value = mock_client
+    with patch(
+        "server.tools.common.runtime._client_factory",
+        lambda: mock_client,
+    ):
         yield mock_client

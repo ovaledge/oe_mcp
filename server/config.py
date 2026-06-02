@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     # ── OvalEdge connection ──────────────────────────────────────
     # Default supports local tooling/CI; always set OVALEDGE_BASE_URL in real deployments.
     ovaledge_base_url: str = "https://mock.ovaledge.com"
+    # Optional override for user-facing nav links (pod/custom hostname); falls back to base URL.
+    ovaledge_link_base_url: str = ""
+    # When true, rewrite 127.0.0.1 to localhost in link base URLs for browser-friendly links.
+    ovaledge_prefer_localhost_links: bool = True
     ovaledge_timeout_seconds: int = 30
     # Outbound OvalEdge API: Authorization: "<scheme> <jwt>" (e.g. jwt, not Okta Bearer).
     ovaledge_http_auth_scheme: str = "jwt"
@@ -62,6 +66,10 @@ class Settings(BaseSettings):
     # exchange IdP token for an OvalEdge-issued JWT first (legacy).
     ovaledge_remote_forward_idp_token: bool = False
 
+    # When create_tag omits description, MCP builds wiki HTML from tag name (+ hierarchy).
+    # Set false to preserve legacy behavior (POST with no description field).
+    ovaledge_tag_auto_description: bool = True
+
     # ── MCP server identity ──────────────────────────────────────
     mcp_server_name: str = "OvalEdge MCP Server"
     mcp_server_version: str = "0.1.0"
@@ -80,4 +88,13 @@ class Settings(BaseSettings):
                 return s
         return v if isinstance(v, str) else "local"
 
-settings = Settings()
+_settings = Settings()
+
+
+def get_settings() -> Settings:
+    """Return the process-wide settings singleton (testable import boundary)."""
+    return _settings
+
+
+# Back-compat for existing imports.
+settings = _settings

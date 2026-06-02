@@ -24,6 +24,8 @@ from deepeval.evaluate import assert_test
 from deepeval.metrics.base_metric import BaseConversationalMetric, BaseMetric
 from deepeval.test_case import ConversationalTestCase, LLMTestCase
 
+from evals.golden_cases import all_mcp_use_golden_fns
+
 
 def _has_openai_key() -> bool:
     return bool(os.environ.get("OPENAI_API_KEY") or os.environ.get("DEEPEVAL_OPENAI_API_KEY"))
@@ -46,8 +48,8 @@ def _skip_without_openai_key() -> None:
 @pytest.mark.parametrize(
     "golden_fn",
     [
-        pytest.param("golden_mcp_use_catalog_search", id="mcp_use_catalog_search"),
-        pytest.param("golden_mcp_use_prompt_workflow", id="mcp_use_prompt_then_search"),
+        pytest.param(name, id=name.removeprefix("golden_"))
+        for name in all_mcp_use_golden_fns()
     ],
 )
 def test_mcp_use_metric(
