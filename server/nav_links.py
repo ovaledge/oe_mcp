@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import os
-
-from server.config import settings
+from server.config import get_settings
 
 _HASH_PREFIX = "#nav/"
 
@@ -16,10 +14,10 @@ def get_link_base_url() -> str:
     Uses OVALEDGE_LINK_BASE_URL when set (pod/custom hostname), else OVALEDGE_BASE_URL.
     For local dev, 127.0.0.1 is rewritten to localhost so links match typical browser URLs.
     """
-    override = (os.getenv("OVALEDGE_LINK_BASE_URL") or "").strip().rstrip("/")
-    base = override or settings.ovaledge_base_url.strip().rstrip("/")
-    prefer_localhost = os.getenv("OVALEDGE_PREFER_LOCALHOST_LINKS", "true").strip().lower()
-    if prefer_localhost in ("1", "true", "yes") and "127.0.0.1" in base:
+    cfg = get_settings()
+    override = cfg.ovaledge_link_base_url.strip().rstrip("/")
+    base = override or cfg.ovaledge_base_url.strip().rstrip("/")
+    if cfg.ovaledge_prefer_localhost_links and "127.0.0.1" in base:
         base = base.replace("127.0.0.1", "localhost")
     return base
 

@@ -41,17 +41,12 @@ def _optional_float(value: float | None) -> float | None:
 
 
 def dry_run(cases_json: str | None) -> int:
-    from evals.golden_cases import (
-        golden_mcp_use_catalog_search,
-        golden_mcp_use_prompt_workflow,
-        golden_multi_turn_lineage_followup,
-        golden_task_completion_discovery,
-    )
+    import evals.golden_cases as golden_cases
 
-    golden_mcp_use_catalog_search()
-    golden_mcp_use_prompt_workflow()
-    golden_task_completion_discovery()
-    golden_multi_turn_lineage_followup()
+    for fn_name in golden_cases.all_mcp_use_golden_fns():
+        getattr(golden_cases, fn_name)()
+    golden_cases.golden_task_completion_discovery()
+    golden_cases.golden_multi_turn_lineage_followup()
     if cases_json:
         from evals.json_cases import load_mcp_use_cases_from_json
 
@@ -65,12 +60,7 @@ def dry_run(cases_json: str | None) -> int:
 def run_metrics(threshold: float, cases_json: str | None) -> tuple[int, list[MetricReport]]:
     from deepeval.metrics import MCPTaskCompletionMetric, MCPUseMetric, MultiTurnMCPUseMetric
 
-    from evals.golden_cases import (
-        golden_mcp_use_catalog_search,
-        golden_mcp_use_prompt_workflow,
-        golden_multi_turn_lineage_followup,
-        golden_task_completion_discovery,
-    )
+    import evals.golden_cases as golden_cases
     from evals.json_cases import load_mcp_use_cases_from_json
 
     model = _judge_model()
@@ -79,7 +69,9 @@ def run_metrics(threshold: float, cases_json: str | None) -> tuple[int, list[Met
     if cases_json:
         mcp_use_cases = load_mcp_use_cases_from_json(Path(cases_json))
     else:
-        mcp_use_cases = [golden_mcp_use_catalog_search(), golden_mcp_use_prompt_workflow()]
+        mcp_use_cases = [
+            getattr(golden_cases, fn_name)() for fn_name in golden_cases.all_mcp_use_golden_fns()
+        ]
 
     for case in mcp_use_cases:
         m_use = MCPUseMetric(threshold=threshold, model=model, verbose_mode=False)
@@ -109,7 +101,7 @@ def run_metrics(threshold: float, cases_json: str | None) -> tuple[int, list[Met
 
     task_m = MCPTaskCompletionMetric(threshold=threshold, model=model, verbose_mode=False)
     try:
-        tc = golden_task_completion_discovery()
+        tc = golden_cases.golden_task_completion_discovery()
         task_m.measure(tc, _log_metric_to_confident=False)
         reports.append(
             MetricReport(
@@ -133,7 +125,7 @@ def run_metrics(threshold: float, cases_json: str | None) -> tuple[int, list[Met
 
     multi_m = MultiTurnMCPUseMetric(threshold=threshold, model=model, verbose_mode=False)
     try:
-        tc2 = golden_multi_turn_lineage_followup()
+        tc2 = golden_cases.golden_multi_turn_lineage_followup()
         multi_m.measure(tc2, _log_metric_to_confident=False)
         reports.append(
             MetricReport(

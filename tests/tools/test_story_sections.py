@@ -1,6 +1,6 @@
 """Unit tests for data story section parsing in governance tools."""
 
-from server.tools import governance
+from server.tools.governance import helpers as governance_helpers
 
 
 class TestParseStorySections:
@@ -9,12 +9,12 @@ class TestParseStorySections:
             "<h3>Scope</h3><p>Applies to critical PII.</p>"
             "<h3>Cadence</h3><p>Quarterly review.</p>"
         )
-        sections = governance._parse_story_sections(html)
+        sections = governance_helpers._parse_story_sections(html)
         assert sections == [
             ("Scope", "Applies to critical PII."),
             ("Cadence", "Quarterly review."),
         ]
 
     def test_plain_text_fallback(self) -> None:
-        sections = governance._parse_story_sections("Single paragraph body.")
+        sections = governance_helpers._parse_story_sections("Single paragraph body.")
         assert sections == [("", "Single paragraph body.")]

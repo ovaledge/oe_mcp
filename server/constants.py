@@ -9,7 +9,7 @@ TOOL_CATALOG_ASSET_DETAILS = "catalog_asset_details"
 TOOL_COLUMN_PROFILE = "column_profile_statistics"
 TOOL_TABLE_ENTITY_RELATIONSHIPS = "table_entity_relationships"
 TOOL_ASSET_LINEAGE = "asset_lineage"
-TOOL_METADATA_CHANGES_BETWEEN_CRAWLS = "get_metadata_changes_between_crawls"
+TOOL_METADATA_CHANGES_BETWEEN_CRAWLS = "metadata_changes_between_crawls"
 TOOL_LOOKUP_GLOSSARY_TERM = "lookup_glossary_term"
 TOOL_CREATE_GLOSSARY_TERM = "create_glossary_term"
 TOOL_LOOKUP_TAGS = "lookup_tags"
@@ -19,7 +19,7 @@ TOOL_SEARCH_DOCS = "search_platform_docs"
 TOOL_UPDATE_ASSET_DESCRIPTIONS = "update_asset_descriptions"
 TOOL_UPDATE_GOVERNANCE_ROLES = "update_governance_roles"
 TOOL_LOOKUP_DQ_RULE = "lookup_dq_rule"
-TOOL_GET_SOURCE_SYSTEM_ACCESS = "get_source_system_access"
+TOOL_SOURCE_SYSTEM_ACCESS = "source_system_access"
 
 # Lowercase objectType for MCP search-catalog and object-details (matches OvalEdge API).
 MCP_CATALOG_OBJECT_TYPES = frozenset(
@@ -96,7 +96,7 @@ MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES_DOC = ", ".join(
     sorted(MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES)
 )
 
-# get_source_system_access — must match backend McpSourceSystemAccessReadService.
+# source_system_access — must match backend McpSourceSystemAccessReadService.
 MCP_SOURCE_SYSTEMS = frozenset({"redshift", "snowflake", "tableau"})
 MCP_SOURCE_SYSTEMS_DOC = ", ".join(sorted(MCP_SOURCE_SYSTEMS))
 MCP_QUERY_DIRECTIONS = frozenset({"user_to_objects", "object_to_users"})
@@ -111,6 +111,7 @@ MCP_SEARCH_TAGS_PARAM = "tags"
 MCP_SEARCH_GLOSSARY_TERMS_PARAM = "terms"
 MCP_SEARCH_CUSTOM_FIELDS_PARAM = "customFields"
 MCP_SEARCH_DATA_PRODUCTS_PARAM = "dataProducts"
+MCP_SEARCH_CLASSIFICATIONS_PARAM = "classifications"
 MCP_SEARCH_SERVER_TYPE_PARAM = "serverType"
 
 # connectionInfo.serverType values (OvalEdge connector types).
@@ -283,7 +284,10 @@ MCP_SERVER_TYPES_BY_LOWER: dict[str, str] = {v.lower(): v for v in MCP_SERVER_TY
 
 # ── MCP resource URI templates (FastMCP @resource) ───────────────
 MCP_RESOURCE_CATALOG_TABLE = "ovaledge://catalog/table/{object_id}"
+MCP_RESOURCE_CATALOG_FILE = "ovaledge://catalog/file/{object_id}"
 MCP_RESOURCE_GOVERNANCE_GLOSSARY_TERM = "ovaledge://governance/glossary-term/{object_id}"
+MCP_RESOURCE_GOVERNANCE_DATA_STORY = "ovaledge://governance/data-story/{object_id}"
+MCP_RESOURCE_GOVERNANCE_TAG = "ovaledge://governance/tag/{object_id}"
 
 # ── Static doc resources (markdown under server/docs/) ───────────
 DOCS_RESOURCE_URI_PREFIX = "docs://ovaledge"

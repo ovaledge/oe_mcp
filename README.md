@@ -28,14 +28,14 @@ Setup scripts (`scripts/setup_local_mcp.sh`, `scripts/setup_local_mcp.ps1`) crea
 ## What this server provides
 
 - Catalog search and asset details (`search_catalog_assets`, `catalog_asset_details`)
-- Column profile, entity relationships, lineage, metadata drift (`get_metadata_changes_between_crawls`)
+- Column profile, entity relationships, lineage, metadata drift (`metadata_changes_between_crawls`)
 - Glossary lookup, guided term creation (`create_glossary_term`), and tag lookups
 - Glossary and tag lookups; tag creation (`create_tag`) and other governed writes as exposed by the API
-- Native source-system grant previews (`get_source_system_access`)
+- Native source-system grant previews (`source_system_access`)
 - Platform documentation search and data story lookup
 - Asset description updates (`update_asset_descriptions`) and governance role updates (`update_governance_roles`)
 - Resource URIs (`ovaledge://...`)
-- Workflow prompts for common analyst tasks (see `server/prompts/workflows.py`)
+- Workflow prompts for common analyst tasks (see `server/prompts/workflows/`)
 
 Read and write tools both honor OvalEdge permissions — the MCP does not bypass RBAC.
 
@@ -44,21 +44,38 @@ Read and write tools both honor OvalEdge permissions — the MCP does not bypass
 ### Tools (`server/tools/`)
 
 - `search_catalog_assets`, `catalog_asset_details`, `column_profile_statistics`
-- `table_entity_relationships`, `asset_lineage`, `get_metadata_changes_between_crawls`
+- `table_entity_relationships`, `asset_lineage`, `metadata_changes_between_crawls`
 - `lookup_glossary_term`, `create_glossary_term`, `lookup_tags`, `create_tag`, `lookup_datastory`, `search_platform_docs`
-- `get_source_system_access` (Redshift / Snowflake / Tableau grant previews)
+- `source_system_access` (Redshift / Snowflake / Tableau grant previews)
 - `update_asset_descriptions`, `update_governance_roles`, `lookup_dq_rule`
 
-**`create_glossary_term` workflow:** (1) `term_name` → domain picker; (2) `term_name` + `domain_id` → category picker when categories exist under the domain (skip only after user says skip: `skip_category=true` + `category_skip_confirmed=true`); (3) if category chosen and subcategories exist → subcategory picker (optional, `skip_subcategory=true`); (4) create only with non-blank `description` (tool blocks create without it). Manual pickers: `search_on=oeglobaldomain|category|subcategory`.
+**`create_glossary_term` workflow:** (1) `term_name` → domain picker; (2) `term_name` + `domain_id` → category picker when categories exist (skip only after user says skip: `skip_category=true` + `category_skip_confirmed=true`); (3) subcategory picker when applicable; (4) non-blank `description` required; (5) `confirm_create` preview; (6) POST with `create_confirmed_by_user=true`. Manual pickers: `search_on=oeglobaldomain|category|subcategory`.
+
+**`create_tag` workflow:** OPEN or SECURE mode from create-options; master/parent pickers with user confirmation flags; `confirm_create` preview; POST with `create_confirmed_by_user=true`. See [server/docs/tags_guide.md](server/docs/tags_guide.md).
+
+**Data stories:** Prefer `lookup_datastory` (`content_query`) for organizational knowledge; use `organizational_knowledge` prompt. Not `search_platform_docs`. See [server/docs/data_stories.md](server/docs/data_stories.md).
+
+**Agent guides (static MCP doc resources):** [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md) (tools, resources, prompts index), [glossary_guide.md](server/docs/glossary_guide.md), [governance_model.md](server/docs/governance_model.md), [asset_types.md](server/docs/asset_types.md). Exposed as `docs://ovaledge/{name}` (e.g. `docs://ovaledge/mcp_workflows`).
 
 ### Resources (`server/resources/`)
 
-- `ovaledge://catalog/table/{object_id}`
-- `ovaledge://governance/glossary-term/{object_id}`
+- `ovaledge://catalog/table/{object_id}` — oetable catalog document
+- `ovaledge://catalog/file/{object_id}` — oefile catalog document
+- `ovaledge://governance/glossary-term/{object_id}` — glossary term
+- `ovaledge://governance/data-story/{object_id}` — data story (prefer `lookup_datastory` for narrative)
+- `ovaledge://governance/tag/{object_id}` — tag (prefer `lookup_tags` for hierarchy)
 
-### Prompts (`server/prompts/workflows.py`)
+Static product docs: `docs://ovaledge/...` (all `server/docs/*.md`, including `mcp_workflows`, `data_stories`, `tags_guide`).
 
-Data discovery, explain business term, trust assessment, explore domain, trace lineage, find related assets, platform help.
+### Prompts (`server/prompts/workflows/`)
+
+Sixteen workflow prompts (discovery, knowledge, lineage/quality, native access, governed writes). Full list: [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md#workflow-prompts).
+
+Discovery: `data_discovery`, `explore_data_domain`, `find_related_assets`.  
+Knowledge: `explain_business_term`, `organizational_knowledge`, `explain_tag`, `explain_dq_rule`, `platform_help`.  
+Lineage & quality: `trust_assessment`, `trace_data_lineage`, `metadata_drift`.  
+Access: `native_source_access`.  
+Writes (human-in-the-loop): `create_business_glossary_term`, `create_governance_tag`, `document_asset_descriptions`, `assign_governance_roles`.
 
 ## Development
 

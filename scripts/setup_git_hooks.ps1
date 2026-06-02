@@ -28,10 +28,14 @@ if (-not (Get-Command poetry -ErrorAction SilentlyContinue)) {
 Write-Host "==> Ensuring dev dependencies (pre-commit, pytest, ruff)..."
 poetry install --with dev --no-interaction
 
-Write-Host "==> Installing pre-commit hooks..."
+Write-Host "==> Installing pre-commit hooks (requires pre-commit >= 3.2)..."
+poetry run pre-commit --version
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 poetry run pre-commit install
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 poetry run pre-commit install --hook-type pre-push
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+poetry run pre-commit validate-config .pre-commit-config.yaml
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "==> Git hooks ready:"

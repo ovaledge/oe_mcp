@@ -23,6 +23,15 @@ OvalEdge is a data governance platform that helps organizations find, understand
 | **Curation score** | Measure of metadata completeness and governance hygiene for an asset or term. |
 | **DQ score** | Data quality score derived from rules and assessments. |
 
+## MCP agents
+
+This repository ships an MCP server that exposes catalog search, lineage, glossary, tags, **data stories**, platform docs, metadata drift, native access previews, and governed writes. Agents should use:
+
+- **`lookup_datastory`** for organization-specific narrative knowledge (not product docs)
+- **Workflow prompts** and **resources** documented in [mcp_workflows](mcp_workflows)
+
+Static guides in `server/docs/` are available to clients as `docs://ovaledge/{name}` resources.
+
 ## Bridge Client
 
 For on-premises or restricted networks, the **Bridge Client** connects OvalEdge Cloud to sources inside your perimeter so crawling, profiling, and lineage run where the data lives—without moving raw data to the cloud unnecessarily. Use it when direct cloud-to-source connectivity is not allowed.

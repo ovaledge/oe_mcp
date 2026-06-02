@@ -18,7 +18,7 @@ mangum = ">=0.17"
 tenacity = ">=8.2"
 
 [tool.poetry.group.dev.dependencies]
-pre-commit = "*"
+pre-commit = ">=3.2.0"
 pytest = "*"
 pytest-asyncio = "*"
 pytest-httpx = "*"

@@ -18,6 +18,7 @@ from server.constants import (
     MCP_PATH_UPDATE_GOVERNANCE_ROLES,
 )
 from server.tools import governance
+from server.tools.governance import helpers as governance_helpers
 from tests.conftest import MOCK_GLOSSARY_RESULT
 from tests.helpers import get_tool_fn
 
@@ -268,6 +269,22 @@ class TestCreateGlossaryTerm:
             },
         )
 
+    async def test_confirm_preview_blocks_post(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "create_glossary_term")
+        out = await fn(
+            term_name="TermX",
+            domain_id=12,
+            description="Business definition from the user.",
+            skip_category=True,
+            category_skip_confirmed=True,
+        )
+        assert out["workflowPhase"] == "confirm_create"
+        assert out.get("doNotCreate") is True
+        assert out.get("createConfirmedByUser") is False
+        mock_oe_client.post.assert_not_called()
+
     async def test_create_happy_path(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.post.return_value = {
             "ok": True,
@@ -281,6 +298,19 @@ class TestCreateGlossaryTerm:
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
         fn = await get_tool_fn(mcp, "create_glossary_term")
+        preview = await fn(
+            term_name="Revenue Recognition",
+            domain_id=12,
+            description="ASC 606 revenue recognition policy.",
+            category_id=55,
+            subcategory_id=88,
+            domain_name="Finance",
+            category_name="cost",
+            subcategory_name="money",
+        )
+        assert preview["workflowPhase"] == "confirm_create"
+        assert preview.get("doNotCreate") is True
+        mock_oe_client.post.assert_not_called()
         out = await fn(
             term_name="Revenue Recognition",
             domain_id=12,
@@ -290,6 +320,7 @@ class TestCreateGlossaryTerm:
             domain_name="Finance",
             category_name="cost",
             subcategory_name="money",
+            create_confirmed_by_user=True,
         )
         assert out["placementPath"] == "Finance > cost > money > Revenue Recognition"
         assert "navUrl" in out
@@ -330,6 +361,7 @@ class TestCreateGlossaryTerm:
             description="joyful description",
             skip_category=True,
             category_skip_confirmed=True,
+            create_confirmed_by_user=True,
         )
         assert out["termDetails"] == "#nav/glossary?browse=summary&id=2463"
         assert out["redirectUrl"].endswith("#nav/glossary?browse=summary&id=2463")
@@ -741,6 +773,7 @@ class TestCreateGlossaryTerm:
             description="desc",
             skip_category=True,
             category_skip_confirmed=True,
+            create_confirmed_by_user=True,
         )
         assert out["status_code"] == 409
 
@@ -804,19 +837,19 @@ class TestBuildUserSelectableMasters:
                 "parentTagChoices": [{"parentTagId": 99, "tagName": "child"}],
             },
         ]
-        masters = governance._build_user_selectable_masters(choices)
+        masters = governance_helpers._build_user_selectable_masters(choices)
         assert len(masters) == 3
         assert [m["masterTagId"] for m in masters] == [1, 2, 3]
-        text = governance._format_master_list_for_user(masters)
+        text = governance_helpers._format_master_list_for_user(masters)
         assert "3 accessible" in text
         assert "parentTagId=99" not in text
 
 
 @pytest.fixture(autouse=True)
 def _clear_parent_picker_pending() -> None:
-    governance._pending_parent_picker_expiry.clear()
+    governance_helpers._pending_parent_picker_expiry.clear()
     yield
-    governance._pending_parent_picker_expiry.clear()
+    governance_helpers._pending_parent_picker_expiry.clear()
 
 
 class TestCreateTag:
@@ -848,14 +881,18 @@ class TestCreateTag:
                 "fullQualifiedName": "Governance > Confidential",
             },
         }
+        secure_gets = [
+            secure_opts,
+            secure_opts,
+            parent_opts,
+            secure_opts,
+            secure_opts,
+            parent_opts,
+            parent_opts,
+        ]
         mock_oe_client.get.side_effect = [
-            secure_opts,
-            secure_opts,
-            parent_opts,
-            secure_opts,
-            secure_opts,
-            parent_opts,
-            parent_opts,
+            *secure_gets,
+            *secure_gets,
             tag_lookup,
         ]
         mcp = FastMCP(name="test", version="0.0.1")
@@ -868,6 +905,17 @@ class TestCreateTag:
             master_tag_id_confirmed_by_user=True,
         )
         assert parent_step.get("selectionPhase") == "PARENT_OPTIONAL"
+        confirm = await fn(
+            tag_name="Confidential",
+            description="<p>secret</p>",
+            master_tag_id=10,
+            master_tag_id_confirmed_by_user=True,
+            parent_tag_id=20,
+            parent_tag_id_confirmed_by_user=True,
+            parent_step_completed_by_user=True,
+        )
+        assert confirm["workflowPhase"] == "confirm_create"
+        mock_oe_client.post.assert_not_called()
         out = await fn(
             tag_name="Confidential",
             description="<p>secret</p>",
@@ -876,6 +924,7 @@ class TestCreateTag:
             parent_tag_id=20,
             parent_tag_id_confirmed_by_user=True,
             parent_step_completed_by_user=True,
+            create_confirmed_by_user=True,
         )
         assert out["ok"] is True
         mock_oe_client.post.assert_called_once_with(
@@ -927,10 +976,14 @@ class TestCreateTag:
                 "parentTagChoices": [{"parentTagId": 1, "tagName": "Root"}],
             },
         }
-        mock_oe_client.get.side_effect = [
+        ranchi_gets = [
             {"ok": True, "data": {"tagSecurityMode": "open"}},
             open_create_opts,
             {"ok": True, "data": {"tagSecurityMode": "open"}},
+        ]
+        mock_oe_client.get.side_effect = [
+            *ranchi_gets,
+            *ranchi_gets,
             OvalEdgeError(404, "Not found"),
         ]
         mcp = FastMCP(name="test", version="0.0.0")
@@ -938,10 +991,16 @@ class TestCreateTag:
         fn = await get_tool_fn(mcp, "create_tag")
         step1 = await fn(tag_name="Ranchi")
         assert step1.get("selectionPhase") == "PARENT_OPTIONAL"
+        await fn(
+            tag_name="Ranchi",
+            create_directly_under_master=True,
+            parent_step_completed_by_user=True,
+        )
         out = await fn(
             tag_name="Ranchi",
             create_directly_under_master=True,
             parent_step_completed_by_user=True,
+            create_confirmed_by_user=True,
         )
         assert out["ok"] is True
         assert out["navLink"].endswith(
@@ -956,21 +1015,27 @@ class TestCreateTag:
             "data": {"tagId": 5, "tagName": "PII"},
         }
         open_opts = {"ok": True, "data": {"tagSecurityMode": "open", "parentTagChoices": []}}
-        mock_oe_client.get.side_effect = [
-            open_opts,
-            open_opts,
-            open_opts,
-            open_opts,
-            OvalEdgeError(404, "Not found"),
-        ]
+
+        async def open_get(path: str, **kwargs: object) -> dict[str, object]:
+            if path == MCP_PATH_TAGS:
+                raise OvalEdgeError(404, "Not found")
+            return open_opts
+
+        mock_oe_client.get.side_effect = open_get
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
         fn = await get_tool_fn(mcp, "create_tag")
         await fn(tag_name="PII")
+        await fn(
+            tag_name="PII",
+            create_directly_under_master=True,
+            parent_step_completed_by_user=True,
+        )
         out = await fn(
             tag_name="PII",
             create_directly_under_master=True,
             parent_step_completed_by_user=True,
+            create_confirmed_by_user=True,
         )
         assert out["ok"] is True
         assert "#nav/tag?id=5" in out["data"]["navLink"]
@@ -987,15 +1052,30 @@ class TestCreateTag:
     async def test_create_api_error(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.post.side_effect = OvalEdgeError(400, "Cannot add")
         open_opts = {"ok": True, "data": {"tagSecurityMode": "open", "parentTagChoices": []}}
-        mock_oe_client.get.side_effect = [open_opts, open_opts, open_opts, open_opts]
+        mock_oe_client.get.side_effect = [
+            open_opts,
+            open_opts,
+            open_opts,
+            open_opts,
+            open_opts,
+            open_opts,
+            open_opts,
+            open_opts,
+        ]
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
         fn = await get_tool_fn(mcp, "create_tag")
         await fn(tag_name="x")
+        await fn(
+            tag_name="x",
+            create_directly_under_master=True,
+            parent_step_completed_by_user=True,
+        )
         out = await fn(
             tag_name="x",
             create_directly_under_master=True,
             parent_step_completed_by_user=True,
+            create_confirmed_by_user=True,
         )
         assert out["status_code"] == 400
 
@@ -1167,10 +1247,14 @@ class TestCreateTag:
                 "parentTagChoices": [{"parentTagId": 1, "tagName": "Root"}],
             },
         }
-        mock_oe_client.get.side_effect = [
+        open_step_gets = [
             {"ok": True, "data": {"tagSecurityMode": "open"}},
             open_create_opts,
             {"ok": True, "data": {"tagSecurityMode": "open"}},
+        ]
+        mock_oe_client.get.side_effect = [
+            *open_step_gets,
+            *open_step_gets,
             OvalEdgeError(404, "Not found"),
         ]
         mcp = FastMCP(name="test", version="0.0.1")
@@ -1180,10 +1264,16 @@ class TestCreateTag:
         assert step1.get("selectionPhase") == "PARENT_OPTIONAL"
         assert step1.get("userSelectableParents")
         mock_oe_client.post.assert_not_called()
+        await fn(
+            tag_name="SkipTest",
+            create_directly_under_master=True,
+            parent_step_completed_by_user=True,
+        )
         out = await fn(
             tag_name="SkipTest",
             create_directly_under_master=True,
             parent_step_completed_by_user=True,
+            create_confirmed_by_user=True,
         )
         assert out["ok"] is True
         mock_oe_client.post.assert_called_once()
@@ -1208,23 +1298,28 @@ class TestCreateTag:
                 "parentTagChoices": [{"parentTagId": 1055, "tagName": "AssociateTag"}],
             },
         }
+        open_parent_gets = [open_opts, open_opts, open_opts, open_opts, open_opts]
         mock_oe_client.get.side_effect = [
-            open_opts,
-            open_opts,
-            open_opts,
-            open_opts,
-            open_opts,
+            *open_parent_gets,
+            *open_parent_gets,
             OvalEdgeError(404, "Not found"),
         ]
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
         fn = await get_tool_fn(mcp, "create_tag")
         await fn(tag_name="Child")
+        await fn(
+            tag_name="Child",
+            parent_tag_id=1055,
+            parent_tag_id_confirmed_by_user=True,
+            parent_step_completed_by_user=True,
+        )
         out = await fn(
             tag_name="Child",
             parent_tag_id=1055,
             parent_tag_id_confirmed_by_user=True,
             parent_step_completed_by_user=True,
+            create_confirmed_by_user=True,
         )
         assert out["ok"] is True
         body = mock_oe_client.post.call_args.kwargs.get("body") or {}
@@ -1283,6 +1378,31 @@ class TestCreateTag:
         mock_oe_client.post.assert_not_called()
         mock_oe_client.get.assert_any_call(MCP_PATH_TAGS_CREATE_OPTIONS)
 
+    async def test_open_mode_confirm_preview_blocks_post(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        open_opts = {
+            "ok": True,
+            "data": {
+                "tagSecurityMode": "open",
+                "parentTagChoices": [{"parentTagId": 1, "tagName": "Root"}],
+            },
+        }
+        mock_oe_client.get.side_effect = [open_opts, open_opts, open_opts, open_opts]
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "create_tag")
+        await fn(tag_name="Logistics")
+        preview = await fn(
+            tag_name="Logistics",
+            create_directly_under_master=True,
+            parent_step_completed_by_user=True,
+        )
+        assert preview["workflowPhase"] == "confirm_create"
+        assert preview.get("doNotCreateTag") is True
+        assert preview.get("createConfirmedByUser") is False
+        mock_oe_client.post.assert_not_called()
+
     async def test_open_mode_create_without_parent(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.post.return_value = {
             "ok": True,
@@ -1295,20 +1415,26 @@ class TestCreateTag:
                 "parentTagChoices": [{"parentTagId": 1, "tagName": "Root"}],
             },
         }
+        open_child_gets = [open_opts, open_opts, open_opts]
         mock_oe_client.get.side_effect = [
-            open_opts,
-            open_opts,
-            open_opts,
+            *open_child_gets,
+            *open_child_gets,
             OvalEdgeError(404, "Not found"),
         ]
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
         fn = await get_tool_fn(mcp, "create_tag")
         await fn(tag_name="OpenChild")
+        await fn(
+            tag_name="OpenChild",
+            create_directly_under_master=True,
+            parent_step_completed_by_user=True,
+        )
         out = await fn(
             tag_name="OpenChild",
             create_directly_under_master=True,
             parent_step_completed_by_user=True,
+            create_confirmed_by_user=True,
         )
         assert out["ok"] is True
         mock_oe_client.post.assert_called_once()
@@ -1345,16 +1471,14 @@ class TestCreateTag:
                 ],
             },
         }
-        mock_oe_client.get.side_effect = [
-            secure_opts,
-            secure_opts,
-            parent_opts,
-            secure_opts,
-            secure_opts,
-            parent_opts,
-            parent_opts,
-            {"ok": True, "data": {"objectId": 50, "objectName": "Pouse"}},
-        ]
+        async def secure_get(path: str, **kwargs: object) -> dict[str, object]:
+            if path == MCP_PATH_TAGS_PARENT_OPTIONS:
+                return parent_opts
+            if path == MCP_PATH_TAGS:
+                return {"ok": True, "data": {"objectId": 50, "objectName": "Pouse"}}
+            return secure_opts
+
+        mock_oe_client.get.side_effect = secure_get
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
         fn = await get_tool_fn(mcp, "create_tag")
@@ -1363,6 +1487,14 @@ class TestCreateTag:
             master_tag_id=1031,
             master_tag_id_confirmed_by_user=True,
         )
+        await fn(
+            tag_name="Pouse",
+            master_tag_id=1031,
+            master_tag_id_confirmed_by_user=True,
+            parent_tag_id=1042,
+            parent_tag_id_confirmed_by_user=True,
+            parent_step_completed_by_user=True,
+        )
         out = await fn(
             tag_name="Pouse",
             master_tag_id=1031,
@@ -1370,6 +1502,7 @@ class TestCreateTag:
             parent_tag_id=1042,
             parent_tag_id_confirmed_by_user=True,
             parent_step_completed_by_user=True,
+            create_confirmed_by_user=True,
         )
         assert out["ok"] is True
         body = mock_oe_client.post.call_args.kwargs.get("body") or {}
@@ -1425,7 +1558,7 @@ class TestCreateTag:
 
 class TestTagAutoDescription:
     def test_build_auto_description_with_hierarchy(self) -> None:
-        desc = governance._build_auto_tag_description(
+        desc = governance_helpers._build_auto_tag_description(
             "Pouse",
             master_tag_name="Investment Services",
             parent_tag_name="Savings Accounts",
@@ -1437,7 +1570,7 @@ class TestTagAutoDescription:
 
     def test_explicit_description_wins(self) -> None:
         assert (
-            governance._resolve_create_tag_description(
+            governance_helpers._resolve_create_tag_description(
                 "Pouse",
                 "<p>custom</p>",
                 master_tag_name="Investment Services",
@@ -1450,7 +1583,7 @@ class TestTagAutoDescription:
 
         monkeypatch.setattr(settings, "ovaledge_tag_auto_description", False)
         assert (
-            governance._resolve_create_tag_description("Pouse", None) is None
+            governance_helpers._resolve_create_tag_description("Pouse", None) is None
         )
 
 

@@ -1,4 +1,4 @@
-# Live integration tests — `get_source_system_access`
+# Live integration tests — `source_system_access`
 
 ## Prerequisites
 

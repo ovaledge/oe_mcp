@@ -3,11 +3,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from server.config import settings
-from server.docs import register as register_docs
-from server.prompts import workflows
-from server.resources import catalog as catalog_res
-from server.resources import governance as governance_res
-from server.tools import catalog, data_access_management, docs, governance
+from server.mcp import register_all
 
 
 def create_mcp(lifespan: Any = None) -> FastMCP:
@@ -36,10 +32,23 @@ def create_mcp(lifespan: Any = None) -> FastMCP:
             "metadata drift), governance lookups (glossary, tags, data stories), "
             "source-system access previews, and governed write operations where the "
             "API allows (e.g. create_tag, update_asset_descriptions, update_governance_roles). "
+            "Organizational knowledge (policies, playbooks, onboarding narratives, domain "
+            "context documented in OvalEdge data stories): call lookup_datastory first — "
+            "usually content_query set to the user's question; add story_zone_name or "
+            "story_name when they name a zone or title. Present formattedResponse and lead "
+            "with storyCitation verbatim. Do not answer from model memory when a story may "
+            "exist. Use search_platform_docs only for OvalEdge product how-to (features, UI, "
+            "configuration), not for org-specific story content. Use search_catalog_assets "
+            "for physical datasets; when hits include oestory, follow with lookup_datastory. "
             "For native Redshift/Snowflake/Tableau grants (not OvalEdge catalog ACLs), "
-            "use get_source_system_access. "
-            "Use resources for deep links: catalog tables and glossary terms by id. "
-            "Use prompts to run pre-packaged governance workflows. "
+            "use source_system_access. "
+            "Use resources for deep links when you already have object ids: "
+            "ovaledge://catalog/table/{id}, ovaledge://catalog/file/{id}, "
+            "ovaledge://governance/glossary-term/{id}, "
+            "ovaledge://governance/data-story/{id}, ovaledge://governance/tag/{id}. "
+            "Prefer lookup_datastory / lookup_tags for rich formattedResponse. "
+            "Use prompts to run pre-packaged governance workflows (discovery, lineage, "
+            "stories, tags, metadata drift, native access, creates, DQ, role updates). "
             "Every response includes full governance context where the API provides it. "
             "RBAC is enforced by OvalEdge — users see only what they are entitled to; "
             "write tools require appropriate OvalEdge permissions."
@@ -47,18 +56,7 @@ def create_mcp(lifespan: Any = None) -> FastMCP:
         lifespan=lifespan,
     )
 
-    catalog.register(mcp)
-    data_access_management.register(mcp)
-    governance.register(mcp)
-    docs.register(mcp)
-
-    catalog_res.register(mcp)
-    governance_res.register(mcp)
-
-    workflows.register(mcp)
-
-    register_docs(mcp)
-
+    register_all(mcp)
     return mcp
 
 

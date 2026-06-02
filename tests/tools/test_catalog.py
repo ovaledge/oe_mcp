@@ -11,6 +11,7 @@ from server.constants import (
     MCP_PATH_METADATA_CHANGES_BETWEEN_CRAWLS,
     MCP_PATH_SEARCH_CATALOG,
     MCP_PATH_UPDATE_ASSET_DESCRIPTIONS,
+    MCP_SEARCH_CLASSIFICATIONS_PARAM,
     MCP_SEARCH_CONTEXT_QUERY_PARAM,
     MCP_SEARCH_CUSTOM_FIELDS_PARAM,
     MCP_SEARCH_DATA_PRODUCTS_PARAM,
@@ -76,6 +77,7 @@ class TestSearchCatalogAssets:
             terms=["Revenue"],
             custom_fields=["Confidential"],
             data_products=["Customer 360"],
+            classifications=["PII", "Financial"],
             context_query="Find assets with Operations tag and Revenue term",
         )
         params = mock_oe_client.get.call_args[1]["params"]
@@ -83,8 +85,18 @@ class TestSearchCatalogAssets:
         assert json.loads(params[MCP_SEARCH_GLOSSARY_TERMS_PARAM]) == ["Revenue"]
         assert json.loads(params[MCP_SEARCH_CUSTOM_FIELDS_PARAM]) == ["Confidential"]
         assert json.loads(params[MCP_SEARCH_DATA_PRODUCTS_PARAM]) == ["Customer 360"]
+        assert json.loads(params[MCP_SEARCH_CLASSIFICATIONS_PARAM]) == ["PII", "Financial"]
         assert params[MCP_SEARCH_CONTEXT_QUERY_PARAM].startswith("Find assets")
         assert MCP_SEARCH_TERMS_PARAM not in params
+
+    async def test_omits_classifications_when_empty(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        await tool_fn(classifications=[], limit=10)
+        params = mock_oe_client.get.call_args[1]["params"]
+        assert MCP_SEARCH_CLASSIFICATIONS_PARAM not in params
 
     async def test_filters_forwarded(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
@@ -473,7 +485,7 @@ class TestMetadataChangesBetweenCrawls:
         mock_oe_client.post.return_value = {"ok": True, "data": {"changeSummary": "x"}}
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
-        fn = await get_tool_fn(mcp, "get_metadata_changes_between_crawls")
+        fn = await get_tool_fn(mcp, "metadata_changes_between_crawls")
         out = await fn(
             question="What changed in CUSTOMER schema after the latest crawl?",
             connection_name="Snowflake PROD",
@@ -500,7 +512,7 @@ class TestMetadataChangesBetweenCrawls:
     async def test_rejects_days_and_weeks_together(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
-        fn = await get_tool_fn(mcp, "get_metadata_changes_between_crawls")
+        fn = await get_tool_fn(mcp, "metadata_changes_between_crawls")
         out = await fn(last_n_days=1, last_n_weeks=1)
         assert out["status_code"] == 400
         mock_oe_client.post.assert_not_called()
@@ -508,7 +520,7 @@ class TestMetadataChangesBetweenCrawls:
     async def test_rejects_invalid_crawl_range(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
-        fn = await get_tool_fn(mcp, "get_metadata_changes_between_crawls")
+        fn = await get_tool_fn(mcp, "metadata_changes_between_crawls")
         out = await fn(from_crawl_id=10, to_crawl_id=9)
         assert out["status_code"] == 400
         mock_oe_client.post.assert_not_called()
@@ -517,6 +529,6 @@ class TestMetadataChangesBetweenCrawls:
         mock_oe_client.post.side_effect = OvalEdgeError(500, "Internal error")
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
-        fn = await get_tool_fn(mcp, "get_metadata_changes_between_crawls")
+        fn = await get_tool_fn(mcp, "metadata_changes_between_crawls")
         out = await fn(question="Show drift")
         assert out["status_code"] == 500

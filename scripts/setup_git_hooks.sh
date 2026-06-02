@@ -24,9 +24,11 @@ command -v poetry >/dev/null 2>&1 || die "poetry not on PATH; run scripts/setup_
 echo "==> Ensuring dev dependencies (pre-commit, pytest, ruff)..."
 poetry install --with dev --no-interaction
 
-echo "==> Installing pre-commit hooks..."
+echo "==> Installing pre-commit hooks (requires pre-commit >= 3.2)..."
+poetry run pre-commit --version
 poetry run pre-commit install
 poetry run pre-commit install --hook-type pre-push
+poetry run pre-commit validate-config .pre-commit-config.yaml
 
 echo "==> Git hooks ready:"
 echo "    git commit → ruff check + pytest (tests/)"

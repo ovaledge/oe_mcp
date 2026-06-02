@@ -61,18 +61,20 @@ class TestGetLinkBaseUrl:
         from server.config import Settings
 
         monkeypatch.setattr(
-            "server.nav_links.settings",
-            Settings(ovaledge_base_url="http://127.0.0.1:8080/ovaledge"),
+            "server.nav_links.get_settings",
+            lambda: Settings(ovaledge_base_url="http://127.0.0.1:8080/ovaledge"),
         )
         assert get_link_base_url() == "http://localhost:8080/ovaledge"
 
     def test_link_base_override_for_pod(self, monkeypatch) -> None:
-        monkeypatch.setenv(
-            "OVALEDGE_LINK_BASE_URL",
-            "https://my-pod.example.com/ovaledge",
-        )
-        monkeypatch.setenv(
-            "OVALEDGE_BASE_URL", "http://127.0.0.1:8080/ovaledge"
+        from server.config import Settings
+
+        monkeypatch.setattr(
+            "server.nav_links.get_settings",
+            lambda: Settings(
+                ovaledge_base_url="http://127.0.0.1:8080/ovaledge",
+                ovaledge_link_base_url="https://my-pod.example.com/ovaledge",
+            ),
         )
         assert get_link_base_url() == "https://my-pod.example.com/ovaledge"
 
