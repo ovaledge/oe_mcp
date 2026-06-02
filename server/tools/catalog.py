@@ -21,7 +21,14 @@ from server.constants import (
     MCP_PATH_OBJECT_DETAILS,
     MCP_PATH_SEARCH_CATALOG,
     MCP_SEARCH_CONTEXT_QUERY_PARAM,
+    MCP_SEARCH_CUSTOM_FIELDS_PARAM,
+    MCP_SEARCH_DATA_PRODUCTS_PARAM,
+    MCP_SEARCH_GLOSSARY_TERMS_PARAM,
+    MCP_SEARCH_SERVER_TYPE_PARAM,
+    MCP_SEARCH_TAGS_PARAM,
     MCP_SEARCH_TERMS_PARAM,
+    MCP_SERVER_TYPES,
+    MCP_SERVER_TYPES_BY_LOWER,
 )
 
 _TABLE_FILE_TYPES = frozenset({"oetable", "oefile"})
@@ -30,17 +37,41 @@ _DESC_SEARCH = (
     "Search the OvalEdge catalog (Elasticsearch hybrid / keyword search plus optional "
     "server-side vector context). Use for discovery: schemas, tables, columns, files, charts, "
     "APIs, queries, data products, glossary, tags, and stories.\n\n"
-    f"Backend: GET {MCP_PATH_SEARCH_CATALOG}\n"
-    f"Query params include {MCP_SEARCH_TERMS_PARAM} as a URL-encoded JSON array of strings, "
-    "page, limit, filters, objectType, and optionally "
-    f"{MCP_SEARCH_CONTEXT_QUERY_PARAM} (full user question for embedding / semantic ranking).\n\n"
-    "Pass search_terms as a JSON array of distinct keywords or short phrases (e.g. "
-    '["customer","revenue","churn"]). Omit or use [] for filter-only paging.\n\n'
-    "Always pass context_query with the user's verbatim question when they asked in natural "
-    "language — alongside search_terms.\n\n"
+    f"Backend: GET {MCP_PATH_SEARCH_CATALOG}\n\n"
+    "Infer parameters from the user's question before calling:\n"
+    "- **Lexical dimensions** (tool args are list[str]; wire as JSON array strings): "
+    f"{MCP_SEARCH_TERMS_PARAM}, {MCP_SEARCH_TAGS_PARAM}, {MCP_SEARCH_GLOSSARY_TERMS_PARAM}, "
+    f"{MCP_SEARCH_CUSTOM_FIELDS_PARAM}, {MCP_SEARCH_DATA_PRODUCTS_PARAM}.\n"
+    "- **Exact filters** (tool args are str; narrow results, not full-text search): "
+    "connection_name, schema_name, server_type (connectionInfo.serverType), "
+    "owner, steward, custodian, object_type.\n"
+    "- **server_type**: Infer from the user question when they name a technology "
+    f"(e.g. MySQL → mysql, Snowflake → snowflake, Tableau → tableau). Maps to API "
+    f"{MCP_SEARCH_SERVER_TYPE_PARAM}. Omit when the question does not imply a "
+    "connector type — do not guess.\n"
+    f"- **Semantic ranking**: {MCP_SEARCH_CONTEXT_QUERY_PARAM} — pass the user's verbatim "
+    "question whenever they asked in natural language.\n\n"
+    "When the user asks for assets **with / tagged by / assigned** a governance tag, prefer "
+    f"tags=[\"<tag name>\"] (not search_terms alone). When they ask for assets linked to a "
+    f"glossary term, prefer {MCP_SEARCH_GLOSSARY_TERMS_PARAM}=[\"<term>\"]. Use search_terms "
+    "for general keywords in names/descriptions.\n\n"
+    "Examples:\n"
+    '1) "Find all assets with the Operations tag" → '
+    'tags=["Operations"], context_query=<verbatim question>.\n'
+    '2) "Certified tables in sakila schema" → '
+    'object_type="oetable", schema_name="sakila", search_terms=["certified"] (if needed).\n'
+    '3) "Customer tables owned by rohit.anand" → '
+    'search_terms=["customer"], object_type="oetable", owner="rohit.anand@ovaledge.com".\n'
+    '3b) "Find all assets related to MySQL databases" → '
+    'server_type="mysql", context_query=<verbatim question>.\n'
+    '4) "Data products related to revenue" → '
+    'data_products=["revenue"], context_query=<verbatim question>.\n'
+    '5) "Assets with Primary Business Function Operations" → '
+    'custom_fields=["Operations"] or search_terms as fallback.\n\n'
+    "Omit empty lists; filter-only search is valid (no lexical arrays). "
     "object_type must be one of: "
     + MCP_CATALOG_OBJECT_TYPES_DOC
-    + " — or omit to search all."
+    + " — or omit for all types."
 )
 _DESC_DETAILS = (
     "Fetch one catalog document (JSON from Elasticsearch; embeddings removed). "
@@ -91,6 +122,40 @@ def _normalize_search_terms(terms: list[str] | None) -> list[str] | None:
         return None
     out = [t.strip() for t in terms if t and str(t).strip()]
     return out or None
+
+
+def _resolve_server_type(raw: str | None) -> str | None:
+    """Return canonical serverType for API, or None when unset (no filter)."""
+    if raw is None:
+        return None
+    value = str(raw).strip()
+    if not value:
+        return None
+    if value in MCP_SERVER_TYPES:
+        return value
+    return MCP_SERVER_TYPES_BY_LOWER.get(value.lower())
+
+
+def _apply_lexical_search_params(
+    params: dict[str, object],
+    *,
+    search_terms: list[str] | None = None,
+    tags: list[str] | None = None,
+    terms: list[str] | None = None,
+    custom_fields: list[str] | None = None,
+    data_products: list[str] | None = None,
+) -> None:
+    """Map MCP list args to API query params (each a JSON array string)."""
+    for api_key, values in (
+        (MCP_SEARCH_TERMS_PARAM, search_terms),
+        (MCP_SEARCH_TAGS_PARAM, tags),
+        (MCP_SEARCH_GLOSSARY_TERMS_PARAM, terms),
+        (MCP_SEARCH_CUSTOM_FIELDS_PARAM, custom_fields),
+        (MCP_SEARCH_DATA_PRODUCTS_PARAM, data_products),
+    ):
+        normalized = _normalize_search_terms(values)
+        if normalized is not None:
+            params[api_key] = json.dumps(normalized, ensure_ascii=False)
 
 
 def _build_metadata_links(
@@ -423,9 +488,55 @@ def register(mcp: FastMCP) -> None:
             list[str] | None,
             Field(
                 description=(
-                    "Distinct keywords for lexical search; tool argument is a JSON array. "
-                    f"On the wire: one query param {MCP_SEARCH_TERMS_PARAM} with a JSON array "
-                    'string value, e.g. ["payroll","employee"]. Omit or [] for filters only.'
+                    "General lexical keywords (names, descriptions, metadata text). JSON array "
+                    f"on the wire as {MCP_SEARCH_TERMS_PARAM}. "
+                    'e.g. ["customer","revenue"]. Not for governance tag names — use tags instead.'
+                ),
+                default=None,
+            ),
+        ] = None,
+        tags: Annotated[
+            list[str] | None,
+            Field(
+                description=(
+                    "Governance tag names to match (OETAG assignments). JSON array on the wire "
+                    f"as {MCP_SEARCH_TAGS_PARAM}. "
+                    'Use when the user asks for assets "with tag X" or "tagged X". '
+                    'e.g. ["Operations","PII"].'
+                ),
+                default=None,
+            ),
+        ] = None,
+        terms: Annotated[
+            list[str] | None,
+            Field(
+                description=(
+                    "Glossary term names for lexical search. JSON array on the wire as "
+                    f"{MCP_SEARCH_GLOSSARY_TERMS_PARAM}. "
+                    'Use when the user asks for assets linked to glossary/business terms. '
+                    'e.g. ["Revenue","Customer"].'
+                ),
+                default=None,
+            ),
+        ] = None,
+        custom_fields: Annotated[
+            list[str] | None,
+            Field(
+                description=(
+                    "Custom field values or labels to match. JSON array on the wire as "
+                    f"{MCP_SEARCH_CUSTOM_FIELDS_PARAM}. "
+                    'e.g. ["Confidential","Operations"].'
+                ),
+                default=None,
+            ),
+        ] = None,
+        data_products: Annotated[
+            list[str] | None,
+            Field(
+                description=(
+                    "Data product names/keywords. JSON array on the wire as "
+                    f"{MCP_SEARCH_DATA_PRODUCTS_PARAM}. "
+                    'e.g. ["Customer 360"].'
                 ),
                 default=None,
             ),
@@ -436,7 +547,7 @@ def register(mcp: FastMCP) -> None:
                 description=(
                     "Full user question or contextual NL string for the server (maps to "
                     f"API {MCP_SEARCH_CONTEXT_QUERY_PARAM}). Use for vector / semantic search "
-                    "or hybrid ranking alongside search_terms. Prefer verbatim user wording."
+                    "or hybrid ranking alongside lexical params. Prefer verbatim user wording."
                 ),
                 default=None,
             ),
@@ -452,33 +563,74 @@ def register(mcp: FastMCP) -> None:
         connection_name: Annotated[
             str | None,
             Field(
-                description="Filter by data connection name (API: connectionName).",
+                description=(
+                    "Filter: exact connection name (API connectionName). "
+                    'Infer when user names a source, e.g. "ovaledgedb" or "Snowflake PROD".'
+                ),
+                default=None,
+            ),
+        ] = None,
+        server_type: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Filter: connection technology (API serverType → connectionInfo.serverType). "
+                    "Use a canonical connector id when the user names a platform, e.g. mysql, "
+                    "snowflake, postgres, redshift, bigquery, tableau, oracle, sqlserver. "
+                    "Omit when the question does not clearly imply one connector — do not guess. "
+                    "Case-insensitive match to the platform allowlist."
+                ),
                 default=None,
             ),
         ] = None,
         schema_name: Annotated[
             str | None,
-            Field(description="Filter by schema name (API: schemaName).", default=None),
+            Field(
+                description=(
+                    "Filter: exact schema name (API schemaName). "
+                    'Infer when user names a schema/database context, e.g. "sakila".'
+                ),
+                default=None,
+            ),
         ] = None,
         owner: Annotated[
             str | None,
-            Field(description="Filter by asset owner login/name.", default=None),
+            Field(
+                description=(
+                    "Filter: asset owner login or display name (API owner). "
+                    "Infer when user asks for assets owned by someone."
+                ),
+                default=None,
+            ),
         ] = None,
         steward: Annotated[
             str | None,
-            Field(description="Filter by steward login/name.", default=None),
+            Field(
+                description=(
+                    "Filter: steward login or display name (API steward). "
+                    "Infer when user asks for stewarded assets."
+                ),
+                default=None,
+            ),
         ] = None,
         custodian: Annotated[
             str | None,
-            Field(description="Filter by custodian login/name.", default=None),
+            Field(
+                description=(
+                    "Filter: custodian login or display name (API custodian). "
+                    "Infer when user asks for custodian-assigned assets."
+                ),
+                default=None,
+            ),
         ] = None,
         object_type: Annotated[
             str | None,
             Field(
                 description=(
-                    "Restrict to one catalog object type: "
+                    "Filter: restrict to one catalog object type (API objectType): "
                     + MCP_CATALOG_OBJECT_TYPES_DOC
-                    + ". Omit for all types."
+                    + '. Infer when user asks for "tables", "reports/charts", "tags", etc. '
+                    "(e.g. tables → oetable, reports → oechart). Omit for all types."
                 ),
                 default=None,
             ),
@@ -493,21 +645,36 @@ def register(mcp: FastMCP) -> None:
                 ),
                 "status_code": 400,
             }
+        resolved_server_type = _resolve_server_type(server_type)
+        if server_type is not None and str(server_type).strip() and resolved_server_type is None:
+            return {
+                "error": (
+                    f"server_type must be a known connector type, got {server_type!r}. "
+                    "Omit server_type when the user question does not specify a platform."
+                ),
+                "status_code": 400,
+            }
         try:
-            terms = _normalize_search_terms(search_terms)
             params: dict[str, object] = _q(
                 **{MCP_SEARCH_CONTEXT_QUERY_PARAM: context_query},
                 page=max(page, 1),
                 limit=min(max(limit, 1), 100),
                 connectionName=connection_name,
+                **{MCP_SEARCH_SERVER_TYPE_PARAM: resolved_server_type},
                 schemaName=schema_name,
                 owner=owner,
                 steward=steward,
                 custodian=custodian,
                 objectType=object_type,
             )
-            if terms is not None:
-                params[MCP_SEARCH_TERMS_PARAM] = json.dumps(terms, ensure_ascii=False)
+            _apply_lexical_search_params(
+                params,
+                search_terms=search_terms,
+                tags=tags,
+                terms=terms,
+                custom_fields=custom_fields,
+                data_products=data_products,
+            )
             async with OvalEdgeClient() as client:
                 return await client.get(MCP_PATH_SEARCH_CATALOG, params=params)
         except OvalEdgeError as e:

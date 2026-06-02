@@ -30,5 +30,5 @@ poetry run pytest -c tests/integration/pytest.ini tests/integration -m integrati
 Unit tests (mocked) still run via:
 
 ```bash
-poetry run pytest tests/tools/test_data_access_management.py -q --no-cov -o addopts=
+poetry run pytest tests/tools/test_data_access_management.py -q
 ```

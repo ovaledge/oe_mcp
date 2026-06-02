@@ -11,6 +11,11 @@ from server.constants import (
     MCP_PATH_METADATA_CHANGES_BETWEEN_CRAWLS,
     MCP_PATH_SEARCH_CATALOG,
     MCP_SEARCH_CONTEXT_QUERY_PARAM,
+    MCP_SEARCH_CUSTOM_FIELDS_PARAM,
+    MCP_SEARCH_DATA_PRODUCTS_PARAM,
+    MCP_SEARCH_GLOSSARY_TERMS_PARAM,
+    MCP_SEARCH_SERVER_TYPE_PARAM,
+    MCP_SEARCH_TAGS_PARAM,
     MCP_SEARCH_TERMS_PARAM,
 )
 from server.tools import catalog
@@ -57,6 +62,87 @@ class TestSearchCatalogAssets:
         await tool_fn(search_terms=[], limit=10)
         params = mock_oe_client.get.call_args[1]["params"]
         assert MCP_SEARCH_TERMS_PARAM not in params
+
+    async def test_lexical_arrays_tags_terms_custom_fields_data_products(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        await tool_fn(
+            tags=["Operations"],
+            terms=["Revenue"],
+            custom_fields=["Confidential"],
+            data_products=["Customer 360"],
+            context_query="Find assets with Operations tag and Revenue term",
+        )
+        params = mock_oe_client.get.call_args[1]["params"]
+        assert json.loads(params[MCP_SEARCH_TAGS_PARAM]) == ["Operations"]
+        assert json.loads(params[MCP_SEARCH_GLOSSARY_TERMS_PARAM]) == ["Revenue"]
+        assert json.loads(params[MCP_SEARCH_CUSTOM_FIELDS_PARAM]) == ["Confidential"]
+        assert json.loads(params[MCP_SEARCH_DATA_PRODUCTS_PARAM]) == ["Customer 360"]
+        assert params[MCP_SEARCH_CONTEXT_QUERY_PARAM].startswith("Find assets")
+        assert MCP_SEARCH_TERMS_PARAM not in params
+
+    async def test_filters_forwarded(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        await tool_fn(
+            schema_name="sakila",
+            connection_name="ovaledgedb",
+            owner="admin",
+            steward="steward@example.com",
+            custodian="custodian@example.com",
+        )
+        params = mock_oe_client.get.call_args[1]["params"]
+        assert params["schemaName"] == "sakila"
+        assert params["connectionName"] == "ovaledgedb"
+        assert params["owner"] == "admin"
+        assert params["steward"] == "steward@example.com"
+        assert params["custodian"] == "custodian@example.com"
+
+    async def test_server_type_forwarded(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        await tool_fn(
+            context_query="Find all assets related to MySQL databases",
+            server_type="mysql",
+        )
+        params = mock_oe_client.get.call_args[1]["params"]
+        assert params[MCP_SEARCH_SERVER_TYPE_PARAM] == "mysql"
+        assert params[MCP_SEARCH_CONTEXT_QUERY_PARAM].startswith("Find all assets")
+
+    async def test_server_type_case_insensitive(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        await tool_fn(server_type="MySQL")
+        params = mock_oe_client.get.call_args[1]["params"]
+        assert params[MCP_SEARCH_SERVER_TYPE_PARAM] == "mysql"
+
+    async def test_server_type_omitted_when_unset(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        await tool_fn(search_terms=["customer"])
+        params = mock_oe_client.get.call_args[1]["params"]
+        assert MCP_SEARCH_SERVER_TYPE_PARAM not in params
+
+    async def test_server_type_invalid_returns_400(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        result = await tool_fn(server_type="not-a-real-connector")
+        assert result["status_code"] == 400
+        assert "server_type" in result["error"]
+        mock_oe_client.get.assert_not_called()
 
     async def test_limit_capped(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE

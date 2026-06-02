@@ -22,15 +22,17 @@ def create_mcp(lifespan: Any = None) -> FastMCP:
         version=settings.mcp_server_version,
         instructions=(
             "You are connected to the OvalEdge data governance platform. "
-            "Phase 1 — Asset & Metadata Discovery (read-only). "
-            "Use tools to search the catalog, fetch asset details, lineage, profiles, "
-            "and governance lookups (glossary, tags). "
+            "Use tools for catalog discovery (search, details, profiles, lineage, "
+            "metadata drift), governance lookups (glossary, tags, data stories), "
+            "source-system access previews, and governed write operations where the "
+            "API allows (e.g. create_tag). "
             "For native Redshift/Snowflake/Tableau grants (not OvalEdge catalog ACLs), "
             "use get_source_system_access. "
             "Use resources for deep links: catalog tables and glossary terms by id. "
             "Use prompts to run pre-packaged governance workflows. "
             "Every response includes full governance context where the API provides it. "
-            "RBAC is enforced by OvalEdge — users see only what they are entitled to."
+            "RBAC is enforced by OvalEdge — users see only what they are entitled to; "
+            "write tools require appropriate OvalEdge permissions."
         ),
         lifespan=lifespan,
     )

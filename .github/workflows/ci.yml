@@ -34,7 +34,7 @@ jobs:
           restore-keys: ${{ runner.os }}-poetry-
 
       - name: Install dependencies
-        run: poetry install
+        run: poetry install --with dev
 
       - name: Lint
         run: poetry run ruff check .
@@ -43,7 +43,13 @@ jobs:
         run: poetry run mypy server/ entrypoints/ evals/
 
       - name: Test with coverage
-        run: poetry run pytest --cov-report=xml
+        run: |
+          poetry run pytest \
+            --cov=server \
+            --cov=entrypoints \
+            --cov-report=term-missing:skip-covered \
+            --cov-report=xml \
+            --cov-fail-under=0
 
       - name: Upload coverage to Codecov (optional)
         uses: codecov/codecov-action@v5
