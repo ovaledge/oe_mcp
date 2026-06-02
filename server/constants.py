@@ -11,6 +11,7 @@ TOOL_TABLE_ENTITY_RELATIONSHIPS = "table_entity_relationships"
 TOOL_ASSET_LINEAGE = "asset_lineage"
 TOOL_METADATA_CHANGES_BETWEEN_CRAWLS = "get_metadata_changes_between_crawls"
 TOOL_LOOKUP_GLOSSARY_TERM = "lookup_glossary_term"
+TOOL_CREATE_GLOSSARY_TERM = "create_glossary_term"
 TOOL_LOOKUP_TAGS = "lookup_tags"
 TOOL_CREATE_TAG = "create_tag"
 TOOL_LOOKUP_DATASTORY = "lookup_datastory"
@@ -51,6 +52,13 @@ MCP_PATH_METADATA_CHANGES_BETWEEN_CRAWLS = (
     "/api/v1/mcp/metadata-changes-between-crawls"
 )
 MCP_PATH_GLOSSARY_TERMS = "/api/v1/mcp/glossary-terms"
+MCP_PATH_DOMAIN_METADATA = "/api/v1/mcp/domain-metadata"
+# termCreationTemplate searchOn values (GlobalDomainActivity).
+MCP_DOMAIN_METADATA_SEARCH_ON = frozenset({"oeglobaldomain", "category", "subcategory"})
+MCP_DOMAIN_METADATA_SIZE_DEFAULT = 100
+MCP_DOMAIN_METADATA_SIZE_MAX = 500
+# In-app glossary term route (matches AppConstants.NAV_BUSINESS_GLOSSARY_ID).
+NAV_GLOSSARY_TERM_HASH = "#nav/glossary?id="
 MCP_PATH_TAGS = "/api/v1/mcp/tags"
 MCP_PATH_TAGS_CREATE_OPTIONS = "/api/v1/mcp/tags/create-options"
 MCP_PATH_TAGS_PARENT_OPTIONS = "/api/v1/mcp/tags/parent-options"

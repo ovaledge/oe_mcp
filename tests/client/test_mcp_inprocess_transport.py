@@ -29,6 +29,7 @@ class TestMcpClientTools:
         assert "search_catalog_assets" in names
         assert "catalog_asset_details" in names
         assert "lookup_glossary_term" in names
+        assert "create_glossary_term" in names
         assert "lookup_datastory" in names
         assert "create_tag" in names
 

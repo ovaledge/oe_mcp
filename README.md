@@ -29,6 +29,7 @@ Setup scripts (`scripts/setup_local_mcp.sh`, `scripts/setup_local_mcp.ps1`) crea
 
 - Catalog search and asset details (`search_catalog_assets`, `catalog_asset_details`)
 - Column profile, entity relationships, lineage, metadata drift (`get_metadata_changes_between_crawls`)
+- Glossary lookup, guided term creation (`create_glossary_term`), and tag lookups
 - Glossary and tag lookups; tag creation (`create_tag`) and other governed writes as exposed by the API
 - Native source-system grant previews (`get_source_system_access`)
 - Platform documentation search and data story lookup
@@ -44,9 +45,11 @@ Read and write tools both honor OvalEdge permissions — the MCP does not bypass
 
 - `search_catalog_assets`, `catalog_asset_details`, `column_profile_statistics`
 - `table_entity_relationships`, `asset_lineage`, `get_metadata_changes_between_crawls`
-- `lookup_glossary_term`, `lookup_tags`, `create_tag`, `lookup_datastory`, `search_platform_docs`
+- `lookup_glossary_term`, `create_glossary_term`, `lookup_tags`, `create_tag`, `lookup_datastory`, `search_platform_docs`
 - `get_source_system_access` (Redshift / Snowflake / Tableau grant previews)
 - `update_asset_descriptions`, `update_governance_roles`, `lookup_dq_rule`
+
+**`create_glossary_term` workflow:** (1) `term_name` → domain picker; (2) `term_name` + `domain_id` → category picker when categories exist under the domain (skip only after user says skip: `skip_category=true` + `category_skip_confirmed=true`); (3) if category chosen and subcategories exist → subcategory picker (optional, `skip_subcategory=true`); (4) create only with non-blank `description` (tool blocks create without it). Manual pickers: `search_on=oeglobaldomain|category|subcategory`.
 
 ### Resources (`server/resources/`)
 

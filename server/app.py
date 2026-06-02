@@ -22,6 +22,16 @@ def create_mcp(lifespan: Any = None) -> FastMCP:
         version=settings.mcp_server_version,
         instructions=(
             "You are connected to the OvalEdge data governance platform. "
+            "Phase 1 — Asset & Metadata Discovery (catalog read; glossary create supported). "
+            "Use tools to search the catalog, fetch asset details, lineage, profiles, and "
+            "governance (glossary lookup, create_glossary_term guided flow, tags). "
+            "For new glossary terms: use create_glossary_term (domain → category when "
+            "categories exist → subcategory when available; description required; never "
+            "invent description); present formattedResponse to the user and wait — never "
+            "auto-pick domain_id or skip_category unless the user explicitly skips category. "
+            "If user provides a domain name in natural language ('under <domain>'), pass it as "
+            "domain_name on the first call; otherwise use domain_id from picker. "
+            "Then create with term_name, resolved domain_id, and description. "
             "Use tools for catalog discovery (search, details, profiles, lineage, "
             "metadata drift), governance lookups (glossary, tags, data stories), "
             "source-system access previews, and governed write operations where the "

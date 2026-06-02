@@ -40,3 +40,11 @@ Organizations can configure how glossary properties propagate to catalog assets 
 - Find all assets governed by a term or domain.
 - Trace calculation chains across related terms (`calculates`, `calculates-from`).
 - Onboard new analysts with domain-specific vocabulary tied to real datasets.
+
+For agents creating terms via MCP, use **`create_glossary_term`**:
+
+1. `term_name` → user picks **domain**
+2. `term_name` + `domain_id` → category picker when categories exist (user picks or skips with `skip_category=true` and `category_skip_confirmed=true`)
+3. If a category was chosen and subcategories exist → user picks **subcategory** or skips (`skip_subcategory=true`)
+4. **Description is required** — the tool refuses create without it; never invent a description
+5. Final call: `term_name`, `domain_id`, `description`, plus placement ids or skip flags
