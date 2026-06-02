@@ -17,6 +17,9 @@ Optional env overrides:
 | `OE_IT_RS_OBJECT_PATH` | `ovaledgedb.automation.customers` | Table path |
 | `OE_IT_RS_PARTIAL` | `customers` | Partial-path disambiguation |
 | `OE_IT_SF_USER` | `sithik` | Snowflake user |
+| `OE_IT_SF_OBJECT_PATH` | `BUSINESS.BANKING.ACCOUNTSCHEDULE` | Snowflake table path |
+| `OE_IT_SF_DB_NAME` | `BUSINESS` | Snowflake `dbName`-only path test |
+| `OE_IT_SF_CONN_NAME` | `snowflake` | Snowflake `connectionName.dbName` prefix test |
 | `OE_IT_TABLEAU_OBJECT_PATH` | _(auto-discover)_ | Tableau report/project path |
 
 ## Run

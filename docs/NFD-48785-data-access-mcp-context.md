@@ -38,12 +38,19 @@ One MCP tool: **`get_source_system_access`**
 
 ### `object_path` formats
 
-- **Redshift / Snowflake table:** `database.schema.table` (e.g. `prod_db.public.orders`)
-- **Schema:** `database.schema`
-- **Database:** `database`
-- **Redshift column:** `database.schema.table.column` (with `includeColumns=true`)
-- **Tableau project:** `Project Name`
-- **Tableau report:** `Executive/Revenue Dashboard`
+**Redshift / Snowflake** (dot-separated):
+
+| Pattern | Example | Level |
+|---------|---------|-------|
+| `dbName` | `BUSINESS` | database (partial if ambiguous) |
+| `connectionName.dbName` | `snowflake.BUSINESS` | connection + database |
+| `dbName.schema` | `BUSINESS.BANKING` | schema |
+| `dbName.schema.table` | `BUSINESS.BANKING.ALERTS` | table |
+| `dbName.schema.table.column` | _(Redshift only, `includeColumns=true`)_ | column |
+
+Optional leading `connectionName.` disambiguates when multiple OvalEdge connections share a source type; otherwise pass `connectionId`.
+
+**Tableau:** project `Project Name`; report `Executive/Revenue Dashboard`
 
 ## Response shape (`McpApiResult` → `data`)
 
@@ -70,6 +77,10 @@ One MCP tool: **`get_source_system_access`**
 }
 ```
 
+`summary` counts rows in `grants` after merge (not distinct object paths). `byObjectLevel` always includes `database`, `schema`, `table`, `column` (0 when none); Tableau `project` / `report` appear as extra keys when present.
+
+Partial `object_path` (**object_to_users**, or optional filter on **user_to_objects**): short names (`ALERTS`), `dbName`, or `connectionName.dbName` may match multiple catalog objects. Response sets `ambiguousMatch`, `matchCandidates`, and `advisoryMessage`. Pick one full path + `connectionId`, or pass `resolveAllMatches=true`. Up to 50 candidates.
+
 `grantMechanism`: `direct` | `group` | `role` (Redshift may return multiple rows per object).
 
 ## Grant models (backend)
@@ -82,6 +93,19 @@ One MCP tool: **`get_source_system_access`**
 
 Filter: `source = 'Remote'` (native harvest only).
 
+## Data Access Admin (Instance vs Connector DAA)
+
+OvalEdge RDAM security assigns **Data Access Admin** roles at two levels (same as the DAM UI):
+
+| Level | OvalEdge config | MCP check | Scope |
+|-------|-----------------|-----------|--------|
+| **Instance Data Access Admin** | Instance DAA roles on the RDAM instance | `userIsDaaForInstance` | All connectors/workspaces on that instance (per RDAM rules) |
+| **Connector Data Access Admin** | Connector DAA roles on `connectioninfo` | `userIsDAAForConn` | That connection only |
+
+**MCP API:** DAA is enforced inside `GET /v1/mcp/source-system-access` only (`McpSourceSystemAccessReadService` → `McpDamReadService.canQuerySourceSystemAccessForConnection` / `RdamValidationDao`). No separate DAM or DAA REST routes are required for MCP clients.
+
+**MCP tool (oe_mcp):** `get_source_system_access` → that single endpoint.
+
 ## Errors
 
 | Case | HTTP | Message |
@@ -91,6 +115,7 @@ Filter: `source = 'Remote'` (native harvest only).
 | Missing identifier | 400 | username / object_path required |
 | Unknown user | 400 | username not found in harvested metadata |
 | Unknown object | 400 | object_path not found in harvested metadata |
+| Not Instance/Connector DAA | 400 | RDAM no-access message (`RDAM_NO_ACCESS_ERROR_MSG`) |
 
 ## Sample prompts
 
@@ -98,6 +123,7 @@ Filter: `source = 'Remote'` (native harvest only).
 |----------|------|
 | What Redshift tables can svc_analytics access? | `user_to_objects`, `username=svc_analytics`, `sourceSystem=redshift` |
 | Who can access prod_db.public.orders? | `object_to_users`, `objectPath=prod_db.public.orders` |
+| Who can access BUSINESS database on snowflake conn? | `object_to_users`, `objectPath=snowflake.BUSINESS` or `BUSINESS` + `connectionId` |
 | Snowflake roles for john.doe | `user_to_objects`, `username=john.doe`, `sourceSystem=snowflake` |
 | Tableau report access | `object_to_users`, `objectPath=Executive/Revenue Dashboard`, `sourceSystem=tableau` |
 

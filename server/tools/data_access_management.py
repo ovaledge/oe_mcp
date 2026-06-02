@@ -6,6 +6,8 @@ Queries OvalEdge-harvested RDAM privilege metadata — not OvalEdge catalog ACLs
 
 Backend: GET /api/v1/mcp/source-system-access
   → McpSourceSystemAccessReadService (oe-api) over rdam_*privilege tables.
+  Instance/Connector Data Access Admin checks run in that service (RdamValidationDao),
+  not via separate MCP REST routes.
 """
 
 from typing import Annotated, Any, Literal
@@ -15,6 +17,9 @@ from pydantic import Field
 
 from server.client import OvalEdgeClient, OvalEdgeError
 from server.constants import (
+    MCP_DAA_SCOPE_DOC,
+    MCP_OBJECT_PATH_FORMATS_DOC,
+    MCP_OBJECT_PATH_PARTIAL_DOC,
     MCP_PATH_SOURCE_SYSTEM_ACCESS,
     MCP_QUERY_DIRECTIONS,
     MCP_QUERY_DIRECTIONS_DOC,
@@ -54,8 +59,27 @@ _DESC_GET_SOURCE_SYSTEM_ACCESS = (
     "Response includes **grant_mechanism** per entry: direct | group | role, native "
     "**privileges** (SELECT, INSERT, …), and **contributing_group** / **contributing_role** "
     "when access is indirect.\n\n"
+    + MCP_OBJECT_PATH_FORMATS_DOC
+    + "\n\n"
+    "Response includes **grant_mechanism** per entry: direct | group | role, **principal_type** "
+    "(user | role | group — use this to tell logins from role/group names in principal_name), "
+    "native **privileges** (SELECT, INSERT, …), and **contributing_group** / "
+    "**contributing_role** when access is indirect.\n\n"
+    "**summary** (server-computed): `totalGrants`, `byObjectLevel` "
+    "(database/schema/table/column for RS/SF; project/report for Tableau), "
+    "`byGrantMechanism` (direct/group/role).\n\n"
+    "Partial-path disambiguation (**object_to_users** and optional **object_path** on "
+    "**user_to_objects**): when the path is not exact and multiple assets match, returns "
+    "**matchCandidates** or **resolve_all_matches=true** (max 50).\n"
+    + MCP_OBJECT_PATH_PARTIAL_DOC
+    + " "
+    "Tableau uses `rdam_reportgroup_privilege` (project) and `rdam_report_privilege` "
+    "(report).\n\n"
+    + MCP_DAA_SCOPE_DOC
+    + "\n\n"
     "Read-only. Returns validation errors for unsupported source_system; not-found when "
-    "username or object_path is absent from harvested metadata."
+    "username or object_path is absent from harvested metadata; RDAM no-access when the caller "
+    "lacks Instance/Connector DAA for the scoped connection(s)."
 )
 
 
@@ -131,8 +155,9 @@ def register(mcp: FastMCP) -> None:
             str | None,
             Field(
                 description=(
-                    "Fully qualified object path (required for object_to_users). "
-                    "See tool description for per-platform formats."
+                    "Object path (required for object_to_users). Redshift/Snowflake: "
+                    "dbName, connectionName.dbName, dbName.schema.table, etc. "
+                    "See tool description."
                 ),
                 default=None,
             ),

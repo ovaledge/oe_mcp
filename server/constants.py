@@ -75,6 +75,15 @@ STATUS_AWAITING_USER_SELECTION = "awaiting_user_selection"
 MCP_PATH_SEARCH_PLATFORM_DOCS = "/api/v1/mcp/search-platform-docs"
 MCP_PATH_SOURCE_SYSTEM_ACCESS = "/api/v1/mcp/source-system-access"
 
+MCP_DAA_SCOPE_DOC = (
+    "**Data Access Admin (DAA)** — enforced server-side on this endpoint (same as DAM UI):\n"
+"- **Instance Data Access Admin:** RDAM instance roles; "
+"access to connectors on that instance.\n"
+    "- **Connector Data Access Admin:** roles on one connection only.\n"
+    "The API returns RDAM no-access if the caller lacks Connector DAA on the connection "
+    "(or Instance DAA on its parent instance). No separate DAA check endpoint is required."
+)
+
 # Optional on glossary-terms and tags (Spring default 20).
 MCP_GLOSSARY_TAGS_LIMIT_DEFAULT = 20
 MCP_GLOSSARY_TAGS_LIMIT_MAX = 100
@@ -106,6 +115,29 @@ MCP_SOURCE_SYSTEMS_DOC = ", ".join(sorted(MCP_SOURCE_SYSTEMS))
 MCP_QUERY_DIRECTIONS = frozenset({"user_to_objects", "object_to_users"})
 MCP_QUERY_DIRECTIONS_DOC = "user_to_objects | object_to_users"
 MCP_GRANT_MECHANISMS = frozenset({"direct", "group", "role"})
+
+# get_source_system_access objectPath — must match backend path resolution.
+MCP_OBJECT_PATH_FORMATS_DOC = (
+    "**object_path** formats (Redshift/Snowflake; dot-separated):\n"
+    "- Optional OvalEdge **connection name** prefix when multiple connections share a "
+    "source type: `connectionName.dbName` (e.g. `snowflake.BUSINESS`), then "
+    "`connectionName.dbName.schema`, `connectionName.dbName.schema.table`, "
+    "`connectionName.dbName.schema.table.column` (Redshift columns only, with "
+    "include_columns=true).\n"
+    "- Without connection prefix (prefer **connection_id** to scope instead): "
+    "`dbName` (database), `dbName.schema`, `dbName.schema.table` "
+    "(e.g. `BUSINESS.BANKING.ALERTS`), `dbName.schema.table.column`.\n"
+    "- Partial names (e.g. table `ALERTS`, database `BUSINESS`) are allowed; the API "
+    "may return **matchCandidates** — use a full path from candidates or "
+    "resolve_all_matches=true.\n"
+    "- Tableau project: `Project Name`; report: `Project/Report Name`."
+)
+MCP_OBJECT_PATH_PARTIAL_DOC = (
+    "Redshift/Snowflake: level is inferred by `.` segment count, optionally after a "
+    "leading `connectionName.` prefix (e.g. `BUSINESS` = database, "
+    "`snowflake.BUSINESS` = connection + database, `BUSINESS.BANKING.ALERTS` = table). "
+    "Tableau: project vs report by `/`."
+)
 
 # search-catalog: optional query param for full NL user text / context (vector search, etc.).
 # source_system_access — must match backend McpSourceSystemAccessReadService.

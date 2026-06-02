@@ -3,13 +3,24 @@ from unittest.mock import AsyncMock
 from fastmcp import FastMCP
 
 from server.client import OvalEdgeError
-from server.constants import MCP_PATH_SOURCE_SYSTEM_ACCESS
+from server.constants import MCP_OBJECT_PATH_FORMATS_DOC, MCP_PATH_SOURCE_SYSTEM_ACCESS
 from server.tools import rdam
 from server.tools import data_access_management
+from server.tools.data_access_management import _DESC_GET_SOURCE_SYSTEM_ACCESS
 from tests.helpers import get_tool_fn
 
 
 class TestGetSourceSystemAccess:
+    def test_tool_description_documents_daa_scope(self) -> None:
+        assert "Instance Data Access Admin" in _DESC_GET_SOURCE_SYSTEM_ACCESS
+        assert "Connector Data Access Admin" in _DESC_GET_SOURCE_SYSTEM_ACCESS
+
+    def test_tool_description_documents_object_path_patterns(self) -> None:
+        assert "connectionName.dbName" in MCP_OBJECT_PATH_FORMATS_DOC
+        assert "dbName" in MCP_OBJECT_PATH_FORMATS_DOC
+        assert "connectionName.dbName" in _DESC_GET_SOURCE_SYSTEM_ACCESS
+        assert "snowflake.BUSINESS" in MCP_OBJECT_PATH_FORMATS_DOC
+
     async def test_user_to_objects_forwards_params(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
@@ -198,6 +209,52 @@ class TestGetSourceSystemAccess:
         assert grant["grantMechanism"] == "direct"
         assert grant["principalType"] == "user"
         assert grant["objectLevel"] == "report"
+
+    async def test_forwards_connection_prefixed_object_path(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
+        mcp = FastMCP(name="test", version="0.0.1")
+        data_access_management.register(mcp)
+        fn = await get_tool_fn(mcp, "get_source_system_access")
+        await fn(
+            source_system="snowflake",
+            query_direction="object_to_users",
+            object_path="snowflake.BUSINESS",
+            connection_id=1002,
+        )
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_SOURCE_SYSTEM_ACCESS,
+            params={
+                "sourceSystem": "snowflake",
+                "queryDirection": "object_to_users",
+                "objectPath": "snowflake.BUSINESS",
+                "connectionId": 1002,
+            },
+        )
+
+    async def test_forwards_database_only_object_path(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
+        mcp = FastMCP(name="test", version="0.0.1")
+        data_access_management.register(mcp)
+        fn = await get_tool_fn(mcp, "get_source_system_access")
+        await fn(
+            source_system="snowflake",
+            query_direction="object_to_users",
+            object_path="BUSINESS",
+            connection_id=1002,
+        )
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_SOURCE_SYSTEM_ACCESS,
+            params={
+                "sourceSystem": "snowflake",
+                "queryDirection": "object_to_users",
+                "objectPath": "BUSINESS",
+                "connectionId": 1002,
+            },
+        )
 
     async def test_forwards_resolve_all_matches(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {
