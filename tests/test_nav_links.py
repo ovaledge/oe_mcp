@@ -3,6 +3,8 @@
 from server.nav_links import (
     build_absolute_nav_url,
     extract_hash_nav_link,
+    get_link_base_url,
+    markdown_link,
     normalize_nav_link,
 )
 
@@ -47,6 +49,39 @@ class TestBuildAbsoluteNavUrl:
                 "http://localhost:8080/ovaledge/#nav/story?id=1028"
             )
             == "https://mock.ovaledge.com/#nav/story?id=1028"
+        )
+
+
+class TestGetLinkBaseUrl:
+    def test_rewrites_loopback_to_localhost(self, monkeypatch) -> None:
+        monkeypatch.setenv(
+            "OVALEDGE_BASE_URL", "http://127.0.0.1:8080/ovaledge"
+        )
+        monkeypatch.setenv("OVALEDGE_PREFER_LOCALHOST_LINKS", "true")
+        from server.config import Settings
+
+        monkeypatch.setattr(
+            "server.nav_links.settings",
+            Settings(ovaledge_base_url="http://127.0.0.1:8080/ovaledge"),
+        )
+        assert get_link_base_url() == "http://localhost:8080/ovaledge"
+
+    def test_link_base_override_for_pod(self, monkeypatch) -> None:
+        monkeypatch.setenv(
+            "OVALEDGE_LINK_BASE_URL",
+            "https://my-pod.example.com/ovaledge",
+        )
+        monkeypatch.setenv(
+            "OVALEDGE_BASE_URL", "http://127.0.0.1:8080/ovaledge"
+        )
+        assert get_link_base_url() == "https://my-pod.example.com/ovaledge"
+
+
+class TestMarkdownLink:
+    def test_builds_markdown(self) -> None:
+        assert (
+            markdown_link("Hazaribag", "http://localhost/x#nav/tag?id=1")
+            == "[Hazaribag](http://localhost/x#nav/tag?id=1)"
         )
 
 

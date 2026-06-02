@@ -22,7 +22,7 @@ repos:
 
       - id: pytest
         name: pytest (tests/)
-        entry: poetry run pytest
+        entry: bash scripts/run_tests.sh --no-cov -q
         language: system
         pass_filenames: false
         always_run: true

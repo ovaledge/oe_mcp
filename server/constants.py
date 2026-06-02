@@ -13,8 +13,12 @@ TOOL_METADATA_CHANGES_BETWEEN_CRAWLS = "get_metadata_changes_between_crawls"
 TOOL_LOOKUP_GLOSSARY_TERM = "lookup_glossary_term"
 TOOL_CREATE_GLOSSARY_TERM = "create_glossary_term"
 TOOL_LOOKUP_TAGS = "lookup_tags"
+TOOL_CREATE_TAG = "create_tag"
 TOOL_LOOKUP_DATASTORY = "lookup_datastory"
 TOOL_SEARCH_DOCS = "search_platform_docs"
+TOOL_UPDATE_ASSET_DESCRIPTIONS = "update_asset_descriptions"
+TOOL_UPDATE_GOVERNANCE_ROLES = "update_governance_roles"
+TOOL_LOOKUP_DQ_RULE = "lookup_dq_rule"
 TOOL_GET_SOURCE_SYSTEM_ACCESS = "get_source_system_access"
 
 # Lowercase objectType for MCP search-catalog and object-details (matches OvalEdge API).
@@ -56,13 +60,41 @@ MCP_DOMAIN_METADATA_SIZE_MAX = 500
 # In-app glossary term route (matches AppConstants.NAV_BUSINESS_GLOSSARY_ID).
 NAV_GLOSSARY_TERM_HASH = "#nav/glossary?id="
 MCP_PATH_TAGS = "/api/v1/mcp/tags"
+MCP_PATH_TAGS_CREATE_OPTIONS = "/api/v1/mcp/tags/create-options"
+MCP_PATH_TAGS_PARENT_OPTIONS = "/api/v1/mcp/tags/parent-options"
 MCP_PATH_SEARCH_PLATFORM_DOCS = "/api/v1/mcp/search-platform-docs"
 MCP_PATH_SOURCE_SYSTEM_ACCESS = "/api/v1/mcp/source-system-access"
-
 MCP_PATH_LOOKUP_DATASTORY = "/api/v1/mcp/lookup-datastory"
+
+# Secure-mode create_tag wizard phases (matches OvalEdge UI).
+SELECTION_PHASE_MASTER_REQUIRED = "MASTER_REQUIRED"
+SELECTION_PHASE_PARENT_OPTIONAL = "PARENT_OPTIONAL"
+# create_tag guidance (not an error — tag not created yet).
+STATUS_AWAITING_USER_SELECTION = "awaiting_user_selection"
 # Optional on glossary-terms and tags (Spring default 20).
 MCP_GLOSSARY_TAGS_LIMIT_DEFAULT = 20
 MCP_GLOSSARY_TAGS_LIMIT_MAX = 100
+MCP_PATH_UPDATE_ASSET_DESCRIPTIONS = "/api/v1/mcp/update-asset-descriptions"
+MCP_PATH_UPDATE_GOVERNANCE_ROLES = "/api/v1/mcp/update-governance-roles"
+MCP_PATH_LOOKUP_DQ_RULES = "/api/v1/mcp/lookup-dq-rules"
+
+# objectType values for update_governance_roles that are NOT in search_catalog_assets.
+MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES = frozenset(
+    {
+        "dqrule",
+        "dqscheme",
+        "dag",
+        "policy",
+        "oeglobaldomain",
+        "processing_activity",
+        "ropa_report",
+    }
+)
+# Steward-only governance updates (UI parity).
+MCP_GOVERNANCE_STEWARD_ONLY_OBJECT_TYPES = frozenset({"dqrule", "dqscheme"})
+MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES_DOC = ", ".join(
+    sorted(MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES)
+)
 
 # get_source_system_access — must match backend McpSourceSystemAccessReadService.
 MCP_SOURCE_SYSTEMS = frozenset({"redshift", "snowflake", "tableau"})
@@ -71,9 +103,183 @@ MCP_QUERY_DIRECTIONS = frozenset({"user_to_objects", "object_to_users"})
 MCP_QUERY_DIRECTIONS_DOC = "user_to_objects | object_to_users"
 MCP_GRANT_MECHANISMS = frozenset({"direct", "group", "role"})
 
-# search-catalog: optional query param for full NL user text / context (vector search, etc.).
+# search-catalog query params (GET /api/v1/mcp/search-catalog).
 MCP_SEARCH_CONTEXT_QUERY_PARAM = "contextQuery"
+# Lexical search — each value is a JSON array string on the wire.
 MCP_SEARCH_TERMS_PARAM = "searchTerms"
+MCP_SEARCH_TAGS_PARAM = "tags"
+MCP_SEARCH_GLOSSARY_TERMS_PARAM = "terms"
+MCP_SEARCH_CUSTOM_FIELDS_PARAM = "customFields"
+MCP_SEARCH_DATA_PRODUCTS_PARAM = "dataProducts"
+MCP_SEARCH_SERVER_TYPE_PARAM = "serverType"
+
+# connectionInfo.serverType values (OvalEdge connector types).
+MCP_SERVER_TYPES = frozenset(
+    {
+        "allscripts",
+        "api",
+        "Athena",
+        "awsDynamoDb",
+        "awsappflow",
+        "adl",
+        "azuredevops",
+        "azuredevopsrepo",
+        "bigquery",
+        "box",
+        "cassandra",
+        "clickhouse",
+        "cloudera_navigator",
+        "db2",
+        "db2as400",
+        "db2odbc",
+        "denodo",
+        "dremio",
+        "dsefs",
+        "informix",
+        "elasticSearch",
+        "elasticSearchOnPremise",
+        "esri",
+        "eventhub",
+        "gcs",
+        "github",
+        "githubfiles",
+        "googledrive",
+        "greenplum",
+        "greenhouse",
+        "hbase",
+        "hdfs",
+        "hive",
+        "qubolehive",
+        "ibmcognos",
+        "impala",
+        "kafka",
+        "linux",
+        "looker",
+        "manual",
+        "mongodb",
+        "mysql",
+        "mariadb",
+        "mavenlink",
+        "microstrategy",
+        "nfs",
+        "onedrive",
+        "oracle",
+        "oracleservicecloud",
+        "postgres",
+        "powerbi",
+        "qlikview",
+        "qlik sense",
+        "redshift",
+        "s3",
+        "sapbods",
+        "sapbo",
+        "sapsuccessfactors",
+        "sftp",
+        "sisense",
+        "sqlserver",
+        "ssas",
+        "ssas_onprem",
+        "ssis",
+        "ssrs",
+        "salesforce",
+        "sapbo_universe",
+        "saptables",
+        "sharepoint",
+        "snowflake",
+        "spline",
+        "sigma",
+        "tableau",
+        "teradata",
+        "vertica",
+        "other",
+        "odbcsqlserver",
+        "exasol",
+        "adf",
+        "adb",
+        "airflow",
+        "dbt",
+        "azuresqlmanagedinstance",
+        "azuresynapse",
+        "couchdb",
+        "saphana",
+        "domo",
+        "quickbase",
+        "atlas",
+        "DeltaLake",
+        "alteryx",
+        "talend",
+        "matillion",
+        "InterSystemsCache",
+        "MSAccess",
+        "arangodb",
+        "pentaho",
+        "awsglueetl",
+        "ODataExt",
+        "netsuitecrm",
+        "informatica_powercenter",
+        "informatica_ics",
+        "informatica_bdm",
+        "hubspot",
+        "dynamics365",
+        "dynamics365reports",
+        "documentdb",
+        "cosmosdb",
+        "okta",
+        "azuread",
+        "avm",
+        "ldap",
+        "DELLBOOMI",
+        "secretsmanager",
+        "hashicorp",
+        "webfocus",
+        "couchbase",
+        "workday",
+        "hopsworks",
+        "ADP",
+        "structuredfileconnector",
+        "azurekeyvault",
+        "dbtcore",
+        "cifs",
+        "erwincsvimport",
+        "gitlab",
+        "zendesk",
+        "schemaregistry",
+        "azureml",
+        "oraclefusionhcm",
+        "sybasease",
+        "salesforcereports",
+        "datapipeline",
+        "fme",
+        "db2zos",
+        "sybaseiq",
+        "datastage",
+        "apachepulsar",
+        "netsuitecrmjdbc",
+        "quicksight",
+        "awsdms",
+        "oraclebi",
+        "obieerpd",
+        "obieepublisher",
+        "awsaurora",
+        "dremioiceberg",
+        "filecloud",
+        "obieeoas",
+        "cartovista",
+        "oracleebstable",
+        "qliktalend",
+        "googleclouddatafusion",
+        "oracleanalytics",
+        "akamaiidentitycloud",
+        "sapanalyticscloud",
+        "salesforcecommercecloud",
+        "microstrategycloud",
+        "quickbooks-desktop",
+        "quickbooks-online",
+        "tally",
+    }
+)
+# Case-insensitive lookup → canonical serverType value.
+MCP_SERVER_TYPES_BY_LOWER: dict[str, str] = {v.lower(): v for v in MCP_SERVER_TYPES}
 
 # ── MCP resource URI templates (FastMCP @resource) ───────────────
 MCP_RESOURCE_CATALOG_TABLE = "ovaledge://catalog/table/{object_id}"

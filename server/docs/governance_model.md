@@ -23,6 +23,8 @@ Certification is enforced and interpreted in OvalEdge; the MCP surfaces values a
 
 Access to catalog assets, glossary content, lineage nodes, and previews is enforced **only** by OvalEdge. The MCP does not bypass, broaden, or reinterpret permissions. If a user cannot see an object in the OvalEdge UI, they should not expect to retrieve it via MCP.
 
+Write tools (e.g. `create_tag`) invoke the same OvalEdge APIs as the UI; they succeed only when the authenticated user has the required governance privileges.
+
 ## Glossary–catalog sync and inheritance
 
 Terms in the business glossary can be linked to physical columns and tables. When sync is enabled, governance properties (e.g. classifications, masking, restriction flags) may **inherit** from the term to the asset. Responses may indicate whether masking or restriction came from term sync versus direct assignment on the asset.
