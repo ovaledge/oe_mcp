@@ -20,7 +20,7 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 | Tag meaning or hierarchy | `lookup_tags` |
 | DQ rule lookup | `lookup_dq_rule` |
 | Metadata drift between crawls | `metadata_changes_between_crawls` |
-| Native Redshift/Snowflake/Tableau grants | `user_object_access` |
+| Native Redshift/Snowflake/Tableau grants | `get_source_system_access` (alias `user_object_access`) |
 | Lineage | `asset_lineage` |
 | Column stats | `column_profile_statistics` |
 | Table relationships | `table_entity_relationships` |
