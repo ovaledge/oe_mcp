@@ -20,9 +20,6 @@ TOOL_UPDATE_ASSET_DESCRIPTIONS = "update_asset_descriptions"
 TOOL_UPDATE_GOVERNANCE_ROLES = "update_governance_roles"
 TOOL_LOOKUP_DQ_RULE = "lookup_dq_rule"
 TOOL_USER_OBJECT_ACCESS = "user_object_access"
-TOOL_UPDATE_ASSET_DESCRIPTIONS = "update_asset_descriptions"
-TOOL_UPDATE_GOVERNANCE_ROLES = "update_governance_roles"
-TOOL_LOOKUP_DQ_RULE = "lookup_dq_rule"
 TOOL_SOURCE_SYSTEM_ACCESS = "source_system_access"
 TOOL_GET_SOURCE_SYSTEM_ACCESS = "get_source_system_access"
 
@@ -76,19 +73,6 @@ SELECTION_PHASE_MASTER_REQUIRED = "MASTER_REQUIRED"
 SELECTION_PHASE_PARENT_OPTIONAL = "PARENT_OPTIONAL"
 # create_tag guidance (not an error — tag not created yet).
 STATUS_AWAITING_USER_SELECTION = "awaiting_user_selection"
-MCP_PATH_TAGS_CREATE_OPTIONS = "/api/v1/mcp/tags/create-options"
-MCP_PATH_TAGS_PARENT_OPTIONS = "/api/v1/mcp/tags/parent-options"
-MCP_PATH_SEARCH_PLATFORM_DOCS = "/api/v1/mcp/search-platform-docs"
-MCP_PATH_SOURCE_SYSTEM_ACCESS = "/api/v1/mcp/source-system-access"
-MCP_PATH_LOOKUP_DATASTORY = "/api/v1/mcp/lookup-datastory"
-
-# Secure-mode create_tag wizard phases (matches OvalEdge UI).
-SELECTION_PHASE_MASTER_REQUIRED = "MASTER_REQUIRED"
-SELECTION_PHASE_PARENT_OPTIONAL = "PARENT_OPTIONAL"
-# create_tag guidance (not an error — tag not created yet).
-STATUS_AWAITING_USER_SELECTION = "awaiting_user_selection"
-MCP_PATH_SEARCH_PLATFORM_DOCS = "/api/v1/mcp/search-platform-docs"
-MCP_PATH_SOURCE_SYSTEM_ACCESS = "/api/v1/mcp/source-system-access"
 
 MCP_DAA_SCOPE_DOC = (
     "**Data Access Admin (DAA)** — enforced server-side on this endpoint (same as DAM UI):\n"
@@ -123,29 +107,9 @@ MCP_GOVERNANCE_STEWARD_ONLY_OBJECT_TYPES = frozenset({"dqrule", "dqscheme"})
 MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES_DOC = ", ".join(
     sorted(MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES)
 )
-MCP_PATH_UPDATE_ASSET_DESCRIPTIONS = "/api/v1/mcp/update-asset-descriptions"
-MCP_PATH_UPDATE_GOVERNANCE_ROLES = "/api/v1/mcp/update-governance-roles"
-MCP_PATH_LOOKUP_DQ_RULES = "/api/v1/mcp/lookup-dq-rules"
 
-# objectType values for update_governance_roles that are NOT in search_catalog_assets.
-MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES = frozenset(
-    {
-        "dqrule",
-        "dqscheme",
-        "dag",
-        "policy",
-        "oeglobaldomain",
-        "processing_activity",
-        "ropa_report",
-    }
-)
-# Steward-only governance updates (UI parity).
-MCP_GOVERNANCE_STEWARD_ONLY_OBJECT_TYPES = frozenset({"dqrule", "dqscheme"})
-MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES_DOC = ", ".join(
-    sorted(MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES)
-)
-
-# get_source_system_access — must match backend McpSourceSystemAccessReadService.
+# Native source-system access (get_source_system_access / user_object_access).
+# Must match backend McpSourceSystemAccessReadService.
 MCP_SOURCE_SYSTEMS = frozenset({"redshift", "snowflake", "tableau"})
 MCP_SOURCE_SYSTEMS_DOC = ", ".join(sorted(MCP_SOURCE_SYSTEMS))
 MCP_QUERY_DIRECTIONS = frozenset({"user_to_objects", "object_to_users"})
@@ -174,23 +138,6 @@ MCP_OBJECT_PATH_PARTIAL_DOC = (
     "`snowflake.BUSINESS` = connection + database, `BUSINESS.BANKING.ALERTS` = table). "
     "Tableau: project vs report by `/`."
 )
-
-# user_object_access (native RDAM): API path unchanged; must match
-# McpSourceSystemAccessReadService.
-MCP_SOURCE_SYSTEMS = frozenset({"redshift", "snowflake", "tableau"})
-MCP_SOURCE_SYSTEMS_DOC = ", ".join(sorted(MCP_SOURCE_SYSTEMS))
-MCP_QUERY_DIRECTIONS = frozenset({"user_to_objects", "object_to_users"})
-MCP_QUERY_DIRECTIONS_DOC = "user_to_objects | object_to_users"
-MCP_GRANT_MECHANISMS = frozenset({"direct", "group", "role"})
-
-# search-catalog query params (GET /api/v1/mcp/search-catalog).
-# search-catalog: optional query param for full NL user text / context (vector search, etc.).
-# source_system_access — must match backend McpSourceSystemAccessReadService.
-MCP_SOURCE_SYSTEMS = frozenset({"redshift", "snowflake", "tableau"})
-MCP_SOURCE_SYSTEMS_DOC = ", ".join(sorted(MCP_SOURCE_SYSTEMS))
-MCP_QUERY_DIRECTIONS = frozenset({"user_to_objects", "object_to_users"})
-MCP_QUERY_DIRECTIONS_DOC = "user_to_objects | object_to_users"
-MCP_GRANT_MECHANISMS = frozenset({"direct", "group", "role"})
 
 # search-catalog query params (GET /api/v1/mcp/search-catalog).
 MCP_SEARCH_CONTEXT_QUERY_PARAM = "contextQuery"
