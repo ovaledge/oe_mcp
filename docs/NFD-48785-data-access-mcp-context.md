@@ -12,7 +12,7 @@ One MCP tool: **`get_source_system_access`**
 
 | Layer | Tool / API |
 |-------|------------|
-| MCP client | `get_source_system_access` in `server/tools/data_access_management.py` |
+| MCP client | `get_source_system_access` in `server/tools/rdam/register.py` |
 | HTTP | `GET /api/v1/mcp/source-system-access` |
 | Java | `McpSourceSystemAccessReadService` → `rdam_*privilege` tables (`source = Remote`) |
 
@@ -23,7 +23,7 @@ One MCP tool: **`get_source_system_access`**
 | Access layer | OvalEdge catalog ACL | Native source grants |
 | Mechanisms | OE user grants + OE roles | Redshift direct/group/role; Snowflake role; Tableau direct |
 | Privileges | metadata-read/write, data levels | SELECT, INSERT, ALL, … |
-| Object scope | 17 OE asset types | RS/SF tables/schemas/(columns); Tableau projects/reports |
+| Object scope | 17 OE asset types | RS/SF databases/tables/schemas/(columns); Tableau projects/reports |
 
 ## Request parameters
 
@@ -71,11 +71,24 @@ Optional leading `connectionName.` disambiguates when multiple OvalEdge connecti
         "contributingRole": "role_read_only",
         "contributingRoles": ["role_read_only", "role_analytics"],
         "connectionId": 42
+      },
+      {
+        "objectPath": "ovaledgedb.automation.customers",
+        "objectLevel": "table",
+        "privileges": ["INSERT"],
+        "grantMechanism": "role",
+        "principalType": "role",
+        "principalName": "oe_mrdw",
+        "contributingRole": "oe_mrdw",
+        "principalNote": "No users are assigned to this role in harvested RDAM metadata; the role is shown as principal.",
+        "connectionId": 1000
       }
     ]
   }
 }
 ```
+
+**principalNote** (optional): present on `object_to_users` rows when `principalType` is `role` or `group` and RDAM has no `rdam_userrole` / `rdam_usergroup` members — explains why the role/group name is in **principalName** instead of user logins. When members exist, grants expand to users and **contributing_role** holds the role name (e.g. `associate`, `twitchdemo`).
 
 `summary` counts rows in `grants` after merge (not distinct object paths). `byObjectLevel` always includes `database`, `schema`, `table`, `column` (0 when none); Tableau `project` / `report` appear as extra keys when present.
 
@@ -87,8 +100,8 @@ Partial `object_path` (**object_to_users**, or optional filter on **user_to_obje
 
 | Source | Mechanisms | Harvested tables |
 |--------|------------|------------------|
-| Redshift | direct, group (`rdam_usergroup`), role (`rdam_userrole`) | `rdam_tableprivilege`, `rdam_schemaprivilege`, `rdam_columnprivilege` |
-| Snowflake | role only | same |
+| Redshift | direct, group (`rdam_usergroup`), role (`rdam_userrole`) | `rdam_dbprivilege`, `rdam_tableprivilege`, `rdam_schemaprivilege`, `rdam_columnprivilege` |
+| Snowflake | role only | `rdam_dbprivilege`, `rdam_tableprivilege`, `rdam_schemaprivilege` |
 | Tableau | direct user on project/report | `rdam_folderprivilege` |
 
 Filter: `source = 'Remote'` (native harvest only).
@@ -131,7 +144,7 @@ OvalEdge RDAM security assigns **Data Access Admin** roles at two levels (same a
 
 ### oe_mcp (this repo)
 
-- `server/tools/data_access_management.py` — MCP tool
+- `server/tools/rdam/register.py` — MCP tools (`get_source_system_access`, `user_object_access`)
 - `server/constants.py` — `MCP_PATH_SOURCE_SYSTEM_ACCESS`
 - `tests/tools/test_data_access_management.py`
 
@@ -160,7 +173,6 @@ Restart Cursor MCP after backend deploy.
 
 ## Follow-ups
 
-- Database-level privilege queries (`rdam_dbprivilege`)
 - Tableau report-level join via `oechart` / `chart` tables
 - Postman entry in `McpApi.postman_collection.json`
 - Integration tests against seeded `oe-rdam` test SQL
