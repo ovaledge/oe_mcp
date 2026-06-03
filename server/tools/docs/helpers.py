@@ -7,6 +7,13 @@ from typing import Any
 from server.constants import MCP_PATH_SEARCH_PLATFORM_DOCS
 
 _DESC_DOCS = (
+    "Semantic search over OvalEdge / EDGI **product** documentation (RAG: embedded query, "
+    "vector KNN in Elasticsearch). Use for **how-to** questions about OvalEdge features, "
+    "UI, and configuration.\n\n"
+    "**Do not use for organizational knowledge** (internal policies, playbooks, standards, "
+    "onboarding narratives, or domain context documented in OvalEdge data stories). "
+    "For that, use lookup_datastory (content_query) or the organizational_knowledge "
+    "workflow prompt.\n\n"
     "Semantic search over OvalEdge / EDGI platform documentation (RAG: embedded query, "
     "vector KNN in Elasticsearch).\n\n"
     f"Backend: GET {MCP_PATH_SEARCH_PLATFORM_DOCS} "

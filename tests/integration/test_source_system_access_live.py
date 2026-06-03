@@ -24,6 +24,7 @@ RS_PARTIAL = os.environ.get("OE_IT_RS_PARTIAL", "customers")
 SF_USER = os.environ.get("OE_IT_SF_USER", "sithik")
 TABLEAU_PATH = os.environ.get("OE_IT_TABLEAU_OBJECT_PATH", "")
 RS_CONN_ID = os.environ.get("OE_IT_RS_CONNECTION_ID", os.environ.get("OE_IT_CONNECTION_ID", "1000"))
+SF_CONN_ID = os.environ.get("OE_IT_SF_CONNECTION_ID", "")
 SF_CONN_ID = os.environ.get("OE_IT_SF_CONNECTION_ID", "1002")
 SF_OBJECT_PATH = os.environ.get(
     "OE_IT_SF_OBJECT_PATH", "BUSINESS.BANKING.ACCOUNTSCHEDULE"

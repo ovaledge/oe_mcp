@@ -20,6 +20,7 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 | Tag meaning or hierarchy | `lookup_tags` |
 | DQ rule lookup | `lookup_dq_rule` |
 | Metadata drift between crawls | `metadata_changes_between_crawls` |
+| Native Redshift/Snowflake/Tableau grants | `user_object_access` |
 | Native Redshift/Snowflake/Tableau grants | `source_system_access` |
 | Lineage | `asset_lineage` |
 | Column stats | `column_profile_statistics` |
@@ -90,6 +91,9 @@ Invoke by name from the MCP client when supported. Each prompt returns instructi
 | `document_asset_descriptions` | Draft + user confirm → `update_asset_descriptions` |
 | `assign_governance_roles` | Resolve target → confirm → `update_governance_roles` |
 
+## Human confirmation before write (MCP-only)
+
+`create_glossary_term`, `create_tag`, `update_asset_descriptions`, and `update_governance_roles` require **`create_confirmed_by_user=true`** on the call that performs the OvalEdge POST (unless `dry_run=true` on update tools). Earlier calls return **`confirm_create`** or **`confirm_update`** previews (`doNotCreate` / `doNotUpdate`) with `formattedResponse` — the agent must show them and wait for explicit user approval.
 ## Human confirmation before create (MCP-only)
 
 `create_glossary_term` and `create_tag` require **`create_confirmed_by_user=true`** on the call that performs the OvalEdge POST. Earlier calls return a **`confirm_create`** preview (`doNotCreate` / `doNotCreateTag`) with `formattedResponse` — the agent must show it and wait for explicit user approval.

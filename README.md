@@ -1,5 +1,6 @@
 # OvalEdge MCP Server
 
+OvalEdge governance and catalog MCP server for MCP clients (Cursor, Claude Desktop, etc.): catalog discovery, lineage, glossary and tags, **data stories** for organizational knowledge, metadata drift, native source-system access previews, product docs, workflow prompts, and governed writes (glossary terms, tags, descriptions, roles) — all subject to OvalEdge RBAC. Server instructions in `server/app.py` tell agents to prefer **`lookup_datastory`** for internal policy/playbook questions and **`search_platform_docs`** only for OvalEdge product how-to.
 OvalEdge governance and catalog MCP server for MCP clients (Cursor, Claude Desktop, etc.): discovery, lineage, glossary and tags, metadata change analysis, platform docs, workflow prompts, and selected governed write operations (e.g. tag creation, asset description updates, governance role updates), all subject to OvalEdge RBAC.
 
 ## How to run
@@ -29,6 +30,33 @@ Setup scripts (`scripts/setup_local_mcp.sh`, `scripts/setup_local_mcp.ps1`) crea
 
 - Catalog search and asset details (`search_catalog_assets`, `catalog_asset_details`)
 - Column profile, entity relationships, lineage, metadata drift (`metadata_changes_between_crawls`)
+- Glossary lookup and guided term creation (`lookup_glossary_term`, `create_glossary_term`)
+- Tag lookup and guided creation (`lookup_tags`, `create_tag`)
+- **Data stories** for organizational knowledge (`lookup_datastory`) — not a substitute for `search_platform_docs`
+- Platform product documentation (`search_platform_docs`)
+- Native source-system grant previews (`user_object_access`) — Redshift / Snowflake / Tableau, not catalog ACLs
+- DQ rule lookup (`lookup_dq_rule`)
+- Asset description and governance role updates (`update_asset_descriptions`, `update_governance_roles`)
+- Resource URIs (`ovaledge://catalog/...`, `ovaledge://governance/...`) and static guides (`docs://ovaledge/...`)
+- Sixteen workflow prompts under `server/prompts/workflows/` (see below)
+
+Read and write tools honor OvalEdge permissions — the MCP does not bypass RBAC.
+
+## Agent guidance (mirrors `server/app.py` instructions)
+
+These rules apply to every MCP session (also exposed to clients as server **instructions**):
+
+| Topic | Behavior |
+| ----- | -------- |
+| **Organizational knowledge** | Call **`lookup_datastory`** first (`content_query` = user question; add `story_zone_name` or `story_name` when named). Present **`formattedResponse`** and lead with **`storyCitation`** verbatim. Do not answer from model memory when a story may exist. |
+| **Product how-to** | Use **`search_platform_docs`** only for OvalEdge UI/features/configuration — not for internal policy or playbooks. |
+| **Physical datasets** | Use **`search_catalog_assets`**; if results include `oestory`, follow with **`lookup_datastory`**. |
+| **Native DB/BI access** | Use **`user_object_access`** for Redshift/Snowflake/Tableau grants — not OvalEdge catalog ACLs. |
+| **Deep links** | Use **`ovaledge://...` resources** when you already have object ids; prefer lookup tools for rich formatted output. |
+| **Governed writes** | **`create_glossary_term`**, **`create_tag`**, **`update_asset_descriptions`**, **`update_governance_roles`**: show **`confirm_create`** / **`confirm_update`** preview, then POST only with **`create_confirmed_by_user=true`** (`dry_run` skips confirm on updates). |
+| **Glossary placement** | Domain → category (when categories exist) → subcategory; never invent **`description`**; pass **`domain_name`** on first call when the user names a domain in natural language. |
+| **Workflows** | Optional MCP **prompts** (discovery, lineage, stories, tags, drift, native access, creates, DQ, roles) — see [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md). |
+- Column profile, entity relationships, lineage, metadata drift (`metadata_changes_between_crawls`)
 - Glossary lookup, guided term creation (`create_glossary_term`), and tag lookups
 - Glossary and tag lookups; tag creation (`create_tag`) and other governed writes as exposed by the API
 - Native source-system grant previews (`source_system_access`)
@@ -44,6 +72,20 @@ Read and write tools both honor OvalEdge permissions — the MCP does not bypass
 ### Tools (`server/tools/`)
 
 - `search_catalog_assets`, `catalog_asset_details`, `column_profile_statistics`
+- `table_entity_relationships`, `asset_lineage`, `metadata_changes_between_crawls`
+- `lookup_glossary_term`, `create_glossary_term`, `lookup_tags`, `create_tag`, `lookup_datastory`, `search_platform_docs`
+- `user_object_access` (Redshift / Snowflake / Tableau grant previews)
+- `update_asset_descriptions`, `update_governance_roles`, `lookup_dq_rule`
+
+**`create_glossary_term` workflow:** (1) `term_name` → domain picker; (2) `term_name` + `domain_id` → category picker when categories exist (skip only after user says skip: `skip_category=true` + `category_skip_confirmed=true`); (3) subcategory picker when applicable; (4) non-blank `description` required; (5) `confirm_create` preview; (6) POST with `create_confirmed_by_user=true`. Manual pickers: `search_on=oeglobaldomain|category|subcategory`.
+
+**`create_tag` workflow:** OPEN or SECURE mode from create-options; master/parent pickers with user confirmation flags; `confirm_create` preview; POST with `create_confirmed_by_user=true`. See [server/docs/tags_guide.md](server/docs/tags_guide.md).
+
+**`update_asset_descriptions` / `update_governance_roles`:** Same confirm gate (`confirm_update`, `create_confirmed_by_user=true`) before POST; `dry_run=true` validates without confirm.
+
+**Data stories:** Prefer `lookup_datastory` (`content_query`) for organizational knowledge; use `organizational_knowledge` prompt. Not `search_platform_docs`. See [server/docs/data_stories.md](server/docs/data_stories.md).
+
+**Agent guides (static MCP doc resources):** [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md) (tools, resources, prompts index), [glossary_guide.md](server/docs/glossary_guide.md), [governance_model.md](server/docs/governance_model.md), [asset_types.md](server/docs/asset_types.md). Exposed as `docs://ovaledge/{name}` (e.g. `docs://ovaledge/mcp_workflows`).
 - `table_entity_relationships`, `asset_lineage`, `metadata_changes_between_crawls`
 - `lookup_glossary_term`, `create_glossary_term`, `lookup_tags`, `create_tag`, `lookup_datastory`, `search_platform_docs`
 - `source_system_access` (Redshift / Snowflake / Tableau grant previews)

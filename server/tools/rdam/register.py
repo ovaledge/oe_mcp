@@ -15,15 +15,15 @@ from server.constants import (
 )
 from server.tools.common import drop_none, map_ovaledge_error, ovaledge_client, strip_or_none
 from server.tools.rdam.helpers import (
-    _DESC_GET_SOURCE_SYSTEM_ACCESS,
-    validate_source_system_access_args,
+    _DESC_USER_OBJECT_ACCESS,
+    validate_user_object_access_args,
 )
 
 
 def register(mcp: FastMCP) -> None:
 
-    @mcp.tool(description=_DESC_GET_SOURCE_SYSTEM_ACCESS)
-    async def source_system_access(
+    @mcp.tool(description=_DESC_USER_OBJECT_ACCESS)
+    async def user_object_access(
         source_system: Annotated[
             Literal["redshift", "snowflake", "tableau"],
             Field(description="Native platform: " + MCP_SOURCE_SYSTEMS_DOC + "."),
@@ -73,16 +73,15 @@ def register(mcp: FastMCP) -> None:
             bool,
             Field(
                 description=(
-                    "When object_path matches multiple catalog objects (same name across "
-                    "connections/schemas/tables/columns or Tableau projects/reports), return "
-                    "native access for all matches. Default false returns matchCandidates."
+                    "When object_path matches multiple catalog objects, return native access "
+                    "for all matches. Default false returns matchCandidates."
                 ),
                 default=False,
             ),
         ] = False,
     ) -> dict[str, Any]:
         """Native source-system access (see MCP tool description)."""
-        err = validate_source_system_access_args(
+        err = validate_user_object_access_args(
             source_system, query_direction, username, object_path
         )
         if err is not None:

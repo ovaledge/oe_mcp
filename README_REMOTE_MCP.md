@@ -129,6 +129,10 @@ poetry run python scripts/validate_remote_mcp.py --all --token "$OAUTH_TEST_ACCE
 - **`remote_credentials`:** long-lived OvalEdge credentials travel in **headers** — terminate TLS at the edge (API Gateway, ALB); never log header values.
 - **`remote` (OAuth 2.x remote MCP, WIP):** treat IdP tokens like secrets in transit; configure `OAUTH_AUDIENCE` / issuer discovery carefully once OAuth remote MCP is out of WIP.
 
+## MCP surface (same as local)
+
+HTTP mode exposes the same tools, resources, prompts, and `docs://ovaledge/...` guides as stdio. Server **instructions** in `server/app.py` apply to every request (data-story-first routing, human confirm before creates, RBAC). See [README.md](README.md#agent-guidance-mirrors-serverapppy-instructions) and [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md).
+
 ## Layout (remote-relevant paths)
 
 - `entrypoints/lambda_handler.py` — HTTP app + Mangum handler

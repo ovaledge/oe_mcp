@@ -329,6 +329,20 @@ MOCK_UPDATE_DESCRIPTIONS_RESPONSE = {
 
 
 class TestUpdateAssetDescriptions:
+    async def test_confirm_preview_blocks_post(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_asset_descriptions")
+        out = await fn(
+            object_id=42,
+            object_type="oetable",
+            description_field="business_description",
+            description_text="Updated business text",
+        )
+        assert out["workflowPhase"] == "confirm_update"
+        assert out["doNotUpdate"] is True
+        mock_oe_client.post.assert_not_called()
+
     async def test_post_body_and_formatted_response(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.post.return_value = dict(MOCK_UPDATE_DESCRIPTIONS_RESPONSE)
         mcp = FastMCP(name="test", version="0.0.1")
@@ -340,6 +354,7 @@ class TestUpdateAssetDescriptions:
             description_field="business_description",
             description_text="Updated business text",
             reason="MCP test",
+            create_confirmed_by_user=True,
         )
         assert out["status"] == "success"
         assert "formattedResponse" in out
@@ -367,6 +382,7 @@ class TestUpdateAssetDescriptions:
             business_description="biz",
             technical_description="tech",
             dry_run=True,
+            create_confirmed_by_user=False,
         )
         body = mock_oe_client.post.call_args[0][1]
         assert body["descriptions"] == {
@@ -426,6 +442,7 @@ class TestUpdateAssetDescriptions:
             object_type="oetable",
             technical_description="A description from MCP tool via cursor.",
             prompt="Update the technical description of workflowtemplate table",
+            create_confirmed_by_user=True,
         )
         assert out.get("status_code") != 400
         mock_oe_client.post.assert_called_once()
@@ -447,6 +464,7 @@ class TestUpdateAssetDescriptions:
             object_type="oetable",
             description_field="business_description",
             description_text="via generic pair",
+            create_confirmed_by_user=True,
         )
         body = mock_oe_client.post.call_args[0][1]
         assert body["descriptions"] == {
@@ -476,6 +494,7 @@ class TestUpdateAssetDescriptions:
             object_type="oetable",
             description_field="business_description",
             description_text="x",
+            create_confirmed_by_user=True,
         )
         assert out["status_code"] == 403
         assert "403" in out["error"]
@@ -532,3 +551,5 @@ class TestMetadataChangesBetweenCrawls:
         fn = await get_tool_fn(mcp, "metadata_changes_between_crawls")
         out = await fn(question="Show drift")
         assert out["status_code"] == 500
+
+

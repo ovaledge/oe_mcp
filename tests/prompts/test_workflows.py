@@ -30,16 +30,6 @@ from server.mcp_surface import MCP_WORKFLOW_PROMPT_NAMES
 from server.prompts.workflows import register as register_workflow_prompts
 
 WORKFLOW_PROMPT_NAMES = tuple(sorted(MCP_WORKFLOW_PROMPT_NAMES))
-WORKFLOW_PROMPT_NAMES = (
-    "data_discovery",
-    "explain_business_term",
-    "trust_assessment",
-    "explore_data_domain",
-    "trace_data_lineage",
-    "find_related_assets",
-    "native_source_access",
-    "platform_help",
-)
 
 # Each prompt must reference the tools its instruction text tells the model to call.
 _PROMPT_REQUIRED_TOOLS: dict[str, tuple[str, ...]] = {

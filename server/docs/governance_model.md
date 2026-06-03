@@ -25,6 +25,22 @@ Access to catalog assets, glossary content, lineage nodes, and previews is enfor
 
 Write tools (e.g. `create_tag`, `create_glossary_term`, `update_asset_descriptions`, `update_governance_roles`) invoke the same OvalEdge APIs as the UI; they succeed only when the authenticated user has the required governance privileges.
 
+The MCP adds **human-in-the-loop** steps for governed writes: picker responses (`formattedResponse`) on creates, explicit confirmation flags, and a final **`create_confirmed_by_user`** gate before POST (creates and updates). Agents must not skip pickers or auto-confirm on behalf of users.
+
+## Data stories
+
+**Data stories** (`oestory`) hold narrative organizational knowledge (policies, playbooks, domain context). They are governed and RBAC-scoped like other assets. Use `lookup_datastory` for search and display; see [data_stories](data_stories).
+
+## Tags
+
+**Tags** (`oetag`) classify assets. Lookup via `lookup_tags`; creation follows secure or open master/parent flows via `create_tag`. See [tags_guide](tags_guide).
+
+## Native source access (RDAM)
+
+`user_object_access` returns **native** Redshift, Snowflake, or Tableau grants harvested into OvalEdge — not catalog ACLs in OvalEdge (`get_catalog_object_access` may ship later). Use the **`native_source_access`** workflow prompt for grant questions.
+
+Write tools (e.g. `create_tag`, `create_glossary_term`, `update_asset_descriptions`, `update_governance_roles`) invoke the same OvalEdge APIs as the UI; they succeed only when the authenticated user has the required governance privileges.
+
 The MCP adds **human-in-the-loop** steps for creates: picker responses (`formattedResponse`), explicit confirmation flags, and a final **`create_confirmed_by_user`** gate before POST. Agents must not skip pickers or auto-confirm on behalf of users.
 
 ## Data stories

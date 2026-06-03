@@ -36,6 +36,8 @@ def create_mcp(lifespan: Any = None) -> FastMCP:
             "metadata drift), governance lookups (glossary, tags, data stories), "
             "source-system access previews, and governed write operations where the "
             "API allows (e.g. create_tag, update_asset_descriptions, update_governance_roles). "
+            "Governed writes require create_confirmed_by_user=true after the user approves "
+            "the confirm_create or confirm_update preview. "
             "Organizational knowledge (policies, playbooks, onboarding narratives, domain "
             "context documented in OvalEdge data stories): call lookup_datastory first — "
             "usually content_query set to the user's question; add story_zone_name or "

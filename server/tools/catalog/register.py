@@ -41,6 +41,7 @@ from server.tools.catalog.helpers import (
     _build_update_descriptions_body,
     _description_field_hint,
     _enrich_update_descriptions_response,
+    _format_update_descriptions_confirmation_preview,
     _is_specific_table_compare,
     _normalize_search_terms,
     _resolve_server_type,
@@ -498,6 +499,17 @@ def register(mcp: FastMCP) -> None:
                 default=None,
             ),
         ] = None,
+        create_confirmed_by_user: Annotated[
+            bool,
+            Field(
+                description=(
+                    "Final update gate: true only after the user explicitly approved "
+                    "the confirm_update preview. Re-call with the same object_id, "
+                    "object_type, description fields, and clientContext."
+                ),
+                default=False,
+            ),
+        ] = False,
     ) -> dict[str, Any]:
         """Update asset descriptions (see MCP tool description)."""
         if object_type not in MCP_CATALOG_OBJECT_TYPES:
@@ -547,6 +559,9 @@ def register(mcp: FastMCP) -> None:
                 ),
                 "status_code": 400,
             }
+        is_dry = dry_run is True
+        if not is_dry and not create_confirmed_by_user:
+            return _format_update_descriptions_confirmation_preview(body)
         try:
             async with ovaledge_client() as client:
                 result = await client.post(MCP_PATH_UPDATE_ASSET_DESCRIPTIONS, body)
