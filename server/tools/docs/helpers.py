@@ -14,8 +14,6 @@ _DESC_DOCS = (
     "onboarding narratives, or domain context documented in OvalEdge data stories). "
     "For that, use lookup_datastory (content_query) or the organizational_knowledge "
     "workflow prompt.\n\n"
-    "Semantic search over OvalEdge / EDGI platform documentation (RAG: embedded query, "
-    "vector KNN in Elasticsearch).\n\n"
     f"Backend: GET {MCP_PATH_SEARCH_PLATFORM_DOCS} "
     "(query params: query, optional limit, optional numCandidates).\n\n"
     "The API requires numCandidates >= limit when both apply; if you pass limit only, "

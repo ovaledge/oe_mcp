@@ -78,7 +78,6 @@ _DESC_SEARCH = (
     "When results include oestory (data story), call lookup_datastory (object_id or "
     "content_query) for full narrative and storyCitation — do not answer from search "
     "snippets alone."
-    "with update_asset_descriptions when the user asks to change descriptions."
 )
 _DESC_DETAILS = (
     "Fetch one catalog document (JSON from Elasticsearch; embeddings removed). "

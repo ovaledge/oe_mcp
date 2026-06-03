@@ -85,10 +85,6 @@ With the server connected, Cursor can list **MCP prompts**, **resources**, and *
 
 Full index: [server/docs/mcp_workflows.md](../../server/docs/mcp_workflows.md) (`docs://ovaledge/mcp_workflows`). Agent rules: [README.md](../../README.md#agent-guidance-mirrors-serverapppy-instructions).
 
-## Workflow prompts and docs
-
-With the server connected, Cursor can list **MCP prompts** (e.g. `data_discovery`, `organizational_knowledge`, `create_governance_tag`) and **resources** (`ovaledge://catalog/table/{id}`, `docs://ovaledge/mcp_workflows`). Use prompts when you want a fixed multi-tool playbook; see [server/docs/mcp_workflows.md](../../server/docs/mcp_workflows.md).
-
 ## Security
 
 Never commit real tokens. Rotate credentials if exposed. Prefer least-privilege OvalEdge accounts for local mode.

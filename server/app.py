@@ -3,11 +3,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from server.config import settings
-from server.docs import register as register_docs
 from server.mcp import register_all
-from server.prompts import workflows
-from server.resources import catalog as catalog_res
-from server.resources import governance as governance_res
 
 
 def create_mcp(lifespan: Any = None) -> FastMCP:
@@ -22,7 +18,6 @@ def create_mcp(lifespan: Any = None) -> FastMCP:
         version=settings.mcp_server_version,
         instructions=(
             "You are connected to the OvalEdge data governance platform. "
-            "Phase 1 — Asset & Metadata Discovery (catalog read; glossary create supported). "
             "Use tools to search the catalog, fetch asset details, lineage, profiles, and "
             "governance (glossary lookup, create_glossary_term guided flow, tags). "
             "For new glossary terms: use create_glossary_term (domain → category when "
@@ -47,12 +42,13 @@ def create_mcp(lifespan: Any = None) -> FastMCP:
             "configuration), not for org-specific story content. Use search_catalog_assets "
             "for physical datasets; when hits include oestory, follow with lookup_datastory. "
             "For native Redshift/Snowflake/Tableau grants (not OvalEdge catalog ACLs), "
-            "use get_source_system_access for native grants (Instance/Connector DAA enforced "
-            "on the server). "
+            "use get_source_system_access (alias user_object_access; Instance/Connector DAA "
+            "enforced on the server). "
             "Use resources for deep links when you already have object ids: "
             "ovaledge://catalog/table/{id}, ovaledge://catalog/file/{id}, "
             "ovaledge://governance/glossary-term/{id}, "
-            "ovaledge://governance/data-story/{id}, ovaledge://governance/tag/{id}. "
+            "ovaledge://governance/data-story/{id}, "
+            "ovaledge://governance/tag/{id}. "
             "Prefer lookup_datastory / lookup_tags for rich formattedResponse. "
             "Use prompts to run pre-packaged governance workflows (discovery, lineage, "
             "stories, tags, metadata drift, native access, creates, DQ, role updates). "
@@ -64,14 +60,6 @@ def create_mcp(lifespan: Any = None) -> FastMCP:
     )
 
     register_all(mcp)
-
-    catalog_res.register(mcp)
-    governance_res.register(mcp)
-
-    workflows.register(mcp)
-
-    register_docs(mcp)
-
     return mcp
 
 

@@ -119,13 +119,6 @@ poetry -C /absolute/path/to/oe_mcp run oe-mcp-local
 - `server/auth/*` — token exchange and context
 - `server/client.py` — outbound OvalEdge HTTP client
 - `server/tools/*`, `server/resources/*`, `server/prompts/workflows/`, `server/docs/` (static doc resources, e.g. `docs://ovaledge/mcp_workflows`)
-- `server/tools/*`, `server/resources/*`, `server/prompts/workflows/`, `server/docs/` (static doc resources, e.g. `docs://ovaledge/mcp_workflows`)
-
-## MCP surface (tools, resources, prompts)
-
-After the server starts, clients see **tools** (catalog, governance, docs, RDAM), **resources** (`ovaledge://catalog/...`, `ovaledge://governance/...`), **workflow prompts** (e.g. `data_discovery`, `organizational_knowledge`, `create_governance_tag`), and **doc resources** from `server/docs/*.md`.
-
-Reference: [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md) · [README.md](README.md#tools-resources-and-prompts)
 - `scripts/setup_local_mcp.sh`, `scripts/setup_local_mcp.ps1`
 
 ## MCP surface (tools, resources, prompts)

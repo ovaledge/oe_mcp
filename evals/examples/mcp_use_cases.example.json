@@ -71,63 +71,7 @@
       "actual_output": "I listed native Redshift grants for svc_analytics.",
       "mcp_tools_called": [
         {
-          "name": "user_object_access",
-          "args": {
-            "source_system": "redshift",
-            "query_direction": "user_to_objects",
-            "username": "svc_analytics"
-          },
-          "result": { "grants": [], "summary": { "totalGrants": 0 } }
-        }
-      ]
-    },
-    {
-      "name": "example_metadata_drift",
-      "input": "What changed in the CUSTOMER schema after the latest crawl?",
-      "actual_output": "I compared metadata between crawls for the CUSTOMER schema.",
-      "mcp_tools_called": [
-        {
-          "name": "metadata_changes_between_crawls",
-          "args": { "schema_name": "CUSTOMER" },
-          "result": { "ok": true, "changes": [] }
-        }
-      ]
-    },
-    {
-      "name": "example_platform_docs",
-      "input": "How do I create a data quality rule in OvalEdge?",
-      "actual_output": "I searched OvalEdge platform documentation and summarized the steps.",
-      "mcp_tools_called": [
-        {
-          "name": "search_platform_docs",
-          "args": { "query": "create data quality rule", "limit": 7 },
-          "result": { "hits": [{ "title": "DQ rules", "url": "https://docs.ovaledge.com/" }] }
-        }
-      ]
-    },
-    {
-      "name": "example_datastory_lookup",
-      "input": "What is our customer PII retention policy in data stories?",
-      "actual_output": "I searched data stories and cited the matching policy narrative.",
-      "mcp_tools_called": [
-        {
-          "name": "lookup_datastory",
-          "args": { "content_query": "customer PII retention policy" },
-          "result": {
-            "ok": true,
-            "storyCitation": "[PII Policy](#nav/story?id=1)",
-            "formattedResponse": "Retention policy excerpt."
-          }
-        }
-      ]
-    },
-    {
-      "name": "example_native_source_access",
-      "input": "What can svc_analytics SELECT in Redshift?",
-      "actual_output": "I listed native Redshift grants for svc_analytics.",
-      "mcp_tools_called": [
-        {
-          "name": "source_system_access",
+          "name": "get_source_system_access",
           "args": {
             "source_system": "redshift",
             "query_direction": "user_to_objects",

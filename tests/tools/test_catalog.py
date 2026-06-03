@@ -551,5 +551,3 @@ class TestMetadataChangesBetweenCrawls:
         fn = await get_tool_fn(mcp, "metadata_changes_between_crawls")
         out = await fn(question="Show drift")
         assert out["status_code"] == 500
-
-

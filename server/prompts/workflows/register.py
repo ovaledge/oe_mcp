@@ -403,9 +403,6 @@ def register(mcp: FastMCP) -> None:
             f"without create_confirmed_by_user for confirm_update preview\n"
             f"5. Re-call with create_confirmed_by_user=true and the same parameters to POST\n"
             f"6. Report updatedFields or blockedFields from the response"
-            f"4. Confirm the draft with the user before calling {TOOL_UPDATE_ASSET_DESCRIPTIONS}\n"
-            f"5. Pass object_id, object_type, description_field, and new text; report "
-            f"updatedFields or blockedFields from the response"
         )
         return [Message(text)]
 
@@ -431,10 +428,6 @@ def register(mcp: FastMCP) -> None:
             f"confirm_update preview; wait for user approval\n"
             f"4. Re-call with create_confirmed_by_user=true and the same role_updates to POST\n"
             f"5. Report partial_success, blockedRoles (e.g. glossary-propagated), and redirectUrl"
-            f"3. Call {TOOL_UPDATE_GOVERNANCE_ROLES} with role_updates; "
-            f"DQ rules allow steward only\n"
-            f"4. Report partial_success, blockedRoles (e.g. glossary-propagated), and redirectUrl\n"
-            f"5. Do not update roles without explicit user confirmation of principals"
         )
         return [Message(text)]
 

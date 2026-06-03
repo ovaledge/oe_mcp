@@ -36,7 +36,6 @@ from server.tools.common import blank as _blank
 _DESC_GLOSSARY = (
     "Look up business glossary term(s) by id or name. Server object type is always "
     "glossary; name search may return multiple hits.\n\n"
-    "Look up one business glossary term. Server object type is always glossary.\n\n"
     f"Backend: GET {MCP_PATH_GLOSSARY_TERMS} (objectId OR termName — mutually exclusive).\n"
     f"Optional query param limit (default {MCP_GLOSSARY_TAGS_LIMIT_DEFAULT} on server; "
     f"this client caps at {MCP_GLOSSARY_TAGS_LIMIT_MAX}).\n\n"
@@ -45,7 +44,6 @@ _DESC_GLOSSARY = (
 _DESC_TAGS = (
     "Look up OETAG (tag) document(s) by id or name from Elasticsearch; name search "
     "may return multiple hits.\n\n"
-    "Look up one OETAG (tag) document from Elasticsearch.\n\n"
     f"Backend: GET {MCP_PATH_TAGS} (objectId OR tagName — mutually exclusive).\n"
     f"Optional query param limit (default {MCP_GLOSSARY_TAGS_LIMIT_DEFAULT} on server; "
     f"this client caps at {MCP_GLOSSARY_TAGS_LIMIT_MAX}).\n\n"
