@@ -15,7 +15,7 @@ from typing import Annotated, Any, Literal
 from fastmcp import FastMCP
 from pydantic import Field
 
-from server.client import OvalEdgeClient, OvalEdgeError
+from server.client import OvalEdgeError
 from server.constants import (
     MCP_DAA_SCOPE_DOC,
     MCP_OBJECT_PATH_FORMATS_DOC,
@@ -26,6 +26,7 @@ from server.constants import (
     MCP_SOURCE_SYSTEMS,
     MCP_SOURCE_SYSTEMS_DOC,
 )
+from server.tools.common import ovaledge_client
 
 _DESC_GET_SOURCE_SYSTEM_ACCESS = (
     "Resolve **native** access grants harvested from Redshift, Snowflake, or Tableau — "
@@ -182,6 +183,17 @@ def register(mcp: FastMCP) -> None:
                 default=None,
             ),
         ] = None,
+        resolve_all_matches: Annotated[
+            bool,
+            Field(
+                description=(
+                    "When object_path matches multiple catalog objects (same name across "
+                    "connections/schemas/tables/columns or Tableau projects/reports), return "
+                    "native access for all matches. Default false returns matchCandidates."
+                ),
+                default=False,
+            ),
+        ] = False,
     ) -> dict[str, Any]:
         """Native source-system access (see MCP tool description)."""
         err = _validate_source_system_access_args(
@@ -196,9 +208,10 @@ def register(mcp: FastMCP) -> None:
             objectPath=object_path.strip() if object_path else None,
             includeColumns=include_columns if include_columns else None,
             connectionId=connection_id,
+            resolveAllMatches=resolve_all_matches if resolve_all_matches else None,
         )
         try:
-            async with OvalEdgeClient() as client:
+            async with ovaledge_client() as client:
                 return await client.get(MCP_PATH_SOURCE_SYSTEM_ACCESS, params=params)
         except OvalEdgeError as e:
             return {"error": str(e), "status_code": e.status_code}
