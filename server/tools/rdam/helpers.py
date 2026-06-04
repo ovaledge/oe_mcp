@@ -2,7 +2,7 @@
 Native source-system access helpers (RDAM harvest).
 
 Queries OvalEdge-harvested RDAM privilege metadata — not OvalEdge catalog ACLs
-(see get_user_object_access when that ships) and not catalog data-sources.
+(see get_catalog_object_access when that ships) and not catalog data-sources.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ _DESC_SOURCE_SYSTEM_ACCESS = (
     '- "Which Snowflake roles give john.doe access?"\n'
     '- "Who can view the Revenue Dashboard in Tableau?"\n\n'
     f"Backend: GET {MCP_PATH_SOURCE_SYSTEM_ACCESS}\n\n"
-    "**Not** OvalEdge `get_user_object_access` (catalog ACL layer).\n\n"
+    "**Not** OvalEdge `get_catalog_object_access` (catalog ACL layer; may ship later).\n\n"
     "**source_system** (required): "
     + MCP_SOURCE_SYSTEMS_DOC
     + ".\n\n"

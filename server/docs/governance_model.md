@@ -37,7 +37,7 @@ The MCP adds **human-in-the-loop** steps for governed writes: picker responses (
 
 ## Native source access (RDAM)
 
-**`source_system_access`** returns **native** Redshift, Snowflake, or Tableau grants harvested into OvalEdge — not catalog ACLs in OvalEdge (`get_catalog_object_access` may ship later). Instance/Connector **Data Access Admin** is enforced on the API. Use the **`native_source_access`** workflow prompt for grant questions.
+**`source_system_access`** returns **native** Redshift, Snowflake, or Tableau grants harvested into OvalEdge — not catalog ACLs in OvalEdge (`get_catalog_object_access` may ship later). Instance/Connector **Data Access Admin** is enforced on the API. Use the **`native_source_access`** workflow prompt for grant questions. See [mcp_workflows](mcp_workflows#native-source-access-rdam) for `query_direction`, `object_path` formats, and examples.
 
 ## Glossary–catalog sync and inheritance
 
