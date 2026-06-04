@@ -76,11 +76,6 @@ _DESC_SOURCE_SYSTEM_ACCESS = (
     "lacks Instance/Connector DAA for the scoped connection(s)."
 )
 
-_DESC_USER_OBJECT_ACCESS = (
-    "Alias of **source_system_access** — same API and native RDAM harvest.\n\n"
-    + _DESC_SOURCE_SYSTEM_ACCESS
-)
-
 
 def validate_source_system_access_args(
     source_system: str,

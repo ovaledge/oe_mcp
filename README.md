@@ -33,7 +33,7 @@ Setup scripts (`scripts/setup_local_mcp.sh`, `scripts/setup_local_mcp.ps1`) crea
 - Tag lookup and guided creation (`lookup_tags`, `create_tag`)
 - **Data stories** for organizational knowledge (`lookup_datastory`) — not a substitute for `search_platform_docs`
 - Platform product documentation (`search_platform_docs`)
-- Native source-system grant previews (`source_system_access`, alias `user_object_access`) — Redshift / Snowflake / Tableau, not catalog ACLs
+- Native source-system grant previews (`source_system_access`) — Redshift / Snowflake / Tableau, not catalog ACLs
 - DQ rule lookup (`lookup_dq_rule`)
 - Asset description and governance role updates (`update_asset_descriptions`, `update_governance_roles`)
 - Resource URIs (`ovaledge://catalog/...`, `ovaledge://governance/...`) and static guides (`docs://ovaledge/...`)
@@ -50,7 +50,7 @@ These rules apply to every MCP session (also exposed to clients as server **inst
 | **Organizational knowledge** | Call **`lookup_datastory`** first (`content_query` = user question; add `story_zone_name` or `story_name` when named). Present **`formattedResponse`** and lead with **`storyCitation`** verbatim. Do not answer from model memory when a story may exist. |
 | **Product how-to** | Use **`search_platform_docs`** only for OvalEdge UI/features/configuration — not for internal policy or playbooks. |
 | **Physical datasets** | Use **`search_catalog_assets`**; if results include `oestory`, follow with **`lookup_datastory`**. |
-| **Native DB/BI access** | Use **`source_system_access`** (alias **`user_object_access`**) for Redshift/Snowflake/Tableau grants — not OvalEdge catalog ACLs. |
+| **Native DB/BI access** | Use **`source_system_access`** for Redshift/Snowflake/Tableau grants — not OvalEdge catalog ACLs. |
 | **Deep links** | Use **`ovaledge://...` resources** when you already have object ids; prefer lookup tools for rich formatted output. |
 | **Governed writes** | **`create_glossary_term`**, **`create_tag`**, **`update_asset_descriptions`**, **`update_governance_roles`**: show **`confirm_create`** / **`confirm_update`** preview, then POST only with **`create_confirmed_by_user=true`** (`dry_run` skips confirm on updates). |
 | **Glossary placement** | Domain → category (when categories exist) → subcategory; never invent **`description`**; pass **`domain_name`** on first call when the user names a domain in natural language. |
@@ -63,7 +63,7 @@ These rules apply to every MCP session (also exposed to clients as server **inst
 - `search_catalog_assets`, `catalog_asset_details`, `column_profile_statistics`
 - `table_entity_relationships`, `asset_lineage`, `metadata_changes_between_crawls`
 - `lookup_glossary_term`, `create_glossary_term`, `lookup_tags`, `create_tag`, `lookup_datastory`, `search_platform_docs`
-- `source_system_access`, `user_object_access` (Redshift / Snowflake / Tableau grant previews)
+- `source_system_access` (Redshift / Snowflake / Tableau grant previews)
 - `update_asset_descriptions`, `update_governance_roles`, `lookup_dq_rule`
 
 **`create_glossary_term` workflow:** (1) `term_name` → domain picker; (2) `term_name` + `domain_id` → category picker when categories exist (skip only after user says skip: `skip_category=true` + `category_skip_confirmed=true`); (3) subcategory picker when applicable; (4) non-blank `description` required; (5) `confirm_create` preview; (6) POST with `create_confirmed_by_user=true`. Manual pickers: `search_on=oeglobaldomain|category|subcategory`.

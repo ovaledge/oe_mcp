@@ -28,7 +28,6 @@ from server.constants import (
     TOOL_TABLE_ENTITY_RELATIONSHIPS,
     TOOL_UPDATE_ASSET_DESCRIPTIONS,
     TOOL_UPDATE_GOVERNANCE_ROLES,
-    TOOL_USER_OBJECT_ACCESS,
 )
 
 MCP_TOOL_NAMES: frozenset[str] = frozenset(
@@ -49,7 +48,6 @@ MCP_TOOL_NAMES: frozenset[str] = frozenset(
         TOOL_UPDATE_GOVERNANCE_ROLES,
         TOOL_LOOKUP_DQ_RULE,
         TOOL_SOURCE_SYSTEM_ACCESS,
-        TOOL_USER_OBJECT_ACCESS,
     }
 )
 

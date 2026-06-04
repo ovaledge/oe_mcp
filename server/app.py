@@ -42,7 +42,7 @@ def create_mcp(lifespan: Any = None) -> FastMCP:
             "configuration), not for org-specific story content. Use search_catalog_assets "
             "for physical datasets; when hits include oestory, follow with lookup_datastory. "
             "For native Redshift/Snowflake/Tableau grants (not OvalEdge catalog ACLs), "
-            "use source_system_access (alias user_object_access; Instance/Connector DAA "
+            "use source_system_access (Instance/Connector DAA "
             "enforced on the server). "
             "Use resources for deep links when you already have object ids: "
             "ovaledge://catalog/table/{id}, ovaledge://catalog/file/{id}, "

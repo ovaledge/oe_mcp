@@ -19,7 +19,6 @@ TOOL_SEARCH_DOCS = "search_platform_docs"
 TOOL_UPDATE_ASSET_DESCRIPTIONS = "update_asset_descriptions"
 TOOL_UPDATE_GOVERNANCE_ROLES = "update_governance_roles"
 TOOL_LOOKUP_DQ_RULE = "lookup_dq_rule"
-TOOL_USER_OBJECT_ACCESS = "user_object_access"
 TOOL_SOURCE_SYSTEM_ACCESS = "source_system_access"
 
 # Lowercase objectType for MCP search-catalog and object-details (matches OvalEdge API).
@@ -107,7 +106,7 @@ MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES_DOC = ", ".join(
     sorted(MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES)
 )
 
-# Native source-system access (source_system_access / user_object_access).
+# Native source-system access (source_system_access).
 # Must match backend McpSourceSystemAccessReadService.
 MCP_SOURCE_SYSTEMS = frozenset({"redshift", "snowflake", "tableau"})
 MCP_SOURCE_SYSTEMS_DOC = ", ".join(sorted(MCP_SOURCE_SYSTEMS))
