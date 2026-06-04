@@ -15,15 +15,45 @@ from server.constants import (
 )
 from server.tools.common import drop_none, map_ovaledge_error, ovaledge_client, strip_or_none
 from server.tools.rdam.helpers import (
-    _DESC_USER_OBJECT_ACCESS,
-    validate_user_object_access_args,
+    _DESC_SOURCE_SYSTEM_ACCESS,
+    validate_source_system_access_args,
 )
+
+
+async def _invoke_source_system_access(
+    source_system: str,
+    query_direction: str,
+    username: str | None,
+    object_path: str | None,
+    include_columns: bool,
+    connection_id: int | None,
+    resolve_all_matches: bool,
+) -> dict[str, Any]:
+    err = validate_source_system_access_args(
+        source_system, query_direction, username, object_path
+    )
+    if err is not None:
+        return err
+    params: dict[str, object] = drop_none(
+        sourceSystem=source_system.strip().lower(),
+        queryDirection=query_direction.strip().lower(),
+        username=strip_or_none(username),
+        objectPath=strip_or_none(object_path),
+        includeColumns=include_columns if include_columns else None,
+        connectionId=connection_id,
+        resolveAllMatches=resolve_all_matches if resolve_all_matches else None,
+    )
+    try:
+        async with ovaledge_client() as client:
+            return await client.get(MCP_PATH_SOURCE_SYSTEM_ACCESS, params=params)
+    except OvalEdgeError as e:
+        return map_ovaledge_error(e)
 
 
 def register(mcp: FastMCP) -> None:
 
-    @mcp.tool(description=_DESC_USER_OBJECT_ACCESS)
-    async def user_object_access(
+    @mcp.tool(description=_DESC_SOURCE_SYSTEM_ACCESS)
+    async def source_system_access(
         source_system: Annotated[
             Literal["redshift", "snowflake", "tableau"],
             Field(description="Native platform: " + MCP_SOURCE_SYSTEMS_DOC + "."),
@@ -43,8 +73,9 @@ def register(mcp: FastMCP) -> None:
             str | None,
             Field(
                 description=(
-                    "Fully qualified object path (required for object_to_users). "
-                    "See tool description for per-platform formats."
+                    "Object path (required for object_to_users). Redshift/Snowflake: "
+                    "dbName, connectionName.dbName, dbName.schema.table, etc. "
+                    "See tool description."
                 ),
                 default=None,
             ),
@@ -82,22 +113,12 @@ def register(mcp: FastMCP) -> None:
         ] = False,
     ) -> dict[str, Any]:
         """Native source-system access (see MCP tool description)."""
-        err = validate_user_object_access_args(
-            source_system, query_direction, username, object_path
+        return await _invoke_source_system_access(
+            source_system,
+            query_direction,
+            username,
+            object_path,
+            include_columns,
+            connection_id,
+            resolve_all_matches,
         )
-        if err is not None:
-            return err
-        params: dict[str, object] = drop_none(
-            sourceSystem=source_system.strip().lower(),
-            queryDirection=query_direction.strip().lower(),
-            username=strip_or_none(username),
-            objectPath=strip_or_none(object_path),
-            includeColumns=include_columns if include_columns else None,
-            connectionId=connection_id,
-            resolveAllMatches=resolve_all_matches if resolve_all_matches else None,
-        )
-        try:
-            async with ovaledge_client() as client:
-                return await client.get(MCP_PATH_SOURCE_SYSTEM_ACCESS, params=params)
-        except OvalEdgeError as e:
-            return map_ovaledge_error(e)

@@ -20,7 +20,7 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 | Tag meaning or hierarchy | `lookup_tags` |
 | DQ rule lookup | `lookup_dq_rule` |
 | Metadata drift between crawls | `metadata_changes_between_crawls` |
-| Native Redshift/Snowflake/Tableau grants | `user_object_access` |
+| Native Redshift/Snowflake/Tableau grants | `source_system_access` |
 | Lineage | `asset_lineage` |
 | Column stats | `column_profile_statistics` |
 | Table relationships | `table_entity_relationships` |
@@ -30,6 +30,54 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 | Update governance roles | `update_governance_roles` |
 
 **Data stories vs platform docs:** `lookup_datastory` searches **your organization’s** onboarded stories (`oestory`). `search_platform_docs` searches **OvalEdge product** documentation. Do not use platform docs for internal policy questions.
+
+## Native source access (RDAM)
+
+Use **`source_system_access`** for **native** grants harvested from Redshift, Snowflake, or Tableau (RDAM). This is **not** OvalEdge catalog ACL (`get_catalog_object_access` may ship later) and **not** catalog discovery — do not use `search_catalog_assets` to answer “who can SELECT this table in Redshift?”.
+
+**Workflow prompt:** `native_source_access` (pass `source_system` and the user’s question).
+
+| Parameter | Values / notes |
+|-----------|----------------|
+| `source_system` | `redshift`, `snowflake`, `tableau` |
+| `query_direction` | See below |
+| `username` | Required for `user_to_objects`; omit for `object_to_users` |
+| `object_path` | Required for `object_to_users`; optional filter on `user_to_objects` |
+| `include_columns` | Redshift only — column-level grants (default false) |
+| `connection_id` | Scope when multiple connections share a `source_system` |
+| `resolve_all_matches` | When `object_path` is ambiguous, return all matches (max 50); default returns `matchCandidates` |
+
+### Query direction
+
+| Direction | Provide | Example question |
+|-----------|---------|------------------|
+| `user_to_objects` | `username` | “What can `svc_analytics` access in Snowflake?” |
+| `object_to_users` | `object_path` | “Who has native access to `prod_db.public.orders`?” |
+
+### `object_path` formats
+
+**Redshift / Snowflake** (dot-separated; level inferred by segment count):
+
+- Database: `dbName` (e.g. `BUSINESS`)
+- Schema: `dbName.schema`
+- Table: `dbName.schema.table` (e.g. `BUSINESS.BANKING.ALERTS`)
+- Column (Redshift only, with `include_columns=true`): `dbName.schema.table.column`
+- Optional **connection name** prefix when names collide: `connectionName.dbName`, `connectionName.dbName.schema.table`, etc. Prefer **`connection_id`** to scope instead of guessing the prefix.
+
+**Tableau:**
+
+- Project: `Project Name`
+- Report: `Project/Report Name`
+
+Partial paths (e.g. table name only) may return **`matchCandidates`** — disambiguate with a full path from the response, or set `resolve_all_matches=true`.
+
+### Grant models (what to expect in the response)
+
+- **Redshift:** direct user, group, and role grants (`grant_mechanism`: direct | group | role).
+- **Snowflake:** role assignment only (no direct user grants / groups).
+- **Tableau:** direct user or service account on project/report.
+
+**Authorization:** Instance or Connector **Data Access Admin** is enforced server-side; callers without DAA on the scoped connection see RDAM no-access. See [governance_model](governance_model#native-source-access-rdam).
 
 ## Resources (deep links by object id)
 
@@ -96,4 +144,4 @@ Invoke by name from the MCP client when supported. Each prompt returns instructi
 
 This gate is enforced in the MCP server only; **no OvalEdge backend change** is required.
 
-See also: [glossary_guide](glossary_guide), [tags_guide](tags_guide), [data_stories](data_stories).
+See also: [glossary_guide](glossary_guide), [tags_guide](tags_guide), [data_stories](data_stories), [governance_model](governance_model).

@@ -24,7 +24,12 @@ RS_PARTIAL = os.environ.get("OE_IT_RS_PARTIAL", "customers")
 SF_USER = os.environ.get("OE_IT_SF_USER", "sithik")
 TABLEAU_PATH = os.environ.get("OE_IT_TABLEAU_OBJECT_PATH", "")
 RS_CONN_ID = os.environ.get("OE_IT_RS_CONNECTION_ID", os.environ.get("OE_IT_CONNECTION_ID", "1000"))
-SF_CONN_ID = os.environ.get("OE_IT_SF_CONNECTION_ID", "")
+SF_CONN_ID = os.environ.get("OE_IT_SF_CONNECTION_ID", "1002")
+SF_OBJECT_PATH = os.environ.get(
+    "OE_IT_SF_OBJECT_PATH", "BUSINESS.BANKING.ACCOUNTSCHEDULE"
+)
+SF_DB_NAME = os.environ.get("OE_IT_SF_DB_NAME", "BUSINESS")
+SF_CONN_NAME = os.environ.get("OE_IT_SF_CONN_NAME", "snowflake")
 TABLEAU_CONN_ID = os.environ.get("OE_IT_TABLEAU_CONNECTION_ID", "")
 
 
@@ -174,12 +179,46 @@ async def test_snowflake_user_to_objects_role_only(api_get) -> None:
 
 
 @pytest.mark.asyncio
+async def test_snowflake_object_to_users_dbname_only(api_get) -> None:
+    r = await api_get(
+        {
+            "sourceSystem": "snowflake",
+            "queryDirection": "object_to_users",
+            "objectPath": SF_DB_NAME,
+            **_conn_param("snowflake"),
+        }
+    )
+    if r.status_code == 400 and "No OvalEdge connections" in r.text:
+        pytest.skip("No Snowflake connection in this environment")
+    if r.status_code == 400 and "not found" in r.text.lower():
+        pytest.skip(f"Database {SF_DB_NAME!r} not in Snowflake harvest")
+    assert r.status_code == 200, r.text[:500]
+
+
+@pytest.mark.asyncio
+async def test_snowflake_object_to_users_connection_dbname(api_get) -> None:
+    r = await api_get(
+        {
+            "sourceSystem": "snowflake",
+            "queryDirection": "object_to_users",
+            "objectPath": f"{SF_CONN_NAME}.{SF_DB_NAME}",
+            **_conn_param("snowflake"),
+        }
+    )
+    if r.status_code == 400 and "No OvalEdge connections" in r.text:
+        pytest.skip("No Snowflake connection in this environment")
+    if r.status_code == 400 and "not found" in r.text.lower():
+        pytest.skip(f"Path {SF_CONN_NAME}.{SF_DB_NAME!r} not in Snowflake harvest")
+    assert r.status_code == 200, r.text[:500]
+
+
+@pytest.mark.asyncio
 async def test_snowflake_object_to_users(api_get) -> None:
     r = await api_get(
         {
             "sourceSystem": "snowflake",
             "queryDirection": "object_to_users",
-            "objectPath": RS_TABLE_PATH,
+            "objectPath": SF_OBJECT_PATH,
             **_conn_param("snowflake"),
         }
     )

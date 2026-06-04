@@ -19,7 +19,7 @@ TOOL_SEARCH_DOCS = "search_platform_docs"
 TOOL_UPDATE_ASSET_DESCRIPTIONS = "update_asset_descriptions"
 TOOL_UPDATE_GOVERNANCE_ROLES = "update_governance_roles"
 TOOL_LOOKUP_DQ_RULE = "lookup_dq_rule"
-TOOL_USER_OBJECT_ACCESS = "user_object_access"
+TOOL_SOURCE_SYSTEM_ACCESS = "source_system_access"
 
 # Lowercase objectType for MCP search-catalog and object-details (matches OvalEdge API).
 MCP_CATALOG_OBJECT_TYPES = frozenset(
@@ -71,6 +71,16 @@ SELECTION_PHASE_MASTER_REQUIRED = "MASTER_REQUIRED"
 SELECTION_PHASE_PARENT_OPTIONAL = "PARENT_OPTIONAL"
 # create_tag guidance (not an error — tag not created yet).
 STATUS_AWAITING_USER_SELECTION = "awaiting_user_selection"
+
+MCP_DAA_SCOPE_DOC = (
+    "**Data Access Admin (DAA)** — enforced server-side on this endpoint (same as DAM UI):\n"
+"- **Instance Data Access Admin:** RDAM instance roles; "
+"access to connectors on that instance.\n"
+    "- **Connector Data Access Admin:** roles on one connection only.\n"
+    "The API returns RDAM no-access if the caller lacks Connector DAA on the connection "
+    "(or Instance DAA on its parent instance). No separate DAA check endpoint is required."
+)
+
 # Optional on glossary-terms and tags (Spring default 20).
 MCP_GLOSSARY_TAGS_LIMIT_DEFAULT = 20
 MCP_GLOSSARY_TAGS_LIMIT_MAX = 100
@@ -96,13 +106,35 @@ MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES_DOC = ", ".join(
     sorted(MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES)
 )
 
-# user_object_access (native RDAM): API path unchanged; must match
-# McpSourceSystemAccessReadService.
+# Native source-system access (source_system_access).
+# Must match backend McpSourceSystemAccessReadService.
 MCP_SOURCE_SYSTEMS = frozenset({"redshift", "snowflake", "tableau"})
 MCP_SOURCE_SYSTEMS_DOC = ", ".join(sorted(MCP_SOURCE_SYSTEMS))
 MCP_QUERY_DIRECTIONS = frozenset({"user_to_objects", "object_to_users"})
 MCP_QUERY_DIRECTIONS_DOC = "user_to_objects | object_to_users"
-MCP_GRANT_MECHANISMS = frozenset({"direct", "group", "role"})
+
+# source_system_access objectPath — must match backend path resolution.
+MCP_OBJECT_PATH_FORMATS_DOC = (
+    "**object_path** formats (Redshift/Snowflake; dot-separated):\n"
+    "- Optional OvalEdge **connection name** prefix when multiple connections share a "
+    "source type: `connectionName.dbName` (e.g. `snowflake.BUSINESS`), then "
+    "`connectionName.dbName.schema`, `connectionName.dbName.schema.table`, "
+    "`connectionName.dbName.schema.table.column` (Redshift columns only, with "
+    "include_columns=true).\n"
+    "- Without connection prefix (prefer **connection_id** to scope instead): "
+    "`dbName` (database), `dbName.schema`, `dbName.schema.table` "
+    "(e.g. `BUSINESS.BANKING.ALERTS`), `dbName.schema.table.column`.\n"
+    "- Partial names (e.g. table `ALERTS`, database `BUSINESS`) are allowed; the API "
+    "may return **matchCandidates** — use a full path from candidates or "
+    "resolve_all_matches=true.\n"
+    "- Tableau project: `Project Name`; report: `Project/Report Name`."
+)
+MCP_OBJECT_PATH_PARTIAL_DOC = (
+    "Redshift/Snowflake: level is inferred by `.` segment count, optionally after a "
+    "leading `connectionName.` prefix (e.g. `BUSINESS` = database, "
+    "`snowflake.BUSINESS` = connection + database, `BUSINESS.BANKING.ALERTS` = table). "
+    "Tableau: project vs report by `/`."
+)
 
 # search-catalog query params (GET /api/v1/mcp/search-catalog).
 MCP_SEARCH_CONTEXT_QUERY_PARAM = "contextQuery"

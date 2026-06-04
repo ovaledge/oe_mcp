@@ -1,6 +1,8 @@
 # Cursor + OvalEdge MCP
 
-[Official MCP docs](https://docs.cursor.com/context/model-context-protocol) · Cursor reads **`~/.cursor/mcp.json`** (user) or project-level MCP config depending on your Cursor version and settings.
+[Official MCP docs](https://docs.cursor.com/context/model-context-protocol) · Cursor reads **`~/.cursor/mcp.json`** (user) or project-level **`.cursor/mcp.json`** depending on your Cursor version and settings.
+
+**Project template:** copy [`.cursor/mcp.json.example`](../../.cursor/mcp.json.example) → `.cursor/mcp.json` (see [`.cursor/README.md`](../../.cursor/README.md)).
 
 ---
 
@@ -81,6 +83,7 @@ With the server connected, Cursor can list **MCP prompts**, **resources**, and *
 | Find tables, files, reports | Prompt `data_discovery` or `search_catalog_assets` |
 | Create tag or glossary term | Prompt `create_governance_tag` / `create_business_glossary_term` (confirm preview, then `create_confirmed_by_user=true`) |
 | OvalEdge product how-to | Prompt `platform_help` or `search_platform_docs` |
+| Native Redshift / Snowflake / Tableau grants | Prompt `native_source_access` or tool `source_system_access` |
 | Deep link by id | `ovaledge://catalog/table/{id}`, `ovaledge://governance/data-story/{id}`, … |
 
 Full index: [server/docs/mcp_workflows.md](../../server/docs/mcp_workflows.md) (`docs://ovaledge/mcp_workflows`). Agent rules: [README.md](../../README.md#agent-guidance-mirrors-serverapppy-instructions).

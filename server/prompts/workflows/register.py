@@ -3,6 +3,7 @@ from fastmcp.prompts import Message
 
 from server.constants import (
     MCP_CATALOG_OBJECT_TYPES_DOC,
+    MCP_SOURCE_SYSTEMS_DOC,
     TOOL_ASSET_LINEAGE,
     TOOL_CATALOG_ASSET_DETAILS,
     TOOL_COLUMN_PROFILE,
@@ -15,10 +16,10 @@ from server.constants import (
     TOOL_METADATA_CHANGES_BETWEEN_CRAWLS,
     TOOL_SEARCH_CATALOG,
     TOOL_SEARCH_DOCS,
+    TOOL_SOURCE_SYSTEM_ACCESS,
     TOOL_TABLE_ENTITY_RELATIONSHIPS,
     TOOL_UPDATE_ASSET_DESCRIPTIONS,
     TOOL_UPDATE_GOVERNANCE_ROLES,
-    TOOL_USER_OBJECT_ACCESS,
 )
 
 
@@ -284,8 +285,9 @@ def register(mcp: FastMCP) -> None:
             f"Steps:\n"
             f"1. Decide query_direction: user_to_objects (needs username) vs object_to_users "
             f"(needs object_path)\n"
-            f"2. Call {TOOL_USER_OBJECT_ACCESS} with source_system='{source_system}', "
-            f"the correct query_direction, and username or object_path from the question\n"
+            f"2. Call {TOOL_SOURCE_SYSTEM_ACCESS} with source_system='{source_system}' "
+            f"({MCP_SOURCE_SYSTEMS_DOC}), the correct query_direction, and username or "
+            f"object_path from the question\n"
             f"3. Present grants with grant_mechanism (direct/group/role) and privileges; use "
             f"summary counts when returned\n"
             f"4. Do not confuse with OvalEdge catalog permissions — "

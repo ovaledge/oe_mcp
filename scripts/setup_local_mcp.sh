@@ -135,6 +135,6 @@ PY
 
 echo ""
 echo "    Replace env placeholders with your values (or omit env and rely on .env in the repo)."
-echo "    Cursor: typically ~/.cursor/mcp.json or project .cursor/mcp.json (see Cursor docs)."
+echo "    Cursor: cp .cursor/mcp.json.example .cursor/mcp.json (or ~/.cursor/mcp.json) — see .cursor/README.md"
 echo ""
 echo "Done."

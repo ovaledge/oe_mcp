@@ -32,7 +32,7 @@ This repository ships an MCP server (see `server/app.py` **instructions**) for c
 | Organizational policy, playbook, onboarding narrative | **`lookup_datastory`** (`content_query`); prompt **`organizational_knowledge`** |
 | OvalEdge product UI / features / configuration | **`search_platform_docs`**; prompt **`platform_help`** |
 | Tables, files, columns, reports | **`search_catalog_assets`** → **`catalog_asset_details`** |
-| Native Redshift / Snowflake / Tableau grants | **`user_object_access`** (not catalog ACLs) |
+| Native Redshift / Snowflake / Tableau grants | **`source_system_access`** (not catalog ACLs) |
 | Create glossary term or tag | **`create_glossary_term`** / **`create_tag`** with picker flow; POST only after **`create_confirmed_by_user=true`** |
 
 Present **`formattedResponse`** and **`storyCitation`** from data-story tools verbatim when provided. Do not invent glossary **descriptions**. Workflow prompts and resource URIs: [mcp_workflows](mcp_workflows). Static guides: `docs://ovaledge/{name}`.

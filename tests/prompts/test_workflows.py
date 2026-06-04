@@ -21,10 +21,10 @@ from server.constants import (
     TOOL_METADATA_CHANGES_BETWEEN_CRAWLS,
     TOOL_SEARCH_CATALOG,
     TOOL_SEARCH_DOCS,
+    TOOL_SOURCE_SYSTEM_ACCESS,
     TOOL_TABLE_ENTITY_RELATIONSHIPS,
     TOOL_UPDATE_ASSET_DESCRIPTIONS,
     TOOL_UPDATE_GOVERNANCE_ROLES,
-    TOOL_USER_OBJECT_ACCESS,
 )
 from server.mcp_surface import MCP_WORKFLOW_PROMPT_NAMES
 from server.prompts.workflows import register as register_workflow_prompts
@@ -64,13 +64,13 @@ _PROMPT_REQUIRED_TOOLS: dict[str, tuple[str, ...]] = {
         TOOL_SEARCH_CATALOG,
         TOOL_SEARCH_DOCS,
     ),
+    "native_source_access": (TOOL_SOURCE_SYSTEM_ACCESS,),
     "platform_help": (TOOL_SEARCH_DOCS,),
     "metadata_drift": (
         TOOL_METADATA_CHANGES_BETWEEN_CRAWLS,
         TOOL_SEARCH_CATALOG,
         TOOL_CATALOG_ASSET_DETAILS,
     ),
-    "native_source_access": (TOOL_USER_OBJECT_ACCESS,),
     "explain_tag": (TOOL_LOOKUP_TAGS, TOOL_SEARCH_CATALOG),
     "explain_dq_rule": (TOOL_LOOKUP_DQ_RULE, TOOL_UPDATE_GOVERNANCE_ROLES),
     "create_business_glossary_term": (TOOL_CREATE_GLOSSARY_TERM,),

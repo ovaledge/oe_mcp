@@ -43,3 +43,6 @@ class TestStaticDocResources:
         text = contents[0].text if hasattr(contents[0], "text") else str(contents[0])
         assert "lookup_datastory" in text
         assert "organizational_knowledge" in text
+        assert "Native source access (RDAM)" in text
+        assert "user_to_objects" in text
+        assert "source_system_access" in text
