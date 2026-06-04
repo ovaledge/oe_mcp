@@ -125,6 +125,16 @@ def register(mcp: FastMCP) -> None:
                 default=None,
             ),
         ] = None,
+        critical_data_element: Annotated[
+            list[str] | None,
+            Field(
+                description=(
+                    "Critical Data Element flag values (exact match). JSON array on the wire "
+                    'as criticalDataElement. e.g. ["Yes"] for marked CDE columns.'
+                ),
+                default=None,
+            ),
+        ] = None,
         context_query: Annotated[
             str | None,
             Field(
@@ -259,6 +269,7 @@ def register(mcp: FastMCP) -> None:
                 custom_fields=custom_fields,
                 data_products=data_products,
                 classifications=classifications,
+                critical_data_element=critical_data_element,
             )
             async with ovaledge_client() as client:
                 return await client.get(MCP_PATH_SEARCH_CATALOG, params=params)

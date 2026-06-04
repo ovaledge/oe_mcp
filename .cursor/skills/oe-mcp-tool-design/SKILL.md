@@ -16,6 +16,7 @@ description: >-
 3. **Descriptions live in `helpers.py`** as `_DESC_<NAME>` — include purpose, when **not** to use sibling tools, `Backend: GET|POST {MCP_PATH_*}`, examples, and RBAC/DAA notes if applicable.
 4. **Thin `register.py`** — `@mcp.tool(description=_DESC_…)` + `Annotated`/`Field` params; delegate to `_invoke_*` or helper builders; use `server.tools.common` (`drop_none`, `map_ovaledge_error`, `ovaledge_client`, validators).
 5. **Client validation before HTTP** — return `error_payload(...)` from helpers when args are invalid; do not rely on the API for MCP-side mutual-exclusion rules.
+6. **Append at end** — add new `@mcp.tool` handlers at the **end** of `register(mcp)` (not between existing tools); add `_DESC_*` and `validate_*` / `build_*` at the **end** of `helpers.py`.
 
 ## Choose a domain package
 

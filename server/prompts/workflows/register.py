@@ -4,9 +4,12 @@ from fastmcp.prompts import Message
 from server.constants import (
     MCP_CATALOG_OBJECT_TYPES_DOC,
     MCP_SOURCE_SYSTEMS_DOC,
+    TOOL_ASSESS_CDE_DQ,
     TOOL_ASSET_LINEAGE,
+    TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
     TOOL_CATALOG_ASSET_DETAILS,
     TOOL_COLUMN_PROFILE,
+    TOOL_CREATE_DQ_RULES,
     TOOL_CREATE_GLOSSARY_TERM,
     TOOL_CREATE_TAG,
     TOOL_LOOKUP_DATASTORY,
@@ -455,5 +458,30 @@ def register(mcp: FastMCP) -> None:
             f"   - Answer from general knowledge\n"
             f"   - Clearly label as 'General knowledge — not from OvalEdge docs'\n"
             f"5. Suggest related features where applicable"
+        )
+        return [Message(text)]
+
+    @mcp.prompt()
+    def assess_cde_dq_coverage(scope: str) -> list[Message]:
+        """
+        P17 — CDE column DQ assessment (read-only recommendations).
+
+        Trigger: "Which CDE columns need DQ rules?"
+                 "Recommend DQ functions for critical data elements in Finance"
+        """
+        text = (
+            f"Assess Critical Data Element (CDE) DQ coverage for: '{scope}'\n\n"
+            f"Steps:\n"
+            f"1. Call {TOOL_SEARCH_CATALOG} with search_terms from the scope and "
+            f"critical_data_element=Yes (and object_type oetable/oecolumn/oefile/oefilecolumn "
+            f"when narrowing)\n"
+            f"2. Build objects from hits (objectId + objectType) or call "
+            f"{TOOL_ASSESS_CDE_DQ}(discover_cde_columns=true) when listing all CDE columns\n"
+            f"3. Call {TOOL_ASSESS_CDE_DQ} with those objects — read-only; present "
+            f"recommendedFunction, recommendedRule, associatedToDqRule, and redirect URLs\n"
+            f"4. Use {TOOL_LOOKUP_DQ_RULE} when the user names an existing rule; do not use "
+            f"{TOOL_SEARCH_CATALOG} for dqrule objects\n"
+            f"5. Only after explicit user approval for writes: {TOOL_ASSOCIATE_DQ_RULE_OBJECTS} "
+            f"for a known draft rule id, or {TOOL_CREATE_DQ_RULES} to create/associate in one step"
         )
         return [Message(text)]

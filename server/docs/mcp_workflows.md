@@ -19,6 +19,9 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 | Business term definition | `lookup_glossary_term` |
 | Tag meaning or hierarchy | `lookup_tags` |
 | DQ rule lookup | `lookup_dq_rule` |
+| CDE columns / DQ function & rule recommendations | `assess_cde_dq` (after `search_catalog_assets` or `discover_cde_columns=true`) |
+| Associate objects to draft DQ rule | `associate_dq_rule_objects` (after `assess_cde_dq` / `lookup_dq_rule`) |
+| Auto-create or associate DQ rules for CDE columns | `create_dq_rules` (assess + create/associate in one call) |
 | Metadata drift between crawls | `metadata_changes_between_crawls` |
 | Native Redshift/Snowflake/Tableau grants | `source_system_access` |
 | Lineage | `asset_lineage` |
@@ -122,6 +125,7 @@ Invoke by name from the MCP client when supported. Each prompt returns instructi
 | `trust_assessment` | Scorecard: DQ, certification, lineage, roles |
 | `trace_data_lineage` | Upstream/downstream narrative |
 | `metadata_drift` | Changes between crawls |
+| `assess_cde_dq_coverage` | CDE columns: catalog search → read-only `assess_cde_dq`; optional writes after approval |
 
 ### Access
 
@@ -145,3 +149,17 @@ Invoke by name from the MCP client when supported. Each prompt returns instructi
 This gate is enforced in the MCP server only; **no OvalEdge backend change** is required.
 
 See also: [glossary_guide](glossary_guide), [tags_guide](tags_guide), [data_stories](data_stories), [governance_model](governance_model).
+
+## CDE / DQ intelligence (MCP)
+
+| Step | Tool | Notes |
+|------|------|--------|
+| Find CDE assets | `search_catalog_assets` | Set `critical_data_element=Yes`; object types `oetable`, `oecolumn`, `oefile`, `oefilecolumn` |
+| Read-only assessment | `assess_cde_dq` | Pass `objects` from search hits, or `discover_cde_columns=true` to auto-discover CDE columns |
+| Resolve existing rule | `lookup_dq_rule` | DQ rules are not in catalog search |
+| Link to draft rule | `associate_dq_rule_objects` | Requires `dqrule_id` from assessment or lookup; user must approve write |
+| Create + associate | `create_dq_rules` | Re-assesses internally; prefer existing rule or auto-create draft when criteria sufficient |
+
+**Workflow prompt:** `assess_cde_dq_coverage` (pass `scope` = user question or domain name).
+
+Read-only path: search → `assess_cde_dq` only. Do not call write tools without explicit user approval (unlike glossary/tag, these DQ writes do not use `create_confirmed_by_user`; approval is conversational).

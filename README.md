@@ -35,9 +35,12 @@ Setup scripts (`scripts/setup_local_mcp.sh`, `scripts/setup_local_mcp.ps1`) crea
 - Platform product documentation (`search_platform_docs`)
 - Native source-system grant previews (`source_system_access`) — Redshift / Snowflake / Tableau, not catalog ACLs
 - DQ rule lookup (`lookup_dq_rule`)
+- CDE / column DQ assessment — read-only (`assess_cde_dq`)
+- Associate objects to draft DQ rules (`associate_dq_rule_objects`)
+- Auto-create or associate draft DQ rules for CDE columns (`create_dq_rules`)
 - Asset description and governance role updates (`update_asset_descriptions`, `update_governance_roles`)
 - Resource URIs (`ovaledge://catalog/...`, `ovaledge://governance/...`) and static guides (`docs://ovaledge/...`)
-- Sixteen workflow prompts under `server/prompts/workflows/` (see below)
+- Seventeen workflow prompts under `server/prompts/workflows/` (see below)
 
 Read and write tools honor OvalEdge permissions — the MCP does not bypass RBAC.
 
@@ -64,7 +67,8 @@ These rules apply to every MCP session (also exposed to clients as server **inst
 - `table_entity_relationships`, `asset_lineage`, `metadata_changes_between_crawls`
 - `lookup_glossary_term`, `create_glossary_term`, `lookup_tags`, `create_tag`, `lookup_datastory`, `search_platform_docs`
 - `source_system_access` (Redshift / Snowflake / Tableau grant previews)
-- `update_asset_descriptions`, `update_governance_roles`, `lookup_dq_rule`
+- `update_asset_descriptions`, `update_governance_roles`, `lookup_dq_rule`, `assess_cde_dq`
+- `associate_dq_rule_objects`, `create_dq_rules`
 
 **`create_glossary_term` workflow:** (1) `term_name` → domain picker; (2) `term_name` + `domain_id` → category picker when categories exist (skip only after user says skip: `skip_category=true` + `category_skip_confirmed=true`); (3) subcategory picker when applicable; (4) non-blank `description` required; (5) `confirm_create` preview; (6) POST with `create_confirmed_by_user=true`. Manual pickers: `search_on=oeglobaldomain|category|subcategory`.
 
@@ -88,13 +92,14 @@ Static product docs: `docs://ovaledge/...` (all `server/docs/*.md`, including `m
 
 ### Prompts (`server/prompts/workflows/`)
 
-Sixteen workflow prompts (discovery, knowledge, lineage/quality, native access, governed writes). Full list: [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md#workflow-prompts).
+Seventeen workflow prompts (discovery, knowledge, lineage/quality, native access, governed writes). Full list: [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md#workflow-prompts).
 
 Discovery: `data_discovery`, `explore_data_domain`, `find_related_assets`.  
 Knowledge: `explain_business_term`, `organizational_knowledge`, `explain_tag`, `explain_dq_rule`, `platform_help`.  
-Lineage & quality: `trust_assessment`, `trace_data_lineage`, `metadata_drift`.  
+Lineage & quality: `trust_assessment`, `trace_data_lineage`, `metadata_drift`, `assess_cde_dq_coverage`.  
 Access: `native_source_access`.  
-Writes (human-in-the-loop): `create_business_glossary_term`, `create_governance_tag`, `document_asset_descriptions`, `assign_governance_roles`.
+Writes (human-in-the-loop): `create_business_glossary_term`, `create_governance_tag`, `document_asset_descriptions`, `assign_governance_roles`.  
+DQ writes (user-approved after `assess_cde_dq`): `associate_dq_rule_objects`, `create_dq_rules`.
 
 ## Development
 

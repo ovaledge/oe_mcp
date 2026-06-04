@@ -17,6 +17,7 @@ from server.constants import (
     MCP_PATH_UPDATE_ASSET_DESCRIPTIONS,
     MCP_SEARCH_CLASSIFICATIONS_PARAM,
     MCP_SEARCH_CONTEXT_QUERY_PARAM,
+    MCP_SEARCH_CRITICAL_DATA_ELEMENT_PARAM,
     MCP_SEARCH_CUSTOM_FIELDS_PARAM,
     MCP_SEARCH_DATA_PRODUCTS_PARAM,
     MCP_SEARCH_GLOSSARY_TERMS_PARAM,
@@ -38,7 +39,7 @@ _DESC_SEARCH = (
     "- **Lexical dimensions** (tool args are list[str]; wire as JSON array strings): "
     f"{MCP_SEARCH_TERMS_PARAM}, {MCP_SEARCH_TAGS_PARAM}, {MCP_SEARCH_GLOSSARY_TERMS_PARAM}, "
     f"{MCP_SEARCH_CUSTOM_FIELDS_PARAM}, {MCP_SEARCH_DATA_PRODUCTS_PARAM}, "
-    f"{MCP_SEARCH_CLASSIFICATIONS_PARAM}.\n"
+    f"{MCP_SEARCH_CLASSIFICATIONS_PARAM}, {MCP_SEARCH_CRITICAL_DATA_ELEMENT_PARAM}.\n"
     "- **Exact filters** (tool args are str; narrow results, not full-text search): "
     "connection_name, schema_name, server_type (connectionInfo.serverType), "
     "owner, steward, custodian, object_type.\n"
@@ -68,7 +69,10 @@ _DESC_SEARCH = (
     '5) "Assets with Primary Business Function Operations" → '
     'custom_fields=["Operations"] or search_terms as fallback.\n'
     '6) "Tables classified as PII" → '
-    'classifications=["PII"], context_query=<verbatim question>.\n\n'
+    'classifications=["PII"], context_query=<verbatim question>.\n'
+    '7) "All table columns marked as CDE" → '
+    'object_type="oecolumn", critical_data_element=["Yes"]; then assess_cde_dq '
+    "(discover_cde_columns=true or pass objects from hits) for DQ recommendations.\n\n"
     "Omit empty lists; filter-only search is valid (no lexical arrays). "
     "object_type must be one of: "
     + MCP_CATALOG_OBJECT_TYPES_DOC
@@ -486,6 +490,7 @@ def _apply_lexical_search_params(
     custom_fields: list[str] | None = None,
     data_products: list[str] | None = None,
     classifications: list[str] | None = None,
+    critical_data_element: list[str] | None = None,
 ) -> None:
     """Map MCP list args to API query params (each a JSON array string)."""
     for api_key, values in (
@@ -495,6 +500,7 @@ def _apply_lexical_search_params(
         (MCP_SEARCH_CUSTOM_FIELDS_PARAM, custom_fields),
         (MCP_SEARCH_DATA_PRODUCTS_PARAM, data_products),
         (MCP_SEARCH_CLASSIFICATIONS_PARAM, classifications),
+        (MCP_SEARCH_CRITICAL_DATA_ELEMENT_PARAM, critical_data_element),
     ):
         normalized = _normalize_search_terms(values)
         if normalized is not None:
