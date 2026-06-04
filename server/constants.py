@@ -113,7 +113,6 @@ MCP_SOURCE_SYSTEMS = frozenset({"redshift", "snowflake", "tableau"})
 MCP_SOURCE_SYSTEMS_DOC = ", ".join(sorted(MCP_SOURCE_SYSTEMS))
 MCP_QUERY_DIRECTIONS = frozenset({"user_to_objects", "object_to_users"})
 MCP_QUERY_DIRECTIONS_DOC = "user_to_objects | object_to_users"
-MCP_GRANT_MECHANISMS = frozenset({"direct", "group", "role"})
 
 # source_system_access objectPath — must match backend path resolution.
 MCP_OBJECT_PATH_FORMATS_DOC = (
