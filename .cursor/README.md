@@ -31,3 +31,11 @@ If `${workspaceFolder}` is not expanded in your Cursor build, replace it with th
 ## Tools, prompts, and routing
 
 After connect, use workflow prompts and tools as documented in [server/docs/mcp_workflows.md](../server/docs/mcp_workflows.md) (`docs://ovaledge/mcp_workflows`), including **`native_source_access`** / **`source_system_access`** for Redshift, Snowflake, and Tableau native grants.
+
+## Agent skills (this repo)
+
+| Skill | Use when |
+|-------|----------|
+| [oe-mcp-tool-design](skills/oe-mcp-tool-design/SKILL.md) | Adding or reviewing MCP tools in this codebase |
+
+Invoke in Cursor with `@oe-mcp-tool-design` or ask to follow the oe_mcp tool design skill.
