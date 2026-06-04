@@ -15,7 +15,7 @@ from server.constants import (
 )
 from server.tools.common import drop_none, map_ovaledge_error, ovaledge_client, strip_or_none
 from server.tools.rdam.helpers import (
-    _DESC_GET_SOURCE_SYSTEM_ACCESS,
+    _DESC_SOURCE_SYSTEM_ACCESS,
     _DESC_USER_OBJECT_ACCESS,
     validate_source_system_access_args,
 )
@@ -53,8 +53,8 @@ async def _invoke_source_system_access(
 
 def register(mcp: FastMCP) -> None:
 
-    @mcp.tool(description=_DESC_GET_SOURCE_SYSTEM_ACCESS)
-    async def get_source_system_access(
+    @mcp.tool(description=_DESC_SOURCE_SYSTEM_ACCESS)
+    async def source_system_access(
         source_system: Annotated[
             Literal["redshift", "snowflake", "tableau"],
             Field(description="Native platform: " + MCP_SOURCE_SYSTEMS_DOC + "."),
@@ -182,7 +182,7 @@ def register(mcp: FastMCP) -> None:
             ),
         ] = False,
     ) -> dict[str, Any]:
-        """Native source-system access (alias of get_source_system_access)."""
+        """Native source-system access (alias of source_system_access)."""
         return await _invoke_source_system_access(
             source_system,
             query_direction,

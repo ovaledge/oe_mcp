@@ -21,7 +21,7 @@ from server.constants import (
 )
 from server.tools.common import blank, error_payload
 
-_DESC_GET_SOURCE_SYSTEM_ACCESS = (
+_DESC_SOURCE_SYSTEM_ACCESS = (
     "Resolve **native** access grants harvested from Redshift, Snowflake, or Tableau — "
     "independent of OvalEdge catalog permissions.\n\n"
     "Use for questions like:\n"
@@ -77,8 +77,8 @@ _DESC_GET_SOURCE_SYSTEM_ACCESS = (
 )
 
 _DESC_USER_OBJECT_ACCESS = (
-    "Alias of **get_source_system_access** — same API and native RDAM harvest.\n\n"
-    + _DESC_GET_SOURCE_SYSTEM_ACCESS
+    "Alias of **source_system_access** — same API and native RDAM harvest.\n\n"
+    + _DESC_SOURCE_SYSTEM_ACCESS
 )
 
 

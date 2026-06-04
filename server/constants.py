@@ -21,7 +21,6 @@ TOOL_UPDATE_GOVERNANCE_ROLES = "update_governance_roles"
 TOOL_LOOKUP_DQ_RULE = "lookup_dq_rule"
 TOOL_USER_OBJECT_ACCESS = "user_object_access"
 TOOL_SOURCE_SYSTEM_ACCESS = "source_system_access"
-TOOL_GET_SOURCE_SYSTEM_ACCESS = "get_source_system_access"
 
 # Lowercase objectType for MCP search-catalog and object-details (matches OvalEdge API).
 MCP_CATALOG_OBJECT_TYPES = frozenset(
@@ -108,7 +107,7 @@ MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES_DOC = ", ".join(
     sorted(MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES)
 )
 
-# Native source-system access (get_source_system_access / user_object_access).
+# Native source-system access (source_system_access / user_object_access).
 # Must match backend McpSourceSystemAccessReadService.
 MCP_SOURCE_SYSTEMS = frozenset({"redshift", "snowflake", "tableau"})
 MCP_SOURCE_SYSTEMS_DOC = ", ".join(sorted(MCP_SOURCE_SYSTEMS))
@@ -116,7 +115,7 @@ MCP_QUERY_DIRECTIONS = frozenset({"user_to_objects", "object_to_users"})
 MCP_QUERY_DIRECTIONS_DOC = "user_to_objects | object_to_users"
 MCP_GRANT_MECHANISMS = frozenset({"direct", "group", "role"})
 
-# get_source_system_access objectPath — must match backend path resolution.
+# source_system_access objectPath — must match backend path resolution.
 MCP_OBJECT_PATH_FORMATS_DOC = (
     "**object_path** formats (Redshift/Snowflake; dot-separated):\n"
     "- Optional OvalEdge **connection name** prefix when multiple connections share a "

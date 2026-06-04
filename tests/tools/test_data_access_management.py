@@ -5,26 +5,26 @@ from fastmcp import FastMCP
 from server.client import OvalEdgeError
 from server.constants import MCP_OBJECT_PATH_FORMATS_DOC, MCP_PATH_SOURCE_SYSTEM_ACCESS
 from server.tools import rdam
-from server.tools.rdam.helpers import _DESC_GET_SOURCE_SYSTEM_ACCESS
+from server.tools.rdam.helpers import _DESC_SOURCE_SYSTEM_ACCESS
 from tests.helpers import get_tool_fn
 
 
 class TestGetSourceSystemAccess:
     def test_tool_description_documents_daa_scope(self) -> None:
-        assert "Instance Data Access Admin" in _DESC_GET_SOURCE_SYSTEM_ACCESS
-        assert "Connector Data Access Admin" in _DESC_GET_SOURCE_SYSTEM_ACCESS
+        assert "Instance Data Access Admin" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "Connector Data Access Admin" in _DESC_SOURCE_SYSTEM_ACCESS
 
     def test_tool_description_documents_object_path_patterns(self) -> None:
         assert "connectionName.dbName" in MCP_OBJECT_PATH_FORMATS_DOC
         assert "dbName" in MCP_OBJECT_PATH_FORMATS_DOC
-        assert "connectionName.dbName" in _DESC_GET_SOURCE_SYSTEM_ACCESS
+        assert "connectionName.dbName" in _DESC_SOURCE_SYSTEM_ACCESS
         assert "snowflake.BUSINESS" in MCP_OBJECT_PATH_FORMATS_DOC
 
     async def test_user_to_objects_forwards_params(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
         rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "get_source_system_access")
+        fn = await get_tool_fn(mcp, "source_system_access")
         out = await fn(
             source_system="redshift",
             query_direction="user_to_objects",
@@ -44,7 +44,7 @@ class TestGetSourceSystemAccess:
         mock_oe_client.get.return_value = {}
         mcp = FastMCP(name="test", version="0.0.1")
         rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "get_source_system_access")
+        fn = await get_tool_fn(mcp, "source_system_access")
         await fn(
             source_system="redshift",
             query_direction="object_to_users",
@@ -62,7 +62,7 @@ class TestGetSourceSystemAccess:
     async def test_rejects_invalid_source_system(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "get_source_system_access")
+        fn = await get_tool_fn(mcp, "source_system_access")
         out = await fn(
             source_system="postgres",
             query_direction="user_to_objects",
@@ -74,7 +74,7 @@ class TestGetSourceSystemAccess:
     async def test_rejects_missing_username(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "get_source_system_access")
+        fn = await get_tool_fn(mcp, "source_system_access")
         out = await fn(source_system="snowflake", query_direction="user_to_objects")
         assert out["status_code"] == 400
         mock_oe_client.get.assert_not_called()
@@ -82,7 +82,7 @@ class TestGetSourceSystemAccess:
     async def test_rejects_missing_object_path(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "get_source_system_access")
+        fn = await get_tool_fn(mcp, "source_system_access")
         out = await fn(source_system="tableau", query_direction="object_to_users")
         assert out["status_code"] == 400
         mock_oe_client.get.assert_not_called()
@@ -94,7 +94,7 @@ class TestGetSourceSystemAccess:
         )
         mcp = FastMCP(name="test", version="0.0.1")
         rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "get_source_system_access")
+        fn = await get_tool_fn(mcp, "source_system_access")
         out = await fn(
             source_system="snowflake",
             query_direction="user_to_objects",
@@ -105,7 +105,7 @@ class TestGetSourceSystemAccess:
     async def test_rejects_invalid_query_direction(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "get_source_system_access")
+        fn = await get_tool_fn(mcp, "source_system_access")
         out = await fn(
             source_system="redshift",
             query_direction="objects_to_user",
@@ -117,7 +117,7 @@ class TestGetSourceSystemAccess:
     async def test_rejects_username_on_object_to_users(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "get_source_system_access")
+        fn = await get_tool_fn(mcp, "source_system_access")
         out = await fn(
             source_system="redshift",
             query_direction="object_to_users",
@@ -132,7 +132,7 @@ class TestGetSourceSystemAccess:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
         rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "get_source_system_access")
+        fn = await get_tool_fn(mcp, "source_system_access")
         await fn(
             source_system="redshift",
             query_direction="object_to_users",
@@ -158,7 +158,7 @@ class TestGetSourceSystemAccess:
         )
         mcp = FastMCP(name="test", version="0.0.1")
         rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "get_source_system_access")
+        fn = await get_tool_fn(mcp, "source_system_access")
         out = await fn(
             source_system="redshift",
             query_direction="object_to_users",
@@ -202,7 +202,7 @@ class TestGetSourceSystemAccess:
         }
         mcp = FastMCP(name="test", version="0.0.1")
         rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "get_source_system_access")
+        fn = await get_tool_fn(mcp, "source_system_access")
         out = await fn(
             source_system="redshift",
             query_direction="object_to_users",
@@ -232,7 +232,7 @@ class TestGetSourceSystemAccess:
         }
         mcp = FastMCP(name="test", version="0.0.1")
         rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "get_source_system_access")
+        fn = await get_tool_fn(mcp, "source_system_access")
         out = await fn(
             source_system="tableau",
             query_direction="object_to_users",
@@ -250,7 +250,7 @@ class TestGetSourceSystemAccess:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
         rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "get_source_system_access")
+        fn = await get_tool_fn(mcp, "source_system_access")
         await fn(
             source_system="snowflake",
             query_direction="object_to_users",
@@ -273,7 +273,7 @@ class TestGetSourceSystemAccess:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
         rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "get_source_system_access")
+        fn = await get_tool_fn(mcp, "source_system_access")
         await fn(
             source_system="snowflake",
             query_direction="object_to_users",
@@ -300,7 +300,7 @@ class TestGetSourceSystemAccess:
         }
         mcp = FastMCP(name="test", version="0.0.1")
         rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "get_source_system_access")
+        fn = await get_tool_fn(mcp, "source_system_access")
         await fn(
             source_system="redshift",
             query_direction="object_to_users",
@@ -340,7 +340,7 @@ class TestGetSourceSystemAccess:
         }
         mcp = FastMCP(name="test", version="0.0.1")
         rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "get_source_system_access")
+        fn = await get_tool_fn(mcp, "source_system_access")
         out = await fn(
             source_system="redshift",
             query_direction="user_to_objects",
@@ -374,7 +374,7 @@ class TestGetSourceSystemAccess:
         }
         mcp = FastMCP(name="test", version="0.0.1")
         rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "get_source_system_access")
+        fn = await get_tool_fn(mcp, "source_system_access")
         out = await fn(
             source_system="snowflake",
             query_direction="user_to_objects",
