@@ -484,6 +484,50 @@ class TestUpdateAssetDescriptions:
         assert out["status_code"] == 400
         mock_oe_client.post.assert_not_called()
 
+    async def test_accepts_oeglobaldomain(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.return_value = {"status": "success"}
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_asset_descriptions")
+        await fn(
+            object_id=10,
+            object_type="oeglobaldomain",
+            domain_description="Domain text",
+            create_confirmed_by_user=True,
+        )
+        body = mock_oe_client.post.call_args[0][1]
+        assert body["target"]["objectType"] == "oeglobaldomain"
+        assert body["descriptions"]["domainDescription"] == "Domain text"
+
+    async def test_oecode_alias_maps_to_code_api_type(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.return_value = {"status": "success"}
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_asset_descriptions")
+        await fn(
+            object_id=7,
+            object_type="oecode",
+            business_description="Code business",
+            prompt="Update the business description",
+            create_confirmed_by_user=True,
+        )
+        body = mock_oe_client.post.call_args[0][1]
+        assert body["target"]["objectType"] == "code"
+        assert body["descriptions"]["businessDescription"] == "Code business"
+
+    async def test_rejects_oestory(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_asset_descriptions")
+        out = await fn(
+            object_id=1,
+            object_type="oestory",
+            description_field="business_description",
+            description_text="x",
+        )
+        assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
     async def test_oval_edge_error_returns_dict(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.post.side_effect = OvalEdgeError(403, "Forbidden")
         mcp = FastMCP(name="test", version="0.0.1")

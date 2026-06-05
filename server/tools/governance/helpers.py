@@ -845,6 +845,16 @@ _ROLE_KEYS_CANONICAL: dict[str, str] = {
     "governance_role_4": "governance_role_4",
     "governance_role_5": "governance_role_5",
     "governance_role_6": "governance_role_6",
+    # Common UI/app synonyms (case-insensitive) for agent/user convenience.
+    "governancerole4": "governance_role_4",
+    "governancerole5": "governance_role_5",
+    "governancerole6": "governance_role_6",
+    "govrole4": "governance_role_4",
+    "govrole5": "governance_role_5",
+    "govrole6": "governance_role_6",
+    "gov_role_4": "governance_role_4",
+    "gov_role_5": "governance_role_5",
+    "gov_role_6": "governance_role_6",
 }
 
 

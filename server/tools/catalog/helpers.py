@@ -25,6 +25,8 @@ from server.constants import (
     MCP_SEARCH_TERMS_PARAM,
     MCP_SERVER_TYPES,
     MCP_SERVER_TYPES_BY_LOWER,
+    MCP_UPDATE_ASSET_DESCRIPTION_OBJECT_TYPES,
+    MCP_UPDATE_ASSET_DESCRIPTION_OBJECT_TYPES_DOC,
 )
 
 _TABLE_FILE_TYPES = frozenset({"oetable", "oefile"})
@@ -67,8 +69,16 @@ _DESC_SEARCH = (
     'data_products=["revenue"], context_query=<verbatim question>.\n'
     '5) "Assets with Primary Business Function Operations" → '
     'custom_fields=["Operations"] or search_terms as fallback.\n'
-    '6) "Tables classified as PII" → '
+    '6) "Finance Domain from Data Domains" → '
+    'object_type="dp_domain", search_terms=["Finance"], context_query=<verbatim question>. '
+    "Do not use object_type=\"domain\" or oeglobaldomain (that is glossary Global Domain, "
+    "not Data Domains).\n"
+    '7) "Tables classified as PII" → '
     'classifications=["PII"], context_query=<verbatim question>.\n\n'
+    "**Data Domains (dp_domain):** When the user says Data Domains, data domain, or dp_domain, "
+    "set object_type=\"dp_domain\" (alias datadomain). These assets are loaded from the database "
+    "(not the main Elasticsearch catalog index); search requires object_type=dp_domain alone — "
+    "do not combine with other object types.\n\n"
     "Omit empty lists; filter-only search is valid (no lexical arrays). "
     "object_type must be one of: "
     + MCP_CATALOG_OBJECT_TYPES_DOC
@@ -80,11 +90,14 @@ _DESC_SEARCH = (
     "snippets alone."
 )
 _DESC_DETAILS = (
-    "Fetch one catalog document (JSON from Elasticsearch; embeddings removed). "
+    "Fetch one catalog document (JSON from Elasticsearch for most types; embeddings removed). "
     "Use after search_catalog_assets to drill into an asset.\n\n"
     f"Backend: GET {MCP_PATH_OBJECT_DETAILS}\n\n"
     "Exactly one lookup mode: (1) fully_qualified_name alone, OR "
     "(2) object_id AND object_type together. Never mix FQN with id/type.\n\n"
+    "For **dp_domain** (Data Domains), use object_id + object_type=dp_domain from search hits; "
+    "FQN lookup is not supported. Details are resolved from the database and wiki when no ES "
+    "document exists.\n\n"
     "object_type must be one of: "
     + MCP_CATALOG_OBJECT_TYPES_DOC
     + "."
@@ -115,9 +128,11 @@ _DESC_UPDATE_DESCRIPTIONS = (
     "create_confirmed_by_user=true and the same object_id, object_type, description "
     "fields, and clientContext — then POST. Never set create_confirmed_by_user until "
     "the user confirms.\n\n"
-    "Workflow: call search_catalog_assets first, then pass items[].objectId as object_id "
-    "and items[].objectType as object_type (API returns camelCase; this tool uses snake_case "
-    "arguments). Do not guess ids.\n\n"
+    "Resolve object_id first: search_catalog_assets (catalog types), lookup_glossary_term "
+    "(glossary), or lookup_tags (oetag). For **Data Domains (dp_domain)**, discover via "
+    "search_catalog_assets with object_type=\"dp_domain\", then catalog_asset_details. "
+    "For code/master tags use search with object_type filter or catalog_asset_details with "
+    "known id. Do not guess ids.\n\n"
     "Required: object_id, object_type, and an explicit description slot.\n\n"
     "When the user says only \"description\" (not business vs technical), you MUST ask which "
     "slot applies, then call with description_field + description_text. Do NOT guess "
@@ -129,16 +144,17 @@ _DESC_UPDATE_DESCRIPTIONS = (
     "(HTTP 400). Updating both business and technical in one call is allowed.\n\n"
     "Field applicability by object_type (server rejects unsupported combinations with 400):\n"
     "- Catalog assets (oeschema, oetable, oecolumn, oefile, oefilecolumn, oechart, chartchild, "
-    "apiobject, apicolumn, oequery): business_description, technical_description only — "
+    "oeapi, oeapicolumn, code/oecode): business_description, technical_description only — "
     "NOT detailed_description.\n"
     "- Glossary (glossary / businessglossary): business_description, detailed_description — "
-    "NOT technical_description.\n"
+    "NOT technical_description. Terms must be in Draft state on the server.\n"
     "- Data product (dp_product): business_description, detailed_description.\n"
-    "- Global domain / data domain (oeglobaldomain, dp_domain): domain_description only.\n"
+    "- Glossary Global Domain (oeglobaldomain): domain_description only (not Data Domains).\n"
+    "- Data Domains (dp_domain): domain_description only (wiki on dp_domain_master).\n"
     "- Tag (oetag): tag_description only.\n"
     "- Master tag (mastertag): master_tag_description only.\n\n"
     "object_type must be one of: "
-    + MCP_CATALOG_OBJECT_TYPES_DOC
+    + MCP_UPDATE_ASSET_DESCRIPTION_OBJECT_TYPES_DOC
     + ".\n\n"
     "Response status may be success, partial_success (some fields blocked), or blocked. "
     "Check updatedFields, blockedFields, blockedReasons, and target.redirectUrl. "
@@ -188,7 +204,9 @@ _DESCRIPTION_FIELDS_BY_OBJECT_TYPE: dict[str, tuple[str, ...]] = {
     "oeapi": ("business_description", "technical_description"),
     "oeapicolumn": ("business_description", "technical_description"),
     "oequery": ("business_description", "technical_description"),
+    "code": ("business_description", "technical_description"),
     "glossary": ("business_description", "detailed_description"),
+    "businessglossary": ("business_description", "detailed_description"),
     "dp_product": ("business_description", "detailed_description"),
     "oeglobaldomain": ("domain_description",),
     "dp_domain": ("domain_description",),
@@ -196,14 +214,31 @@ _DESCRIPTION_FIELDS_BY_OBJECT_TYPE: dict[str, tuple[str, ...]] = {
     "mastertag": ("master_tag_description",),
 }
 
+# Normalize tool argument object_type to canonical key for field rules / allow-list.
+_OBJECT_TYPE_CANONICAL_KEY: dict[str, str] = {
+    "filecolumn": "oefilecolumn",
+    "oecode": "code",
+    "businessglossary": "glossary",
+}
+
 # Tool-facing aliases sent to the OvalEdge API as canonical objectType values.
 _OBJECT_TYPE_TO_API: dict[str, str] = {
     "filecolumn": "oefilecolumn",
+    "oecode": "code",
+    "businessglossary": "glossary",
 }
 
 
+def _normalize_object_type_key(object_type: str) -> str:
+    key = str(object_type).strip().lower().replace("-", "_")
+    return _OBJECT_TYPE_CANONICAL_KEY.get(key, key)
+
+
 def _api_object_type(object_type: str) -> str:
-    return _OBJECT_TYPE_TO_API.get(object_type, object_type)
+    return _OBJECT_TYPE_TO_API.get(
+        str(object_type).strip().lower().replace("-", "_"),
+        _normalize_object_type_key(object_type),
+    )
 
 
 _PROMPT_SLOT_PHRASES: dict[str, tuple[str, ...]] = {
@@ -227,7 +262,7 @@ def _prompt_names_slot(user_prompt: str | None, slot: str) -> bool:
 
 
 def _description_field_hint(object_type: str) -> str:
-    fields = _DESCRIPTION_FIELDS_BY_OBJECT_TYPE.get(object_type)
+    fields = _DESCRIPTION_FIELDS_BY_OBJECT_TYPE.get(_normalize_object_type_key(object_type))
     if not fields:
         return "See tool description for supported object types."
     if len(fields) == 1:
@@ -249,6 +284,15 @@ def _validate_description_inputs(
     prompt: str | None = None,
 ) -> dict[str, Any] | None:
     """Return a client-side 400 payload when description arguments are ambiguous."""
+    otype_key = _normalize_object_type_key(object_type)
+    if otype_key not in MCP_UPDATE_ASSET_DESCRIPTION_OBJECT_TYPES:
+        return {
+            "error": (
+                f"object_type {object_type!r} is not supported for update_asset_descriptions. "
+                f"Use one of: {MCP_UPDATE_ASSET_DESCRIPTION_OBJECT_TYPES_DOC}."
+            ),
+            "status_code": 400,
+        }
     typed_set = [
         name
         for name, value in (
@@ -287,7 +331,7 @@ def _validate_description_inputs(
             "status_code": 400,
         }
     if field:
-        allowed = _DESCRIPTION_FIELDS_BY_OBJECT_TYPE.get(object_type, ())
+        allowed = _DESCRIPTION_FIELDS_BY_OBJECT_TYPE.get(otype_key, ())
         if field not in allowed:
             return {
                 "error": (
@@ -296,7 +340,7 @@ def _validate_description_inputs(
                 ),
                 "status_code": 400,
             }
-    allowed = _DESCRIPTION_FIELDS_BY_OBJECT_TYPE.get(object_type, ())
+    allowed = _DESCRIPTION_FIELDS_BY_OBJECT_TYPE.get(otype_key, ())
     if len(allowed) > 1 and len(typed_set) == 1 and not (has_generic and field):
         only_slot = typed_set[0]
         if not _prompt_names_slot(prompt, only_slot):

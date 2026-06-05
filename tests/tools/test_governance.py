@@ -1835,6 +1835,19 @@ class TestLookupDqRule:
 
 
 class TestUpdateGovernanceRoles:
+    async def test_rejects_unsupported_object_type(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_governance_roles")
+        out = await fn(
+            object_id=1,
+            object_type="not_a_real_type",
+            role_updates={"owner": "john"},
+        )
+        assert out["status_code"] == 400
+        assert "unsupported object_type" in out["error"].lower()
+        mock_oe_client.post.assert_not_called()
+
     async def test_rejects_owner_on_dqrule(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
@@ -1952,6 +1965,49 @@ class TestUpdateGovernanceRoles:
                 "roleUpdates": {"custodian": None},
             },
         )
+
+    async def test_accepts_govrole5_synonym(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.return_value = {
+            "status": "success",
+            "updatedRoles": ["governance_role_5"],
+            "blockedRoles": [],
+            "target": {"objectId": 1, "objectType": "oetable"},
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_governance_roles")
+        await fn(
+            object_id=1,
+            object_type="oetable",
+            role_updates={"govrole5": "sarah"},
+            create_confirmed_by_user=True,
+        )
+        mock_oe_client.post.assert_called_once_with(
+            MCP_PATH_UPDATE_GOVERNANCE_ROLES,
+            {
+                "target": {"objectId": 1, "objectType": "oetable"},
+                "roleUpdates": {"governance_role_5": "sarah"},
+            },
+        )
+
+    async def test_governance_role_not_enabled_error_is_structured(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.side_effect = OvalEdgeError(
+            400, "Governance role is not enabled: governance_role_5"
+        )
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_governance_roles")
+        out = await fn(
+            object_id=1,
+            object_type="oetable",
+            role_updates={"governance_role_5": "sarah"},
+            create_confirmed_by_user=True,
+        )
+        assert out["status_code"] == 400
+        assert out["reason_code"] == "GOVERNANCE_ROLE_NOT_ENABLED"
+        assert "not enabled" in out["error"].lower()
 
     async def test_oval_edge_error_returns_dict(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.post.side_effect = OvalEdgeError(403, "Forbidden")
