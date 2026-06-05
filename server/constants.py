@@ -29,18 +29,54 @@ MCP_CATALOG_OBJECT_TYPES = frozenset(
         "oecolumn",
         "oefile",
         "filecolumn",
+        "oefilecolumn",
         "oechart",
         "chartchild",
         "oeapi",
         "oeapicolumn",
         "oequery",
+        "code",
+        "oecode",
         "dp_product",
         "glossary",
+        "businessglossary",
         "oetag",
+        "mastertag",
+        "oeglobaldomain",
+        "dp_domain",
         "oestory",
     }
 )
 MCP_CATALOG_OBJECT_TYPES_DOC = ", ".join(sorted(MCP_CATALOG_OBJECT_TYPES))
+
+# BRD object types for update_asset_descriptions (oestory excluded — no description slots).
+MCP_UPDATE_ASSET_DESCRIPTION_OBJECT_TYPES = frozenset(
+    {
+        "oeschema",
+        "oetable",
+        "oecolumn",
+        "oefile",
+        "filecolumn",
+        "oefilecolumn",
+        "oechart",
+        "chartchild",
+        "oeapi",
+        "oeapicolumn",
+        "oequery",
+        "code",
+        "oecode",
+        "oeglobaldomain",
+        "glossary",
+        "businessglossary",
+        "oetag",
+        "mastertag",
+        "dp_domain",
+        "dp_product",
+    }
+)
+MCP_UPDATE_ASSET_DESCRIPTION_OBJECT_TYPES_DOC = ", ".join(
+    sorted(MCP_UPDATE_ASSET_DESCRIPTION_OBJECT_TYPES)
+)
 
 # ── OvalEdge MCP HTTP paths (appended to OVALEDGE_BASE_URL) ──────
 MCP_PATH_SEARCH_CATALOG = "/api/v1/mcp/search-catalog"
@@ -98,6 +134,8 @@ MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES = frozenset(
         "oeglobaldomain",
         "processing_activity",
         "ropa_report",
+        "category",
+        "subcategory",
     }
 )
 # Steward-only governance updates (UI parity).

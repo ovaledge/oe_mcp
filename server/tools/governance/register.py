@@ -9,11 +9,14 @@ from pydantic import Field
 
 from server.client import OvalEdgeError
 from server.constants import (
+    MCP_CATALOG_OBJECT_TYPES,
     MCP_DOMAIN_METADATA_SEARCH_ON,
     MCP_DOMAIN_METADATA_SIZE_DEFAULT,
     MCP_DOMAIN_METADATA_SIZE_MAX,
     MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
     MCP_GLOSSARY_TAGS_LIMIT_MAX,
+    MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES,
+    MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES_DOC,
     MCP_GOVERNANCE_STEWARD_ONLY_OBJECT_TYPES,
     MCP_PATH_GLOSSARY_TERMS,
     MCP_PATH_LOOKUP_DATASTORY,
@@ -1411,6 +1414,18 @@ def register(mcp: FastMCP) -> None:
             return {"error": err, "status_code": 400}
 
         otype_key = str(object_type).strip().lower()
+        if (
+            otype_key not in MCP_CATALOG_OBJECT_TYPES
+            and otype_key not in MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES
+        ):
+            return {
+                "error": (
+                    f"Unsupported object_type {object_type!r}. Use a catalog objectType from "
+                    "search_catalog_assets, or one of: "
+                    f"{MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES_DOC}."
+                ),
+                "status_code": 400,
+            }
         if otype_key in MCP_GOVERNANCE_STEWARD_ONLY_OBJECT_TYPES and normalized_updates:
             invalid_roles = [
                 role
@@ -1456,4 +1471,15 @@ def register(mcp: FastMCP) -> None:
                     return _enrich_update_governance_roles_response(result)
                 return result
         except OvalEdgeError as e:
+            msg = str(e)
+            prefix = f"OvalEdge API error {e.status_code}: "
+            if msg.startswith(prefix):
+                msg = msg[len(prefix) :].strip()
+            lower = msg.lower()
+            if "governance role is not enabled" in lower and "role" in lower:
+                return {
+                    "error": msg,
+                    "status_code": e.status_code,
+                    "reason_code": "GOVERNANCE_ROLE_NOT_ENABLED",
+                }
             return map_ovaledge_error(e)
