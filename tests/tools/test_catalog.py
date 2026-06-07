@@ -11,6 +11,7 @@ from server.constants import (
     MCP_PATH_METADATA_CHANGES_BETWEEN_CRAWLS,
     MCP_PATH_SEARCH_CATALOG,
     MCP_PATH_UPDATE_ASSET_DESCRIPTIONS,
+    MCP_PATH_UPDATE_CDE_ASSOCIATIONS,
     MCP_SEARCH_CLASSIFICATIONS_PARAM,
     MCP_SEARCH_CONTEXT_QUERY_PARAM,
     MCP_SEARCH_CUSTOM_FIELDS_PARAM,
@@ -21,7 +22,12 @@ from server.constants import (
     MCP_SEARCH_TERMS_PARAM,
 )
 from server.tools import catalog
-from tests.conftest import MOCK_ASSET_DETAIL, MOCK_LINEAGE_RESPONSE, MOCK_SEARCH_RESPONSE
+from tests.conftest import (
+    MOCK_ASSET_DETAIL,
+    MOCK_LINEAGE_RESPONSE,
+    MOCK_SEARCH_RESPONSE,
+    MOCK_UPDATE_CDE_RESPONSE,
+)
 from tests.helpers import get_tool_fn
 
 
@@ -551,3 +557,77 @@ class TestMetadataChangesBetweenCrawls:
         fn = await get_tool_fn(mcp, "metadata_changes_between_crawls")
         out = await fn(question="Show drift")
         assert out["status_code"] == 500
+
+
+class TestUpdateCdeAssociations:
+    async def test_confirm_preview_blocks_post(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_cde_associations")
+        out = await fn(
+            targets=[{"object_id": 3337, "object_type": "oeschema"}],
+            action="Yes",
+            cde_justification="Understanding CDE functionality",
+        )
+        assert out["workflowPhase"] == "confirm_update"
+        assert out["doNotUpdate"] is True
+        mock_oe_client.post.assert_not_called()
+
+    async def test_post_body_matches_payload(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.return_value = dict(MOCK_UPDATE_CDE_RESPONSE)
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_cde_associations")
+        out = await fn(
+            targets=[{"object_id": 3337, "object_type": "oeschema"}],
+            action="Yes",
+            cde_justification="Understanding CDE functionality",
+            create_confirmed_by_user=True,
+        )
+        assert out["status"] == "success"
+        assert "formattedResponse" in out
+        mock_oe_client.post.assert_called_once_with(
+            MCP_PATH_UPDATE_CDE_ASSOCIATIONS,
+            {
+                "targets": [{"objectId": 3337, "objectType": "oeschema"}],
+                "action": "Yes",
+                "cdeJustification": "Understanding CDE functionality",
+            },
+        )
+
+    async def test_rejects_unsupported_object_type(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_cde_associations")
+        out = await fn(
+            targets=[{"object_id": 1, "object_type": "glossary"}],
+            action="Yes",
+        )
+        assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
+    async def test_dry_run_skips_confirm_and_posts(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.return_value = {"ok": True, "data": {"status": "success"}}
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_cde_associations")
+        await fn(
+            targets=[{"object_id": 10, "object_type": "oetable"}],
+            action="None",
+            dry_run=True,
+        )
+        body = mock_oe_client.post.call_args[0][1]
+        assert body["options"] == {"dryRun": True}
+        assert body["action"] == "None"
+
+    async def test_oval_edge_error_returns_structured_dict(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.side_effect = OvalEdgeError(403, "Forbidden")
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_cde_associations")
+        out = await fn(
+            targets=[{"object_id": 1, "object_type": "oetable"}],
+            action="Yes",
+            create_confirmed_by_user=True,
+        )
+        assert out["status_code"] == 403
