@@ -208,6 +208,9 @@ _DESC_ASSOCIATE_DQ_RULE_OBJECTS = (
     "Associate catalog objects to an existing draft DQ rule (idempotent when "
     "skip_already_associated=true).\n\n"
     f"Backend: POST {MCP_PATH_ASSOCIATE_DQ_RULE_OBJECTS}\n\n"
+    "Mirrors the UI flow: batch-validates each objectType against the rule function via "
+    "getSupportedDQRuleObjectsForDQFunction (validateDQRuleObjectsForDQFunction), then "
+    "associates only supported objects.\n\n"
     "**Not** assess_cde_dq — that is read-only assessment; use this after the user "
     "confirms linking to a specific draft rule.\n\n"
     "**Not** create_dq_rules — use that when you need auto-create or prefer-existing "
@@ -216,7 +219,12 @@ _DESC_ASSOCIATE_DQ_RULE_OBJECTS = (
     "**objects** (required): "
     '[{"objectId": 123, "objectType": "oecolumn"}, ...]\n\n'
     f"**objectType**: {MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC} only.\n\n"
-    "Audit source OE-MCP. Returns per-object status: associated, skipped, or failed."
+    "Response includes statusMessage (batch function-support summary), counts "
+    "(associatedCount, skippedCount, failedCount), and per-row status:\n"
+    "- associated: linked to the draft rule\n"
+    "- skipped: already linked, or unsupported column data type / connector for the function\n"
+    "- failed: invalid object type, not found, or license error\n\n"
+    "Present formattedResponse to the user. Audit source OE-MCP."
 )
 
 _DESC_CREATE_DQ_RULES = (
@@ -2202,6 +2210,39 @@ def validate_associate_dq_rule_objects_args(
     if not refs:
         return error_payload("At least one object with objectId and objectType is required.")
     return None
+
+
+def format_associate_dq_rule_objects_response(body: dict[str, Any]) -> str:
+    """Human-readable summary of associate_dq_rule_objects API result."""
+    data = body.get("data") if isinstance(body.get("data"), dict) else body
+    if not isinstance(data, dict):
+        return "DQ rule association completed."
+    lines: list[str] = []
+    rule_id = data.get("dqruleId")
+    if rule_id is not None:
+        lines.append(f"DQ rule id: {rule_id}")
+    status_message = data.get("statusMessage")
+    if isinstance(status_message, str) and status_message.strip():
+        lines.append(f"Function support: {status_message.strip()}")
+    associated = data.get("associatedCount", 0)
+    skipped = data.get("skippedCount", 0)
+    failed = data.get("failedCount", 0)
+    lines.append(
+        f"Summary: {associated} associated, {skipped} skipped, {failed} failed."
+    )
+    rows = data.get("rows")
+    if isinstance(rows, list) and rows:
+        lines.append("Per object:")
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            oid = row.get("objectId", "?")
+            otype = row.get("objectType", "?")
+            status = row.get("status", "?")
+            message = row.get("message")
+            detail = f" — {message}" if isinstance(message, str) and message.strip() else ""
+            lines.append(f"  - {oid} ({otype}): {status}{detail}")
+    return "\n".join(lines)
 
 
 def build_associate_dq_rule_objects_payload(

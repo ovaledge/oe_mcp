@@ -22,7 +22,7 @@ class TestAssessCdeDq:
         assert out["assessedCount"] == 0
         mock_oe_client.post.assert_called_once_with(
             MCP_PATH_ASSESS_CDE_DQ,
-            json={
+            {
                 "discoverCdeColumns": True,
                 "limit": MCP_DQ_ASSESS_LIMIT_DEFAULT,
             },
@@ -39,7 +39,7 @@ class TestAssessCdeDq:
         )
         mock_oe_client.post.assert_called_once_with(
             MCP_PATH_ASSESS_CDE_DQ,
-            json={
+            {
                 "discoverCdeColumns": False,
                 "limit": 25,
                 "objects": [{"objectId": 10, "objectType": "oecolumn"}],

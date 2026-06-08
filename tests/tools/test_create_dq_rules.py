@@ -24,7 +24,7 @@ class TestCreateDqRules:
         )
         mock_oe_client.post.assert_called_once_with(
             MCP_PATH_CREATE_DQ_RULES,
-            json={
+            {
                 "discoverCdeColumns": True,
                 "preferExistingRule": False,
                 "skipDuplicateFunctionOnObject": False,
@@ -43,7 +43,7 @@ class TestCreateDqRules:
         )
         mock_oe_client.post.assert_called_once_with(
             MCP_PATH_CREATE_DQ_RULES,
-            json={
+            {
                 "discoverCdeColumns": False,
                 "preferExistingRule": True,
                 "skipDuplicateFunctionOnObject": True,
