@@ -18,6 +18,7 @@ from server.constants import (
     MCP_PATH_OBJECT_DETAILS,
     MCP_PATH_SEARCH_CATALOG,
     MCP_PATH_UPDATE_ASSET_DESCRIPTIONS,
+    MCP_PATH_UPDATE_CDE_ASSOCIATIONS,
     MCP_SEARCH_CLASSIFICATIONS_PARAM,
     MCP_SEARCH_CONTEXT_QUERY_PARAM,
     MCP_SEARCH_CUSTOM_FIELDS_PARAM,
@@ -46,6 +47,13 @@ from server.tools.catalog.helpers import (
     _normalize_search_terms,
     _resolve_server_type,
     _validate_description_inputs,
+)
+from server.tools.cde_helpers import (
+    _DESC_UPDATE_CDE,
+    build_update_cde_body,
+    enrich_update_cde_response,
+    format_update_cde_confirmation_preview,
+    validate_cde_inputs,
 )
 from server.tools.common import drop_none as _q
 from server.tools.common import map_ovaledge_error, ovaledge_client
@@ -568,6 +576,95 @@ def register(mcp: FastMCP) -> None:
                 if isinstance(result, dict):
                     return _enrich_update_descriptions_response(result)
                 return result
+        except OvalEdgeError as e:
+            return map_ovaledge_error(e)
+
+    @mcp.tool(description=_DESC_UPDATE_CDE)
+    async def update_cde_associations(
+        targets: Annotated[
+            list[dict[str, Any]],
+            Field(
+                description=(
+                    "Assets to update. Each item: {object_id, object_type}. "
+                    "Supported CDE types: oeschema, oetable, oecolumn, oefile, oefilecolumn, "
+                    "oechart, chartchild, oeapi, oeapicolumn, oequery."
+                ),
+            ),
+        ],
+        action: Annotated[
+            str,
+            Field(description='CDE action: "Yes", "No", or "None".'),
+        ],
+        cde_category: Annotated[
+            str | None,
+            Field(description="Optional category/level when action is Yes or No.", default=None),
+        ] = None,
+        cde_justification: Annotated[
+            str | None,
+            Field(description="Optional justification (max 5000 chars).", default=None),
+        ] = None,
+        dry_run: Annotated[
+            bool | None,
+            Field(description="If true, validate only; skips confirm gate.", default=None),
+        ] = None,
+        idempotency_key: Annotated[
+            str | None,
+            Field(description="Optional idempotency key for retries.", default=None),
+        ] = None,
+        prompt: Annotated[
+            str | None,
+            Field(description="Original user prompt for audit context.", default=None),
+        ] = None,
+        reason: Annotated[
+            str | None,
+            Field(description="Short reason for the CDE change.", default=None),
+        ] = None,
+        create_confirmed_by_user: Annotated[
+            bool,
+            Field(
+                description=(
+                    "Set true only after the user explicitly confirms the pending CDE update."
+                ),
+                default=False,
+            ),
+        ] = False,
+    ) -> dict[str, Any]:
+        """Update CDE status on catalog assets (see MCP tool description)."""
+        validation_error = validate_cde_inputs(targets, action)
+        if validation_error:
+            return validation_error
+        body = build_update_cde_body(
+            targets,
+            action,
+            cde_category=cde_category,
+            cde_justification=cde_justification,
+            dry_run=dry_run,
+            idempotency_key=idempotency_key,
+            prompt=prompt,
+            reason=reason,
+        )
+        is_dry = dry_run is True
+        if not is_dry and not create_confirmed_by_user:
+            return format_update_cde_confirmation_preview(body)
+        try:
+            async with ovaledge_client() as client:
+                result = await client.post(MCP_PATH_UPDATE_CDE_ASSOCIATIONS, body)
+            if isinstance(result, dict) and result.get("ok") is True:
+                data = result.get("data")
+                if isinstance(data, dict):
+                    return enrich_update_cde_response(data)
+            if isinstance(result, dict) and result.get("ok") is False:
+                out: dict[str, Any] = {
+                    "error": result.get("message") or "CDE update failed",
+                    "status_code": 400,
+                }
+                data = result.get("data")
+                if isinstance(data, dict):
+                    out.update(enrich_update_cde_response(data))
+                return out
+            if isinstance(result, dict):
+                return enrich_update_cde_response(result)
+            return {"data": result}
         except OvalEdgeError as e:
             return map_ovaledge_error(e)
 

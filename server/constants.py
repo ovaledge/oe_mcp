@@ -17,6 +17,7 @@ TOOL_CREATE_TAG = "create_tag"
 TOOL_LOOKUP_DATASTORY = "lookup_datastory"
 TOOL_SEARCH_DOCS = "search_platform_docs"
 TOOL_UPDATE_ASSET_DESCRIPTIONS = "update_asset_descriptions"
+TOOL_UPDATE_CDE_ASSOCIATIONS = "update_cde_associations"
 TOOL_UPDATE_GOVERNANCE_ROLES = "update_governance_roles"
 TOOL_LOOKUP_DQ_RULE = "lookup_dq_rule"
 TOOL_SOURCE_SYSTEM_ACCESS = "source_system_access"
@@ -41,6 +42,31 @@ MCP_CATALOG_OBJECT_TYPES = frozenset(
     }
 )
 MCP_CATALOG_OBJECT_TYPES_DOC = ", ".join(sorted(MCP_CATALOG_OBJECT_TYPES))
+
+# CDE write tool: catalog assets with criticaldataelement columns (v7.2 schema).
+MCP_UPDATE_CDE_OBJECT_TYPES = frozenset(
+    {
+        "oeschema",
+        "oetable",
+        "oecolumn",
+        "oefile",
+        "oefilecolumn",
+        "oechart",
+        "chartchild",
+        "oeapi",
+        "oeapicolumn",
+        "oequery",
+        "apiobject",
+        "apicolumn",
+        "filecolumn",
+        "code",
+    }
+)
+MCP_CDE_ACTIONS = frozenset({"Yes", "No", "None"})
+_CDE_OBJECT_TYPE_ALIASES = frozenset({"apiobject", "apicolumn", "filecolumn", "code"})
+MCP_UPDATE_CDE_OBJECT_TYPES_DOC = ", ".join(
+    sorted(t for t in MCP_UPDATE_CDE_OBJECT_TYPES if t not in _CDE_OBJECT_TYPE_ALIASES)
+)
 
 # ── OvalEdge MCP HTTP paths (appended to OVALEDGE_BASE_URL) ──────
 MCP_PATH_SEARCH_CATALOG = "/api/v1/mcp/search-catalog"
@@ -85,6 +111,7 @@ MCP_DAA_SCOPE_DOC = (
 MCP_GLOSSARY_TAGS_LIMIT_DEFAULT = 20
 MCP_GLOSSARY_TAGS_LIMIT_MAX = 100
 MCP_PATH_UPDATE_ASSET_DESCRIPTIONS = "/api/v1/mcp/update-asset-descriptions"
+MCP_PATH_UPDATE_CDE_ASSOCIATIONS = "/api/v1/mcp/update-cde-associations"
 MCP_PATH_UPDATE_GOVERNANCE_ROLES = "/api/v1/mcp/update-governance-roles"
 MCP_PATH_LOOKUP_DQ_RULES = "/api/v1/mcp/lookup-dq-rules"
 
