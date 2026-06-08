@@ -93,6 +93,25 @@ MOCK_DOCS_SEARCH = {
     "chunks": [{"text": "How to create a rule", "url": "https://docs.ovaledge.com/x"}]
 }
 
+MOCK_UPDATE_CDE_RESPONSE = {
+    "ok": True,
+    "data": {
+        "status": "success",
+        "results": [
+            {
+                "objectId": 3337,
+                "objectType": "oeschema",
+                "redirectUrl": "https://mock.ovaledge.com/ovaledge/#nav/schema?id=3337",
+                "previousCde": "None",
+                "updatedCde": "Yes",
+                "cdeJustification": "Understanding CDE functionality",
+            }
+        ],
+        "governanceSummary": {"requested": 1, "updated": 1, "blocked": 0, "noChange": 0},
+        "audit": {"source": "OE-MCP", "auditReferenceIds": [101]},
+    },
+}
+
 
 # ── Fixtures ─────────────────────────────────────────────────────
 
