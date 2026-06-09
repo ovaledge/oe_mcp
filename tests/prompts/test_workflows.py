@@ -9,9 +9,12 @@ from fastmcp.prompts.function_prompt import FunctionPrompt
 from mcp.types import TextContent
 
 from server.constants import (
+    TOOL_ASSESS_CDE_DQ,
     TOOL_ASSET_LINEAGE,
+    TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
     TOOL_CATALOG_ASSET_DETAILS,
     TOOL_COLUMN_PROFILE,
+    TOOL_CREATE_DQ_RULES,
     TOOL_CREATE_GLOSSARY_TERM,
     TOOL_CREATE_TAG,
     TOOL_LOOKUP_DATASTORY,
@@ -85,6 +88,13 @@ _PROMPT_REQUIRED_TOOLS: dict[str, tuple[str, ...]] = {
         TOOL_SEARCH_CATALOG,
         TOOL_CATALOG_ASSET_DETAILS,
         TOOL_UPDATE_GOVERNANCE_ROLES,
+    ),
+    "assess_cde_dq_coverage": (
+        TOOL_SEARCH_CATALOG,
+        TOOL_ASSESS_CDE_DQ,
+        TOOL_LOOKUP_DQ_RULE,
+        TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
+        TOOL_CREATE_DQ_RULES,
     ),
 }
 

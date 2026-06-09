@@ -17,6 +17,7 @@ from server.constants import (
     MCP_PATH_UPDATE_ASSET_DESCRIPTIONS,
     MCP_SEARCH_CLASSIFICATIONS_PARAM,
     MCP_SEARCH_CONTEXT_QUERY_PARAM,
+    MCP_SEARCH_CRITICAL_DATA_ELEMENT_PARAM,
     MCP_SEARCH_CUSTOM_FIELDS_PARAM,
     MCP_SEARCH_DATA_PRODUCTS_PARAM,
     MCP_SEARCH_GLOSSARY_TERMS_PARAM,
@@ -44,7 +45,7 @@ _DESC_SEARCH = (
     "- **Lexical dimensions** (tool args are list[str]; wire as JSON array strings): "
     f"{MCP_SEARCH_TERMS_PARAM}, {MCP_SEARCH_TAGS_PARAM}, {MCP_SEARCH_GLOSSARY_TERMS_PARAM}, "
     f"{MCP_SEARCH_CUSTOM_FIELDS_PARAM}, {MCP_SEARCH_DATA_PRODUCTS_PARAM}, "
-    f"{MCP_SEARCH_CLASSIFICATIONS_PARAM}.\n"
+    f"{MCP_SEARCH_CLASSIFICATIONS_PARAM}, {MCP_SEARCH_CRITICAL_DATA_ELEMENT_PARAM}.\n"
     "- **Exact filters** (tool args are str; narrow results, not full-text search): "
     "connection_name, schema_name, server_type (connectionInfo.serverType), "
     "owner, steward, custodian, object_type.\n"
@@ -87,7 +88,10 @@ _DESC_SEARCH = (
     '8) "All glossary terms under category test in PrakashDOmain" → '
     'object_type="glossary", domain_name="PrakashDOmain", category_name="test".\n'
     '9) "Tables linked to terms in Finance domain" → '
-    'object_type="oetable", domain_name="Finance".\n\n'
+    'object_type="oetable", domain_name="Finance".\n'
+    '10) "All table columns marked as CDE" → '
+    'object_type="oecolumn", critical_data_element=["Yes"]; then assess_cde_dq '
+    "(discover_cde_columns=true or pass objects from hits) for DQ recommendations.\n\n"
     "**Data Domains (dp_domain):** When the user says Data Domains, data domain, or dp_domain, "
     "set object_type=\"dp_domain\" (alias datadomain). These assets are loaded from the database "
     "(not the main Elasticsearch catalog index); search requires object_type=dp_domain alone — "
@@ -546,6 +550,7 @@ def _apply_lexical_search_params(
     custom_fields: list[str] | None = None,
     data_products: list[str] | None = None,
     classifications: list[str] | None = None,
+    critical_data_element: list[str] | None = None,
 ) -> None:
     """Map MCP list args to API query params (each a JSON array string)."""
     for api_key, values in (
@@ -555,6 +560,7 @@ def _apply_lexical_search_params(
         (MCP_SEARCH_CUSTOM_FIELDS_PARAM, custom_fields),
         (MCP_SEARCH_DATA_PRODUCTS_PARAM, data_products),
         (MCP_SEARCH_CLASSIFICATIONS_PARAM, classifications),
+        (MCP_SEARCH_CRITICAL_DATA_ELEMENT_PARAM, critical_data_element),
     ):
         normalized = _normalize_search_terms(values)
         if normalized is not None:

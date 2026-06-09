@@ -20,7 +20,6 @@ from server.constants import (
     MCP_GOVERNANCE_STEWARD_ONLY_OBJECT_TYPES,
     MCP_PATH_GLOSSARY_TERMS,
     MCP_PATH_LOOKUP_DATASTORY,
-    MCP_PATH_LOOKUP_DQ_RULES,
     MCP_PATH_TAGS,
     MCP_PATH_UPDATE_GOVERNANCE_ROLES,
 )
@@ -43,7 +42,6 @@ from server.tools.governance.helpers import (
     _DESC_CREATE_TAG,
     _DESC_DATASTORY,
     _DESC_GLOSSARY,
-    _DESC_LOOKUP_DQ_RULE,
     _DESC_TAGS,
     _DESC_UPDATE_GOVERNANCE_ROLES,
     _block_llm_master_selection,
@@ -1407,53 +1405,6 @@ def register(mcp: FastMCP) -> None:
                 if isinstance(body, dict):
                     return _enrich_datastory_response(body)
                 return body
-        except OvalEdgeError as e:
-            return map_ovaledge_error(e)
-
-    @mcp.tool(description=_DESC_LOOKUP_DQ_RULE)
-    async def lookup_dq_rule(
-        object_id: Annotated[
-            int | None,
-            Field(description="DQ rule id (dqruleid); omit if using rule_name.", default=None),
-        ] = None,
-        rule_name: Annotated[
-            str | None,
-            Field(
-                description="Rule name or substring (e.g. Null Data Density Check).",
-                default=None,
-            ),
-        ] = None,
-        limit: Annotated[
-            int,
-            Field(
-                description="Max hits for name search (default 20; server max 100).",
-                default=MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
-                ge=1,
-            ),
-        ] = MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
-    ) -> dict[str, Any]:
-        """Resolve Data Quality rules for governance updates (see MCP tool description)."""
-        has_id = object_id is not None and object_id > 0
-        has_name = rule_name is not None and str(rule_name).strip() != ""
-        if has_id and has_name:
-            return {
-                "error": "Provide either rule_name or object_id for DQ rule lookup, not both.",
-                "status_code": 400,
-            }
-        if not has_id and not has_name:
-            return {"error": "Provide rule_name or object_id.", "status_code": 400}
-        capped = min(limit, MCP_GLOSSARY_TAGS_LIMIT_MAX)
-        try:
-            async with ovaledge_client() as client:
-                body = await client.get(
-                    MCP_PATH_LOOKUP_DQ_RULES,
-                    params=_q(
-                        objectId=object_id if has_id else None,
-                        ruleName=strip_or_none(rule_name) if has_name else None,
-                        limit=capped,
-                    ),
-                )
-                return body if isinstance(body, dict) else {"data": body}
         except OvalEdgeError as e:
             return map_ovaledge_error(e)
 

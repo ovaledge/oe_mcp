@@ -21,6 +21,9 @@ TOOL_UPDATE_CDE_ASSOCIATIONS = "update_cde_associations"
 TOOL_UPDATE_GOVERNANCE_ROLES = "update_governance_roles"
 TOOL_LOOKUP_DQ_RULE = "lookup_dq_rule"
 TOOL_SOURCE_SYSTEM_ACCESS = "source_system_access"
+TOOL_ASSESS_CDE_DQ = "assess_cde_dq"
+TOOL_ASSOCIATE_DQ_RULE_OBJECTS = "associate_dq_rule_objects"
+TOOL_CREATE_DQ_RULES = "create_dq_rules"
 
 # Lowercase objectType for MCP search-catalog and object-details (matches OvalEdge API).
 MCP_CATALOG_OBJECT_TYPES = frozenset(
@@ -152,7 +155,6 @@ MCP_GLOSSARY_TAGS_LIMIT_MAX = 100
 MCP_PATH_UPDATE_ASSET_DESCRIPTIONS = "/api/v1/mcp/update-asset-descriptions"
 MCP_PATH_UPDATE_CDE_ASSOCIATIONS = "/api/v1/mcp/update-cde-associations"
 MCP_PATH_UPDATE_GOVERNANCE_ROLES = "/api/v1/mcp/update-governance-roles"
-MCP_PATH_LOOKUP_DQ_RULES = "/api/v1/mcp/lookup-dq-rules"
 
 # objectType values for update_governance_roles that are NOT in search_catalog_assets.
 MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES = frozenset(
@@ -460,6 +462,7 @@ MCP_SEARCH_CATEGORY_ID_PARAM = "categoryId"
 MCP_SEARCH_CATEGORY_NAME_PARAM = "categoryName"
 MCP_SEARCH_SUBCATEGORY_ID_PARAM = "subCategoryId"
 MCP_SEARCH_SUBCATEGORY_NAME_PARAM = "subCategoryName"
+MCP_SEARCH_CRITICAL_DATA_ELEMENT_PARAM = "criticalDataElement"
 MCP_SEARCH_SERVER_TYPE_PARAM = "serverType"
 
 # connectionInfo.serverType values (OvalEdge connector types).
@@ -658,3 +661,30 @@ CREDENTIALS_HEADER_MAX_LEN = 2048
 CREDENTIALS_COMBINED_MAX_LEN = (
     2 * CREDENTIALS_HEADER_MAX_LEN + len(CREDENTIALS_COMBINED_SEPARATOR)
 )
+
+# assess_cde_dq — must match backend McpDqApplicableObjectTypes.
+MCP_DQ_APPLICABLE_OBJECT_TYPES = frozenset(
+    {"oetable", "oecolumn", "oefile", "oefilecolumn"}
+)
+MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC = ", ".join(
+    sorted(MCP_DQ_APPLICABLE_OBJECT_TYPES)
+)
+MCP_DQ_OBJECT_TYPE_ALIASES: dict[str, str] = {
+    "table": "oetable",
+    "oetable": "oetable",
+    "column": "oecolumn",
+    "tablecolumn": "oecolumn",
+    "table_column": "oecolumn",
+    "oecolumn": "oecolumn",
+    "file": "oefile",
+    "oefile": "oefile",
+    "filecolumn": "oefilecolumn",
+    "file_column": "oefilecolumn",
+    "oefilecolumn": "oefilecolumn",
+}
+MCP_DQ_ASSESS_LIMIT_DEFAULT = 50
+MCP_DQ_ASSESS_LIMIT_MAX = 100
+MCP_PATH_LOOKUP_DQ_RULES = "/api/v1/mcp/lookup-dq-rules"
+MCP_PATH_ASSESS_CDE_DQ = "/api/v1/mcp/dq-intelligence/assess-cde"
+MCP_PATH_ASSOCIATE_DQ_RULE_OBJECTS = "/api/v1/mcp/dq-intelligence/associate-rule-objects"
+MCP_PATH_CREATE_DQ_RULES = "/api/v1/mcp/dq-intelligence/create-rules"
