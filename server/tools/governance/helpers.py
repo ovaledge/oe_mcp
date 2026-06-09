@@ -14,7 +14,6 @@ from server.constants import (
     MCP_PATH_DOMAIN_METADATA,
     MCP_PATH_GLOSSARY_TERMS,
     MCP_PATH_LOOKUP_DATASTORY,
-    MCP_PATH_LOOKUP_DQ_RULES,
     MCP_PATH_TAGS,
     MCP_PATH_TAGS_CREATE_OPTIONS,
     MCP_PATH_TAGS_PARENT_OPTIONS,
@@ -142,14 +141,6 @@ _DESC_DATASTORY = (
     "Do not use for glossary, tags, or tables."
 )
 
-_DESC_LOOKUP_DQ_RULE = (
-    "Look up Data Quality rules by name or id (not in search_catalog_assets).\n\n"
-    f"Backend: GET {MCP_PATH_LOOKUP_DQ_RULES}\n\n"
-    "Provide either rule_name (partial match) or object_id, never both.\n\n"
-    "Each hit includes objectId, objectType (dqrule), objectName, steward, redirectUrl. "
-    "Use with update_governance_roles: only steward may be updated on DQ rules."
-)
-
 _DESC_UPDATE_GOVERNANCE_ROLES = (
     "Assign, update, or remove governance responsibilities (Owner, Steward, Custodian, "
     "Governance Role 4/5/6) on supported OvalEdge assets.\n\n"
@@ -180,7 +171,6 @@ _DESC_UPDATE_GOVERNANCE_ROLES = (
     "Multi-role requests may return partial_success.\n\n"
     "Responses include a redirectUrl to open the target object in OvalEdge."
 )
-
 
 def _cell(value: object) -> str:
     if value is None:

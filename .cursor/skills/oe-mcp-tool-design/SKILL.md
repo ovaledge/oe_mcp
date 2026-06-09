@@ -22,7 +22,8 @@ description: >-
 | Package | Use for |
 |---------|---------|
 | `server/tools/catalog/` | Catalog search, details, lineage, profiles, metadata drift, asset descriptions |
-| `server/tools/governance/` | Glossary, tags, data stories, DQ, governance roles (incl. guided creates) |
+| `server/tools/governance/` | Glossary, tags, data stories, governance roles (incl. guided creates) |
+| `server/tools/dataquality/` | CDE assessment, DQ rule lookup, associate, create |
 | `server/tools/docs/` | OvalEdge **product** documentation search only |
 | `server/tools/rdam/` | Native Redshift/Snowflake/Tableau grants (RDAM harvest) |
 | New domain | Only if none fit — add `server/tools/<domain>/`, export in `server/tools/__init__.py`, call `register` from `server/mcp/bootstrap.py` |
@@ -120,4 +121,5 @@ In `tests/tools/test_<feature>.py`:
 - Example read-only tool: `server/tools/rdam/`
 - Example simple GET: `server/tools/docs/`
 - Example complex writes: `server/tools/governance/`
+- Example DQ tools: `server/tools/dataquality/`
 - Agent routing index: `server/docs/mcp_workflows.md`

@@ -17,7 +17,7 @@ from server.constants import (
     MCP_PATH_TAGS_PARENT_OPTIONS,
     MCP_PATH_UPDATE_GOVERNANCE_ROLES,
 )
-from server.tools import governance
+from server.tools import dataquality, governance
 from server.tools.governance import helpers as governance_helpers
 from tests.conftest import MOCK_GLOSSARY_RESULT
 from tests.helpers import get_tool_fn
@@ -1816,7 +1816,7 @@ class TestLookupDqRule:
             ],
         }
         mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
+        dataquality.register(mcp)
         fn = await get_tool_fn(mcp, "lookup_dq_rule")
         out = await fn(rule_name="Null Data Density")
         assert out["ok"] is True
@@ -1827,7 +1827,7 @@ class TestLookupDqRule:
 
     async def test_rejects_both_id_and_name(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
+        dataquality.register(mcp)
         fn = await get_tool_fn(mcp, "lookup_dq_rule")
         out = await fn(object_id=1, rule_name="x")
         assert out["status_code"] == 400
