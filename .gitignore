@@ -36,6 +36,10 @@ MANIFEST
 pip-log.txt
 pip-delete-this-directory.txt
 
+# Generated large description fixtures (scripts/generate_large_description_fixtures.py)
+testdata/fixtures/business-description-*.txt
+testdata/fixtures/business-description-*.html
+
 # Unit test / coverage reports
 htmlcov/
 .tox/

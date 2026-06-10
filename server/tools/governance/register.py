@@ -23,6 +23,7 @@ from server.constants import (
     MCP_PATH_TAGS,
     MCP_PATH_UPDATE_GOVERNANCE_ROLES,
 )
+from server.mcp_response_slim import slim_tool_response
 from server.tools.common import (
     as_dict as _as_dict,
 )
@@ -185,7 +186,7 @@ def register(mcp: FastMCP) -> None:
                 )
                 body = await client.get(MCP_PATH_GLOSSARY_TERMS, params=params)
                 if isinstance(body, dict):
-                    return _enrich_glossary_lookup_response(body)
+                    return slim_tool_response(_enrich_glossary_lookup_response(body))
                 return body
         except OvalEdgeError as e:
             return map_ovaledge_error(e)

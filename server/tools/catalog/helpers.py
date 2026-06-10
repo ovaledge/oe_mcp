@@ -109,6 +109,8 @@ _DESC_SEARCH = (
 )
 _DESC_DETAILS = (
     "Fetch one catalog document (JSON from Elasticsearch for most types; embeddings removed). "
+    "Long business/technical/wiki descriptions are truncated for MCP client limits "
+    "(plain text up to ~6k chars; HTML/wiki markup shorter). "
     "Use after search_catalog_assets to drill into an asset.\n\n"
     f"Backend: GET {MCP_PATH_OBJECT_DETAILS}\n\n"
     "Exactly one lookup mode: (1) fully_qualified_name alone, OR "

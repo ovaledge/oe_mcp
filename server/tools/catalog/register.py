@@ -34,6 +34,7 @@ from server.constants import (
     MCP_SEARCH_TAGS_PARAM,
     MCP_SEARCH_TERMS_PARAM,
 )
+from server.mcp_response_slim import slim_tool_response
 from server.tools.catalog.formatters import _enhance_metadata_changes_response
 from server.tools.catalog.helpers import (
     _DESC_COLUMN,
@@ -339,7 +340,7 @@ def register(mcp: FastMCP) -> None:
             )
             async with ovaledge_client() as client:
                 body = await client.get(MCP_PATH_SEARCH_CATALOG, params=params)
-                return _enrich_catalog_search_response(body)
+                return slim_tool_response(_enrich_catalog_search_response(body))
         except OvalEdgeError as e:
             return map_ovaledge_error(e)
 
@@ -410,7 +411,7 @@ def register(mcp: FastMCP) -> None:
                 else:
                     od_params = _q(objectId=object_id, objectType=object_type)
                 body = await client.get(MCP_PATH_OBJECT_DETAILS, params=od_params)
-                return _enrich_catalog_details_response(body)
+                return slim_tool_response(_enrich_catalog_details_response(body))
         except OvalEdgeError as e:
             return map_ovaledge_error(e)
 
