@@ -2,6 +2,7 @@ from typing import Any
 
 from fastmcp import FastMCP
 
+from server.branding import mcp_server_icons
 from server.config import settings
 from server.mcp import register_all
 
@@ -16,6 +17,7 @@ def create_mcp(lifespan: Any = None) -> FastMCP:
     mcp = FastMCP(
         name=settings.mcp_server_name,
         version=settings.mcp_server_version,
+        icons=mcp_server_icons(),
         instructions=(
             "You are connected to the OvalEdge data governance platform. "
             "Use tools to search the catalog, fetch asset details, lineage, profiles, and "

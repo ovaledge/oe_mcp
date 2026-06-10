@@ -26,6 +26,7 @@ from server.auth.token_exchange import (
     exchange_oauth_access_token,
     get_or_refresh_user_token,
 )
+from server.branding import MCP_BRAND_ICON_ROUTE
 from server.config import settings
 from server.constants import (
     HEADER_OE_USER_COMBINED,
@@ -52,6 +53,7 @@ _UNPROTECTED = {
     "/mcp-auth/declined",
     "/register",
     "/health",
+    MCP_BRAND_ICON_ROUTE,
 }
 
 

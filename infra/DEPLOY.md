@@ -135,3 +135,102 @@ Last resort: `docker builder prune -af` (removes **all** build cache on the mach
 - Use output **`MCPEndpointUrl`** as the MCP HTTP base (ends with `/mcp`).
 - HTTP API has **no gateway authorizer** in this template; **`AuthMiddleware`** enforces credentials or Bearer tokens on the function.
 - For production hardening, consider WAF, throttling, or an HTTP API JWT authorizer in addition to app auth.
+
+## MCP branding icon (`/brand/ovaledge-mcp-icon.png`)
+
+Both [template.yaml](template.yaml) and [template-zip.yaml](template-zip.yaml) register:
+
+```text
+GET /brand/ovaledge-mcp-icon.png   →  server/static/ovaledge-mcp-icon.png (no auth)
+```
+
+Stack outputs:
+
+| Output | Use |
+|--------|-----|
+| **`MCPBrandIconUrl`** | Verify in browser or `curl` (expect **200** `image/png`) |
+| **`MCPPublicBaseUrl`** | Value for Lambda env **`MCP_PUBLIC_BASE_URL`** (host only, **no** `/mcp`) |
+
+### Set `MCP_PUBLIC_BASE_URL` on Lambda (required for MCP metadata)
+
+The SAM template **does not** set `MCP_PUBLIC_BASE_URL` automatically (CloudFormation circular dependency with the HTTP API). After deploy:
+
+1. AWS Console → **Lambda** → your function → **Configuration** → **Environment variables**
+2. Add **`MCP_PUBLIC_BASE_URL`** = stack output **`MCPPublicBaseUrl`**  
+   Example: `https://ajh08u6ci3.execute-api.ap-south-1.amazonaws.com`
+3. Save (Lambda cold-starts with the new value)
+
+MCP `initialize` will then advertise `serverInfo.icons` with that HTTPS URL. Toggle the MCP server off/on in Cursor after changing env vars.
+
+### Why Cursor still shows the AWS logo on `execute-api` URLs
+
+If **`MCPEndpointUrl`** uses `*.execute-api.*.amazonaws.com`, **Cursor often shows the AWS badge** from the hostname — even when **`MCPBrandIconUrl`** returns **200**. That is client UI behavior, not a missing route.
+
+To show the **OvalEdge** icon in Cursor (or avoid the AWS badge), put a **custom hostname** in front of the same HTTP API (below) and use that host in both Lambda env and `mcp.json`.
+
+## Custom domain (recommended for Cursor branding)
+
+Use when you want `https://mcp.example.com/mcp` instead of `https://<api-id>.execute-api.<region>.amazonaws.com/mcp`.
+
+**Prerequisites:** DNS control for your domain; ACM certificate in the **same region** as the API (e.g. `ap-south-1` for Mumbai).
+
+### 1. ACM certificate
+
+```bash
+export AWS_REGION=ap-south-1   # must match API region
+# Request a public cert for mcp.example.com (DNS validation in ACM console)
+```
+
+### 2. API Gateway custom domain (HTTP API)
+
+In **API Gateway** → **Custom domain names** → **Create**:
+
+| Field | Value |
+|-------|--------|
+| Domain name | `mcp.example.com` |
+| API type | HTTP |
+| Certificate | ACM cert from step 1 |
+
+Create an **API mapping**:
+
+| Field | Value |
+|-------|--------|
+| API | Your stack’s HTTP API (e.g. `oe-mcp-zip-dev-httpapi`) |
+| Stage | `$default` |
+| Path | *(leave empty)* |
+
+Note the **API Gateway domain target** (e.g. `d-xxxxx.execute-api.ap-south-1.amazonaws.com`).
+
+### 3. DNS
+
+Add a **CNAME** (or alias per your DNS provider):
+
+```text
+mcp.example.com  →  <API Gateway domain target from step 2>
+```
+
+### 4. Lambda + Cursor
+
+| Where | Set |
+|-------|-----|
+| Lambda env | `MCP_PUBLIC_BASE_URL=https://mcp.example.com` |
+| Cursor `mcp.json` | `"url": "https://mcp.example.com/mcp"` |
+| Headers | Same `X-OvalEdge-Token` / `X-OvalEdge-Secret` as before |
+
+Verify:
+
+```bash
+curl -sS -I https://mcp.example.com/brand/ovaledge-mcp-icon.png
+curl -sS https://mcp.example.com/health
+```
+
+### ZIP stack example (`ap-south-1`)
+
+```bash
+export OVALEDGE_BASE_URL=https://your-pod.ovaledge.cloud/ovaledge
+export STACK_NAME=oe-mcp-zip
+export AWS_REGION=ap-south-1
+./scripts/deploy-zip.sh
+```
+
+Then set **`MCP_PUBLIC_BASE_URL`** from output **`MCPPublicBaseUrl`**, or your custom domain after step 4.

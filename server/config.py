@@ -64,6 +64,9 @@ class Settings(BaseSettings):
     # Resource identifier expected as JWT ``aud`` (API audience).
     oauth_audience: str = ""
     mcp_public_base_url: str = ""
+    # Optional HTTPS base for MCP ``initialize`` icon URL only (``GET /brand/...``).
+    # Use when MCP runs on localhost but Cursor must fetch the icon from a public URL.
+    mcp_brand_icon_base_url: str = ""
     aws_region: str = "us-east-1"
     # Remote only: if True, skip POST /api/user/token/generate and send the validated IdP
     # access token to OvalEdge as Authorization (see ovaledge_http_auth_scheme). If False,
