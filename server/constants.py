@@ -19,6 +19,7 @@ TOOL_SEARCH_DOCS = "search_platform_docs"
 TOOL_UPDATE_ASSET_DESCRIPTIONS = "update_asset_descriptions"
 TOOL_UPDATE_CDE_ASSOCIATIONS = "update_cde_associations"
 TOOL_UPDATE_GOVERNANCE_ROLES = "update_governance_roles"
+TOOL_UPDATE_CUSTOM_FIELD_VALUE = "update_custom_field_value"
 TOOL_LOOKUP_DQ_RULE = "lookup_dq_rule"
 TOOL_SOURCE_SYSTEM_ACCESS = "source_system_access"
 TOOL_ASSESS_CDE_DQ = "assess_cde_dq"
@@ -116,6 +117,30 @@ MCP_GLOSSARY_TAGS_LIMIT_MAX = 100
 MCP_PATH_UPDATE_ASSET_DESCRIPTIONS = "/api/v1/mcp/update-asset-descriptions"
 MCP_PATH_UPDATE_CDE_ASSOCIATIONS = "/api/v1/mcp/update-cde-associations"
 MCP_PATH_UPDATE_GOVERNANCE_ROLES = "/api/v1/mcp/update-governance-roles"
+MCP_PATH_CUSTOM_FIELDS = "/api/v1/mcp/custom-fields"
+MCP_PATH_UPDATE_CUSTOM_FIELD_VALUES = "/api/v1/mcp/update-custom-field-values"
+
+# Custom field read/write (matches McpCustomFieldObjectTypes in oe-next-gen-commons).
+MCP_CUSTOM_FIELD_OBJECT_TYPES = frozenset(
+    {
+        "oeschema",
+        "oetable",
+        "oecolumn",
+        "oefile",
+        "oefilecolumn",
+        "oechart",
+        "chartchild",
+        "apiobject",
+        "apicolumn",
+        "oequery",
+        "glossary",
+        "oetag",
+        "dqrule",
+        "dp_product",
+        "code",
+    }
+)
+MCP_CUSTOM_FIELD_OBJECT_TYPES_DOC = ", ".join(sorted(MCP_CUSTOM_FIELD_OBJECT_TYPES))
 
 # objectType values for update_governance_roles that are NOT in search_catalog_assets.
 MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES = frozenset(

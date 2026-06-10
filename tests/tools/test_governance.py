@@ -15,6 +15,7 @@ from server.constants import (
     MCP_PATH_TAGS,
     MCP_PATH_TAGS_CREATE_OPTIONS,
     MCP_PATH_TAGS_PARENT_OPTIONS,
+    MCP_PATH_UPDATE_CUSTOM_FIELD_VALUES,
     MCP_PATH_UPDATE_GOVERNANCE_ROLES,
 )
 from server.tools import dataquality, governance
@@ -1965,5 +1966,80 @@ class TestUpdateGovernanceRoles:
             create_confirmed_by_user=True,
         )
         assert out["status_code"] == 403
+
+
+class TestUpdateCustomFieldValue:
+    async def test_rejects_missing_field_updates(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_custom_field_value")
+        out = await fn(object_id=1, object_type="oetable", field_updates=[])
+        assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
+    async def test_rejects_unsupported_object_type(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_custom_field_value")
+        out = await fn(
+            object_id=1,
+            object_type="project",
+            field_updates=[{"field_name": "Retention Period", "value": "7 years"}],
+        )
+        assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
+    async def test_confirm_preview_blocks_post(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_custom_field_value")
+        out = await fn(
+            object_id=99,
+            object_type="oetable",
+            field_updates=[{"field_name": "Data Owner", "value": "John Smith"}],
+        )
+        assert out["workflowPhase"] == "confirm_update"
+        assert out["doNotUpdate"] is True
+        mock_oe_client.post.assert_not_called()
+
+    async def test_posts_body_and_enriches_response(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        api_resp = {
+            "status": "success",
+            "updatedFields": ["Data Owner"],
+            "blockedFields": [],
+            "target": {
+                "objectId": 99,
+                "objectType": "oetable",
+                "redirectUrl": "https://mock.ovaledge.com/#nav/table?id=99",
+            },
+            "audit": {"source": "OE-MCP"},
+        }
+        mock_oe_client.post.return_value = api_resp
+
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_custom_field_value")
+        out = await fn(
+            object_id=99,
+            object_type="oetable",
+            field_updates=[{"field_name": "Data Owner", "value": "John Smith"}],
+            prompt="Update Data Owner to John Smith",
+            create_confirmed_by_user=True,
+        )
+
+        assert out["status"] == "success"
+        assert "formattedResponse" in out
+        assert "OE-MCP" in out["formattedResponse"]
+
+        mock_oe_client.post.assert_called_once_with(
+            MCP_PATH_UPDATE_CUSTOM_FIELD_VALUES,
+            {
+                "target": {"objectId": 99, "objectType": "oetable"},
+                "fieldUpdates": [{"fieldName": "Data Owner", "value": "John Smith"}],
+                "clientContext": {"prompt": "Update Data Owner to John Smith"},
+            },
+        )
 
 
