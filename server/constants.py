@@ -113,6 +113,44 @@ MCP_SOURCE_SYSTEMS_DOC = ", ".join(sorted(MCP_SOURCE_SYSTEMS))
 MCP_QUERY_DIRECTIONS = frozenset({"user_to_objects", "object_to_users"})
 MCP_QUERY_DIRECTIONS_DOC = "user_to_objects | object_to_users"
 
+# RDAM native object levels for source_system_access (wire: objectType).
+# Must match backend McpSourceSystemAccessReadService.
+MCP_RDAM_OBJECT_TYPES = frozenset(
+    {"database", "schema", "table", "column", "project", "report"}
+)
+MCP_RDAM_OBJECT_TYPES_DOC = ", ".join(sorted(MCP_RDAM_OBJECT_TYPES))
+
+# RDAM SQL metadata tables queried by McpSourceSystemAccessReadService (per object_type).
+# "metadata table" = OvalEdge DB table storing harvested grants — not a Tableau/Snowflake object.
+MCP_RDAM_PRIVILEGE_MAP_DOC = (
+    "**RDAM privilege map** (harvested native grants in OvalEdge SQL metadata tables — "
+    "not Elasticsearch, not OvalEdge catalog):\n\n"
+    "**Redshift / Snowflake** — `object_type` selects which RDAM metadata table to query:\n"
+    "| object_type | RDAM metadata table |\n"
+    "|-------------|---------------------|\n"
+    "| database | `rdam_dbprivilege` |\n"
+    "| schema | `rdam_schemaprivilege` |\n"
+    "| table | `rdam_tableprivilege` |\n"
+    "| column | `rdam_columnprivilege` (Redshift only; `include_columns=true`) |\n\n"
+    "**Tableau** — no database/schema/table/column objects; BI assets are **project** "
+    "or **report** only:\n"
+    "| object_type | RDAM metadata table |\n"
+    "|-------------|---------------------|\n"
+    "| project | `rdam_reportgroup_privilege` |\n"
+    "| report | `rdam_report_privilege` |\n"
+    "| group expansion | `rdam_usergroup` (site-group membership for indirect grants) |"
+)
+
+# Agents must not fall back to catalog/Elasticsearch when RDAM returns empty or errors.
+MCP_RDAM_NO_CATALOG_FALLBACK_DOC = (
+    "**No catalog / Elasticsearch fallback:** `source_system_access` reads RDAM SQL metadata "
+    "only. Never call `search_catalog_assets`, `catalog_asset_details`, or other catalog "
+    "tools as a substitute when RDAM returns empty grants, 4xx/5xx, not-found, or "
+    "not-harvested — catalog search cannot answer native Redshift/Snowflake/Tableau grants. "
+    "Report the RDAM result (or API error) and suggest RDAM harvest, DAA, object_path / "
+    "object_type, or native SQL (e.g. Snowflake `SHOW GRANTS`) — do not invoke catalog search."
+)
+
 # source_system_access objectPath — must match backend path resolution.
 MCP_OBJECT_PATH_FORMATS_DOC = (
     "**object_path** formats (Redshift/Snowflake; dot-separated):\n"
@@ -129,11 +167,57 @@ MCP_OBJECT_PATH_FORMATS_DOC = (
     "resolve_all_matches=true.\n"
     "- Tableau project: `Project Name`; report: `Project/Report Name`."
 )
+MCP_RDAM_OBJECT_TYPE_DOC = (
+    "**object_type** (required): RDAM native object level — "
+    + MCP_RDAM_OBJECT_TYPES_DOC
+    + ". Sent to the API as `objectType`. Always pass explicitly (do not rely on `.` "
+    "segment count alone). Examples: `object_path=SNOWFLAKE.ALERT` + `object_type=schema`; "
+    "`object_path=BUSINESS` + `object_type=database`; "
+    "`object_path=BUSINESS.BANKING.ACCOUNTSCHEDULE` + `object_type=table`; "
+    "Tableau report `Project/Report` + `object_type=report`. "
+    "Catalog aliases accepted: `oeschema`→schema, `oetable`→table, `oecolumn`→column."
+)
+MCP_SOURCE_SYSTEM_ACCESS_MULTI_SOURCE_ERROR = (
+    "Multiple source_system values are not supported in a single API request. "
+    "Pass one platform only (redshift, snowflake, or tableau)."
+)
+MCP_SOURCE_SYSTEM_ACCESS_MULTI_CONNECTION_ERROR = (
+    "Multiple connection_id values are not supported in a single API request. "
+    "Pass one OvalEdge connection id."
+)
+MCP_SOURCE_SYSTEM_ACCESS_MULTI_OBJECT_TYPE_ERROR = (
+    "Multiple object_type values are not supported in a single API request. "
+    "Pass one RDAM object level (database, schema, table, column, project, or report)."
+)
+MCP_SOURCE_SYSTEM_ACCESS_REQUIRED_DOC = (
+    "**Mandatory by direction** (infer `query_direction` from the question — "
+    "do not ask the user):\n"
+    "- **object_to_users:** `source_system`, `object_path` (one or more), `object_type`, "
+    "`connection_id`\n"
+    "- **user_to_objects:** `source_system`, `username` (one or more), `object_path` "
+    "(one or more), `object_type`, `connection_id`\n"
+    "**Single value only:** `source_system`, `object_type`, `connection_id` — multiple values "
+    "for these fields return a validation error.\n"
+    "**Multiple values allowed:** `username` (user_to_objects only), `object_path`.\n"
+    "If any mandatory field is missing, the tool returns which parameters are required."
+)
+MCP_SNOWFLAKE_BUILTIN_OBJECTS_DOC = (
+    "**Snowflake built-in objects:**\n"
+    "- Always set `object_type` with `object_path` — e.g. `SNOWFLAKE.ALERT` + "
+    "`object_type=schema` (built-in **schema** `ALERT` in database `SNOWFLAKE`).\n"
+    "- Without `object_type`, the API may infer level from `.` segment count only: "
+    "`ALERT` (one segment) → database; `SNOWFLAKE.ALERT` (two) → schema.\n"
+    "- Do not confuse schema `ALERT` with table `ALERTS` (`object_type=table`).\n"
+    "- Built-in `SNOWFLAKE.*` schemas may be missing from RDAM harvest; grants are often "
+    "via Snowflake database roles (e.g. `SNOWFLAKE.ALERT_VIEWER`) — not in catalog/RDAM. "
+    "If RDAM has no rows, say so; do not fall back to catalog search."
+)
 MCP_OBJECT_PATH_PARTIAL_DOC = (
-    "Redshift/Snowflake: level is inferred by `.` segment count, optionally after a "
-    "leading `connectionName.` prefix (e.g. `BUSINESS` = database, "
-    "`snowflake.BUSINESS` = connection + database, `BUSINESS.BANKING.ALERTS` = table). "
-    "Tableau: project vs report by `/`."
+    "When `object_path` is partial, `object_type` still disambiguates the RDAM level "
+    "(e.g. table name only + `object_type=table`). "
+    "Tableau: `object_type=project` vs `report` (path uses `/` for reports). "
+    "Redshift/Snowflake segment-count hints when `object_type` omitted on the API: "
+    "`BUSINESS` = database, `SNOWFLAKE.ALERT` = schema, `BUSINESS.BANKING.ALERTS` = table."
 )
 
 # search-catalog query params (GET /api/v1/mcp/search-catalog).

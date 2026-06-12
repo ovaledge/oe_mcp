@@ -7,12 +7,22 @@ disambiguation. Requires backend deploy with RDAM-only schema resolution
 **API:** `GET /api/v1/mcp/source-system-access`  
 **MCP tool:** `source_system_access` with the same parameters (snake_case).
 
+**MCP tool mandatory fields:**
+- **object_to_users:** `source_system`, `object_path` (one or more), `object_type`, `connection_id`
+- **user_to_objects:** `source_system`, `username` (one or more), `object_path` (one or more),
+  `object_type`, `connection_id`
+
+**Single value only:** `source_system`, `object_type`, `connection_id` — multiple values return a
+validation error. **Multiple allowed:** `username` (user_to_objects), `object_path`. Use
+`database`, `schema`, `table`, `column` (Redshift), `project`, or `report` (Tableau). Example:
+`SNOWFLAKE.ALERT` + `object_type=schema`.
+
 ## Prerequisites
 
 | Item | Notes |
 |------|--------|
 | Caller is **Instance or Connector DAA** on every connection under test | Otherwise 400 RDAM no-access |
-| RDAM harvest complete | `rdam_schemaprivilege` rows with `source = Remote` for target schemas |
+| RDAM harvest complete | Remote privilege rows in the matching RDAM **metadata** table — RS/SF: `rdam_dbprivilege`, `rdam_schemaprivilege`, `rdam_tableprivilege`, `rdam_columnprivilege` (column: Redshift only). Tableau: `rdam_reportgroup_privilege` (project), `rdam_report_privilege` (report) — no DB/schema/table objects |
 | **4 Snowflake connections** (QA scenario) | Each with schema `BUSINESS.BANKING` (or equivalent) and **different** role grants |
 | Record connection ids | e.g. `1001`, `1002`, `1360`, `1400` — replace in examples below |
 | JWT / local MCP credentials | See [README.md](README.md) |
@@ -51,6 +61,7 @@ Permissions should differ **per connection** so tests can prove scoping works.
   "source_system": "snowflake",
   "query_direction": "object_to_users",
   "object_path": "BUSINESS.BANKING",
+  "object_type": "schema",
   "connection_id": 1360
 }
 ```
@@ -80,7 +91,8 @@ other users have `USAGE` on `BUSINESS` at database level.
 {
   "source_system": "snowflake",
   "query_direction": "object_to_users",
-  "object_path": "BUSINESS.BANKING"
+  "object_path": "BUSINESS.BANKING",
+  "object_type": "schema"
 }
 ```
 
@@ -116,7 +128,8 @@ Run **TC-01** four times with `connection_id` = 1001, 1002, 1360, 1400.
 {
   "source_system": "snowflake",
   "query_direction": "object_to_users",
-  "object_path": "BANKING"
+  "object_path": "BANKING",
+  "object_type": "schema"
 }
 ```
 
@@ -138,6 +151,7 @@ Run **TC-01** four times with `connection_id` = 1001, 1002, 1360, 1400.
   "source_system": "snowflake",
   "query_direction": "object_to_users",
   "object_path": "BANKING",
+  "object_type": "schema",
   "resolve_all_matches": true
 }
 ```
@@ -156,7 +170,7 @@ Run **TC-01** four times with `connection_id` = 1001, 1002, 1360, 1400.
 Repeat **TC-01** with:
 
 ```json
-{ "object_path": "business.banking", "connection_id": 1360 }
+{ "object_path": "business.banking", "object_type": "schema", "connection_id": 1360 }
 ```
 
 | Check | Expected |
@@ -174,6 +188,7 @@ Repeat **TC-01** with:
   "source_system": "snowflake",
   "query_direction": "object_to_users",
   "object_path": "BUSINESS.BANKING",
+  "object_type": "schema",
   "connection_id": 1360
 }
 ```
@@ -192,6 +207,7 @@ Repeat **TC-01** with:
   "source_system": "snowflake",
   "query_direction": "object_to_users",
   "object_path": "BUSINESS.BANKING.ACCOUNTS",
+  "object_type": "table",
   "connection_id": 1360
 }
 ```
@@ -209,7 +225,8 @@ Repeat **TC-01** with:
 ### TC-09 — Wrong tool guard (catalog search)
 
 **Question:** “Who has access to BUSINESS.BANKING schema?” must **not** be answered with
-`search_catalog_assets` table listings alone. Use `source_system_access` (this API).
+Never use `search_catalog_assets` for grant questions or as fallback when RDAM is empty/errors.
+Use `source_system_access` only (RDAM SQL — no Elasticsearch).
 
 | Check | Expected |
 |-------|----------|
@@ -252,6 +269,7 @@ Read the exact message text before logging a DAA bug.
   "source_system": "snowflake",
   "query_direction": "object_to_users",
   "object_path": "BUSINESS.BANKING",
+  "object_type": "schema",
   "connection_id": <connection caller is not DAA for>
 }
 ```
@@ -270,6 +288,7 @@ Read the exact message text before logging a DAA bug.
   "source_system": "snowflake",
   "query_direction": "object_to_users",
   "object_path": "BUSINESS",
+  "object_type": "database",
   "connection_id": 1360
 }
 ```
@@ -289,6 +308,7 @@ curl -G "${OVALEDGE_BASE_URL}/api/v1/mcp/source-system-access" \
   --data-urlencode "sourceSystem=snowflake" \
   --data-urlencode "queryDirection=object_to_users" \
   --data-urlencode "objectPath=BUSINESS.BANKING" \
+  --data-urlencode "objectType=schema" \
   --data-urlencode "connectionId=1360"
 ```
 
