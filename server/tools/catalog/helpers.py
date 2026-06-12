@@ -44,6 +44,11 @@ _DESC_SEARCH = (
     "- **Exact filters** (tool args are str; narrow results, not full-text search): "
     "connection_name, schema_name, server_type (connectionInfo.serverType), "
     "owner, steward, custodian, object_type.\n"
+    "- **Glossary placement** (domain / category / subcategory): use domain_id or "
+    f"domain_name (required), plus optional category_id/category_name and "
+    f"subcategory_id/subcategory_name. With object_type=\"glossary\" (or "
+    "businessglossary), returns glossary terms in that placement. Without "
+    "object_type, returns any catalog assets linked to terms in that placement.\n"
     "- **server_type**: Infer from the user question when they name a technology "
     f"(e.g. MySQL → mysql, Snowflake → snowflake, Tableau → tableau). Maps to API "
     f"{MCP_SEARCH_SERVER_TYPE_PARAM}. Omit when the question does not imply a "
@@ -74,7 +79,11 @@ _DESC_SEARCH = (
     "Do not use object_type=\"domain\" or oeglobaldomain (that is glossary Global Domain, "
     "not Data Domains).\n"
     '7) "Tables classified as PII" → '
-    'classifications=["PII"], context_query=<verbatim question>.\n\n'
+    'classifications=["PII"], context_query=<verbatim question>.\n'
+    '8) "All glossary terms under category test in PrakashDOmain" → '
+    'object_type="glossary", domain_name="PrakashDOmain", category_name="test".\n'
+    '9) "Tables linked to terms in Finance domain" → '
+    'object_type="oetable", domain_name="Finance".\n\n'
     "**Data Domains (dp_domain):** When the user says Data Domains, data domain, or dp_domain, "
     "set object_type=\"dp_domain\" (alias datadomain). These assets are loaded from the database "
     "(not the main Elasticsearch catalog index); search requires object_type=dp_domain alone — "

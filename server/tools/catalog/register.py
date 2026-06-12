@@ -18,12 +18,18 @@ from server.constants import (
     MCP_PATH_OBJECT_DETAILS,
     MCP_PATH_SEARCH_CATALOG,
     MCP_PATH_UPDATE_ASSET_DESCRIPTIONS,
+    MCP_SEARCH_CATEGORY_ID_PARAM,
+    MCP_SEARCH_CATEGORY_NAME_PARAM,
     MCP_SEARCH_CLASSIFICATIONS_PARAM,
     MCP_SEARCH_CONTEXT_QUERY_PARAM,
     MCP_SEARCH_CUSTOM_FIELDS_PARAM,
     MCP_SEARCH_DATA_PRODUCTS_PARAM,
+    MCP_SEARCH_DOMAIN_ID_PARAM,
+    MCP_SEARCH_DOMAIN_NAME_PARAM,
     MCP_SEARCH_GLOSSARY_TERMS_PARAM,
     MCP_SEARCH_SERVER_TYPE_PARAM,
+    MCP_SEARCH_SUBCATEGORY_ID_PARAM,
+    MCP_SEARCH_SUBCATEGORY_NAME_PARAM,
     MCP_SEARCH_TAGS_PARAM,
     MCP_SEARCH_TERMS_PARAM,
 )
@@ -48,7 +54,7 @@ from server.tools.catalog.helpers import (
     _validate_description_inputs,
 )
 from server.tools.common import drop_none as _q
-from server.tools.common import map_ovaledge_error, ovaledge_client
+from server.tools.common import map_ovaledge_error, ovaledge_client, strip_or_none
 
 
 def register(mcp: FastMCP) -> None:
@@ -219,6 +225,42 @@ def register(mcp: FastMCP) -> None:
                 default=None,
             ),
         ] = None,
+        domain_id: Annotated[
+            int | None,
+            Field(
+                description=(
+                    "Glossary global domain id for placement filter; pair with optional "
+                    "category/subcategory."
+                ),
+                default=None,
+            ),
+        ] = None,
+        domain_name: Annotated[
+            str | None,
+            Field(
+                description="Glossary global domain name when domain_id is unknown.",
+                default=None,
+            ),
+        ] = None,
+        category_id: Annotated[
+            int | None,
+            Field(description="Glossary category id for placement filter.", default=None),
+        ] = None,
+        category_name: Annotated[
+            str | None,
+            Field(description="Glossary category name when category_id is unknown.", default=None),
+        ] = None,
+        subcategory_id: Annotated[
+            int | None,
+            Field(description="Glossary subcategory id for placement filter.", default=None),
+        ] = None,
+        subcategory_name: Annotated[
+            str | None,
+            Field(
+                description="Glossary subcategory name when subcategory_id is unknown.",
+                default=None,
+            ),
+        ] = None,
     ) -> dict[str, Any]:
         """OvalEdge catalog search (see MCP tool description)."""
         if object_type is not None and object_type not in MCP_CATALOG_OBJECT_TYPES:
@@ -250,6 +292,20 @@ def register(mcp: FastMCP) -> None:
                 steward=steward,
                 custodian=custodian,
                 objectType=object_type,
+                **{
+                    MCP_SEARCH_DOMAIN_ID_PARAM: domain_id
+                    if domain_id is not None and domain_id > 0
+                    else None,
+                    MCP_SEARCH_DOMAIN_NAME_PARAM: strip_or_none(domain_name),
+                    MCP_SEARCH_CATEGORY_ID_PARAM: category_id
+                    if category_id is not None and category_id > 0
+                    else None,
+                    MCP_SEARCH_CATEGORY_NAME_PARAM: strip_or_none(category_name),
+                    MCP_SEARCH_SUBCATEGORY_ID_PARAM: subcategory_id
+                    if subcategory_id is not None and subcategory_id > 0
+                    else None,
+                    MCP_SEARCH_SUBCATEGORY_NAME_PARAM: strip_or_none(subcategory_name),
+                },
             )
             _apply_lexical_search_params(
                 params,
