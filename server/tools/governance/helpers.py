@@ -94,7 +94,9 @@ _DESC_CREATE_TAG = (
     "- OPEN: objectType=mastertag, isMasterTagSelectable=true, isRoot=false, "
     "isDataAsset=false (no parentId).\n"
     "- SECURE (after master): same + parentId=<masterTagId>, isRoot=true, "
-    "isMasterTagSelectable=false.\n\n"
+    "isMasterTagSelectable=false.\n"
+    "- Nested browse: GET parent-options with browseParentTagId=<parentTagId> "
+    "(children of that tag under the master; isRoot=false).\n\n"
     "SECURE mode (master mandatory, parent optional):\n"
     "1) tag_name only → MASTER_REQUIRED: show ALL userSelectableMasters. User must pick "
     "exactly one masterTagId (required). Do not show or ask about parent tags yet.\n"
@@ -103,7 +105,10 @@ _DESC_CREATE_TAG = (
     "   - Under master only (no parent tag): create_directly_under_master=true + "
     "parent_step_completed_by_user=true (POST uses masterTagId only, like UI under master).\n"
     "   - Under a parent: parent_tag_id + parent_tag_id_confirmed_by_user=true + "
-    "parent_step_completed_by_user=true.\n\n"
+    "parent_step_completed_by_user=true.\n"
+    "   - Deeper nesting: tags with hasChildren=true can be browsed — call again with "
+    "browse_parent_tag_id=<that parentTagId> to list child parents (e.g. MCPNEWcreated "
+    "under MCPCreated).\n\n"
     "**Parameter create_directly_under_master (name is shared; meaning depends on mode):**\n"
     "- SECURE: create as a direct child of the chosen masterTagId (no parentTagId).\n"
     "- OPEN: create a root tag with no parent (do not send masterTagId).\n\n"
@@ -1338,9 +1343,22 @@ def _build_user_selectable_parents(parents: object) -> list[dict[str, Any]]:
         }
         if row.get("rootTag") is True:
             entry["rootTag"] = True
+        if row.get("hasChildren") is True:
+            entry["hasChildren"] = True
         items.append(entry)
     items.sort(key=lambda p: (str(p.get("tagName") or "").lower(), p["parentTagId"]))
     return items
+
+
+def _parent_choice_label(p: dict[str, Any]) -> str:
+    pid = p["parentTagId"]
+    pname = p.get("tagName") or "(unnamed)"
+    suffix = ""
+    if p.get("hasChildren"):
+        suffix = f" (has children — browse with browse_parent_tag_id={pid})"
+    elif p.get("rootTag"):
+        suffix = " (root/master — use parent_tag_id; backend sets master)"
+    return f"  - parentTagId={pid}: {pname}{suffix}"
 
 
 def _format_open_parent_list_for_user(parents: list[dict[str, Any]]) -> str:
@@ -1368,14 +1386,7 @@ def _format_open_parent_list_for_user(parents: list[dict[str, Any]]) -> str:
         f"Suggested parent tags ({len(parents)} choices — complete list):"
     )
     for p in parents:
-        pid = p["parentTagId"]
-        pname = p.get("tagName") or "(unnamed)"
-        root_note = (
-            " (root/master — use parent_tag_id; backend sets master)"
-            if p.get("rootTag")
-            else ""
-        )
-        lines.append(f"  - parentTagId={pid}: {pname}{root_note}")
+        lines.append(_parent_choice_label(p))
     return "\n".join(lines)
 
 
@@ -1400,11 +1411,21 @@ def _format_parent_list_for_user(
     master_tag_id: int,
     master_tag_name: str | None,
     parents: list[dict[str, Any]],
+    *,
+    browse_meta: dict[str, Any] | None = None,
 ) -> str:
     label = master_tag_name or f"master {master_tag_id}"
     lines = [
         "SECURE mode — Step 2 of 2 (parent selection under the chosen master).",
         f"Master tag selected: {label} (masterTagId={master_tag_id}) — required step done.",
+    ]
+    if browse_meta and browse_meta.get("browseParentTagId"):
+        browse_id = browse_meta["browseParentTagId"]
+        browse_name = browse_meta.get("browseParentTagName") or f"tag {browse_id}"
+        lines.append(
+            f"Browsing children of **{browse_name}** (browseParentTagId={browse_id})."
+        )
+    lines.extend([
         "",
         "Parent tag is optional. Choose one:",
         "",
@@ -1416,7 +1437,10 @@ def _format_parent_list_for_user(
         "    parent_tag_id + parent_tag_id_confirmed_by_user=true + "
         "parent_step_completed_by_user=true",
         "",
-    ]
+        "  - **Browse deeper** (when a row shows has children): call create_tag again with "
+        "browse_parent_tag_id=<that parentTagId> (same master_tag_id + confirmations).",
+        "",
+    ])
     if not parents:
         lines.append(
             f"No additional parent tags under this master. Use create_directly_under_master=true "
@@ -1427,9 +1451,7 @@ def _format_parent_list_for_user(
         f"Parent tags under masterTagId={master_tag_id} ({len(parents)} choices — complete list):"
     )
     for p in parents:
-        pid = p["parentTagId"]
-        pname = p.get("tagName") or "(unnamed)"
-        lines.append(f"  - parentTagId={pid}: {pname}")
+        lines.append(_parent_choice_label(p))
     return "\n".join(lines)
 
 
@@ -1534,22 +1556,70 @@ async def _resolve_tag_hierarchy_names_for_create(
     master_name: str | None = None
     parent_name: str | None = None
     if secure_mode and master_tag_id is not None and master_tag_id > 0:
-        master_name, parents = await _fetch_parent_choices_for_master(
+        master_name, parents, _ = await _fetch_parent_choices_for_master(
             client, master_tag_id, secure_guidance
         )
         parent_name = _tag_name_from_parent_list(parents, parent_tag_id)
+        if (
+            parent_name is None
+            and parent_tag_id is not None
+            and parent_tag_id > 0
+        ):
+            nested_row = await _find_parent_choice_under_master(
+                client, master_tag_id, parent_tag_id, secure_guidance
+            )
+            if nested_row is not None:
+                parent_name = nested_row.get("tagName")
+                if isinstance(parent_name, str):
+                    parent_name = parent_name.strip() or None
+        if parent_name is None and parent_tag_id is not None and parent_tag_id > 0:
+            parent_name = await _lookup_tag_name_by_id(client, parent_tag_id)
     elif parent_tag_id is not None and parent_tag_id > 0:
         open_parents = await _fetch_open_parent_choices(client)
         parent_name = _tag_name_from_parent_list(open_parents, parent_tag_id)
+        if parent_name is None:
+            parent_name = await _lookup_tag_name_by_id(client, parent_tag_id)
     return master_name, parent_name
 
 
-async def _fetch_open_parent_choices(client: OvalEdgeClient) -> list[dict[str, Any]]:
+async def _lookup_tag_name_by_id(client: OvalEdgeClient, object_id: int) -> str | None:
+    try:
+        result = await client.get(MCP_PATH_TAGS, params={"objectId": object_id})
+    except OvalEdgeError:
+        return None
+    if not isinstance(result, dict) or not result.get("ok"):
+        return None
+    data = result.get("data")
+    if isinstance(data, dict):
+        name = data.get("objectName") or data.get("tagName") or data.get("name")
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+    return None
+
+
+async def _fetch_open_parent_choices(
+    client: OvalEdgeClient,
+    *,
+    browse_parent_tag_id: int | None = None,
+) -> list[dict[str, Any]]:
     """
     Open mode parent list — same sources as Create Tag UI (tag/list / create-options).
 
     Prefer GET /mcp/tags/create-options parentTagChoices, then parent-options.
     """
+    if browse_parent_tag_id is not None and browse_parent_tag_id > 0:
+        try:
+            result = await client.get(
+                MCP_PATH_TAGS_PARENT_OPTIONS,
+                params={"browseParentTagId": browse_parent_tag_id},
+            )
+            if isinstance(result, dict) and result.get("ok"):
+                data = result.get("data")
+                if isinstance(data, dict):
+                    return _build_user_selectable_parents(data.get("parentTagChoices"))
+        except OvalEdgeError:
+            pass
+        return []
     try:
         opts = await client.get(MCP_PATH_TAGS_CREATE_OPTIONS)
         if isinstance(opts, dict) and opts.get("ok"):
@@ -1608,24 +1678,35 @@ def _format_open_parent_selection_guidance(
     *,
     parents: list[dict[str, Any]],
     tag_name: str,
+    browse_parent_tag_id: int | None = None,
 ) -> dict[str, Any]:
     lines = [
         "STOP — do not create the tag yet.",
         f"Tag name: {tag_name}",
+    ]
+    if browse_parent_tag_id is not None and browse_parent_tag_id > 0:
+        lines.append(
+            f"Browsing children of browseParentTagId={browse_parent_tag_id}."
+        )
+    lines.extend([
         _format_open_parent_list_for_user(parents),
         "",
-        "Ask the human: use a parent from the list, or no parent.",
+        "Ask the human: use a parent from the list, browse deeper with "
+        "browse_parent_tag_id when hasChildren=true, or no parent.",
         "Next create_tag call: parent_step_completed_by_user=true plus their choice.",
-    ]
+    ])
+    extra: dict[str, Any] = {
+        "tagSecurityMode": "open",
+        "masterTagRequired": False,
+        "parentTagRequired": False,
+    }
+    if browse_parent_tag_id is not None and browse_parent_tag_id > 0:
+        extra["browseParentTagId"] = browse_parent_tag_id
     return _parent_picker_guidance_payload(
         tag_name=tag_name,
         parents=parents,
         formatted_response="\n".join(lines),
-        extra={
-            "tagSecurityMode": "open",
-            "masterTagRequired": False,
-            "parentTagRequired": False,
-        },
+        extra=extra,
     )
 
 
@@ -1633,24 +1714,37 @@ async def _fetch_parent_choices_for_master(
     client: OvalEdgeClient,
     master_tag_id: int,
     secure_guidance: dict[str, Any] | None,
-) -> tuple[str | None, list[dict[str, Any]]]:
+    *,
+    browse_parent_tag_id: int | None = None,
+) -> tuple[str | None, list[dict[str, Any]], dict[str, Any]]:
     master_name = _master_label_from_guidance(secure_guidance, master_tag_id)
+    browse_meta: dict[str, Any] = {}
+    params: dict[str, Any] = {"masterTagId": master_tag_id}
+    if browse_parent_tag_id is not None and browse_parent_tag_id > 0:
+        params["browseParentTagId"] = browse_parent_tag_id
     try:
-        result = await client.get(
-            MCP_PATH_TAGS_PARENT_OPTIONS,
-            params={"masterTagId": master_tag_id},
-        )
+        result = await client.get(MCP_PATH_TAGS_PARENT_OPTIONS, params=params)
         if isinstance(result, dict) and result.get("ok"):
             data = result.get("data")
             if isinstance(data, dict):
                 if not master_name and isinstance(data.get("masterTagName"), str):
                     master_name = data["masterTagName"]
-                return master_name, _build_user_selectable_parents(
-                    data.get("parentTagChoices")
+                browse_id = data.get("browseParentTagId")
+                if isinstance(browse_id, int) and browse_id > 0:
+                    browse_meta["browseParentTagId"] = browse_id
+                    browse_name = data.get("browseParentTagName")
+                    if isinstance(browse_name, str) and browse_name.strip():
+                        browse_meta["browseParentTagName"] = browse_name.strip()
+                return (
+                    master_name,
+                    _build_user_selectable_parents(data.get("parentTagChoices")),
+                    browse_meta,
                 )
     except OvalEdgeError:
         pass
-    if secure_guidance and isinstance(secure_guidance.get("masterTagChoices"), list):
+    if (
+        browse_parent_tag_id is None or browse_parent_tag_id <= 0
+    ) and secure_guidance and isinstance(secure_guidance.get("masterTagChoices"), list):
         parents_raw: list[dict[str, Any]] = []
         for item in _iter_master_choice_dicts(secure_guidance["masterTagChoices"]):
             if item.get("masterTagId") != master_tag_id:
@@ -1659,8 +1753,63 @@ async def _fetch_parent_choices_for_master(
             if isinstance(raw, list):
                 parents_raw = [p for p in raw if isinstance(p, dict)]
             break
-        return master_name, _build_user_selectable_parents(parents_raw)
-    return master_name, []
+        return master_name, _build_user_selectable_parents(parents_raw), browse_meta
+    return master_name, [], browse_meta
+
+
+_PARENT_BROWSE_MAX_DEPTH = 12
+
+
+async def _find_parent_choice_under_master(
+    client: OvalEdgeClient,
+    master_tag_id: int,
+    parent_tag_id: int,
+    secure_guidance: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Return parent choice row when parent_tag_id is under master (top or nested browse)."""
+    if parent_tag_id <= 0:
+        return None
+    _, top_parents, _ = await _fetch_parent_choices_for_master(
+        client, master_tag_id, secure_guidance
+    )
+    for row in top_parents:
+        if row.get("parentTagId") == parent_tag_id:
+            return row
+    queue = [p["parentTagId"] for p in top_parents if p.get("hasChildren")]
+    seen: set[int] = set()
+    depth = 0
+    while queue and depth < _PARENT_BROWSE_MAX_DEPTH:
+        depth += 1
+        browse_id = queue.pop(0)
+        if browse_id in seen:
+            continue
+        seen.add(browse_id)
+        _, nested, _ = await _fetch_parent_choices_for_master(
+            client,
+            master_tag_id,
+            secure_guidance,
+            browse_parent_tag_id=browse_id,
+        )
+        for row in nested:
+            if row.get("parentTagId") == parent_tag_id:
+                return row
+        for p in nested:
+            if p.get("hasChildren"):
+                queue.append(p["parentTagId"])
+    return None
+
+
+async def _parent_tag_is_allowed_under_master(
+    client: OvalEdgeClient,
+    master_tag_id: int,
+    parent_tag_id: int,
+    secure_guidance: dict[str, Any] | None,
+) -> bool:
+    """True when parent_tag_id appears in top-level or nested parent-options under master."""
+    found = await _find_parent_choice_under_master(
+        client, master_tag_id, parent_tag_id, secure_guidance
+    )
+    return found is not None
 
 
 def _format_parent_selection_guidance(
@@ -1669,26 +1818,32 @@ def _format_parent_selection_guidance(
     master_tag_name: str | None,
     parents: list[dict[str, Any]],
     tag_name: str,
+    browse_meta: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     lines = [
         "STOP — do not create the tag yet.",
         f"Tag name: {tag_name}",
-        _format_parent_list_for_user(master_tag_id, master_tag_name, parents),
+        _format_parent_list_for_user(
+            master_tag_id, master_tag_name, parents, browse_meta=browse_meta
+        ),
     ]
+    extra: dict[str, Any] = {
+        "tagSecurityMode": "secure",
+        "masterTagRequired": True,
+        "parentTagRequired": False,
+        "masterTagId": master_tag_id,
+        "masterTagName": master_tag_name,
+        "createUnderMasterOnlyOption": _create_under_master_option(
+            master_tag_id, master_tag_name
+        ),
+    }
+    if browse_meta:
+        extra.update(browse_meta)
     return _parent_picker_guidance_payload(
         tag_name=tag_name,
         parents=parents,
         formatted_response="\n".join(lines),
-        extra={
-            "tagSecurityMode": "secure",
-            "masterTagRequired": True,
-            "parentTagRequired": False,
-            "masterTagId": master_tag_id,
-            "masterTagName": master_tag_name,
-            "createUnderMasterOnlyOption": _create_under_master_option(
-                master_tag_id, master_tag_name
-            ),
-        },
+        extra=extra,
     )
 
 

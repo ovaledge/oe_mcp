@@ -1174,6 +1174,7 @@ class TestCreateTag:
             secure_opts,
             secure_opts,
             parent_opts,
+            parent_opts,
         ]
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
@@ -1194,7 +1195,123 @@ class TestCreateTag:
         assert out["ok"] is False
         assert "1033" in out.get("message", "")
         assert "1013" in out.get("message", "")
+        assert "browse_parent_tag_id" in out.get("formattedResponse", "")
         mock_oe_client.post.assert_not_called()
+
+    async def test_secure_mode_nested_parent_via_browse(self, mock_oe_client: AsyncMock) -> None:
+        """Grandchild parent (e.g. MCPNEWcreated) is allowed after BFS parent-options browse."""
+        secure_opts = {
+            "ok": True,
+            "data": {
+                "tagSecurityMode": "secure",
+                "masterTagChoices": [
+                    {"masterTagId": 1036, "tagName": "Deposit Accounts"},
+                ],
+            },
+        }
+        top_parent_opts = {
+            "ok": True,
+            "data": {
+                "masterTagId": 1036,
+                "masterTagName": "Deposit Accounts",
+                "parentTagChoices": [
+                    {
+                        "parentTagId": 1774,
+                        "tagName": "MCPCreated",
+                        "hasChildren": True,
+                    },
+                ],
+            },
+        }
+        nested_parent_opts = {
+            "ok": True,
+            "data": {
+                "masterTagId": 1036,
+                "browseParentTagId": 1774,
+                "browseParentTagName": "MCPCreated",
+                "parentTagChoices": [
+                    {"parentTagId": 1776, "tagName": "MCPNEWcreated"},
+                ],
+            },
+        }
+        async def _parent_options_router(*_args: object, **kwargs: object) -> dict[str, object]:
+            params = kwargs.get("params") if isinstance(kwargs.get("params"), dict) else {}
+            if params.get("browseParentTagId"):
+                return nested_parent_opts
+            if params.get("masterTagId"):
+                return top_parent_opts
+            return secure_opts
+
+        mock_oe_client.get.side_effect = _parent_options_router
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "create_tag")
+        await fn(
+            tag_name="deep tag created",
+            master_tag_id=1036,
+            master_tag_id_confirmed_by_user=True,
+        )
+        out = await fn(
+            tag_name="deep tag created",
+            master_tag_id=1036,
+            master_tag_id_confirmed_by_user=True,
+            parent_tag_id=1776,
+            parent_tag_id_confirmed_by_user=True,
+            parent_step_completed_by_user=True,
+        )
+        assert out.get("doNotCreateTag") is True
+        assert out.get("workflowPhase") == "confirm_create"
+        mock_oe_client.post.assert_not_called()
+        mock_oe_client.get.assert_any_call(
+            MCP_PATH_TAGS_PARENT_OPTIONS,
+            params={"masterTagId": 1036, "browseParentTagId": 1774},
+        )
+
+    async def test_secure_mode_browse_parent_shows_children(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        secure_opts = {
+            "ok": True,
+            "data": {
+                "tagSecurityMode": "secure",
+                "masterTagChoices": [
+                    {"masterTagId": 1036, "tagName": "Deposit Accounts"},
+                ],
+            },
+        }
+        nested_parent_opts = {
+            "ok": True,
+            "data": {
+                "masterTagId": 1036,
+                "browseParentTagId": 1774,
+                "browseParentTagName": "MCPCreated",
+                "parentTagChoices": [
+                    {"parentTagId": 1776, "tagName": "MCPNEWcreated"},
+                ],
+            },
+        }
+        mock_oe_client.get.side_effect = [
+            secure_opts,
+            secure_opts,
+            nested_parent_opts,
+        ]
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "create_tag")
+        out = await fn(
+            tag_name="deep tag created",
+            master_tag_id=1036,
+            master_tag_id_confirmed_by_user=True,
+            browse_parent_tag_id=1774,
+        )
+        assert out.get("doNotCreateTag") is True
+        assert out.get("browseParentTagId") == 1774
+        assert out["parentTagChoiceCount"] == 1
+        assert "MCPNEWcreated" in str(out.get("userSelectableParents"))
+        mock_oe_client.get.assert_any_call(
+            MCP_PATH_TAGS_PARENT_OPTIONS,
+            params={"masterTagId": 1036, "browseParentTagId": 1774},
+        )
 
     async def test_secure_mode_parent_step_after_master(self, mock_oe_client: AsyncMock) -> None:
         secure_opts = {
