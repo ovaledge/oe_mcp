@@ -71,6 +71,7 @@ from server.tools.governance.helpers import (
     _normalize_role_updates,
     _parent_choice_finalized,
     _parent_picker_was_shown,
+    _parent_tag_is_allowed_under_master,
     _reject_invented_master_tag_id,
     _resolve_category_id_by_name,
     _resolve_create_tag_description,
@@ -951,6 +952,18 @@ def register(mcp: FastMCP) -> None:
                 default=False,
             ),
         ] = False,
+        browse_parent_tag_id: Annotated[
+            int | None,
+            Field(
+                description=(
+                    "Optional nested browse: list child tags under this parentTagId "
+                    "(GET parent-options browseParentTagId). Use when a parent row has "
+                    "hasChildren=true to reach deeper levels (e.g. MCPNEWcreated under "
+                    "MCPCreated). Keep master_tag_id and master confirmations when set."
+                ),
+                default=None,
+            ),
+        ] = None,
         create_directly_under_master: Annotated[
             bool,
             Field(
@@ -1026,15 +1039,16 @@ def register(mcp: FastMCP) -> None:
                                 secure_guidance,
                                 parent_tag_id=parent_tag_id,
                             )
-                        # Validate via parent-options API (not nested create-options
-                        # parentTagChoices, which are intentionally empty in secure mode).
-                        _, parents_for_validate = await _fetch_parent_choices_for_master(
-                            client, master_tag_id, secure_guidance
+                        allowed = await _parent_tag_is_allowed_under_master(
+                            client,
+                            master_tag_id,
+                            parent_tag_id,
+                            secure_guidance,
                         )
-                        allowed_parents = {
-                            p["parentTagId"] for p in parents_for_validate
-                        }
-                        if allowed_parents and parent_tag_id not in allowed_parents:
+                        if not allowed:
+                            _, parents_hint, _ = await _fetch_parent_choices_for_master(
+                                client, master_tag_id, secure_guidance
+                            )
                             return {
                                 "ok": False,
                                 "status_code": 422,
@@ -1043,11 +1057,13 @@ def register(mcp: FastMCP) -> None:
                                     f"master_tag_id {master_tag_id}."
                                 ),
                                 "doNotCreateTag": True,
+                                "userSelectableParents": parents_hint,
                                 "formattedResponse": (
                                     f"parent_tag_id {parent_tag_id} is not listed under "
                                     f"master_tag_id {master_tag_id}. Ask the human to pick "
-                                    "from userSelectableParents or decline with "
-                                    "create_directly_under_master=true and "
+                                    "from userSelectableParents, browse deeper with "
+                                    "browse_parent_tag_id when hasChildren=true, or decline "
+                                    "with create_directly_under_master=true and "
                                     "parent_step_completed_by_user=true."
                                 ),
                             }
@@ -1058,24 +1074,36 @@ def register(mcp: FastMCP) -> None:
                         create_directly_under_master=create_directly_under_master,
                         parent_step_completed_by_user=parent_step_completed_by_user,
                     ):
-                        master_name, parents = await _fetch_parent_choices_for_master(
-                            client, master_tag_id, secure_guidance
+                        master_name, parents, browse_meta = (
+                            await _fetch_parent_choices_for_master(
+                                client,
+                                master_tag_id,
+                                secure_guidance,
+                                browse_parent_tag_id=browse_parent_tag_id,
+                            )
                         )
                         return _format_parent_selection_guidance(
                             master_tag_id=master_tag_id,
                             master_tag_name=master_name,
                             parents=parents,
                             tag_name=name,
+                            browse_meta=browse_meta,
                         )
                     if not _parent_picker_was_shown(name):
-                        master_name, parents = await _fetch_parent_choices_for_master(
-                            client, master_tag_id, secure_guidance
+                        master_name, parents, browse_meta = (
+                            await _fetch_parent_choices_for_master(
+                                client,
+                                master_tag_id,
+                                secure_guidance,
+                                browse_parent_tag_id=browse_parent_tag_id,
+                            )
                         )
                         out = _format_parent_selection_guidance(
                             master_tag_id=master_tag_id,
                             master_tag_name=master_name,
                             parents=parents,
                             tag_name=name,
+                            browse_meta=browse_meta,
                         )
                         out["message"] = (
                             "Parent picker was not completed for this tag name. "
@@ -1105,19 +1133,34 @@ def register(mcp: FastMCP) -> None:
                     open_parents: list[dict[str, Any]] = []
                     if parent_tag_id is not None and parent_tag_id > 0:
                         if not parent_tag_id_confirmed_by_user:
-                            open_parents = await _fetch_open_parent_choices(client)
+                            open_parents = await _fetch_open_parent_choices(
+                                client, browse_parent_tag_id=browse_parent_tag_id
+                            )
                             guidance = _format_open_parent_selection_guidance(
                                 parents=open_parents,
                                 tag_name=name,
+                                browse_parent_tag_id=browse_parent_tag_id,
                             )
                             return _block_llm_parent_selection(
                                 guidance,
                                 parent_tag_id=parent_tag_id,
                             )
-                        open_parents = await _fetch_open_parent_choices(client)
-                        allowed_open = {
-                            p["parentTagId"] for p in open_parents
-                        }
+                        open_parents = await _fetch_open_parent_choices(
+                            client, browse_parent_tag_id=browse_parent_tag_id
+                        )
+                        allowed_open = {p["parentTagId"] for p in open_parents}
+                        if allowed_open and parent_tag_id not in allowed_open:
+                            if browse_parent_tag_id is None or browse_parent_tag_id <= 0:
+                                for p in open_parents:
+                                    if not p.get("hasChildren"):
+                                        continue
+                                    nested = await _fetch_open_parent_choices(
+                                        client,
+                                        browse_parent_tag_id=p["parentTagId"],
+                                    )
+                                    allowed_open.update(
+                                        n["parentTagId"] for n in nested
+                                    )
                         if allowed_open and parent_tag_id not in allowed_open:
                             return {
                                 "ok": False,
@@ -1143,16 +1186,22 @@ def register(mcp: FastMCP) -> None:
                         create_directly_under_master=create_directly_under_master,
                         parent_step_completed_by_user=parent_step_completed_by_user,
                     ):
-                        open_parents = await _fetch_open_parent_choices(client)
+                        open_parents = await _fetch_open_parent_choices(
+                            client, browse_parent_tag_id=browse_parent_tag_id
+                        )
                         return _format_open_parent_selection_guidance(
                             parents=open_parents,
                             tag_name=name,
+                            browse_parent_tag_id=browse_parent_tag_id,
                         )
                     if not _parent_picker_was_shown(name):
-                        open_parents = await _fetch_open_parent_choices(client)
+                        open_parents = await _fetch_open_parent_choices(
+                            client, browse_parent_tag_id=browse_parent_tag_id
+                        )
                         out = _format_open_parent_selection_guidance(
                             parents=open_parents,
                             tag_name=name,
+                            browse_parent_tag_id=browse_parent_tag_id,
                         )
                         out["message"] = (
                             "Parent picker was not completed for this tag name. "
@@ -1194,20 +1243,29 @@ def register(mcp: FastMCP) -> None:
                                 "doNotCreateTag": True,
                             }
                         resolved_master_id = master_tag_id
-                        master_name, parents = await _fetch_parent_choices_for_master(
-                            client, resolved_master_id, secure_guidance
+                        master_name, parents, browse_meta = (
+                            await _fetch_parent_choices_for_master(
+                                client,
+                                resolved_master_id,
+                                secure_guidance,
+                                browse_parent_tag_id=browse_parent_tag_id,
+                            )
                         )
                         out = _format_parent_selection_guidance(
                             master_tag_id=resolved_master_id,
                             master_tag_name=master_name,
                             parents=parents,
                             tag_name=name,
+                            browse_meta=browse_meta,
                         )
                     else:
-                        open_parents = await _fetch_open_parent_choices(client)
+                        open_parents = await _fetch_open_parent_choices(
+                            client, browse_parent_tag_id=browse_parent_tag_id
+                        )
                         out = _format_open_parent_selection_guidance(
                             parents=open_parents,
                             tag_name=name,
+                            browse_parent_tag_id=browse_parent_tag_id,
                         )
                     out["message"] = (
                         "Parent picker session expired or was not completed. "
