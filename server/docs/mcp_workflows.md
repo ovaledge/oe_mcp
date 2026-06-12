@@ -31,6 +31,7 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 | Create tag | `create_tag` (guided; human confirms) |
 | Update descriptions | `update_asset_descriptions` |
 | Update governance roles | `update_governance_roles` |
+| Update custom / additional field | `search_catalog_assets` (if needed) → GET custom-fields → `update_custom_field_value` |
 
 **Data stories vs platform docs:** `lookup_datastory` searches **your organization’s** onboarded stories (`oestory`). `search_platform_docs` searches **OvalEdge product** documentation. Do not use platform docs for internal policy questions.
 

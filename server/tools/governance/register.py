@@ -10,6 +10,7 @@ from pydantic import Field
 from server.client import OvalEdgeError
 from server.constants import (
     MCP_CATALOG_OBJECT_TYPES,
+    MCP_CUSTOM_FIELD_OBJECT_TYPES,
     MCP_DOMAIN_METADATA_SEARCH_ON,
     MCP_DOMAIN_METADATA_SIZE_DEFAULT,
     MCP_DOMAIN_METADATA_SIZE_MAX,
@@ -21,7 +22,9 @@ from server.constants import (
     MCP_PATH_GLOSSARY_TERMS,
     MCP_PATH_LOOKUP_DATASTORY,
     MCP_PATH_TAGS,
+    MCP_PATH_UPDATE_CUSTOM_FIELD_VALUES,
     MCP_PATH_UPDATE_GOVERNANCE_ROLES,
+    TOOL_UPDATE_CUSTOM_FIELD_VALUE,
 )
 from server.mcp_response_slim import slim_tool_response
 from server.tools.common import (
@@ -44,6 +47,7 @@ from server.tools.governance.helpers import (
     _DESC_DATASTORY,
     _DESC_GLOSSARY,
     _DESC_TAGS,
+    _DESC_UPDATE_CUSTOM_FIELD_VALUE,
     _DESC_UPDATE_GOVERNANCE_ROLES,
     _block_llm_master_selection,
     _block_llm_parent_selection,
@@ -52,6 +56,7 @@ from server.tools.governance.helpers import (
     _enrich_datastory_response,
     _enrich_glossary_lookup_response,
     _enrich_tag_lookup_response,
+    _enrich_update_custom_field_value_response,
     _enrich_update_governance_roles_response,
     _extract_picker_items,
     _extract_placement_from_path,
@@ -65,10 +70,12 @@ from server.tools.governance.helpers import (
     _format_parent_selection_guidance,
     _format_placement_options,
     _format_tag_create_confirmation_preview,
+    _format_update_custom_field_value_confirmation_preview,
     _format_update_governance_roles_confirmation_preview,
     _load_secure_create_guidance,
     _lookup_tag_after_create,
     _master_tag_ids_from_guidance_data,
+    _normalize_field_updates,
     _normalize_role_updates,
     _parent_choice_finalized,
     _parent_picker_was_shown,
@@ -1556,4 +1563,123 @@ def register(mcp: FastMCP) -> None:
                     "status_code": e.status_code,
                     "reason_code": "GOVERNANCE_ROLE_NOT_ENABLED",
                 }
+            return map_ovaledge_error(e)
+
+    @mcp.tool(description=_DESC_UPDATE_CUSTOM_FIELD_VALUE, name=TOOL_UPDATE_CUSTOM_FIELD_VALUE)
+    async def update_custom_field_value(
+        object_id: Annotated[
+            int,
+            Field(
+                description=(
+                    "Internal object id from search_catalog_assets or governance lookups."
+                ),
+                ge=1,
+            ),
+        ],
+        object_type: Annotated[
+            str,
+            Field(
+                description=(
+                    "OvalEdge objectType for custom fields "
+                    f"(e.g. {', '.join(sorted(MCP_CUSTOM_FIELD_OBJECT_TYPES))})."
+                ),
+            ),
+        ],
+        field_updates: Annotated[
+            list[dict[str, Any]],
+            Field(
+                description=(
+                    "Fields to update. Each item: {field_name, value} or "
+                    "{field_key, value}. Supports multi-field in one call."
+                ),
+            ),
+        ],
+        prompt: Annotated[
+            str | None,
+            Field(
+                description="Original user prompt for audit (clientContext.prompt).",
+                default=None,
+            ),
+        ] = None,
+        reason: Annotated[
+            str | None,
+            Field(
+                description="Short reason for the change (clientContext.reason).",
+                default=None,
+            ),
+        ] = None,
+        dry_run: Annotated[
+            bool | None,
+            Field(description="If true, validate only; do not persist.", default=None),
+        ] = None,
+        fail_on_blocked_field: Annotated[
+            bool | None,
+            Field(
+                description="If true, treat any blocked field as a full request failure.",
+                default=None,
+            ),
+        ] = None,
+        idempotency_key: Annotated[
+            str | None,
+            Field(description="Optional client key to dedupe retries.", default=None),
+        ] = None,
+        create_confirmed_by_user: Annotated[
+            bool,
+            Field(
+                description=(
+                    "Final update gate: true only after the user explicitly approved "
+                    "the confirm_update preview."
+                ),
+                default=False,
+            ),
+        ] = False,
+    ) -> dict[str, Any]:
+        """Update custom field values (see MCP tool description)."""
+        if object_type is None or str(object_type).strip() == "":
+            return {"error": "object_type is required.", "status_code": 400}
+        otype_key = str(object_type).strip().lower()
+        if otype_key not in MCP_CUSTOM_FIELD_OBJECT_TYPES:
+            return {
+                "error": (
+                    f"object_type must be one of {sorted(MCP_CUSTOM_FIELD_OBJECT_TYPES)}, "
+                    f"got {object_type!r}"
+                ),
+                "status_code": 400,
+            }
+        normalized_updates, err = _normalize_field_updates(field_updates)
+        if err:
+            return {"error": err, "status_code": 400}
+
+        body: dict[str, Any] = {
+            "target": {"objectId": object_id, "objectType": str(object_type).strip()},
+            "fieldUpdates": normalized_updates,
+        }
+        options: dict[str, Any] = {}
+        if dry_run is not None:
+            options["dryRun"] = dry_run
+        if fail_on_blocked_field is not None:
+            options["failOnBlockedField"] = fail_on_blocked_field
+        if idempotency_key is not None and str(idempotency_key).strip():
+            options["idempotencyKey"] = str(idempotency_key).strip()
+        if options:
+            body["options"] = options
+        client_context: dict[str, str] = {}
+        if prompt is not None and str(prompt).strip():
+            client_context["prompt"] = str(prompt).strip()
+        if reason is not None and str(reason).strip():
+            client_context["reason"] = str(reason).strip()
+        if client_context:
+            body["clientContext"] = client_context
+
+        is_dry = dry_run is True
+        if not is_dry and not create_confirmed_by_user:
+            return _format_update_custom_field_value_confirmation_preview(body)
+
+        try:
+            async with ovaledge_client() as client:
+                result = await client.post(MCP_PATH_UPDATE_CUSTOM_FIELD_VALUES, body)
+                if isinstance(result, dict):
+                    return _enrich_update_custom_field_value_response(result)
+                return result
+        except OvalEdgeError as e:
             return map_ovaledge_error(e)
