@@ -87,12 +87,53 @@ def register(mcp: FastMCP) -> None:
     async def lookup_glossary_term(
         object_id: Annotated[
             int | None,
-            Field(description="Glossary term internal id; omit if using term_name.", default=None),
+            Field(
+                description="Glossary term internal id; omit for name or placement lookup.",
+                default=None,
+            ),
         ] = None,
         term_name: Annotated[
             str | None,
             Field(
-                description="Term name / label to look up; omit if using object_id.",
+                description="Term name / label to look up; omit if using object_id or placement.",
+                default=None,
+            ),
+        ] = None,
+        domain_id: Annotated[
+            int | None,
+            Field(
+                description=(
+                    "Global domain id for placement lookup; use with optional category/subcategory."
+                ),
+                default=None,
+            ),
+        ] = None,
+        domain_name: Annotated[
+            str | None,
+            Field(
+                description="Global domain name for placement lookup when domain_id is unknown.",
+                default=None,
+            ),
+        ] = None,
+        category_id: Annotated[
+            int | None,
+            Field(description="Category id (category1Id) for placement lookup.", default=None),
+        ] = None,
+        category_name: Annotated[
+            str | None,
+            Field(
+                description="Category name for placement lookup when category_id is unknown.",
+                default=None,
+            ),
+        ] = None,
+        subcategory_id: Annotated[
+            int | None,
+            Field(description="Subcategory id (category2Id) for placement lookup.", default=None),
+        ] = None,
+        subcategory_name: Annotated[
+            str | None,
+            Field(
+                description="Subcategory name for placement lookup when subcategory_id is unknown.",
                 default=None,
             ),
         ] = None,
@@ -110,23 +151,38 @@ def register(mcp: FastMCP) -> None:
         """Glossary lookup (see MCP tool description)."""
         has_id = object_id is not None
         has_name = term_name is not None and str(term_name).strip() != ""
-        if has_id and has_name:
+        has_placement = (
+            (domain_id is not None and domain_id > 0)
+            or strip_or_none(domain_name) is not None
+            or (category_id is not None and category_id > 0)
+            or strip_or_none(category_name) is not None
+            or (subcategory_id is not None and subcategory_id > 0)
+            or strip_or_none(subcategory_name) is not None
+        )
+        mode_count = int(has_id) + int(has_name) + int(has_placement)
+        if mode_count != 1:
             return {
-                "error": "Provide either object_id or term_name — not both.",
-                "status_code": 400,
-            }
-        if not has_id and not has_name:
-            return {
-                "error": "Provide object_id or term_name.",
+                "error": (
+                    "Provide exactly one lookup mode: object_id, term_name, or "
+                    "domain/category placement filters."
+                ),
                 "status_code": 400,
             }
         lim = min(max(limit, 1), MCP_GLOSSARY_TAGS_LIMIT_MAX)
         try:
             async with ovaledge_client() as client:
-                return await client.get(
-                    MCP_PATH_GLOSSARY_TERMS,
-                    params=_q(objectId=object_id, termName=term_name, limit=lim),
+                params = _q(
+                    objectId=object_id,
+                    termName=strip_or_none(term_name),
+                    domainId=domain_id if domain_id and domain_id > 0 else None,
+                    domainName=strip_or_none(domain_name),
+                    categoryId=category_id if category_id and category_id > 0 else None,
+                    categoryName=strip_or_none(category_name),
+                    subCategoryId=subcategory_id if subcategory_id and subcategory_id > 0 else None,
+                    subCategoryName=strip_or_none(subcategory_name),
+                    limit=lim,
                 )
+                return await client.get(MCP_PATH_GLOSSARY_TERMS, params=params)
         except OvalEdgeError as e:
             return map_ovaledge_error(e)
 

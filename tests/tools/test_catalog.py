@@ -11,10 +11,12 @@ from server.constants import (
     MCP_PATH_METADATA_CHANGES_BETWEEN_CRAWLS,
     MCP_PATH_SEARCH_CATALOG,
     MCP_PATH_UPDATE_ASSET_DESCRIPTIONS,
+    MCP_SEARCH_CATEGORY_NAME_PARAM,
     MCP_SEARCH_CLASSIFICATIONS_PARAM,
     MCP_SEARCH_CONTEXT_QUERY_PARAM,
     MCP_SEARCH_CUSTOM_FIELDS_PARAM,
     MCP_SEARCH_DATA_PRODUCTS_PARAM,
+    MCP_SEARCH_DOMAIN_NAME_PARAM,
     MCP_SEARCH_GLOSSARY_TERMS_PARAM,
     MCP_SEARCH_SERVER_TYPE_PARAM,
     MCP_SEARCH_TAGS_PARAM,
@@ -177,6 +179,23 @@ class TestSearchCatalogAssets:
         await tool_fn(search_terms=["q"], object_type="oequery")
         params = mock_oe_client.get.call_args[1]["params"]
         assert params["objectType"] == "oequery"
+
+    async def test_glossary_placement_filters_forwarded(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        await tool_fn(
+            object_type="glossary",
+            domain_name="PrakashDOmain",
+            category_name="test",
+            subcategory_name="okok",
+        )
+        params = mock_oe_client.get.call_args[1]["params"]
+        assert params["objectType"] == "glossary"
+        assert params[MCP_SEARCH_DOMAIN_NAME_PARAM] == "PrakashDOmain"
+        assert params[MCP_SEARCH_CATEGORY_NAME_PARAM] == "test"
+        assert params["subCategoryName"] == "okok"
 
     async def test_error_returns_structured_dict(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.side_effect = OvalEdgeError(403, "Forbidden")

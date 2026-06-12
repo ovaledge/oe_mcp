@@ -86,6 +86,30 @@ class TestLookupGlossaryTerm:
         assert out["status_code"] == 400
         mock_oe_client.get.assert_not_called()
 
+    async def test_placement_by_domain_name(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = MOCK_GLOSSARY_RESULT
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_glossary_term")
+        out = await fn(domain_name="PrakashDOmain", category_name="test")
+        assert out == MOCK_GLOSSARY_RESULT
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_GLOSSARY_TERMS,
+            params={
+                "domainName": "PrakashDOmain",
+                "categoryName": "test",
+                "limit": MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
+            },
+        )
+
+    async def test_rejects_mixed_name_and_placement(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_glossary_term")
+        out = await fn(term_name="x", domain_name="Finance")
+        assert out["status_code"] == 400
+        mock_oe_client.get.assert_not_called()
+
     async def test_whitespace_term_name_treated_as_missing(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)

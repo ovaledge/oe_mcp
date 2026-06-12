@@ -34,12 +34,19 @@ from server.tools.common import as_dict as _as_dict
 from server.tools.common import blank as _blank
 
 _DESC_GLOSSARY = (
-    "Look up business glossary term(s) by id or name. Server object type is always "
-    "glossary; name search may return multiple hits.\n\n"
-    f"Backend: GET {MCP_PATH_GLOSSARY_TERMS} (objectId OR termName — mutually exclusive).\n"
-    f"Optional query param limit (default {MCP_GLOSSARY_TAGS_LIMIT_DEFAULT} on server; "
-    f"this client caps at {MCP_GLOSSARY_TAGS_LIMIT_MAX}).\n\n"
-    "Provide either term_name (search by name) or object_id (by id), never both."
+    "Look up business glossary term(s) by id, name, or glossary placement "
+    "(domain / category / subcategory). Server object type is always glossary.\n\n"
+    f"Backend: GET {MCP_PATH_GLOSSARY_TERMS}. Use exactly one lookup mode:\n"
+    "1. **object_id** — single term by id.\n"
+    "2. **term_name** — name search (may return multiple hits).\n"
+    "3. **Placement** — list terms under domain, category, or subcategory using "
+    "domain_id or domain_name (required), plus optional category_id/category_name and "
+    "subcategory_id/subcategory_name. Domain-only returns all terms in the domain; "
+    "category returns terms directly under that category; subcategory returns terms "
+    "in that subcategory.\n\n"
+    f"Optional limit (default {MCP_GLOSSARY_TAGS_LIMIT_DEFAULT}; capped at "
+    f"{MCP_GLOSSARY_TAGS_LIMIT_MAX}).\n\n"
+    "Do not combine object_id, term_name, and placement filters in one call."
 )
 _DESC_TAGS = (
     "Look up OETAG (tag) document(s) by id or name from Elasticsearch; name search "
