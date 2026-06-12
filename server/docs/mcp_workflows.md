@@ -75,7 +75,7 @@ Partial paths (e.g. table name only) may return **`matchCandidates`** — disamb
 
 - **Redshift:** direct user, group, and role grants (`grant_mechanism`: direct | group | role).
 - **Snowflake:** role assignment only (no direct user grants / groups).
-- **Tableau:** direct user or service account on project/report.
+- **Tableau:** direct site-user grants and site-group grants on project/report (`grant_mechanism`: direct | group). Group access is expanded via harvested `rdam_usergroup` membership.
 
 **Authorization:** Instance or Connector **Data Access Admin** is enforced server-side; callers without DAA on the scoped connection see RDAM no-access. See [governance_model](governance_model#native-source-access-rdam).
 

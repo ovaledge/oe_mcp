@@ -265,12 +265,13 @@ async def test_tableau_object_to_users(api_get) -> None:
     assert r.status_code == 200, r.text[:500]
     grants = r.json()["data"].get("grants") or []
     assert len(grants) > 0
-    assert all(g.get("grantMechanism") == "direct" for g in grants)
+    mechanisms = {g.get("grantMechanism") for g in grants}
+    assert mechanisms <= {"direct", "group"}, f"Unexpected Tableau mechanisms: {mechanisms}"
     assert all(g.get("principalType") == "user" for g in grants)
 
 
 @pytest.mark.asyncio
-async def test_tableau_user_to_objects_direct_only(api_get) -> None:
+async def test_tableau_user_to_objects_direct_and_group(api_get) -> None:
     r = await api_get(
         {
             "sourceSystem": "tableau",
@@ -288,7 +289,10 @@ async def test_tableau_user_to_objects_direct_only(api_get) -> None:
     if not grants:
         pytest.skip("No Tableau grants — verify rdam_report_* harvest")
     mechanisms = {g.get("grantMechanism") for g in grants}
-    assert mechanisms == {"direct"}, f"Tableau should be direct-only, got {mechanisms}"
+    assert mechanisms <= {"direct", "group"}, f"Unexpected Tableau mechanisms: {mechanisms}"
+    group_grants = [g for g in grants if g.get("grantMechanism") == "group"]
+    for g in group_grants:
+        assert g.get("contributingGroup"), "Group grants should include contributingGroup"
 
 
 @pytest.mark.asyncio

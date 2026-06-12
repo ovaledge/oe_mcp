@@ -226,7 +226,16 @@ class TestGetSourceSystemAccess:
                         "principalType": "user",
                         "principalName": "svc_bi",
                         "privileges": ["READ"],
-                    }
+                    },
+                    {
+                        "objectPath": "Executive/Revenue Dashboard",
+                        "objectLevel": "report",
+                        "grantMechanism": "group",
+                        "principalType": "user",
+                        "principalName": "jane.doe",
+                        "contributingGroup": "Analysts",
+                        "privileges": ["READ"],
+                    },
                 ],
             },
         }
@@ -239,10 +248,51 @@ class TestGetSourceSystemAccess:
             object_path="Executive/Revenue Dashboard",
         )
         assert out["ok"] is True
-        grant = out["data"]["grants"][0]
-        assert grant["grantMechanism"] == "direct"
-        assert grant["principalType"] == "user"
-        assert grant["objectLevel"] == "report"
+        direct = out["data"]["grants"][0]
+        group = out["data"]["grants"][1]
+        assert direct["grantMechanism"] == "direct"
+        assert direct["principalType"] == "user"
+        assert direct["objectLevel"] == "report"
+        assert group["grantMechanism"] == "group"
+        assert group["contributingGroup"] == "Analysts"
+
+    async def test_tableau_user_to_objects_group_expansion(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {
+                        "objectPath": "Finance",
+                        "objectLevel": "project",
+                        "grantMechanism": "direct",
+                        "principalType": "user",
+                        "principalName": "jane.doe",
+                        "privileges": ["READ"],
+                    },
+                    {
+                        "objectPath": "Finance/Headcount",
+                        "objectLevel": "report",
+                        "grantMechanism": "group",
+                        "principalType": "user",
+                        "principalName": "jane.doe",
+                        "contributingGroup": "Analysts",
+                        "privileges": ["READ"],
+                    },
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        rdam.register(mcp)
+        fn = await get_tool_fn(mcp, "source_system_access")
+        out = await fn(
+            source_system="tableau",
+            query_direction="user_to_objects",
+            username="jane.doe",
+        )
+        assert out["ok"] is True
+        group_grant = out["data"]["grants"][1]
+        assert group_grant["grantMechanism"] == "group"
+        assert group_grant["contributingGroup"] == "Analysts"
 
     async def test_forwards_connection_prefixed_object_path(
         self, mock_oe_client: AsyncMock
