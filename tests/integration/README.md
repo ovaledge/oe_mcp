@@ -35,3 +35,8 @@ Unit tests (mocked) still run via:
 ```bash
 poetry run pytest tests/tools/test_source_system_access.py -q
 ```
+
+## Manual QA — multi-connection schema access
+
+See [QA_SOURCE_SYSTEM_ACCESS_SCHEMA.md](QA_SOURCE_SYSTEM_ACCESS_SCHEMA.md) for a test-case matrix
+(e.g. four Snowflake connections with the same `BUSINESS.BANKING` schema and different permissions).
