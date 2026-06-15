@@ -15,8 +15,6 @@ cd "$REPO_ROOT"
 
 die() { echo "error: $*" >&2; exit 1; }
 
-command -v poetry >/dev/null 2>&1 || die "poetry not on PATH; run ./scripts/setup_local_mcp.sh first"
-
 WITH_COV=1
 PYTEST_ARGS=()
 for arg in "$@"; do
@@ -25,6 +23,25 @@ for arg in "$@"; do
     *) PYTEST_ARGS+=("$arg") ;;
   esac
 done
+
+run_pytest() {
+  local pytest_bin="$1"
+  if [[ "$WITH_COV" -eq 1 ]]; then
+    exec "$pytest_bin" \
+      --cov=server \
+      --cov=entrypoints \
+      --cov-report=term-missing:skip-covered \
+      --cov-fail-under=0 \
+      "${PYTEST_ARGS[@]}"
+  fi
+  exec "$pytest_bin" "${PYTEST_ARGS[@]}"
+}
+
+if [[ -x .venv/bin/pytest ]]; then
+  run_pytest .venv/bin/pytest
+fi
+
+command -v poetry >/dev/null 2>&1 || die "poetry not on PATH; run ./scripts/setup_local_mcp.sh first"
 
 poetry install --with dev --no-interaction
 

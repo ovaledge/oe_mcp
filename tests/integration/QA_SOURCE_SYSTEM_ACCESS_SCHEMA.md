@@ -7,10 +7,9 @@ disambiguation. Requires backend deploy with RDAM-only schema resolution
 **API:** `GET /api/v1/mcp/source-system-access`  
 **MCP tool:** `source_system_access` with the same parameters (snake_case).
 
-**MCP tool mandatory fields:**
-- **object_to_users:** `source_system`, `object_path` (one or more), `object_type`, `connection_id`
-- **user_to_objects:** `source_system`, `username` (one or more), `object_path` (one or more),
-  `object_type`, `connection_id`
+**MCP tool mandatory fields:** `source_system`, `query_direction` only (both directions).
+
+**Optional:** `username` (user_to_objects), `object_path`, `object_type`, `connection_id`, and other flags.
 
 **Single value only:** `source_system`, `object_type`, `connection_id` — multiple values return a
 validation error. **Multiple allowed:** `username` (user_to_objects), `object_path`. Use
@@ -23,6 +22,7 @@ validation error. **Multiple allowed:** `username` (user_to_objects), `object_pa
 |------|--------|
 | Caller is **Instance or Connector DAA** on every connection under test | Otherwise 400 RDAM no-access |
 | RDAM harvest complete | Remote privilege rows in the matching RDAM **metadata** table — RS/SF: `rdam_dbprivilege`, `rdam_schemaprivilege`, `rdam_tableprivilege`, `rdam_columnprivilege` (column: Redshift only). Tableau: `rdam_reportgroup_privilege` (project), `rdam_report_privilege` (report) — no DB/schema/table objects |
+| **DAM object scope** | API returns grants only for databases/schemas/tables/columns visible in DAM (active `oedatabase` / `oeschema` / `oetable` / `oecolumn` with `rdam_lastcrawldate` set — same as OETP RDAM browse). Schemas harvested in RDAM but not in DAM (e.g. `automation_schema`) must **not** appear. |
 | **4 Snowflake connections** (QA scenario) | Each with schema `BUSINESS.BANKING` (or equivalent) and **different** role grants |
 | Record connection ids | e.g. `1001`, `1002`, `1360`, `1400` — replace in examples below |
 | JWT / local MCP credentials | See [README.md](README.md) |
@@ -42,11 +42,16 @@ Permissions should differ **per connection** so tests can prove scoping works.
 
 ## Path segment rules (reference)
 
-| `object_path` | Level | Grant levels returned |
-|---------------|-------|------------------------|
+**object_to_users** — parent grants are included (hierarchy):
+
+| `object_path` | `object_type` | Grant levels returned |
+|---------------|---------------|------------------------|
 | `BUSINESS` | database | `database` only |
 | `BUSINESS.BANKING` | schema | `schema` + `database` (no `table`) |
 | `BUSINESS.BANKING.ACCOUNTS` | table | `table` + `schema` + `database` |
+
+**user_to_objects** — exact `object_type` only (no ancestor levels). Example:
+`object_type=database` returns only `database` grants for the user/path, not schema or table.
 
 ---
 
@@ -297,6 +302,75 @@ Read the exact message text before logging a DAA bug.
 |-------|----------|
 | `grants[].objectLevel` | `database` only |
 | `objectPath` | `BUSINESS` |
+
+---
+
+### TC-12 — Database-only path not in catalog (`IBIS_UDFS`, connection 1002)
+
+**Question:** Snowflake database `IBIS_UDFS` — what permissions does it have on connection 1002?
+
+**Correct MCP / API call** (infer `object_to_users` — “permissions on the database” = who has native access):
+
+```json
+{
+  "source_system": "snowflake",
+  "query_direction": "object_to_users",
+  "object_path": "IBIS_UDFS",
+  "object_type": "database",
+  "connection_id": 1002
+}
+```
+
+| Check | Expected (after backend fix) | Known failure (before fix) |
+|-------|------------------------------|----------------------------|
+| HTTP / `ok` | 200, `ok: true` | 400 |
+| Error | — | `The object_path was not found in harvested metadata` |
+| `resolvedObjectPath` | `IBIS_UDFS` | — |
+| `grants[].objectLevel` | `database` only | — |
+| `grantMechanism` | `role` (Snowflake) | — |
+
+**Root cause — `resolveObjectPathForQuery`:**
+
+1. `parseObjectPath("IBIS_UDFS", …, objectType=database)` → database-level parts (OK).
+2. `catalogObjectResolver.alignToCatalog` — if `IBIS_UDFS` was **never crawled** into the OvalEdge catalog, alignment yields no usable match.
+3. `objectExistsInHarvest(sourceSystem, catalog, connIds)` runs against **catalog-aligned** parts; fails when catalog alignment fails even if `rdam_dbprivilege` has rows for `IBIS_UDFS`.
+4. `findCatalogMatches(…, objectType=database)` — often searches schema/table catalog rows; returns empty for uncrawled databases.
+5. Four-part column fallback does not apply (single segment, `objectType=database`).
+6. Method returns `null` → API 400 “not found”.
+
+**Backend fix (required):**
+
+- For `objectType=database`, resolve from **RDAM harvest first** using parsed `dbName` — do not require catalog alignment to succeed.
+- Call `objectExistsInHarvest(sourceSystem, parsed, connIds)` **before or in addition to** catalog-aligned parts.
+- Extend `findCatalogMatches` for `objectType=database` to match database names from crawled schema metadata when present.
+- Only return `null` when **both** RDAM (`rdam_dbprivilege`) and catalog have no match for the connection scope.
+
+**Data note:** `IBIS_UDFS` is often created by the Ibis Python library on Snowflake connect; it may exist natively with grants but never appear in OvalEdge crawl/RDAM harvest. If RDAM truly has no rows after fix, return 200 with empty `grants[]` and an advisory — not conflate “uncrawled” with “not found” when harvest lookup is incomplete.
+
+---
+
+### TC-13 — Out-of-DAM schema must not appear (`automation_schema` regression)
+
+**Scenario:** RDAM harvest has grants for `automation_schema` and its tables, but the schema is **not**
+in DAM (no active `oeschema` row with `rdam_lastcrawldate`, or schema never crawled).
+
+```json
+{
+  "source_system": "redshift",
+  "query_direction": "user_to_objects",
+  "username": "john_analyst",
+  "connection_id": <QA Redshift connection id>
+}
+```
+
+| Check | Expected |
+|-------|----------|
+| `grants` | **No** row with `objectPath` containing `automation_schema` |
+| Table grants | **No** `sales_data`, `yardi_property`, `mask_address_vw`, etc. under that schema |
+| DAM parity | Result set matches what DAM browse would show for the same connector |
+
+**Root cause (fixed):** API queried raw `rdam_*privilege` without OETP/DAM catalog scope. Fix filters
+to active `oedatabase` / `oeschema` / `oetable` / `oecolumn` with `rdam_lastcrawldate IS NOT NULL`.
 
 ---
 

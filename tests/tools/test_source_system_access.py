@@ -13,10 +13,16 @@ from server.constants import (
 from server.tools import rdam
 from server.tools.rdam.helpers import (
     _DESC_SOURCE_SYSTEM_ACCESS,
+    _has_table_level_grants,
+    _schema_names_from_schema_grants,
+    filter_user_to_objects_by_level,
+    is_connection_wide_table_listing,
+    is_incomplete_table_object_path,
     normalize_string_list,
     reject_multiple_connection_id,
     reject_multiple_object_type,
     reject_multiple_source_system,
+    shape_object_to_users_disambiguation,
     validate_and_normalize_object_type,
     validate_source_system_access_args,
 )
@@ -45,41 +51,80 @@ class TestGetSourceSystemAccess:
         assert "object_type=schema" in _DESC_SOURCE_SYSTEM_ACCESS
         assert "rdam_tableprivilege" in _DESC_SOURCE_SYSTEM_ACCESS
         assert "never call `search_catalog_assets`" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
-        assert "Mandatory by direction" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "Mandatory API fields" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "object_name" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "object_type=all" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "svc_analytics" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "get_user_object_access" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "Access grant models by source system" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "direct" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "contributing_group" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "user_to_objects" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "object_to_users only" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
+        assert "never call `object_to_users`" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
+        assert "do not guess or discover `connection_id`" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
+        assert "do not probe, enumerate, or discover" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
+        assert "omit `object_path`" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
+        assert "all tables on that connector" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
+        assert "ask the user which schema" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
+        assert "requiresSchemaSelection" in _DESC_SOURCE_SYSTEM_ACCESS
         assert "connection_id" in _DESC_SOURCE_SYSTEM_ACCESS
         assert "filteredToObjectLevel" not in _DESC_SOURCE_SYSTEM_ACCESS
 
-    def test_validate_rejects_missing_required_fields(self) -> None:
+    def test_validate_only_source_system_and_query_direction_required(self) -> None:
+        assert (
+            validate_source_system_access_args(
+                "redshift", "user_to_objects", None, None, None, None
+            )
+            is None
+        )
+        assert (
+            validate_source_system_access_args(
+                "snowflake", "object_to_users", None, None, None, None
+            )
+            is None
+        )
+
         err = validate_source_system_access_args(
             "redshift", "user_to_objects", "", "prod_db.t", "table", 1000
         )
-        assert err is not None
-        assert "mandatory" in err["error"]
-        assert "username" in err["error"]
+        assert err is None
 
         err = validate_source_system_access_args(
-            "redshift", "user_to_objects", "u", "", "table", 1000
+            "redshift", "user_to_objects", "u", "", "schema", 1000
         )
-        assert err is not None
-        assert "mandatory" in err["error"]
-        assert "object_path" in err["error"]
+        assert err is None
+
+        err = validate_source_system_access_args(
+            "redshift", "user_to_objects", "u", None, "table", 1000
+        )
+        assert err is None
 
         err = validate_source_system_access_args(
             "redshift", "user_to_objects", "u", "prod_db.t", None, None
         )
-        assert err is not None
-        assert "mandatory" in err["error"]
-        assert "object_type" in err["error"]
-        assert "connection_id" in err["error"]
+        assert err is None
 
-    def test_validate_lists_all_missing_mandatory_fields(self) -> None:
+    def test_validate_rejects_invalid_source_system_or_direction(self) -> None:
         err = validate_source_system_access_args(
-            "redshift", "user_to_objects", None, "", "", None
+            "postgres", "user_to_objects", "u", "prod_db.t", "table", 1000
         )
         assert err is not None
-        assert err["error"].startswith("The following parameters are mandatory:")
-        for field in ("username", "object_path", "object_type", "connection_id"):
-            assert field in err["error"]
+        assert "source_system" in err["error"]
+
+        err = validate_source_system_access_args(
+            "redshift", "invalid", "u", "prod_db.t", "table", 1000
+        )
+        assert err is not None
+        assert "query_direction" in err["error"]
+
+    def test_connection_wide_table_listing_omits_object_path(self) -> None:
+        assert is_connection_wide_table_listing("user_to_objects", None, "table", 1000)
+        assert is_connection_wide_table_listing("user_to_objects", "", "oetable", 1000)
+        assert not is_connection_wide_table_listing(
+            "user_to_objects", "BUSINESS.BANKING", "table", 1000
+        )
+        assert not is_connection_wide_table_listing("user_to_objects", None, "schema", 1000)
 
     def test_validate_username_not_required_for_object_to_users(self) -> None:
         err = validate_source_system_access_args(
@@ -104,7 +149,7 @@ class TestGetSourceSystemAccess:
         assert "source_system" in err["error"]
         assert "not supported" in err["error"]
 
-    def test_object_to_users_mandatory_fields_redshift(self) -> None:
+    def test_object_to_users_optional_fields_redshift(self) -> None:
         err = validate_source_system_access_args(
             "redshift", "object_to_users", None, "ovaledgedb.automation.customers", "table", 1000
         )
@@ -113,8 +158,7 @@ class TestGetSourceSystemAccess:
         err = validate_source_system_access_args(
             "redshift", "object_to_users", None, "", "table", 1000
         )
-        assert err is not None
-        assert "object_path" in err["error"]
+        assert err is None
 
     def test_reject_multiple_connection_id_values(self) -> None:
         err = reject_multiple_connection_id([1000, 1002])
@@ -158,6 +202,32 @@ class TestGetSourceSystemAccess:
             },
         )
 
+    async def test_user_to_objects_connection_wide_tables_omits_object_path(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
+        mcp = FastMCP(name="test", version="0.0.1")
+        rdam.register(mcp)
+        fn = await get_tool_fn(mcp, "source_system_access")
+        await fn(
+            source_system="redshift",
+            query_direction="user_to_objects",
+            username="bhanuddm",
+            object_path=None,
+            object_type="table",
+            connection_id=1000,
+        )
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_SOURCE_SYSTEM_ACCESS,
+            params={
+                "sourceSystem": "redshift",
+                "queryDirection": "user_to_objects",
+                "username": "bhanuddm",
+                "objectType": "table",
+                "connectionId": 1000,
+            },
+        )
+
     async def test_object_to_users_forwards_params(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {}
         mcp = FastMCP(name="test", version="0.0.1")
@@ -181,9 +251,10 @@ class TestGetSourceSystemAccess:
             },
         )
 
-    async def test_user_to_objects_rejects_missing_username(
+    async def test_user_to_objects_forwards_without_username(
         self, mock_oe_client: AsyncMock
     ) -> None:
+        mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
         rdam.register(mcp)
         fn = await get_tool_fn(mcp, "source_system_access")
@@ -195,10 +266,17 @@ class TestGetSourceSystemAccess:
             object_type=_REQ["object_type"],
             connection_id=_REQ["connection_id"],
         )
-        assert out["status_code"] == 400
-        assert "mandatory" in out["error"]
-        assert "username" in out["error"]
-        mock_oe_client.get.assert_not_called()
+        assert out["ok"] is True
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_SOURCE_SYSTEM_ACCESS,
+            params={
+                "sourceSystem": "redshift",
+                "queryDirection": "user_to_objects",
+                "objectPath": _REQ["object_path"],
+                "objectType": _REQ["object_type"],
+                "connectionId": _REQ["connection_id"],
+            },
+        )
 
     async def test_rejects_invalid_source_system(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
@@ -212,22 +290,50 @@ class TestGetSourceSystemAccess:
         assert out["status_code"] == 400
         mock_oe_client.get.assert_not_called()
 
-    async def test_rejects_missing_object_type(self, mock_oe_client: AsyncMock) -> None:
+    async def test_forwards_without_object_type(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
         rdam.register(mcp)
         fn = await get_tool_fn(mcp, "source_system_access")
         out = await fn(
             source_system="snowflake",
             query_direction="object_to_users",
-            username=_REQ["username"],
             object_path="SNOWFLAKE.ALERT",
             object_type="",
             connection_id=_REQ["connection_id"],
         )
-        assert out["status_code"] == 400
-        assert "mandatory" in out["error"]
-        assert "object_type" in out["error"]
-        mock_oe_client.get.assert_not_called()
+        assert out["ok"] is True
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_SOURCE_SYSTEM_ACCESS,
+            params={
+                "sourceSystem": "snowflake",
+                "queryDirection": "object_to_users",
+                "objectPath": "SNOWFLAKE.ALERT",
+                "connectionId": _REQ["connection_id"],
+            },
+        )
+
+    async def test_forwards_minimal_user_to_objects(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
+        mcp = FastMCP(name="test", version="0.0.1")
+        rdam.register(mcp)
+        fn = await get_tool_fn(mcp, "source_system_access")
+        out = await fn(
+            source_system="snowflake",
+            query_direction="user_to_objects",
+            username="RACHEL",
+            connection_id=1002,
+        )
+        assert out["ok"] is True
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_SOURCE_SYSTEM_ACCESS,
+            params={
+                "sourceSystem": "snowflake",
+                "queryDirection": "user_to_objects",
+                "username": "RACHEL",
+                "connectionId": 1002,
+            },
+        )
 
     async def test_rejects_column_object_type_for_snowflake(
         self, mock_oe_client: AsyncMock
@@ -593,6 +699,92 @@ class TestGetSourceSystemAccess:
         assert len(out["data"]["grants"]) == 1
         assert out["data"]["grants"][0]["objectLevel"] == "database"
         assert out["data"]["filteredToObjectLevel"] == "database"
+        assert "includedObjectLevels" not in out["data"]
+
+    async def test_redshift_user_to_objects_table_type_exact_level_only(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {
+                        "objectPath": "ovaledgedb",
+                        "objectLevel": "database",
+                        "privileges": ["CREATE"],
+                        "grantMechanism": "direct",
+                    },
+                    {
+                        "objectPath": "ovaledgedb.automation",
+                        "objectLevel": "schema",
+                        "privileges": ["USAGE"],
+                        "grantMechanism": "direct",
+                    },
+                    {
+                        "objectPath": "ovaledgedb.automation.customers",
+                        "objectLevel": "table",
+                        "privileges": ["SELECT"],
+                        "grantMechanism": "direct",
+                    },
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        rdam.register(mcp)
+        fn = await get_tool_fn(mcp, "source_system_access")
+        out = await fn(
+            source_system="redshift",
+            query_direction="user_to_objects",
+            username="john_analyst",
+            object_path="ovaledgedb.automation.customers",
+            object_type="table",
+            connection_id=1000,
+        )
+        levels = {grant["objectLevel"] for grant in out["data"]["grants"]}
+        assert levels == {"table"}
+        assert out["data"]["filteredToObjectLevel"] == "table"
+
+    def test_filter_user_to_objects_by_level_exact_level_only(self) -> None:
+        result = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {"objectLevel": "database", "objectPath": "ovaledgedb"},
+                    {"objectLevel": "schema", "objectPath": "ovaledgedb.automation"},
+                    {"objectLevel": "table", "objectPath": "ovaledgedb.automation.customers"},
+                ],
+            },
+        }
+        out = filter_user_to_objects_by_level(result, "schema")
+        levels = {grant["objectLevel"] for grant in out["data"]["grants"]}
+        assert levels == {"schema"}
+
+    async def test_redshift_object_to_users_passes_through_api_grants(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {"objectLevel": "database", "objectPath": "ovaledgedb"},
+                    {"objectLevel": "schema", "objectPath": "ovaledgedb.automation"},
+                    {"objectLevel": "table", "objectPath": "ovaledgedb.automation.customers"},
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        rdam.register(mcp)
+        fn = await get_tool_fn(mcp, "source_system_access")
+        out = await fn(
+            source_system="redshift",
+            query_direction="object_to_users",
+            object_path="ovaledgedb.automation.customers",
+            object_type="table",
+            connection_id=1000,
+        )
+        levels = {grant["objectLevel"] for grant in out["data"]["grants"]}
+        assert levels == {"database", "schema", "table"}
+        assert "filteredToObjectLevel" not in out["data"]
 
     async def test_redshift_multiple_usernames_forwards_params(
         self, mock_oe_client: AsyncMock
@@ -687,3 +879,334 @@ class TestGetSourceSystemAccess:
         normalized, err = validate_and_normalize_object_type("redshift", "database")
         assert err is None
         assert normalized == "database"
+
+
+class TestShapeObjectToUsersDisambiguation:
+    def test_incomplete_table_path_detection(self) -> None:
+        assert is_incomplete_table_object_path("actor")
+        assert is_incomplete_table_object_path("ovaledgedb.actor")
+        assert not is_incomplete_table_object_path("ovaledgedb.sakila.actor")
+
+    def test_backend_ambiguous_match_requires_schema_selection(self) -> None:
+        shaped = shape_object_to_users_disambiguation(
+            {
+                "ok": True,
+                "data": {
+                    "ambiguousMatch": True,
+                    "matchCandidates": [
+                        {
+                            "objectPath": "ovaledgedb.sakila.actor",
+                            "objectLevel": "table",
+                            "connectionId": 1000,
+                        },
+                        {
+                            "objectPath": "ovaledgedb.automation.actor",
+                            "objectLevel": "table",
+                            "connectionId": 1000,
+                        },
+                    ],
+                    "grants": [{"objectLevel": "schema"}],
+                },
+            },
+            "actor",
+            "table",
+        )
+        data = shaped["data"]
+        assert data["requiresSchemaSelection"] is True
+        assert data["grants"] == []
+        assert "sakila" in data["advisoryMessage"]
+        assert "automation" in data["advisoryMessage"]
+
+    def test_multiple_table_grants_require_schema_selection(self) -> None:
+        shaped = shape_object_to_users_disambiguation(
+            {
+                "ok": True,
+                "data": {
+                    "grants": [
+                        {
+                            "objectPath": "ovaledgedb.sakila.actor",
+                            "objectLevel": "table",
+                            "connectionId": 1000,
+                        },
+                        {
+                            "objectPath": "ovaledgedb.public.actor",
+                            "objectLevel": "table",
+                            "connectionId": 1000,
+                        },
+                    ],
+                },
+            },
+            "actor",
+            "table",
+        )
+        data = shaped["data"]
+        assert data["ambiguousMatch"] is True
+        assert data["requiresSchemaSelection"] is True
+        assert data["grants"] == []
+        assert len(data["matchCandidates"]) == 2
+
+    def test_single_resolved_table_grant_is_unchanged(self) -> None:
+        result = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {
+                        "objectPath": "ovaledgedb.automation.customers",
+                        "objectLevel": "table",
+                        "connectionId": 1000,
+                    },
+                ],
+            },
+        }
+        shaped = shape_object_to_users_disambiguation(result, "customers", "table")
+        assert shaped == result
+
+    def test_parent_only_grants_prompt_schema_selection(self) -> None:
+        shaped = shape_object_to_users_disambiguation(
+            {
+                "ok": True,
+                "data": {
+                    "grants": [
+                        {
+                            "objectPath": "sakila",
+                            "objectLevel": "schema",
+                            "connectionId": 1000,
+                        },
+                        {
+                            "objectPath": "customerinfo",
+                            "objectLevel": "schema",
+                            "connectionId": 1000,
+                        },
+                    ],
+                },
+            },
+            "actor",
+            "table",
+        )
+        data = shaped["data"]
+        assert data["requiresSchemaSelection"] is True
+        assert data["grants"] == []
+        assert data["schemaHints"] == ["sakila", "customerinfo"]
+        assert "ask the user which schema" in data["advisoryMessage"].lower()
+
+    def test_schema_names_from_schema_grants(self) -> None:
+        grants = [
+            {"objectPath": "salesinfo", "objectLevel": "schema"},
+            {"objectPath": "customerinfo", "objectLevel": "schema"},
+            {"objectPath": "salesinfo", "objectLevel": "schema"},
+        ]
+        assert _schema_names_from_schema_grants(grants) == ["salesinfo", "customerinfo"]
+
+    def test_has_table_level_grants(self) -> None:
+        assert _has_table_level_grants(
+            {"ok": True, "data": {"grants": [{"objectLevel": "table"}]}}
+        )
+        assert not _has_table_level_grants(
+            {"ok": True, "data": {"grants": [{"objectLevel": "schema"}]}}
+        )
+
+    async def test_object_to_users_applies_schema_disambiguation(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        async def _get(path: str, params: dict[str, object]) -> dict[str, object]:
+            object_path = params.get("objectPath")
+            if object_path == "actor":
+                return {
+                    "ok": True,
+                    "data": {
+                        "grants": [
+                            {
+                                "objectPath": "sakila",
+                                "objectLevel": "schema",
+                                "connectionId": 1000,
+                            },
+                            {
+                                "objectPath": "salesinfo",
+                                "objectLevel": "schema",
+                                "connectionId": 1000,
+                            },
+                        ],
+                    },
+                }
+            if object_path in {"sakila.actor", "salesinfo.actor"}:
+                return {
+                    "ok": True,
+                    "data": {
+                        "grants": [
+                            {
+                                "objectPath": object_path,
+                                "objectLevel": "table",
+                                "connectionId": 1000,
+                            },
+                        ],
+                    },
+                }
+            return {"ok": True, "data": {"grants": []}}
+
+        mock_oe_client.get.side_effect = _get
+        mcp = FastMCP(name="test", version="0.0.1")
+        rdam.register(mcp)
+        fn = await get_tool_fn(mcp, "source_system_access")
+        out = await fn(
+            source_system="redshift",
+            query_direction="object_to_users",
+            object_path="actor",
+            object_type="table",
+            connection_id=1000,
+        )
+        data = out["data"]
+        assert data["requiresSchemaSelection"] is True
+        assert data["grants"] == []
+        assert data["discoveredSchemaCandidates"] is True
+        paths = {candidate["objectPath"] for candidate in data["matchCandidates"]}
+        assert paths == {"sakila.actor", "salesinfo.actor"}
+        assert "salesinfo" in data["advisoryMessage"]
+        assert "customerinfo" not in data["advisoryMessage"]
+
+
+class TestSourceSystemAccessHelpers:
+    def test_compose_object_path_variants(self) -> None:
+        from server.tools.rdam.helpers import compose_object_path
+
+        assert compose_object_path("prod_db", "orders") == "prod_db.orders"
+        assert compose_object_path("prod_db.public", "orders") == "prod_db.public.orders"
+        assert compose_object_path(None, "transactions") == "transactions"
+        assert (
+            compose_object_path("prod_db.public.orders", "new_table")
+            == "prod_db.public.new_table"
+        )
+
+    def test_object_type_all_normalizes(self) -> None:
+        normalized, err = validate_and_normalize_object_type("snowflake", "all")
+        assert err is None
+        assert normalized == "all"
+
+    def test_filter_grants_by_privileges(self) -> None:
+        from server.tools.rdam.helpers import filter_grants_by_privileges
+
+        result = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {"privileges": ["SELECT"], "objectLevel": "table"},
+                    {"privileges": ["INSERT", "UPDATE"], "objectLevel": "table"},
+                ],
+            },
+        }
+        filtered = filter_grants_by_privileges(result, ["INSERT", "UPDATE"])
+        grants = filtered["data"]["grants"]
+        assert len(grants) == 1
+        assert "INSERT" in grants[0]["privileges"]
+
+    async def test_object_name_forwards_composed_path(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
+        mcp = FastMCP(name="test", version="0.0.1")
+        rdam.register(mcp)
+        fn = await get_tool_fn(mcp, "source_system_access")
+        await fn(
+            source_system="redshift",
+            query_direction="object_to_users",
+            object_path="prod_db",
+            object_name="orders",
+            object_type="table",
+            connection_id=1000,
+        )
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_SOURCE_SYSTEM_ACCESS,
+            params={
+                "sourceSystem": "redshift",
+                "queryDirection": "object_to_users",
+                "objectPath": "prod_db.orders",
+                "objectType": "table",
+                "connectionId": 1000,
+            },
+        )
+
+    async def test_object_type_all_omits_wire_object_type(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {"objectLevel": "database"},
+                    {"objectLevel": "table"},
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        rdam.register(mcp)
+        fn = await get_tool_fn(mcp, "source_system_access")
+        out = await fn(
+            source_system="snowflake",
+            query_direction="user_to_objects",
+            username="john.doe",
+            object_type="all",
+            connection_id=1002,
+        )
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_SOURCE_SYSTEM_ACCESS,
+            params={
+                "sourceSystem": "snowflake",
+                "queryDirection": "user_to_objects",
+                "username": "john.doe",
+                "connectionId": 1002,
+            },
+        )
+        assert len(out["data"]["grants"]) == 2
+
+    async def test_privileges_filter_on_user_to_objects(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {
+                        "objectLevel": "table",
+                        "objectPath": "prod.transactions",
+                        "privileges": ["SELECT"],
+                    },
+                    {
+                        "objectLevel": "table",
+                        "objectPath": "prod.transactions",
+                        "privileges": ["INSERT", "UPDATE"],
+                    },
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        rdam.register(mcp)
+        fn = await get_tool_fn(mcp, "source_system_access")
+        out = await fn(
+            source_system="redshift",
+            query_direction="user_to_objects",
+            username="svc_etl",
+            object_name="transactions",
+            object_type="table",
+            privileges=["INSERT", "UPDATE"],
+            connection_id=1000,
+        )
+        grants = out["data"]["grants"]
+        assert len(grants) == 1
+        assert "INSERT" in grants[0]["privileges"]
+        assert out["data"]["filteredToPrivileges"] == ["INSERT", "UPDATE"]
+
+    async def test_multi_connection_advisory(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {"connectionId": 1001, "objectLevel": "table"},
+                    {"connectionId": 1002, "objectLevel": "table"},
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        rdam.register(mcp)
+        fn = await get_tool_fn(mcp, "source_system_access")
+        out = await fn(
+            source_system="snowflake",
+            query_direction="user_to_objects",
+            username="svc_analytics",
+            object_type="table",
+        )
+        assert out["data"]["multipleConnections"] is True
+        assert out["data"]["connectionIds"] == [1001, 1002]
+        assert "connection_id" in out["data"]["advisoryMessage"]
