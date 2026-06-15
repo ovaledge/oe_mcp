@@ -141,7 +141,7 @@ def resolve_client_timezone() -> str:
         tzinfo = datetime.now().astimezone().tzinfo
         if tzinfo is not None:
             key = getattr(tzinfo, "key", None)
-            if key:
+            if isinstance(key, str) and key:
                 return key
     except Exception:
         pass
