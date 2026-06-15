@@ -86,6 +86,30 @@ class TestLookupGlossaryTerm:
         assert out["status_code"] == 400
         mock_oe_client.get.assert_not_called()
 
+    async def test_placement_by_domain_name(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = MOCK_GLOSSARY_RESULT
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_glossary_term")
+        out = await fn(domain_name="PrakashDOmain", category_name="test")
+        assert out == MOCK_GLOSSARY_RESULT
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_GLOSSARY_TERMS,
+            params={
+                "domainName": "PrakashDOmain",
+                "categoryName": "test",
+                "limit": MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
+            },
+        )
+
+    async def test_rejects_mixed_name_and_placement(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_glossary_term")
+        out = await fn(term_name="x", domain_name="Finance")
+        assert out["status_code"] == 400
+        mock_oe_client.get.assert_not_called()
+
     async def test_whitespace_term_name_treated_as_missing(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
@@ -101,6 +125,48 @@ class TestLookupGlossaryTerm:
         fn = await get_tool_fn(mcp, "lookup_glossary_term")
         out = await fn(term_name="revenue")
         assert out["status_code"] == 403
+
+    async def test_enriches_absolute_nav_url_from_relative_nav_link(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": [
+                {
+                    "objectId": 2468,
+                    "objectName": "Sidheshwar",
+                    "navLink": "#nav/glossary?browse=summary&id=2468",
+                }
+            ],
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_glossary_term")
+        out = await fn(term_name="Sidheshwar")
+        hit = out["data"][0]
+        assert hit["navLink"] == "#nav/glossary?browse=summary&id=2468"
+        assert hit["redirectUrl"].startswith("https://mock.ovaledge.com/")
+        assert hit["redirectUrl"].endswith("#nav/glossary?browse=summary&id=2468")
+        assert "navUrl" not in hit
+
+    async def test_object_id_lookup_enriches_nav_in_data(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "objectId": 99,
+                "objectName": "Revenue",
+                "navLink": "#nav/glossary?browse=summary&id=99",
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_glossary_term")
+        out = await fn(object_id=99)
+        assert out["data"]["redirectUrl"].endswith("#nav/glossary?browse=summary&id=99")
+        assert "redirectUrl" not in out
+        assert "navUrl" not in out["data"]
 
 
 _MOCK_DOMAIN_PICKER = {
@@ -339,7 +405,7 @@ class TestCreateGlossaryTerm:
         )
         mock_oe_client.get.assert_not_called()
 
-    async def test_create_uses_term_details_as_redirect_link(
+    async def test_create_uses_nav_link_as_redirect(
         self, mock_oe_client: AsyncMock
     ) -> None:
         mock_oe_client.post.return_value = {
@@ -349,7 +415,7 @@ class TestCreateGlossaryTerm:
                 "termName": "joyful",
                 "status": "DRAFT",
                 "domainId": 1066,
-                "termDetails": "#nav/glossary?browse=summary&id=2463",
+                "navLink": "#nav/glossary?browse=summary&id=2463",
             },
         }
         mcp = FastMCP(name="test", version="0.0.1")
@@ -363,9 +429,9 @@ class TestCreateGlossaryTerm:
             category_skip_confirmed=True,
             create_confirmed_by_user=True,
         )
-        assert out["termDetails"] == "#nav/glossary?browse=summary&id=2463"
+        assert out["navLink"] == "#nav/glossary?browse=summary&id=2463"
         assert out["redirectUrl"].endswith("#nav/glossary?browse=summary&id=2463")
-        assert out["data"]["termDetails"] == "#nav/glossary?browse=summary&id=2463"
+        assert out["data"]["navLink"] == "#nav/glossary?browse=summary&id=2463"
         assert out["data"]["redirectUrl"].endswith("#nav/glossary?browse=summary&id=2463")
         assert "Redirect" in out["formattedResponse"]
 
@@ -825,6 +891,52 @@ class TestLookupTags:
         out = await fn(tag_name="missing")
         assert out["status_code"] == 404
 
+    async def test_enriches_absolute_nav_url_from_relative_nav_link(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": [
+                {
+                    "objectId": 1519,
+                    "objectName": "deepList",
+                    "navLink": "#nav/tag?id=1519&objectType=oetag&masterTagId=1036",
+                    "parentObjectId": 1036,
+                }
+            ],
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_tags")
+        out = await fn(tag_name="deepList")
+        hit = out["data"][0]
+        assert hit["navLink"] == "#nav/tag?id=1519&objectType=oetag&masterTagId=1036"
+        assert hit["redirectUrl"].startswith("https://mock.ovaledge.com/")
+        assert hit["redirectUrl"].endswith(
+            "#nav/tag?id=1519&objectType=oetag&masterTagId=1036"
+        )
+        assert "redirectUrl" not in out
+
+    async def test_object_id_lookup_enriches_nav_in_data(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "objectId": 99,
+                "objectName": "Confidential",
+                "navLink": "#nav/tag?id=99&objectType=oetag&masterTagId=10",
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_tags")
+        out = await fn(object_id=99)
+        assert out["data"]["redirectUrl"].endswith(
+            "#nav/tag?id=99&objectType=oetag&masterTagId=10"
+        )
+        assert "redirectUrl" not in out
+
 
 class TestBuildUserSelectableMasters:
     def test_lists_all_masters_without_parent_truncation(self) -> None:
@@ -1150,6 +1262,7 @@ class TestCreateTag:
             secure_opts,
             secure_opts,
             parent_opts,
+            parent_opts,
         ]
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
@@ -1170,7 +1283,123 @@ class TestCreateTag:
         assert out["ok"] is False
         assert "1033" in out.get("message", "")
         assert "1013" in out.get("message", "")
+        assert "browse_parent_tag_id" in out.get("formattedResponse", "")
         mock_oe_client.post.assert_not_called()
+
+    async def test_secure_mode_nested_parent_via_browse(self, mock_oe_client: AsyncMock) -> None:
+        """Grandchild parent (e.g. MCPNEWcreated) is allowed after BFS parent-options browse."""
+        secure_opts = {
+            "ok": True,
+            "data": {
+                "tagSecurityMode": "secure",
+                "masterTagChoices": [
+                    {"masterTagId": 1036, "tagName": "Deposit Accounts"},
+                ],
+            },
+        }
+        top_parent_opts = {
+            "ok": True,
+            "data": {
+                "masterTagId": 1036,
+                "masterTagName": "Deposit Accounts",
+                "parentTagChoices": [
+                    {
+                        "parentTagId": 1774,
+                        "tagName": "MCPCreated",
+                        "hasChildren": True,
+                    },
+                ],
+            },
+        }
+        nested_parent_opts = {
+            "ok": True,
+            "data": {
+                "masterTagId": 1036,
+                "browseParentTagId": 1774,
+                "browseParentTagName": "MCPCreated",
+                "parentTagChoices": [
+                    {"parentTagId": 1776, "tagName": "MCPNEWcreated"},
+                ],
+            },
+        }
+        async def _parent_options_router(*_args: object, **kwargs: object) -> dict[str, object]:
+            params = kwargs.get("params") if isinstance(kwargs.get("params"), dict) else {}
+            if params.get("browseParentTagId"):
+                return nested_parent_opts
+            if params.get("masterTagId"):
+                return top_parent_opts
+            return secure_opts
+
+        mock_oe_client.get.side_effect = _parent_options_router
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "create_tag")
+        await fn(
+            tag_name="deep tag created",
+            master_tag_id=1036,
+            master_tag_id_confirmed_by_user=True,
+        )
+        out = await fn(
+            tag_name="deep tag created",
+            master_tag_id=1036,
+            master_tag_id_confirmed_by_user=True,
+            parent_tag_id=1776,
+            parent_tag_id_confirmed_by_user=True,
+            parent_step_completed_by_user=True,
+        )
+        assert out.get("doNotCreateTag") is True
+        assert out.get("workflowPhase") == "confirm_create"
+        mock_oe_client.post.assert_not_called()
+        mock_oe_client.get.assert_any_call(
+            MCP_PATH_TAGS_PARENT_OPTIONS,
+            params={"masterTagId": 1036, "browseParentTagId": 1774},
+        )
+
+    async def test_secure_mode_browse_parent_shows_children(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        secure_opts = {
+            "ok": True,
+            "data": {
+                "tagSecurityMode": "secure",
+                "masterTagChoices": [
+                    {"masterTagId": 1036, "tagName": "Deposit Accounts"},
+                ],
+            },
+        }
+        nested_parent_opts = {
+            "ok": True,
+            "data": {
+                "masterTagId": 1036,
+                "browseParentTagId": 1774,
+                "browseParentTagName": "MCPCreated",
+                "parentTagChoices": [
+                    {"parentTagId": 1776, "tagName": "MCPNEWcreated"},
+                ],
+            },
+        }
+        mock_oe_client.get.side_effect = [
+            secure_opts,
+            secure_opts,
+            nested_parent_opts,
+        ]
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "create_tag")
+        out = await fn(
+            tag_name="deep tag created",
+            master_tag_id=1036,
+            master_tag_id_confirmed_by_user=True,
+            browse_parent_tag_id=1774,
+        )
+        assert out.get("doNotCreateTag") is True
+        assert out.get("browseParentTagId") == 1774
+        assert out["parentTagChoiceCount"] == 1
+        assert "MCPNEWcreated" in str(out.get("userSelectableParents"))
+        mock_oe_client.get.assert_any_call(
+            MCP_PATH_TAGS_PARENT_OPTIONS,
+            params={"masterTagId": 1036, "browseParentTagId": 1774},
+        )
 
     async def test_secure_mode_parent_step_after_master(self, mock_oe_client: AsyncMock) -> None:
         secure_opts = {
@@ -1835,6 +2064,19 @@ class TestLookupDqRule:
 
 
 class TestUpdateGovernanceRoles:
+    async def test_rejects_unsupported_object_type(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_governance_roles")
+        out = await fn(
+            object_id=1,
+            object_type="not_a_real_type",
+            role_updates={"owner": "john"},
+        )
+        assert out["status_code"] == 400
+        assert "unsupported object_type" in out["error"].lower()
+        mock_oe_client.post.assert_not_called()
+
     async def test_rejects_owner_on_dqrule(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
@@ -1952,6 +2194,49 @@ class TestUpdateGovernanceRoles:
                 "roleUpdates": {"custodian": None},
             },
         )
+
+    async def test_accepts_govrole5_synonym(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.return_value = {
+            "status": "success",
+            "updatedRoles": ["governance_role_5"],
+            "blockedRoles": [],
+            "target": {"objectId": 1, "objectType": "oetable"},
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_governance_roles")
+        await fn(
+            object_id=1,
+            object_type="oetable",
+            role_updates={"govrole5": "sarah"},
+            create_confirmed_by_user=True,
+        )
+        mock_oe_client.post.assert_called_once_with(
+            MCP_PATH_UPDATE_GOVERNANCE_ROLES,
+            {
+                "target": {"objectId": 1, "objectType": "oetable"},
+                "roleUpdates": {"governance_role_5": "sarah"},
+            },
+        )
+
+    async def test_governance_role_not_enabled_error_is_structured(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.side_effect = OvalEdgeError(
+            400, "Governance role is not enabled: governance_role_5"
+        )
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_governance_roles")
+        out = await fn(
+            object_id=1,
+            object_type="oetable",
+            role_updates={"governance_role_5": "sarah"},
+            create_confirmed_by_user=True,
+        )
+        assert out["status_code"] == 400
+        assert out["reason_code"] == "GOVERNANCE_ROLE_NOT_ENABLED"
+        assert "not enabled" in out["error"].lower()
 
     async def test_oval_edge_error_returns_dict(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.post.side_effect = OvalEdgeError(403, "Forbidden")

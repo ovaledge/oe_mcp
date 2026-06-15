@@ -1,5 +1,7 @@
+import os
 from pathlib import Path
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -25,6 +27,8 @@ class Settings(BaseSettings):
     # When true, rewrite 127.0.0.1 to localhost in link base URLs for browser-friendly links.
     ovaledge_prefer_localhost_links: bool = True
     ovaledge_timeout_seconds: int = 30
+    # IANA timezone sent as OvalEdge ``time-zone`` header (matches browser UI). Empty = auto-detect.
+    ovaledge_client_timezone: str = ""
     # Outbound OvalEdge API: Authorization: "<scheme> <jwt>" (e.g. jwt, not Okta Bearer).
     ovaledge_http_auth_scheme: str = "jwt"
     # Log full outbound URL (method + resolved URL with query) to stderr for tracing.
@@ -98,3 +102,50 @@ def get_settings() -> Settings:
 
 # Back-compat for existing imports.
 settings = _settings
+
+
+_ZONEINFO_MARKER = "zoneinfo/"
+
+
+def _iana_from_etc_localtime() -> str | None:
+    """Resolve IANA zone from /etc/localtime symlink (macOS/Linux)."""
+    try:
+        link = os.path.realpath("/etc/localtime")
+    except OSError:
+        return None
+    idx = link.find(_ZONEINFO_MARKER)
+    if idx < 0:
+        return None
+    zone = link[idx + len(_ZONEINFO_MARKER) :]
+    if not zone:
+        return None
+    try:
+        ZoneInfo(zone)
+    except ZoneInfoNotFoundError:
+        return None
+    return zone
+
+
+def resolve_client_timezone() -> str:
+    """IANA timezone for OvalEdge ``time-zone`` header (align MCP dates with UI)."""
+    configured = settings.ovaledge_client_timezone.strip()
+    if configured:
+        try:
+            ZoneInfo(configured)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError(f"Invalid OVALEDGE_CLIENT_TIMEZONE: {configured!r}") from exc
+        return configured
+    try:
+        from datetime import datetime
+
+        tzinfo = datetime.now().astimezone().tzinfo
+        if tzinfo is not None:
+            key = getattr(tzinfo, "key", None)
+            if isinstance(key, str) and key:
+                return key
+    except Exception:
+        pass
+    from_etc = _iana_from_etc_localtime()
+    if from_etc:
+        return from_etc
+    return "UTC"

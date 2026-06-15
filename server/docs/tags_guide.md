@@ -29,7 +29,7 @@ Flow depends on **`tagSecurityMode`** from create-options:
 ### SECURE mode
 
 1. `tag_name` only → user must pick **master** (`master_tag_id` + `master_tag_id_confirmed_by_user=true`)  
-2. Show **parent** options under that master (optional)  
+2. Show **parent** options under that master (optional). Rows with `hasChildren=true` support nested browse via `browse_parent_tag_id` on the next `create_tag` call (`GET parent-options?browseParentTagId=…`).  
 3. Finalize with `parent_step_completed_by_user=true` and parent choice or `create_directly_under_master=true`  
 4. **Confirm** → `create_confirmed_by_user=true` → POST  
 

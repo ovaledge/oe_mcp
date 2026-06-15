@@ -29,18 +29,54 @@ MCP_CATALOG_OBJECT_TYPES = frozenset(
         "oecolumn",
         "oefile",
         "filecolumn",
+        "oefilecolumn",
         "oechart",
         "chartchild",
         "oeapi",
         "oeapicolumn",
         "oequery",
+        "code",
+        "oecode",
         "dp_product",
         "glossary",
+        "businessglossary",
         "oetag",
+        "mastertag",
+        "oeglobaldomain",
+        "dp_domain",
         "oestory",
     }
 )
 MCP_CATALOG_OBJECT_TYPES_DOC = ", ".join(sorted(MCP_CATALOG_OBJECT_TYPES))
+
+# BRD object types for update_asset_descriptions (oestory excluded — no description slots).
+MCP_UPDATE_ASSET_DESCRIPTION_OBJECT_TYPES = frozenset(
+    {
+        "oeschema",
+        "oetable",
+        "oecolumn",
+        "oefile",
+        "filecolumn",
+        "oefilecolumn",
+        "oechart",
+        "chartchild",
+        "oeapi",
+        "oeapicolumn",
+        "oequery",
+        "code",
+        "oecode",
+        "oeglobaldomain",
+        "glossary",
+        "businessglossary",
+        "oetag",
+        "mastertag",
+        "dp_domain",
+        "dp_product",
+    }
+)
+MCP_UPDATE_ASSET_DESCRIPTION_OBJECT_TYPES_DOC = ", ".join(
+    sorted(MCP_UPDATE_ASSET_DESCRIPTION_OBJECT_TYPES)
+)
 
 # ── OvalEdge MCP HTTP paths (appended to OVALEDGE_BASE_URL) ──────
 MCP_PATH_SEARCH_CATALOG = "/api/v1/mcp/search-catalog"
@@ -101,6 +137,8 @@ MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES = frozenset(
         "oeglobaldomain",
         "processing_activity",
         "ropa_report",
+        "category",
+        "subcategory",
     }
 )
 # Steward-only governance updates (UI parity).
@@ -389,6 +427,12 @@ MCP_SEARCH_GLOSSARY_TERMS_PARAM = "terms"
 MCP_SEARCH_CUSTOM_FIELDS_PARAM = "customFields"
 MCP_SEARCH_DATA_PRODUCTS_PARAM = "dataProducts"
 MCP_SEARCH_CLASSIFICATIONS_PARAM = "classifications"
+MCP_SEARCH_DOMAIN_ID_PARAM = "domainId"
+MCP_SEARCH_DOMAIN_NAME_PARAM = "domainName"
+MCP_SEARCH_CATEGORY_ID_PARAM = "categoryId"
+MCP_SEARCH_CATEGORY_NAME_PARAM = "categoryName"
+MCP_SEARCH_SUBCATEGORY_ID_PARAM = "subCategoryId"
+MCP_SEARCH_SUBCATEGORY_NAME_PARAM = "subCategoryName"
 MCP_SEARCH_SERVER_TYPE_PARAM = "serverType"
 
 # connectionInfo.serverType values (OvalEdge connector types).

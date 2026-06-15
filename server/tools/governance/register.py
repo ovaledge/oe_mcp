@@ -9,11 +9,14 @@ from pydantic import Field
 
 from server.client import OvalEdgeError
 from server.constants import (
+    MCP_CATALOG_OBJECT_TYPES,
     MCP_DOMAIN_METADATA_SEARCH_ON,
     MCP_DOMAIN_METADATA_SIZE_DEFAULT,
     MCP_DOMAIN_METADATA_SIZE_MAX,
     MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
     MCP_GLOSSARY_TAGS_LIMIT_MAX,
+    MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES,
+    MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES_DOC,
     MCP_GOVERNANCE_STEWARD_ONLY_OBJECT_TYPES,
     MCP_PATH_GLOSSARY_TERMS,
     MCP_PATH_LOOKUP_DATASTORY,
@@ -48,6 +51,8 @@ from server.tools.governance.helpers import (
     _consume_parent_picker_shown,
     _enrich_create_tag_response,
     _enrich_datastory_response,
+    _enrich_glossary_lookup_response,
+    _enrich_tag_lookup_response,
     _enrich_update_governance_roles_response,
     _extract_picker_items,
     _extract_placement_from_path,
@@ -68,6 +73,7 @@ from server.tools.governance.helpers import (
     _normalize_role_updates,
     _parent_choice_finalized,
     _parent_picker_was_shown,
+    _parent_tag_is_allowed_under_master,
     _reject_invented_master_tag_id,
     _resolve_category_id_by_name,
     _resolve_create_tag_description,
@@ -84,12 +90,53 @@ def register(mcp: FastMCP) -> None:
     async def lookup_glossary_term(
         object_id: Annotated[
             int | None,
-            Field(description="Glossary term internal id; omit if using term_name.", default=None),
+            Field(
+                description="Glossary term internal id; omit for name or placement lookup.",
+                default=None,
+            ),
         ] = None,
         term_name: Annotated[
             str | None,
             Field(
-                description="Term name / label to look up; omit if using object_id.",
+                description="Term name / label to look up; omit if using object_id or placement.",
+                default=None,
+            ),
+        ] = None,
+        domain_id: Annotated[
+            int | None,
+            Field(
+                description=(
+                    "Global domain id for placement lookup; use with optional category/subcategory."
+                ),
+                default=None,
+            ),
+        ] = None,
+        domain_name: Annotated[
+            str | None,
+            Field(
+                description="Global domain name for placement lookup when domain_id is unknown.",
+                default=None,
+            ),
+        ] = None,
+        category_id: Annotated[
+            int | None,
+            Field(description="Category id (category1Id) for placement lookup.", default=None),
+        ] = None,
+        category_name: Annotated[
+            str | None,
+            Field(
+                description="Category name for placement lookup when category_id is unknown.",
+                default=None,
+            ),
+        ] = None,
+        subcategory_id: Annotated[
+            int | None,
+            Field(description="Subcategory id (category2Id) for placement lookup.", default=None),
+        ] = None,
+        subcategory_name: Annotated[
+            str | None,
+            Field(
+                description="Subcategory name for placement lookup when subcategory_id is unknown.",
                 default=None,
             ),
         ] = None,
@@ -107,23 +154,41 @@ def register(mcp: FastMCP) -> None:
         """Glossary lookup (see MCP tool description)."""
         has_id = object_id is not None
         has_name = term_name is not None and str(term_name).strip() != ""
-        if has_id and has_name:
+        has_placement = (
+            (domain_id is not None and domain_id > 0)
+            or strip_or_none(domain_name) is not None
+            or (category_id is not None and category_id > 0)
+            or strip_or_none(category_name) is not None
+            or (subcategory_id is not None and subcategory_id > 0)
+            or strip_or_none(subcategory_name) is not None
+        )
+        mode_count = int(has_id) + int(has_name) + int(has_placement)
+        if mode_count != 1:
             return {
-                "error": "Provide either object_id or term_name — not both.",
-                "status_code": 400,
-            }
-        if not has_id and not has_name:
-            return {
-                "error": "Provide object_id or term_name.",
+                "error": (
+                    "Provide exactly one lookup mode: object_id, term_name, or "
+                    "domain/category placement filters."
+                ),
                 "status_code": 400,
             }
         lim = min(max(limit, 1), MCP_GLOSSARY_TAGS_LIMIT_MAX)
         try:
             async with ovaledge_client() as client:
-                return await client.get(
-                    MCP_PATH_GLOSSARY_TERMS,
-                    params=_q(objectId=object_id, termName=term_name, limit=lim),
+                params = _q(
+                    objectId=object_id,
+                    termName=strip_or_none(term_name),
+                    domainId=domain_id if domain_id and domain_id > 0 else None,
+                    domainName=strip_or_none(domain_name),
+                    categoryId=category_id if category_id and category_id > 0 else None,
+                    categoryName=strip_or_none(category_name),
+                    subCategoryId=subcategory_id if subcategory_id and subcategory_id > 0 else None,
+                    subCategoryName=strip_or_none(subcategory_name),
+                    limit=lim,
                 )
+                body = await client.get(MCP_PATH_GLOSSARY_TERMS, params=params)
+                if isinstance(body, dict):
+                    return _enrich_glossary_lookup_response(body)
+                return body
         except OvalEdgeError as e:
             return map_ovaledge_error(e)
 
@@ -826,10 +891,13 @@ def register(mcp: FastMCP) -> None:
         lim = min(max(limit, 1), MCP_GLOSSARY_TAGS_LIMIT_MAX)
         try:
             async with ovaledge_client() as client:
-                return await client.get(
+                body = await client.get(
                     MCP_PATH_TAGS,
                     params=_q(objectId=object_id, tagName=tag_name, limit=lim),
                 )
+                if isinstance(body, dict):
+                    return _enrich_tag_lookup_response(body)
+                return body
         except OvalEdgeError as e:
             return map_ovaledge_error(e)
 
@@ -892,6 +960,18 @@ def register(mcp: FastMCP) -> None:
                 default=False,
             ),
         ] = False,
+        browse_parent_tag_id: Annotated[
+            int | None,
+            Field(
+                description=(
+                    "Optional nested browse: list child tags under this parentTagId "
+                    "(GET parent-options browseParentTagId). Use when a parent row has "
+                    "hasChildren=true to reach deeper levels (e.g. MCPNEWcreated under "
+                    "MCPCreated). Keep master_tag_id and master confirmations when set."
+                ),
+                default=None,
+            ),
+        ] = None,
         create_directly_under_master: Annotated[
             bool,
             Field(
@@ -967,15 +1047,16 @@ def register(mcp: FastMCP) -> None:
                                 secure_guidance,
                                 parent_tag_id=parent_tag_id,
                             )
-                        # Validate via parent-options API (not nested create-options
-                        # parentTagChoices, which are intentionally empty in secure mode).
-                        _, parents_for_validate = await _fetch_parent_choices_for_master(
-                            client, master_tag_id, secure_guidance
+                        allowed = await _parent_tag_is_allowed_under_master(
+                            client,
+                            master_tag_id,
+                            parent_tag_id,
+                            secure_guidance,
                         )
-                        allowed_parents = {
-                            p["parentTagId"] for p in parents_for_validate
-                        }
-                        if allowed_parents and parent_tag_id not in allowed_parents:
+                        if not allowed:
+                            _, parents_hint, _ = await _fetch_parent_choices_for_master(
+                                client, master_tag_id, secure_guidance
+                            )
                             return {
                                 "ok": False,
                                 "status_code": 422,
@@ -984,11 +1065,13 @@ def register(mcp: FastMCP) -> None:
                                     f"master_tag_id {master_tag_id}."
                                 ),
                                 "doNotCreateTag": True,
+                                "userSelectableParents": parents_hint,
                                 "formattedResponse": (
                                     f"parent_tag_id {parent_tag_id} is not listed under "
                                     f"master_tag_id {master_tag_id}. Ask the human to pick "
-                                    "from userSelectableParents or decline with "
-                                    "create_directly_under_master=true and "
+                                    "from userSelectableParents, browse deeper with "
+                                    "browse_parent_tag_id when hasChildren=true, or decline "
+                                    "with create_directly_under_master=true and "
                                     "parent_step_completed_by_user=true."
                                 ),
                             }
@@ -999,24 +1082,36 @@ def register(mcp: FastMCP) -> None:
                         create_directly_under_master=create_directly_under_master,
                         parent_step_completed_by_user=parent_step_completed_by_user,
                     ):
-                        master_name, parents = await _fetch_parent_choices_for_master(
-                            client, master_tag_id, secure_guidance
+                        master_name, parents, browse_meta = (
+                            await _fetch_parent_choices_for_master(
+                                client,
+                                master_tag_id,
+                                secure_guidance,
+                                browse_parent_tag_id=browse_parent_tag_id,
+                            )
                         )
                         return _format_parent_selection_guidance(
                             master_tag_id=master_tag_id,
                             master_tag_name=master_name,
                             parents=parents,
                             tag_name=name,
+                            browse_meta=browse_meta,
                         )
                     if not _parent_picker_was_shown(name):
-                        master_name, parents = await _fetch_parent_choices_for_master(
-                            client, master_tag_id, secure_guidance
+                        master_name, parents, browse_meta = (
+                            await _fetch_parent_choices_for_master(
+                                client,
+                                master_tag_id,
+                                secure_guidance,
+                                browse_parent_tag_id=browse_parent_tag_id,
+                            )
                         )
                         out = _format_parent_selection_guidance(
                             master_tag_id=master_tag_id,
                             master_tag_name=master_name,
                             parents=parents,
                             tag_name=name,
+                            browse_meta=browse_meta,
                         )
                         out["message"] = (
                             "Parent picker was not completed for this tag name. "
@@ -1046,19 +1141,34 @@ def register(mcp: FastMCP) -> None:
                     open_parents: list[dict[str, Any]] = []
                     if parent_tag_id is not None and parent_tag_id > 0:
                         if not parent_tag_id_confirmed_by_user:
-                            open_parents = await _fetch_open_parent_choices(client)
+                            open_parents = await _fetch_open_parent_choices(
+                                client, browse_parent_tag_id=browse_parent_tag_id
+                            )
                             guidance = _format_open_parent_selection_guidance(
                                 parents=open_parents,
                                 tag_name=name,
+                                browse_parent_tag_id=browse_parent_tag_id,
                             )
                             return _block_llm_parent_selection(
                                 guidance,
                                 parent_tag_id=parent_tag_id,
                             )
-                        open_parents = await _fetch_open_parent_choices(client)
-                        allowed_open = {
-                            p["parentTagId"] for p in open_parents
-                        }
+                        open_parents = await _fetch_open_parent_choices(
+                            client, browse_parent_tag_id=browse_parent_tag_id
+                        )
+                        allowed_open = {p["parentTagId"] for p in open_parents}
+                        if allowed_open and parent_tag_id not in allowed_open:
+                            if browse_parent_tag_id is None or browse_parent_tag_id <= 0:
+                                for p in open_parents:
+                                    if not p.get("hasChildren"):
+                                        continue
+                                    nested = await _fetch_open_parent_choices(
+                                        client,
+                                        browse_parent_tag_id=p["parentTagId"],
+                                    )
+                                    allowed_open.update(
+                                        n["parentTagId"] for n in nested
+                                    )
                         if allowed_open and parent_tag_id not in allowed_open:
                             return {
                                 "ok": False,
@@ -1084,16 +1194,22 @@ def register(mcp: FastMCP) -> None:
                         create_directly_under_master=create_directly_under_master,
                         parent_step_completed_by_user=parent_step_completed_by_user,
                     ):
-                        open_parents = await _fetch_open_parent_choices(client)
+                        open_parents = await _fetch_open_parent_choices(
+                            client, browse_parent_tag_id=browse_parent_tag_id
+                        )
                         return _format_open_parent_selection_guidance(
                             parents=open_parents,
                             tag_name=name,
+                            browse_parent_tag_id=browse_parent_tag_id,
                         )
                     if not _parent_picker_was_shown(name):
-                        open_parents = await _fetch_open_parent_choices(client)
+                        open_parents = await _fetch_open_parent_choices(
+                            client, browse_parent_tag_id=browse_parent_tag_id
+                        )
                         out = _format_open_parent_selection_guidance(
                             parents=open_parents,
                             tag_name=name,
+                            browse_parent_tag_id=browse_parent_tag_id,
                         )
                         out["message"] = (
                             "Parent picker was not completed for this tag name. "
@@ -1135,20 +1251,29 @@ def register(mcp: FastMCP) -> None:
                                 "doNotCreateTag": True,
                             }
                         resolved_master_id = master_tag_id
-                        master_name, parents = await _fetch_parent_choices_for_master(
-                            client, resolved_master_id, secure_guidance
+                        master_name, parents, browse_meta = (
+                            await _fetch_parent_choices_for_master(
+                                client,
+                                resolved_master_id,
+                                secure_guidance,
+                                browse_parent_tag_id=browse_parent_tag_id,
+                            )
                         )
                         out = _format_parent_selection_guidance(
                             master_tag_id=resolved_master_id,
                             master_tag_name=master_name,
                             parents=parents,
                             tag_name=name,
+                            browse_meta=browse_meta,
                         )
                     else:
-                        open_parents = await _fetch_open_parent_choices(client)
+                        open_parents = await _fetch_open_parent_choices(
+                            client, browse_parent_tag_id=browse_parent_tag_id
+                        )
                         out = _format_open_parent_selection_guidance(
                             parents=open_parents,
                             tag_name=name,
+                            browse_parent_tag_id=browse_parent_tag_id,
                         )
                     out["message"] = (
                         "Parent picker session expired or was not completed. "
@@ -1411,6 +1536,18 @@ def register(mcp: FastMCP) -> None:
             return {"error": err, "status_code": 400}
 
         otype_key = str(object_type).strip().lower()
+        if (
+            otype_key not in MCP_CATALOG_OBJECT_TYPES
+            and otype_key not in MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES
+        ):
+            return {
+                "error": (
+                    f"Unsupported object_type {object_type!r}. Use a catalog objectType from "
+                    "search_catalog_assets, or one of: "
+                    f"{MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES_DOC}."
+                ),
+                "status_code": 400,
+            }
         if otype_key in MCP_GOVERNANCE_STEWARD_ONLY_OBJECT_TYPES and normalized_updates:
             invalid_roles = [
                 role
@@ -1456,4 +1593,15 @@ def register(mcp: FastMCP) -> None:
                     return _enrich_update_governance_roles_response(result)
                 return result
         except OvalEdgeError as e:
+            msg = str(e)
+            prefix = f"OvalEdge API error {e.status_code}: "
+            if msg.startswith(prefix):
+                msg = msg[len(prefix) :].strip()
+            lower = msg.lower()
+            if "governance role is not enabled" in lower and "role" in lower:
+                return {
+                    "error": msg,
+                    "status_code": e.status_code,
+                    "reason_code": "GOVERNANCE_ROLE_NOT_ENABLED",
+                }
             return map_ovaledge_error(e)

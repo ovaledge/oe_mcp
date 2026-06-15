@@ -11,10 +11,12 @@ from server.constants import (
     MCP_PATH_METADATA_CHANGES_BETWEEN_CRAWLS,
     MCP_PATH_SEARCH_CATALOG,
     MCP_PATH_UPDATE_ASSET_DESCRIPTIONS,
+    MCP_SEARCH_CATEGORY_NAME_PARAM,
     MCP_SEARCH_CLASSIFICATIONS_PARAM,
     MCP_SEARCH_CONTEXT_QUERY_PARAM,
     MCP_SEARCH_CUSTOM_FIELDS_PARAM,
     MCP_SEARCH_DATA_PRODUCTS_PARAM,
+    MCP_SEARCH_DOMAIN_NAME_PARAM,
     MCP_SEARCH_GLOSSARY_TERMS_PARAM,
     MCP_SEARCH_SERVER_TYPE_PARAM,
     MCP_SEARCH_TAGS_PARAM,
@@ -27,6 +29,30 @@ from tests.helpers import get_tool_fn
 
 
 class TestSearchCatalogAssets:
+    async def test_enriches_absolute_nav_url_from_relative_nav_link(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "items": [
+                {
+                    "objectId": 2468,
+                    "objectType": "glossary",
+                    "objectName": "Sidheshwar",
+                    "navLink": "#nav/glossary?browse=summary&id=2468",
+                }
+            ],
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        result = await tool_fn(search_terms=["Sidheshwar"])
+        hit = result["items"][0]
+        assert hit["navLink"] == "#nav/glossary?browse=summary&id=2468"
+        assert hit["redirectUrl"].startswith("https://mock.ovaledge.com/")
+        assert hit["redirectUrl"].endswith("#nav/glossary?browse=summary&id=2468")
+        assert "navUrl" not in hit
+
     def test_search_description_rejects_native_grant_fallback(self) -> None:
         assert "source_system_access" in _DESC_SEARCH
         assert "Never use this tool as a fallback" in _DESC_SEARCH
@@ -183,6 +209,23 @@ class TestSearchCatalogAssets:
         params = mock_oe_client.get.call_args[1]["params"]
         assert params["objectType"] == "oequery"
 
+    async def test_glossary_placement_filters_forwarded(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        await tool_fn(
+            object_type="glossary",
+            domain_name="PrakashDOmain",
+            category_name="test",
+            subcategory_name="okok",
+        )
+        params = mock_oe_client.get.call_args[1]["params"]
+        assert params["objectType"] == "glossary"
+        assert params[MCP_SEARCH_DOMAIN_NAME_PARAM] == "PrakashDOmain"
+        assert params[MCP_SEARCH_CATEGORY_NAME_PARAM] == "test"
+        assert params["subCategoryName"] == "okok"
+
     async def test_error_returns_structured_dict(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.side_effect = OvalEdgeError(403, "Forbidden")
 
@@ -197,6 +240,27 @@ class TestSearchCatalogAssets:
 
 
 class TestCatalogAssetDetails:
+    async def test_enriches_absolute_nav_url_from_relative_nav_link(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "objectId": 2468,
+                "objectType": "glossary",
+                "objectName": "Sidheshwar",
+                "navLink": "#nav/glossary?browse=summary&id=2468",
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "catalog_asset_details")
+        out = await tool_fn(object_id=2468, object_type="glossary")
+        assert out["data"]["navLink"] == "#nav/glossary?browse=summary&id=2468"
+        assert out["data"]["redirectUrl"].endswith("#nav/glossary?browse=summary&id=2468")
+        assert "redirectUrl" not in out
+        assert "navUrl" not in out
+
     async def test_fqn_only(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = MOCK_ASSET_DETAIL
         mcp = FastMCP(name="test", version="0.0.1")
@@ -485,6 +549,50 @@ class TestUpdateAssetDescriptions:
             object_id=1,
             object_type="not_a_type",
             business_description="x",
+        )
+        assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
+    async def test_accepts_oeglobaldomain(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.return_value = {"status": "success"}
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_asset_descriptions")
+        await fn(
+            object_id=10,
+            object_type="oeglobaldomain",
+            domain_description="Domain text",
+            create_confirmed_by_user=True,
+        )
+        body = mock_oe_client.post.call_args[0][1]
+        assert body["target"]["objectType"] == "oeglobaldomain"
+        assert body["descriptions"]["domainDescription"] == "Domain text"
+
+    async def test_oecode_alias_maps_to_code_api_type(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.return_value = {"status": "success"}
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_asset_descriptions")
+        await fn(
+            object_id=7,
+            object_type="oecode",
+            business_description="Code business",
+            prompt="Update the business description",
+            create_confirmed_by_user=True,
+        )
+        body = mock_oe_client.post.call_args[0][1]
+        assert body["target"]["objectType"] == "code"
+        assert body["descriptions"]["businessDescription"] == "Code business"
+
+    async def test_rejects_oestory(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_asset_descriptions")
+        out = await fn(
+            object_id=1,
+            object_type="oestory",
+            description_field="business_description",
+            description_text="x",
         )
         assert out["status_code"] == 400
         mock_oe_client.post.assert_not_called()
