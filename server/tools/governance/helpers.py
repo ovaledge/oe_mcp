@@ -19,7 +19,6 @@ from server.constants import (
     MCP_PATH_TAGS_CREATE_OPTIONS,
     MCP_PATH_TAGS_PARENT_OPTIONS,
     MCP_PATH_UPDATE_GOVERNANCE_ROLES,
-    NAV_GLOSSARY_TERM_HASH,
     SELECTION_PHASE_MASTER_REQUIRED,
     SELECTION_PHASE_PARENT_OPTIONAL,
     STATUS_AWAITING_USER_SELECTION,
@@ -46,7 +45,8 @@ _DESC_GLOSSARY = (
     "in that subcategory.\n\n"
     f"Optional limit (default {MCP_GLOSSARY_TAGS_LIMIT_DEFAULT}; capped at "
     f"{MCP_GLOSSARY_TAGS_LIMIT_MAX}).\n\n"
-    "Do not combine object_id, term_name, and placement filters in one call."
+    "Do not combine object_id, term_name, and placement filters in one call.\n\n"
+    "Each hit includes relative navLink plus redirectUrl (absolute, from OVALEDGE_BASE_URL)."
 )
 _DESC_TAGS = (
     "Look up OETAG (tag) document(s) by id or name from Elasticsearch; name search "
@@ -54,7 +54,8 @@ _DESC_TAGS = (
     f"Backend: GET {MCP_PATH_TAGS} (objectId OR tagName — mutually exclusive).\n"
     f"Optional query param limit (default {MCP_GLOSSARY_TAGS_LIMIT_DEFAULT} on server; "
     f"this client caps at {MCP_GLOSSARY_TAGS_LIMIT_MAX}).\n\n"
-    "Provide either tag_name or object_id, never both."
+    "Provide either tag_name or object_id, never both.\n\n"
+    "Each hit includes relative navLink plus redirectUrl (absolute, from OVALEDGE_BASE_URL)."
 )
 _DESC_CREATE_GLOSSARY = (
     "Create a business glossary term or list domain/category/subcategory placement options.\n\n"
@@ -286,6 +287,104 @@ def _format_datastory_display(body: dict[str, Any]) -> str:
         lines.extend(["", nav_url])
 
     return "\n".join(lines).rstrip()
+
+
+def _glossary_nav_from_item(item: dict[str, Any]) -> str:
+    """Resolve glossary nav hash from navLink, legacy string termDetails, or object id."""
+    nav = extract_hash_nav_link(str(item.get("navLink") or ""))
+    if nav:
+        return nav
+    term_details = item.get("termDetails")
+    if isinstance(term_details, str):
+        nav = extract_hash_nav_link(term_details)
+        if nav:
+            return nav
+    oid = item.get("objectId")
+    if oid is None:
+        oid = item.get("businessGlossaryId")
+    if isinstance(oid, int) and oid > 0:
+        return f"#nav/glossary?browse=summary&id={oid}"
+    return ""
+
+
+def _enrich_glossary_term_nav(item: dict[str, Any]) -> dict[str, Any]:
+    """Add absolute redirectUrl from relative navLink (lookup hits)."""
+    out = dict(item)
+    nav = _glossary_nav_from_item(out)
+    if not nav:
+        return out
+    out["navLink"] = nav
+    out["redirectUrl"] = build_absolute_nav_url(nav)
+    return out
+
+
+def _enrich_glossary_lookup_response(body: dict[str, Any]) -> dict[str, Any]:
+    """Normalize nav links on glossary-terms GET responses (data only, no top-level mirror)."""
+    if not body.get("ok"):
+        return body
+    out = dict(body)
+    data = body.get("data")
+    if isinstance(data, list):
+        out["data"] = [_enrich_glossary_term_nav(x) for x in data if isinstance(x, dict)]
+        return out
+    if isinstance(data, dict):
+        out["data"] = _enrich_glossary_term_nav(data)
+    return out
+
+
+def _tag_nav_from_item(item: dict[str, Any]) -> str:
+    """Resolve tag summary nav hash from navLink or tag metadata."""
+    nav = extract_hash_nav_link(str(item.get("navLink") or item.get("hyperlink") or ""))
+    if nav and "objecttype=" in nav.lower():
+        return nav
+    oid = item.get("objectId")
+    if not isinstance(oid, int) or oid <= 0:
+        return nav
+    parent_id = _positive_int(item.get("parentObjectId"))
+    master_id: int | None = None
+    tag_details = item.get("tagDetails")
+    if isinstance(tag_details, list):
+        for td in tag_details:
+            if not isinstance(td, dict) or not td.get("isDirectTag"):
+                continue
+            master_id = _positive_int(td.get("masterTagId"))
+            break
+    hierarchies = item.get("parentHierarchies")
+    if master_id is None and isinstance(hierarchies, list) and hierarchies:
+        first = hierarchies[0]
+        if isinstance(first, dict):
+            master_id = _positive_int(first.get("id"))
+    return _tag_summary_page_nav(
+        oid,
+        catalog=item,
+        master_tag_id=master_id,
+        parent_tag_id=parent_id,
+    )
+
+
+def _enrich_tag_nav(item: dict[str, Any]) -> dict[str, Any]:
+    """Add absolute redirectUrl from relative navLink (lookup hits)."""
+    out = dict(item)
+    nav = _tag_nav_from_item(out)
+    if not nav:
+        return out
+    out["navLink"] = nav
+    out["redirectUrl"] = build_absolute_nav_url(nav)
+    return out
+
+
+def _enrich_tag_lookup_response(body: dict[str, Any]) -> dict[str, Any]:
+    """Normalize nav links on tags GET responses (data only, no top-level mirror)."""
+    if not body.get("ok"):
+        return body
+    out = dict(body)
+    data = body.get("data")
+    if isinstance(data, list):
+        out["data"] = [_enrich_tag_nav(x) for x in data if isinstance(x, dict)]
+        return out
+    if isinstance(data, dict):
+        out["data"] = _enrich_tag_nav(data)
+    return out
 
 
 def _enrich_datastory_response(body: dict[str, Any]) -> dict[str, Any]:
@@ -668,24 +767,14 @@ def _shape_create_response(
 ) -> dict[str, Any]:
     out = dict(body)
     data = _as_dict(body.get("data"))
-    term_details = (
-        str(data.get("termDetails")).strip()
-        if isinstance(data.get("termDetails"), str)
-        else ""
-    )
-    nav = extract_hash_nav_link(term_details) if term_details else ""
-    gid = data.get("businessGlossaryId")
-    if not nav and isinstance(gid, int) and gid > 0:
-        nav = f"{NAV_GLOSSARY_TERM_HASH}{gid}"
+    nav = _glossary_nav_from_item(data)
     if nav:
         absolute = build_absolute_nav_url(nav)
-        out["termDetails"] = nav
         out["redirectUrl"] = absolute
         out["navLink"] = nav
         out["navUrl"] = absolute
         if isinstance(data, dict):
             data = dict(data)
-            data["termDetails"] = nav
             data["redirectUrl"] = absolute
             data["navLink"] = nav
             data["navUrl"] = absolute
@@ -1180,7 +1269,7 @@ def _resolve_tag_nav(
     catalog_nav = extract_hash_nav_link(
         str((catalog or {}).get("navLink") or (catalog or {}).get("hyperlink") or "")
     )
-    if catalog_nav and "objectType=" in catalog_nav.lower():
+    if catalog_nav and "objecttype=" in catalog_nav.lower():
         summary_nav = catalog_nav
     else:
         summary_nav = _tag_summary_page_nav(

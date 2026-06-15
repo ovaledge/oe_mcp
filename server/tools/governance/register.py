@@ -51,6 +51,8 @@ from server.tools.governance.helpers import (
     _consume_parent_picker_shown,
     _enrich_create_tag_response,
     _enrich_datastory_response,
+    _enrich_glossary_lookup_response,
+    _enrich_tag_lookup_response,
     _enrich_update_governance_roles_response,
     _extract_picker_items,
     _extract_placement_from_path,
@@ -183,7 +185,10 @@ def register(mcp: FastMCP) -> None:
                     subCategoryName=strip_or_none(subcategory_name),
                     limit=lim,
                 )
-                return await client.get(MCP_PATH_GLOSSARY_TERMS, params=params)
+                body = await client.get(MCP_PATH_GLOSSARY_TERMS, params=params)
+                if isinstance(body, dict):
+                    return _enrich_glossary_lookup_response(body)
+                return body
         except OvalEdgeError as e:
             return map_ovaledge_error(e)
 
@@ -886,10 +891,13 @@ def register(mcp: FastMCP) -> None:
         lim = min(max(limit, 1), MCP_GLOSSARY_TAGS_LIMIT_MAX)
         try:
             async with ovaledge_client() as client:
-                return await client.get(
+                body = await client.get(
                     MCP_PATH_TAGS,
                     params=_q(objectId=object_id, tagName=tag_name, limit=lim),
                 )
+                if isinstance(body, dict):
+                    return _enrich_tag_lookup_response(body)
+                return body
         except OvalEdgeError as e:
             return map_ovaledge_error(e)
 

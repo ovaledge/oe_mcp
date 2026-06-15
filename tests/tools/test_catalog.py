@@ -28,6 +28,30 @@ from tests.helpers import get_tool_fn
 
 
 class TestSearchCatalogAssets:
+    async def test_enriches_absolute_nav_url_from_relative_nav_link(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "items": [
+                {
+                    "objectId": 2468,
+                    "objectType": "glossary",
+                    "objectName": "Sidheshwar",
+                    "navLink": "#nav/glossary?browse=summary&id=2468",
+                }
+            ],
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        result = await tool_fn(search_terms=["Sidheshwar"])
+        hit = result["items"][0]
+        assert hit["navLink"] == "#nav/glossary?browse=summary&id=2468"
+        assert hit["redirectUrl"].startswith("https://mock.ovaledge.com/")
+        assert hit["redirectUrl"].endswith("#nav/glossary?browse=summary&id=2468")
+        assert "navUrl" not in hit
+
     async def test_search_get_params(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
 
@@ -211,6 +235,27 @@ class TestSearchCatalogAssets:
 
 
 class TestCatalogAssetDetails:
+    async def test_enriches_absolute_nav_url_from_relative_nav_link(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "objectId": 2468,
+                "objectType": "glossary",
+                "objectName": "Sidheshwar",
+                "navLink": "#nav/glossary?browse=summary&id=2468",
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "catalog_asset_details")
+        out = await tool_fn(object_id=2468, object_type="glossary")
+        assert out["data"]["navLink"] == "#nav/glossary?browse=summary&id=2468"
+        assert out["data"]["redirectUrl"].endswith("#nav/glossary?browse=summary&id=2468")
+        assert "redirectUrl" not in out
+        assert "navUrl" not in out
+
     async def test_fqn_only(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = MOCK_ASSET_DETAIL
         mcp = FastMCP(name="test", version="0.0.1")

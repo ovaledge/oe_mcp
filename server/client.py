@@ -11,7 +11,7 @@ from tenacity import (
     wait_exponential,
 )
 
-from server.config import settings
+from server.config import resolve_client_timezone, settings
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +152,7 @@ class OvalEdgeClient:
             "Authorization": _ovaledge_authorization(jwt) if jwt else "",
             "Content-Type": "application/json",
             "Accept": "application/json",
+            "time-zone": resolve_client_timezone(),
         }
         self._timeout = settings.ovaledge_timeout_seconds
         self._client: httpx.AsyncClient | None = None

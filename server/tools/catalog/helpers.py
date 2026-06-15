@@ -28,6 +28,7 @@ from server.constants import (
     MCP_UPDATE_ASSET_DESCRIPTION_OBJECT_TYPES,
     MCP_UPDATE_ASSET_DESCRIPTION_OBJECT_TYPES_DOC,
 )
+from server.nav_links import build_absolute_nav_url, extract_hash_nav_link
 
 _TABLE_FILE_TYPES = frozenset({"oetable", "oefile"})
 
@@ -92,7 +93,8 @@ _DESC_SEARCH = (
     "object_type must be one of: "
     + MCP_CATALOG_OBJECT_TYPES_DOC
     + " — or omit for all types.\n\n"
-    "Each hit in items[] includes objectId and objectType (camelCase). Use those values "
+    "Each hit in items[] includes objectId and objectType (camelCase), relative navLink, "
+    "plus redirectUrl (absolute, from OVALEDGE_BASE_URL). Use those values "
     "with update_asset_descriptions when the user asks to change descriptions.\n\n"
     "When results include oestory (data story), call lookup_datastory (object_id or "
     "content_query) for full narrative and storyCitation — do not answer from search "
@@ -109,7 +111,9 @@ _DESC_DETAILS = (
     "document exists.\n\n"
     "object_type must be one of: "
     + MCP_CATALOG_OBJECT_TYPES_DOC
-    + "."
+    + ".\n\n"
+    "Response includes relative navLink plus redirectUrl "
+    "(absolute, from OVALEDGE_BASE_URL)."
 )
 _DESC_COLUMN = (
     "Column-level profile statistics for one table or file asset.\n\n"
@@ -554,6 +558,39 @@ def _apply_lexical_search_params(
             params[api_key] = json.dumps(normalized, ensure_ascii=False)
 
 
+
+
+def _enrich_catalog_item_nav(item: dict[str, Any]) -> dict[str, Any]:
+    """Add absolute redirectUrl from relative navLink (search/detail hits)."""
+    out = dict(item)
+    nav = extract_hash_nav_link(str(out.get("navLink") or ""))
+    if not nav:
+        nav = extract_hash_nav_link(str(out.get("hyperlink") or ""))
+    if not nav:
+        return out
+    out["navLink"] = nav
+    out["redirectUrl"] = build_absolute_nav_url(nav)
+    return out
+
+
+def _enrich_catalog_search_response(body: dict[str, Any]) -> dict[str, Any]:
+    if body.get("error"):
+        return body
+    out = dict(body)
+    items = body.get("items")
+    if isinstance(items, list):
+        out["items"] = [_enrich_catalog_item_nav(x) for x in items if isinstance(x, dict)]
+    return out
+
+
+def _enrich_catalog_details_response(body: dict[str, Any]) -> dict[str, Any]:
+    if body.get("error") or body.get("ok") is False:
+        return body
+    out = dict(body)
+    data = body.get("data")
+    if isinstance(data, dict):
+        out["data"] = _enrich_catalog_item_nav(data)
+    return out
 
 
 def _is_specific_table_compare(

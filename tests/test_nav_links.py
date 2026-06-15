@@ -52,6 +52,22 @@ class TestBuildAbsoluteNavUrl:
         )
 
 
+class TestBuildAbsoluteNavUrlWithContextPath:
+    def test_includes_ovaledge_context_path(self, monkeypatch) -> None:
+        from server.config import Settings
+
+        monkeypatch.setattr(
+            "server.nav_links.get_settings",
+            lambda: Settings(ovaledge_base_url="http://localhost:8080/ovaledge"),
+        )
+        from server.nav_links import build_absolute_nav_url
+
+        assert (
+            build_absolute_nav_url("#nav/glossary?browse=summary&id=2468")
+            == "http://localhost:8080/ovaledge/#nav/glossary?browse=summary&id=2468"
+        )
+
+
 class TestGetLinkBaseUrl:
     def test_rewrites_loopback_to_localhost(self, monkeypatch) -> None:
         monkeypatch.setenv(

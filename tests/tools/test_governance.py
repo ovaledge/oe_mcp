@@ -126,6 +126,48 @@ class TestLookupGlossaryTerm:
         out = await fn(term_name="revenue")
         assert out["status_code"] == 403
 
+    async def test_enriches_absolute_nav_url_from_relative_nav_link(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": [
+                {
+                    "objectId": 2468,
+                    "objectName": "Sidheshwar",
+                    "navLink": "#nav/glossary?browse=summary&id=2468",
+                }
+            ],
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_glossary_term")
+        out = await fn(term_name="Sidheshwar")
+        hit = out["data"][0]
+        assert hit["navLink"] == "#nav/glossary?browse=summary&id=2468"
+        assert hit["redirectUrl"].startswith("https://mock.ovaledge.com/")
+        assert hit["redirectUrl"].endswith("#nav/glossary?browse=summary&id=2468")
+        assert "navUrl" not in hit
+
+    async def test_object_id_lookup_enriches_nav_in_data(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "objectId": 99,
+                "objectName": "Revenue",
+                "navLink": "#nav/glossary?browse=summary&id=99",
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_glossary_term")
+        out = await fn(object_id=99)
+        assert out["data"]["redirectUrl"].endswith("#nav/glossary?browse=summary&id=99")
+        assert "redirectUrl" not in out
+        assert "navUrl" not in out["data"]
+
 
 _MOCK_DOMAIN_PICKER = {
     "ok": True,
@@ -363,7 +405,7 @@ class TestCreateGlossaryTerm:
         )
         mock_oe_client.get.assert_not_called()
 
-    async def test_create_uses_term_details_as_redirect_link(
+    async def test_create_uses_nav_link_as_redirect(
         self, mock_oe_client: AsyncMock
     ) -> None:
         mock_oe_client.post.return_value = {
@@ -373,7 +415,7 @@ class TestCreateGlossaryTerm:
                 "termName": "joyful",
                 "status": "DRAFT",
                 "domainId": 1066,
-                "termDetails": "#nav/glossary?browse=summary&id=2463",
+                "navLink": "#nav/glossary?browse=summary&id=2463",
             },
         }
         mcp = FastMCP(name="test", version="0.0.1")
@@ -387,9 +429,9 @@ class TestCreateGlossaryTerm:
             category_skip_confirmed=True,
             create_confirmed_by_user=True,
         )
-        assert out["termDetails"] == "#nav/glossary?browse=summary&id=2463"
+        assert out["navLink"] == "#nav/glossary?browse=summary&id=2463"
         assert out["redirectUrl"].endswith("#nav/glossary?browse=summary&id=2463")
-        assert out["data"]["termDetails"] == "#nav/glossary?browse=summary&id=2463"
+        assert out["data"]["navLink"] == "#nav/glossary?browse=summary&id=2463"
         assert out["data"]["redirectUrl"].endswith("#nav/glossary?browse=summary&id=2463")
         assert "Redirect" in out["formattedResponse"]
 
@@ -848,6 +890,52 @@ class TestLookupTags:
         fn = await get_tool_fn(mcp, "lookup_tags")
         out = await fn(tag_name="missing")
         assert out["status_code"] == 404
+
+    async def test_enriches_absolute_nav_url_from_relative_nav_link(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": [
+                {
+                    "objectId": 1519,
+                    "objectName": "deepList",
+                    "navLink": "#nav/tag?id=1519&objectType=oetag&masterTagId=1036",
+                    "parentObjectId": 1036,
+                }
+            ],
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_tags")
+        out = await fn(tag_name="deepList")
+        hit = out["data"][0]
+        assert hit["navLink"] == "#nav/tag?id=1519&objectType=oetag&masterTagId=1036"
+        assert hit["redirectUrl"].startswith("https://mock.ovaledge.com/")
+        assert hit["redirectUrl"].endswith(
+            "#nav/tag?id=1519&objectType=oetag&masterTagId=1036"
+        )
+        assert "redirectUrl" not in out
+
+    async def test_object_id_lookup_enriches_nav_in_data(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "objectId": 99,
+                "objectName": "Confidential",
+                "navLink": "#nav/tag?id=99&objectType=oetag&masterTagId=10",
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_tags")
+        out = await fn(object_id=99)
+        assert out["data"]["redirectUrl"].endswith(
+            "#nav/tag?id=99&objectType=oetag&masterTagId=10"
+        )
+        assert "redirectUrl" not in out
 
 
 class TestBuildUserSelectableMasters:
