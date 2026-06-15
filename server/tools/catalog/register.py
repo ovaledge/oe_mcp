@@ -46,6 +46,8 @@ from server.tools.catalog.helpers import (
     _apply_lexical_search_params,
     _build_update_descriptions_body,
     _description_field_hint,
+    _enrich_catalog_details_response,
+    _enrich_catalog_search_response,
     _enrich_update_descriptions_response,
     _format_update_descriptions_confirmation_preview,
     _is_specific_table_compare,
@@ -317,7 +319,8 @@ def register(mcp: FastMCP) -> None:
                 classifications=classifications,
             )
             async with ovaledge_client() as client:
-                return await client.get(MCP_PATH_SEARCH_CATALOG, params=params)
+                body = await client.get(MCP_PATH_SEARCH_CATALOG, params=params)
+                return _enrich_catalog_search_response(body)
         except OvalEdgeError as e:
             return map_ovaledge_error(e)
 
@@ -387,7 +390,8 @@ def register(mcp: FastMCP) -> None:
                     )
                 else:
                     od_params = _q(objectId=object_id, objectType=object_type)
-                return await client.get(MCP_PATH_OBJECT_DETAILS, params=od_params)
+                body = await client.get(MCP_PATH_OBJECT_DETAILS, params=od_params)
+                return _enrich_catalog_details_response(body)
         except OvalEdgeError as e:
             return map_ovaledge_error(e)
 
