@@ -23,6 +23,7 @@ from server.constants import (
     MCP_SEARCH_TERMS_PARAM,
 )
 from server.tools import catalog
+from server.tools.catalog.helpers import _DESC_SEARCH
 from tests.conftest import MOCK_ASSET_DETAIL, MOCK_LINEAGE_RESPONSE, MOCK_SEARCH_RESPONSE
 from tests.helpers import get_tool_fn
 
@@ -51,6 +52,10 @@ class TestSearchCatalogAssets:
         assert hit["redirectUrl"].startswith("https://mock.ovaledge.com/")
         assert hit["redirectUrl"].endswith("#nav/glossary?browse=summary&id=2468")
         assert "navUrl" not in hit
+
+    def test_search_description_rejects_native_grant_fallback(self) -> None:
+        assert "source_system_access" in _DESC_SEARCH
+        assert "Never use this tool as a fallback" in _DESC_SEARCH
 
     async def test_search_get_params(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE

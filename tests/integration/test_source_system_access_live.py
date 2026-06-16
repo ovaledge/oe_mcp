@@ -91,6 +91,7 @@ async def test_redshift_object_to_users_table(api_get) -> None:
             "sourceSystem": "redshift",
             "queryDirection": "object_to_users",
             "objectPath": RS_TABLE_PATH,
+            "objectType": "table",
             **_conn_param("redshift"),
         }
     )
@@ -108,6 +109,7 @@ async def test_redshift_partial_path_ambiguous_or_resolved(api_get) -> None:
             "sourceSystem": "redshift",
             "queryDirection": "object_to_users",
             "objectPath": RS_PARTIAL,
+            "objectType": "table",
             **_conn_param("redshift"),
         }
     )
@@ -128,6 +130,7 @@ async def test_redshift_resolve_all_matches(api_get) -> None:
             "sourceSystem": "redshift",
             "queryDirection": "object_to_users",
             "objectPath": RS_PARTIAL,
+            "objectType": "table",
             "resolveAllMatches": True,
             **_conn_param("redshift"),
         }
@@ -147,6 +150,7 @@ async def test_redshift_include_columns(api_get) -> None:
             "sourceSystem": "redshift",
             "queryDirection": "object_to_users",
             "objectPath": RS_TABLE_PATH,
+            "objectType": "table",
             "includeColumns": True,
             **_conn_param("redshift"),
         }
@@ -185,6 +189,7 @@ async def test_snowflake_object_to_users_dbname_only(api_get) -> None:
             "sourceSystem": "snowflake",
             "queryDirection": "object_to_users",
             "objectPath": SF_DB_NAME,
+            "objectType": "database",
             **_conn_param("snowflake"),
         }
     )
@@ -202,6 +207,7 @@ async def test_snowflake_object_to_users_connection_dbname(api_get) -> None:
             "sourceSystem": "snowflake",
             "queryDirection": "object_to_users",
             "objectPath": f"{SF_CONN_NAME}.{SF_DB_NAME}",
+            "objectType": "database",
             **_conn_param("snowflake"),
         }
     )
@@ -219,6 +225,7 @@ async def test_snowflake_object_to_users(api_get) -> None:
             "sourceSystem": "snowflake",
             "queryDirection": "object_to_users",
             "objectPath": SF_OBJECT_PATH,
+            "objectType": "table",
             **_conn_param("snowflake"),
         }
     )
@@ -252,11 +259,13 @@ async def test_tableau_object_to_users(api_get) -> None:
         path = (report or project or {}).get("objectPath")
         if not path:
             pytest.skip("No Tableau project/report grants to test object_to_users")
+    object_type = "report" if "/" in path else "project"
     r = await api_get(
         {
             "sourceSystem": "tableau",
             "queryDirection": "object_to_users",
             "objectPath": path,
+            "objectType": object_type,
             **_conn_param("tableau"),
         }
     )
@@ -265,12 +274,13 @@ async def test_tableau_object_to_users(api_get) -> None:
     assert r.status_code == 200, r.text[:500]
     grants = r.json()["data"].get("grants") or []
     assert len(grants) > 0
-    assert all(g.get("grantMechanism") == "direct" for g in grants)
+    mechanisms = {g.get("grantMechanism") for g in grants}
+    assert mechanisms <= {"direct", "group"}, f"Unexpected Tableau mechanisms: {mechanisms}"
     assert all(g.get("principalType") == "user" for g in grants)
 
 
 @pytest.mark.asyncio
-async def test_tableau_user_to_objects_direct_only(api_get) -> None:
+async def test_tableau_user_to_objects_direct_and_group(api_get) -> None:
     r = await api_get(
         {
             "sourceSystem": "tableau",
@@ -288,7 +298,10 @@ async def test_tableau_user_to_objects_direct_only(api_get) -> None:
     if not grants:
         pytest.skip("No Tableau grants — verify rdam_report_* harvest")
     mechanisms = {g.get("grantMechanism") for g in grants}
-    assert mechanisms == {"direct"}, f"Tableau should be direct-only, got {mechanisms}"
+    assert mechanisms <= {"direct", "group"}, f"Unexpected Tableau mechanisms: {mechanisms}"
+    group_grants = [g for g in grants if g.get("grantMechanism") == "group"]
+    for g in group_grants:
+        assert g.get("contributingGroup"), "Group grants should include contributingGroup"
 
 
 @pytest.mark.asyncio
@@ -299,6 +312,7 @@ async def test_user_to_objects_with_object_path_filter(api_get) -> None:
             "queryDirection": "user_to_objects",
             "username": RS_USER,
             "objectPath": RS_PARTIAL,
+            "objectType": "table",
             **_conn_param("redshift"),
         }
     )
@@ -326,6 +340,7 @@ async def test_unknown_object_not_found(api_get) -> None:
             "sourceSystem": "redshift",
             "queryDirection": "object_to_users",
             "objectPath": "no_such_db.no_schema.no_table_xyz",
+            "objectType": "table",
             **_conn_param("redshift"),
         }
     )

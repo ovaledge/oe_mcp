@@ -359,9 +359,10 @@ def golden_mcp_use_native_source_access() -> LLMTestCase:
         actual_output=(
             "This asks for native database grants (not OvalEdge catalog ACLs), so I used "
             "source_system_access with source_system=redshift, "
-            "query_direction=user_to_objects, "
-            "and username=svc_analytics. I did not use search_catalog_assets, which indexes "
-            "governance metadata rather than Redshift privilege tables."
+            "query_direction=user_to_objects, username=svc_analytics, "
+            "object_path=prod, object_type=database, and connection_id for the Redshift "
+            "connector. I did not use search_catalog_assets, which indexes governance metadata "
+            "rather than Redshift privilege tables."
         ),
         mcp_servers=[srv],
         mcp_tools_called=[
@@ -371,6 +372,9 @@ def golden_mcp_use_native_source_access() -> LLMTestCase:
                     "source_system": "redshift",
                     "query_direction": "user_to_objects",
                     "username": "svc_analytics",
+                    "object_path": "prod",
+                    "object_type": "database",
+                    "connection_id": 1000,
                 },
                 result=tool_call_result(
                     {

@@ -33,7 +33,9 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 
 ## Native source access (RDAM)
 
-Use **`source_system_access`** for **native** grants harvested from Redshift, Snowflake, or Tableau (RDAM). This is **not** OvalEdge catalog ACL (`get_catalog_object_access` may ship later) and **not** catalog discovery — do not use `search_catalog_assets` to answer “who can SELECT this table in Redshift?”.
+Use **`source_system_access`** for **native** grants harvested from Redshift, Snowflake, or Tableau (RDAM SQL only — **no Elasticsearch**). This is **not** OvalEdge catalog ACL (`get_catalog_object_access` may ship later) and **not** catalog discovery.
+
+**Never fall back to `search_catalog_assets`** when RDAM is empty, not-found, or errors — catalog search cannot return native grants. Report the RDAM/API outcome instead.
 
 **Workflow prompt:** `native_source_access` (pass `source_system` and the user’s question).
 
@@ -41,18 +43,20 @@ Use **`source_system_access`** for **native** grants harvested from Redshift, Sn
 |-----------|----------------|
 | `source_system` | `redshift`, `snowflake`, `tableau` |
 | `query_direction` | See below |
-| `username` | Required for `user_to_objects`; omit for `object_to_users` |
-| `object_path` | Required for `object_to_users`; optional filter on `user_to_objects` |
+| `username` | **Required** on every call |
+| `object_path` | **Required** — path at the queried level (`BUSINESS`, `BUSINESS.BANKING`, `db.schema.table`, etc.) |
+| `object_type` | **Required** — RDAM level: `database`, `schema`, `table`, `column` (Redshift), `project`, `report` (Tableau) |
 | `include_columns` | Redshift only — column-level grants (default false) |
-| `connection_id` | Scope when multiple connections share a `source_system` |
+| `connection_id` | **Required** — OvalEdge connector id |
 | `resolve_all_matches` | When `object_path` is ambiguous, return all matches (max 50); default returns `matchCandidates` |
 
 ### Query direction
 
 | Direction | Provide | Example question |
 |-----------|---------|------------------|
-| `user_to_objects` | `username` | “What can `svc_analytics` access in Snowflake?” |
-| `object_to_users` | `object_path` | “Who has native access to `prod_db.public.orders`?” |
+| `user_to_objects` | `username`, `object_path`, `object_type`, `connection_id` | “What can `svc_analytics` access on `BUSINESS.BANKING`?” → `object_type=schema` |
+| `user_to_objects` (database level) | `username`, `object_path=BUSINESS`, `object_type=database`, `connection_id` | “What **database-level** permissions does `john_analyst` have?” |
+| `object_to_users` | `username`, `object_path`, `object_type`, `connection_id` | “Who has native access to `prod_db.public.orders`?” (`object_type=table`) |
 
 ### `object_path` formats
 
@@ -75,7 +79,7 @@ Partial paths (e.g. table name only) may return **`matchCandidates`** — disamb
 
 - **Redshift:** direct user, group, and role grants (`grant_mechanism`: direct | group | role).
 - **Snowflake:** role assignment only (no direct user grants / groups).
-- **Tableau:** direct user or service account on project/report.
+- **Tableau:** direct site-user grants and site-group grants on project/report (`grant_mechanism`: direct | group). Group access is expanded via harvested `rdam_usergroup` membership.
 
 **Authorization:** Instance or Connector **Data Access Admin** is enforced server-side; callers without DAA on the scoped connection see RDAM no-access. See [governance_model](governance_model#native-source-access-rdam).
 
