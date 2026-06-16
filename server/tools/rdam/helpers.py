@@ -280,7 +280,7 @@ async def discover_table_schema_candidates(
 def should_discover_table_schema_candidates(
     query_direction: str,
     object_type: str | None,
-    object_path: str | list[str],
+    object_path: str | list[str] | None,
     result: dict[str, Any],
     resolve_all_matches: bool,
 ) -> bool:
@@ -308,7 +308,7 @@ async def enrich_table_schema_candidates(
     result: dict[str, Any],
     source_system: str,
     connection_id: int | None,
-    object_path: str | list[str],
+    object_path: str | list[str] | None,
     query_direction: str,
     object_type: str | None,
     resolve_all_matches: bool,
@@ -317,6 +317,8 @@ async def enrich_table_schema_candidates(
     if not should_discover_table_schema_candidates(
         query_direction, object_type, object_path, result, resolve_all_matches
     ):
+        return result
+    if connection_id is None:
         return result
 
     paths = normalize_string_list(object_path)
@@ -338,7 +340,7 @@ async def enrich_table_schema_candidates(
 
 def shape_object_to_users_disambiguation(
     result: dict[str, Any],
-    object_path: str | list[str],
+    object_path: str | list[str] | None,
     object_type: str | None,
 ) -> dict[str, Any]:
     """
@@ -386,8 +388,8 @@ def shape_object_to_users_disambiguation(
 
     table_paths = _table_grant_paths(grants)
     if len(table_paths) >= 2:
-        schemas = [_schema_from_table_path(table_path) for table_path in table_paths]
-        schema_options = [schema for schema in schemas if schema]
+        grant_schemas = [_schema_from_table_path(table_path) for table_path in table_paths]
+        schema_options = [schema for schema in grant_schemas if schema]
         return {
             **result,
             "data": {
