@@ -177,4 +177,6 @@ def slim_mcp_tool_payload(payload: dict[str, Any]) -> dict[str, Any]:
         slimmed["_mcpResponseNote"] = (
             "; ".join(note_parts) + ". Use navLink/redirectUrl in OvalEdge for full content."
         )
+    if not isinstance(slimmed, dict):
+        return payload
     return slimmed

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install pre-commit git hooks (ruff on commit, pytest on push).
+# Install pre-commit git hooks (ruff + mypy + pytest on commit, same on push).
 # Idempotent — safe to re-run.
 #
 # Usage:
@@ -21,7 +21,7 @@ fi
 
 command -v poetry >/dev/null 2>&1 || die "poetry not on PATH; run scripts/setup_local_mcp.sh first or install Poetry"
 
-echo "==> Ensuring dev dependencies (pre-commit, pytest, ruff)..."
+echo "==> Ensuring dev dependencies (pre-commit, pytest, ruff, mypy)..."
 poetry install --with dev --no-interaction
 
 echo "==> Installing pre-commit hooks (requires pre-commit >= 3.2)..."
@@ -31,5 +31,5 @@ poetry run pre-commit install --hook-type pre-push
 poetry run pre-commit validate-config .pre-commit-config.yaml
 
 echo "==> Git hooks ready:"
-echo "    git commit → ruff check + pytest (tests/)"
-echo "    git push   → pytest again (if you use pre-push hook)"
+echo "    git commit → ruff check + mypy + pytest (tests/)"
+echo "    git push   → ruff + mypy + pytest again (if you use pre-push hook)"
