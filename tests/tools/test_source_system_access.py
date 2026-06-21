@@ -4,12 +4,19 @@ from fastmcp import FastMCP
 
 from server.client import OvalEdgeError
 from server.constants import (
+    MCP_DAA_SCOPE_DOC,
     MCP_OBJECT_PATH_FORMATS_DOC,
     MCP_PATH_SOURCE_SYSTEM_ACCESS,
+    MCP_RDAM_NO_CATALOG_FALLBACK_DOC,
+    MCP_RDAM_OBJECT_TYPE_DOC,
+    MCP_RDAM_PRIVILEGE_MAP_DOC,
+    MCP_SOURCE_SYSTEM_ACCESS_GRANT_MODELS_DOC,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_CONNECTION_ERROR,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_OBJECT_TYPE_ERROR,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_SOURCE_ERROR,
+    MCP_SOURCE_SYSTEM_ACCESS_OVERVIEW_DOC,
 )
+from server.docs.loader import DOCS_DIR
 from server.tools import rdam
 from server.tools.rdam.helpers import (
     _DESC_SOURCE_SYSTEM_ACCESS,
@@ -39,36 +46,38 @@ _REQ = {
 
 class TestGetSourceSystemAccess:
     def test_tool_description_documents_daa_scope(self) -> None:
-        assert "Instance Data Access Admin" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "Connector Data Access Admin" in _DESC_SOURCE_SYSTEM_ACCESS
+        guide = (DOCS_DIR / "source_system_access_guide.md").read_text()
+        assert "Instance Data Access Admin" in MCP_DAA_SCOPE_DOC
+        assert "Connector Data Access Admin" in MCP_DAA_SCOPE_DOC
+        assert "DAA" in guide
+        assert "docs://ovaledge/source_system_access_guide" in _DESC_SOURCE_SYSTEM_ACCESS
 
     def test_tool_description_documents_object_path_patterns(self) -> None:
+        guide = (DOCS_DIR / "source_system_access_guide.md").read_text()
+
         assert "connectionName.dbName" in MCP_OBJECT_PATH_FORMATS_DOC
         assert "dbName" in MCP_OBJECT_PATH_FORMATS_DOC
-        assert "connectionName.dbName" in _DESC_SOURCE_SYSTEM_ACCESS
         assert "snowflake.BUSINESS" in MCP_OBJECT_PATH_FORMATS_DOC
-        assert "SNOWFLAKE.ALERT" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "object_type=schema" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "rdam_tableprivilege" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "never call `search_catalog_assets`" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
-        assert "Mandatory API fields" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "connectionName.dbName" in guide
+        assert "SNOWFLAKE.ALERT" in MCP_RDAM_OBJECT_TYPE_DOC
+        assert "object_type=schema" in guide or "object_type" in guide
+        assert "rdam_tableprivilege" in MCP_RDAM_PRIVILEGE_MAP_DOC
+        assert "never call `search_catalog_assets`" in MCP_RDAM_NO_CATALOG_FALLBACK_DOC.lower()
+        assert "never fall back to search_catalog_assets" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
         assert "object_name" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "object_type=all" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "svc_analytics" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "get_user_object_access" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "Access grant models by source system" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "direct" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "contributing_group" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "object_type=all" in guide
+        assert "svc_analytics" in guide
+        assert "get_user_object_access" in MCP_SOURCE_SYSTEM_ACCESS_OVERVIEW_DOC
+        assert "Access grant models by source system" in MCP_SOURCE_SYSTEM_ACCESS_GRANT_MODELS_DOC
+        assert "direct" in MCP_SOURCE_SYSTEM_ACCESS_GRANT_MODELS_DOC
+        assert "contributing_group" in MCP_SOURCE_SYSTEM_ACCESS_GRANT_MODELS_DOC
         assert "user_to_objects" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "object_to_users only" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
-        assert "never call `object_to_users`" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
-        assert "do not guess or discover `connection_id`" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
-        assert "do not probe, enumerate, or discover" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
-        assert "omit `object_path`" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
-        assert "all tables on that connector" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
-        assert "ask the user which schema" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
-        assert "requiresSchemaSelection" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "object_to_users" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "do not discover connection_id" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
+        assert "omit object_path" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
+        assert "ask for schema" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
         assert "connection_id" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "docs://ovaledge/source_system_access_guide" in _DESC_SOURCE_SYSTEM_ACCESS
         assert "filteredToObjectLevel" not in _DESC_SOURCE_SYSTEM_ACCESS
 
     def test_validate_only_source_system_and_query_direction_required(self) -> None:

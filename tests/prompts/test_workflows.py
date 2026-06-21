@@ -161,5 +161,5 @@ class TestMcpServerInstructions:
         instructions = (mcp.instructions or "").lower()
         assert "lookup_datastory" in instructions
         assert "search_platform_docs" in instructions
-        assert "never show ovaledge://" in instructions
+        assert "not ovaledge://" in instructions
         assert "navlink" in instructions or "redirecturl" in instructions

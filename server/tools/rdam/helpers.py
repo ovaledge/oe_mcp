@@ -11,28 +11,14 @@ from typing import Any
 
 from server.client import OvalEdgeError
 from server.constants import (
-    MCP_DAA_SCOPE_DOC,
-    MCP_OBJECT_PATH_FORMATS_DOC,
-    MCP_OBJECT_PATH_PARTIAL_DOC,
     MCP_PATH_SOURCE_SYSTEM_ACCESS,
     MCP_QUERY_DIRECTIONS,
-    MCP_QUERY_DIRECTIONS_DOC,
-    MCP_RDAM_NO_CATALOG_FALLBACK_DOC,
     MCP_RDAM_OBJECT_TYPE_ALL,
-    MCP_RDAM_OBJECT_TYPE_DOC,
     MCP_RDAM_OBJECT_TYPES,
-    MCP_RDAM_PRIVILEGE_MAP_DOC,
-    MCP_SNOWFLAKE_BUILTIN_OBJECTS_DOC,
-    MCP_SOURCE_SYSTEM_ACCESS_AGENT_RULES_DOC,
-    MCP_SOURCE_SYSTEM_ACCESS_GRANT_MODELS_DOC,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_CONNECTION_ERROR,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_OBJECT_TYPE_ERROR,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_SOURCE_ERROR,
-    MCP_SOURCE_SYSTEM_ACCESS_OVERVIEW_DOC,
-    MCP_SOURCE_SYSTEM_ACCESS_REQUIRED_DOC,
-    MCP_SOURCE_SYSTEM_ACCESS_SAMPLE_PROMPTS_DOC,
     MCP_SOURCE_SYSTEMS,
-    MCP_SOURCE_SYSTEMS_DOC,
     MCP_TABLE_SCHEMA_DISCOVERY_MAX_PROBES,
 )
 from server.tools.common import error_payload
@@ -624,61 +610,18 @@ def filter_user_to_objects_by_level(
 
 
 _DESC_SOURCE_SYSTEM_ACCESS = (
-    "Resolve **native** access grants harvested from Redshift, Snowflake, or Tableau — "
-    "independent of OvalEdge catalog permissions.\n\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_OVERVIEW_DOC
-    + "\n\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_GRANT_MODELS_DOC
-    + "\n\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_REQUIRED_DOC
-    + "\n\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_AGENT_RULES_DOC
-    + "\n\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_SAMPLE_PROMPTS_DOC
-    + "\n\n"
-    "Use for questions like:\n"
-    '- "What tables can svc_analytics query in Redshift?" → user_to_objects; infer '
-    "`object_type=table`; omit `object_path` when `connection_id` scopes all tables on the "
-    "connector\n"
-    '- "Who has native access to prod_db.public.orders?" → object_to_users\n'
-    '- "Which Snowflake roles give john.doe access?" → user_to_objects\n'
-    '- "Who can view the Revenue Dashboard in Tableau?" → object_to_users\n\n'
+    "Native Redshift/Snowflake/Tableau grants from RDAM harvest — not OvalEdge catalog ACLs.\n\n"
     f"Backend: GET {MCP_PATH_SOURCE_SYSTEM_ACCESS}\n\n"
-    "**Not** OvalEdge `get_catalog_object_access` (catalog ACL layer; may ship later).\n\n"
-    "**source_system** (required): "
-    + MCP_SOURCE_SYSTEMS_DOC
-    + ".\n\n"
-    "**query_direction** (required): "
-    + MCP_QUERY_DIRECTIONS_DOC
-    + " — infer from the question; do not ask the user to pick manually.\n\n"
-    + MCP_RDAM_OBJECT_TYPE_DOC
-    + "\n\n"
-    + MCP_RDAM_PRIVILEGE_MAP_DOC
-    + "\n\n"
-    + MCP_OBJECT_PATH_FORMATS_DOC
-    + "\n\n"
-    + MCP_SNOWFLAKE_BUILTIN_OBJECTS_DOC
-    + "\n\n"
-    "Response includes **grant_mechanism** per entry: direct | group | role, **principal_type** "
-    "(user | role | group), native **privileges** (SELECT, INSERT, …), and "
-    "**contributing_group** / **contributing_role** when access is indirect.\n"
-    "When **principal_note** is set on a row, the role/group name appears as **principal** because "
-    "no RDAM user memberships were harvested for that role/group; roles with members are expanded "
-    "to users (see **contributing_role**, e.g. associate, twitchdemo).\n\n"
-    "**summary** (server-computed): `totalGrants`, `byObjectLevel` "
-    "(database/schema/table/column for RS/SF; project/report for Tableau), "
-    "`byGrantMechanism` (direct/group/role).\n\n"
-    "Partial-path disambiguation: when the path is not exact and multiple assets match, returns "
-    "**matchCandidates** or **resolve_all_matches=true** (max 50).\n"
-    + MCP_OBJECT_PATH_PARTIAL_DOC
-    + "\n\n"
-    + MCP_DAA_SCOPE_DOC
-    + "\n\n"
-    + MCP_RDAM_NO_CATALOG_FALLBACK_DOC
-    + "\n\n"
-    "Read-only. Returns validation errors for unsupported source_system; not-found when "
-    "username or object_path is absent from harvested metadata; RDAM no-access when the caller "
-    "lacks Instance/Connector DAA for the scoped connection(s)."
+    "Required: source_system (redshift|snowflake|tableau), query_direction "
+    "(user_to_objects | object_to_users — infer from the question).\n"
+    "Optional: username, object_path, object_type, connection_id, object_name, privileges, "
+    "include_columns, resolve_all_matches. One value only for source_system, object_type, "
+    "connection_id per call.\n\n"
+    "Never fall back to search_catalog_assets. Do not discover connection_id. "
+    "For 'what tables can user X access' with connection_id: object_type=table, omit object_path. "
+    "Ambiguous table paths → present matchCandidates and ask for schema.\n\n"
+    "Full rules, path formats, grant models, samples: docs://ovaledge/source_system_access_guide "
+    "and native_source_access workflow prompt."
 )
 
 

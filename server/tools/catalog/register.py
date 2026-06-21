@@ -20,19 +20,14 @@ from server.constants import (
     MCP_PATH_UPDATE_ASSET_DESCRIPTIONS,
     MCP_SEARCH_CATEGORY_ID_PARAM,
     MCP_SEARCH_CATEGORY_NAME_PARAM,
-    MCP_SEARCH_CLASSIFICATIONS_PARAM,
     MCP_SEARCH_CONTEXT_QUERY_PARAM,
-    MCP_SEARCH_CUSTOM_FIELDS_PARAM,
-    MCP_SEARCH_DATA_PRODUCTS_PARAM,
     MCP_SEARCH_DOMAIN_ID_PARAM,
     MCP_SEARCH_DOMAIN_NAME_PARAM,
-    MCP_SEARCH_GLOSSARY_TERMS_PARAM,
     MCP_SEARCH_SERVER_TYPE_PARAM,
     MCP_SEARCH_SUBCATEGORY_ID_PARAM,
     MCP_SEARCH_SUBCATEGORY_NAME_PARAM,
-    MCP_SEARCH_TAGS_PARAM,
-    MCP_SEARCH_TERMS_PARAM,
 )
+from server.mcp_response_slim import slim_mcp_tool_payload
 from server.tools.catalog.formatters import _enhance_metadata_changes_response
 from server.tools.catalog.helpers import (
     _DESC_COLUMN,
@@ -66,81 +61,37 @@ def register(mcp: FastMCP) -> None:
         search_terms: Annotated[
             list[str] | None,
             Field(
-                description=(
-                    "General lexical keywords (names, descriptions, metadata text). JSON array "
-                    f"on the wire as {MCP_SEARCH_TERMS_PARAM}. "
-                    'e.g. ["customer","revenue"]. Not for governance tag names — use tags instead.'
-                ),
+                description="Lexical keywords (API searchTerms). Use tags for tag names.",
                 default=None,
             ),
         ] = None,
         tags: Annotated[
             list[str] | None,
-            Field(
-                description=(
-                    "Governance tag names to match (OETAG assignments). JSON array on the wire "
-                    f"as {MCP_SEARCH_TAGS_PARAM}. "
-                    'Use when the user asks for assets "with tag X" or "tagged X". '
-                    'e.g. ["Operations","PII"].'
-                ),
-                default=None,
-            ),
+            Field(description="Governance tag names (API tags).", default=None),
         ] = None,
         terms: Annotated[
             list[str] | None,
-            Field(
-                description=(
-                    "Glossary term names for lexical search. JSON array on the wire as "
-                    f"{MCP_SEARCH_GLOSSARY_TERMS_PARAM}. "
-                    'Use when the user asks for assets linked to glossary/business terms. '
-                    'e.g. ["Revenue","Customer"].'
-                ),
-                default=None,
-            ),
+            Field(description="Glossary term names (API terms).", default=None),
         ] = None,
         custom_fields: Annotated[
             list[str] | None,
-            Field(
-                description=(
-                    "Custom field values or labels to match. JSON array on the wire as "
-                    f"{MCP_SEARCH_CUSTOM_FIELDS_PARAM}. "
-                    'e.g. ["Confidential","Operations"].'
-                ),
-                default=None,
-            ),
+            Field(description="Custom field values (API customFields).", default=None),
         ] = None,
         data_products: Annotated[
             list[str] | None,
-            Field(
-                description=(
-                    "Data product names/keywords. JSON array on the wire as "
-                    f"{MCP_SEARCH_DATA_PRODUCTS_PARAM}. "
-                    'e.g. ["Customer 360"].'
-                ),
-                default=None,
-            ),
+            Field(description="Data product keywords (API dataProducts).", default=None),
         ] = None,
         classifications: Annotated[
             list[str] | None,
             Field(
-                description=(
-                    "Governance classification labels to match (e.g. PII, Sensitive). "
-                    "JSON array on the wire as "
-                    f"{MCP_SEARCH_CLASSIFICATIONS_PARAM}. "
-                    'Use when the user asks for assets "classified as X" or with a '
-                    'sensitivity label. e.g. ["PII","Financial"].'
-                ),
+                description="Classification labels e.g. PII (API classifications).",
                 default=None,
             ),
         ] = None,
         context_query: Annotated[
             str | None,
             Field(
-                description=(
-                    "Full user question or contextual NL string for the server (maps to "
-                    f"API {MCP_SEARCH_CONTEXT_QUERY_PARAM}). Use for vector / semantic search "
-                    "or hybrid ranking alongside lexical params. Prefer verbatim user wording."
-                ),
+                description="Verbatim user question for semantic ranking (API contextQuery).",
                 default=None,
             ),
         ] = None,
@@ -154,95 +105,45 @@ def register(mcp: FastMCP) -> None:
         ] = 20,
         connection_name: Annotated[
             str | None,
-            Field(
-                description=(
-                    "Filter: exact connection name (API connectionName). "
-                    'Infer when user names a source, e.g. "ovaledgedb" or "Snowflake PROD".'
-                ),
-                default=None,
-            ),
+            Field(description="Exact connection name filter.", default=None),
         ] = None,
         server_type: Annotated[
             str | None,
             Field(
-                description=(
-                    "Filter: connection technology (API serverType → connectionInfo.serverType). "
-                    "Use a canonical connector id when the user names a platform, e.g. mysql, "
-                    "snowflake, postgres, redshift, bigquery, tableau, oracle, sqlserver. "
-                    "Omit when the question does not clearly imply one connector — do not guess. "
-                    "Case-insensitive match to the platform allowlist."
-                ),
+                description="Connector type e.g. mysql, snowflake; omit if not stated.",
                 default=None,
             ),
         ] = None,
         schema_name: Annotated[
             str | None,
-            Field(
-                description=(
-                    "Filter: exact schema name (API schemaName). "
-                    'Infer when user names a schema/database context, e.g. "sakila".'
-                ),
-                default=None,
-            ),
+            Field(description="Exact schema name filter.", default=None),
         ] = None,
         owner: Annotated[
             str | None,
-            Field(
-                description=(
-                    "Filter: asset owner login or display name (API owner). "
-                    "Infer when user asks for assets owned by someone."
-                ),
-                default=None,
-            ),
+            Field(description="Owner login or name filter.", default=None),
         ] = None,
         steward: Annotated[
             str | None,
-            Field(
-                description=(
-                    "Filter: steward login or display name (API steward). "
-                    "Infer when user asks for stewarded assets."
-                ),
-                default=None,
-            ),
+            Field(description="Steward login or name filter.", default=None),
         ] = None,
         custodian: Annotated[
             str | None,
-            Field(
-                description=(
-                    "Filter: custodian login or display name (API custodian). "
-                    "Infer when user asks for custodian-assigned assets."
-                ),
-                default=None,
-            ),
+            Field(description="Custodian login or name filter.", default=None),
         ] = None,
         object_type: Annotated[
             str | None,
             Field(
-                description=(
-                    "Filter: restrict to one catalog object type (API objectType): "
-                    + MCP_CATALOG_OBJECT_TYPES_DOC
-                    + '. Infer when user asks for "tables", "reports/charts", "tags", etc. '
-                    "(e.g. tables → oetable, reports → oechart). Omit for all types."
-                ),
+                description="Catalog objectType filter; see tool description for values.",
                 default=None,
             ),
         ] = None,
         domain_id: Annotated[
             int | None,
-            Field(
-                description=(
-                    "Glossary global domain id for placement filter; pair with optional "
-                    "category/subcategory."
-                ),
-                default=None,
-            ),
+            Field(description="Glossary domain id for placement filter.", default=None),
         ] = None,
         domain_name: Annotated[
             str | None,
-            Field(
-                description="Glossary global domain name when domain_id is unknown.",
-                default=None,
-            ),
+            Field(description="Glossary domain name when domain_id unknown.", default=None),
         ] = None,
         category_id: Annotated[
             int | None,
@@ -250,7 +151,7 @@ def register(mcp: FastMCP) -> None:
         ] = None,
         category_name: Annotated[
             str | None,
-            Field(description="Glossary category name when category_id is unknown.", default=None),
+            Field(description="Glossary category name when category_id unknown.", default=None),
         ] = None,
         subcategory_id: Annotated[
             int | None,
@@ -259,7 +160,7 @@ def register(mcp: FastMCP) -> None:
         subcategory_name: Annotated[
             str | None,
             Field(
-                description="Glossary subcategory name when subcategory_id is unknown.",
+                description="Glossary subcategory name when subcategory_id unknown.",
                 default=None,
             ),
         ] = None,
@@ -320,7 +221,7 @@ def register(mcp: FastMCP) -> None:
             )
             async with ovaledge_client() as client:
                 body = await client.get(MCP_PATH_SEARCH_CATALOG, params=params)
-                return _enrich_catalog_search_response(body)
+                return slim_mcp_tool_payload(_enrich_catalog_search_response(body))
         except OvalEdgeError as e:
             return map_ovaledge_error(e)
 
@@ -391,7 +292,7 @@ def register(mcp: FastMCP) -> None:
                 else:
                     od_params = _q(objectId=object_id, objectType=object_type)
                 body = await client.get(MCP_PATH_OBJECT_DETAILS, params=od_params)
-                return _enrich_catalog_details_response(body)
+                return slim_mcp_tool_payload(_enrich_catalog_details_response(body))
         except OvalEdgeError as e:
             return map_ovaledge_error(e)
 
