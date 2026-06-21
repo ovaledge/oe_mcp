@@ -11,7 +11,7 @@ from tenacity import (
     wait_exponential,
 )
 
-from server.config import settings
+from server.config import resolve_client_timezone, settings
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +38,14 @@ def _log_inbound_response(response: httpx.Response) -> None:
 class OvalEdgeError(Exception):
     """Raised for non-retryable OvalEdge API errors (4xx except 429)."""
 
-    def __init__(self, status_code: int, message: str) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        message: str,
+        body: dict[str, Any] | None = None,
+    ) -> None:
         self.status_code = status_code
+        self.body: dict[str, Any] = body if body is not None else {}
         super().__init__(f"OvalEdge API error {status_code}: {message}")
 
 
@@ -146,6 +152,7 @@ class OvalEdgeClient:
             "Authorization": _ovaledge_authorization(jwt) if jwt else "",
             "Content-Type": "application/json",
             "Accept": "application/json",
+            "time-zone": resolve_client_timezone(),
         }
         self._timeout = settings.ovaledge_timeout_seconds
         self._client: httpx.AsyncClient | None = None
@@ -315,11 +322,17 @@ class OvalEdgeClient:
                 response.status_code,
                 preview,
             )
+        body: dict[str, Any] | None = None
         try:
-            detail = response.json().get("message", response.text)
+            parsed = response.json()
+            if isinstance(parsed, dict):
+                body = cast(dict[str, Any], parsed)
+                detail = body.get("message", response.text)
+            else:
+                detail = response.text
         except Exception:
             detail = response.text
 
         if response.status_code in (429, 502, 503, 504):
             raise OvalEdgeTransientError(response.status_code, str(detail))
-        raise OvalEdgeError(response.status_code, str(detail))
+        raise OvalEdgeError(response.status_code, str(detail), body=body)

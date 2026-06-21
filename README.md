@@ -1,6 +1,6 @@
 # OvalEdge MCP Server
 
-Read-only OvalEdge governance and catalog capabilities exposed to MCP clients (Cursor, Claude Desktop, etc.): search, lineage, glossary, tags, docs, and workflow prompts.
+OvalEdge governance and catalog MCP server for MCP clients (Cursor, Claude Desktop, etc.): catalog discovery, lineage, glossary and tags, **data stories** for organizational knowledge, metadata drift, native source-system access previews, product docs, workflow prompts, and governed writes (glossary terms, tags, descriptions, roles) — all subject to OvalEdge RBAC. Server instructions in `server/app.py` tell agents to prefer **`lookup_datastory`** for internal policy/playbook questions and **`search_platform_docs`** only for OvalEdge product how-to.
 
 ## How to run
 
@@ -28,38 +28,86 @@ Setup scripts (`scripts/setup_local_mcp.sh`, `scripts/setup_local_mcp.ps1`) crea
 ## What this server provides
 
 - Catalog search and asset details (`search_catalog_assets`, `catalog_asset_details`)
-- Column profile, entity relationships, lineage
-- Glossary and tag lookups
-- Platform documentation search
-- Resource URIs (`ovaledge://...`)
-- Workflow prompts for common analyst tasks (see `server/prompts/workflows.py`)
+- Column profile, entity relationships, lineage, metadata drift (`metadata_changes_between_crawls`)
+- Glossary lookup and guided term creation (`lookup_glossary_term`, `create_glossary_term`)
+- Tag lookup and guided creation (`lookup_tags`, `create_tag`)
+- **Data stories** for organizational knowledge (`lookup_datastory`) — not a substitute for `search_platform_docs`
+- Platform product documentation (`search_platform_docs`)
+- Native source-system grant previews (`source_system_access`) — Redshift / Snowflake / Tableau, not catalog ACLs
+- DQ rule lookup (`lookup_dq_rule`)
+- Asset description and governance role updates (`update_asset_descriptions`, `update_governance_roles`)
+- Resource URIs (`ovaledge://catalog/...`, `ovaledge://governance/...`) and static guides (`docs://ovaledge/...`)
+- Sixteen workflow prompts under `server/prompts/workflows/` (see below)
+
+Read and write tools honor OvalEdge permissions — the MCP does not bypass RBAC.
+
+## Agent guidance (mirrors `server/app.py` instructions)
+
+These rules apply to every MCP session (also exposed to clients as server **instructions**):
+
+| Topic | Behavior |
+| ----- | -------- |
+| **Organizational knowledge** | Call **`lookup_datastory`** first (`content_query` = user question; add `story_zone_name` or `story_name` when named). Present **`formattedResponse`** and lead with **`storyCitation`** verbatim. Do not answer from model memory when a story may exist. |
+| **Product how-to** | Use **`search_platform_docs`** only for OvalEdge UI/features/configuration — not for internal policy or playbooks. |
+| **Physical datasets** | Use **`search_catalog_assets`**; if results include `oestory`, follow with **`lookup_datastory`**. |
+| **Native DB/BI access** | Use **`source_system_access`** only (RDAM SQL). Never fall back to **`search_catalog_assets`** when RDAM is empty or errors. |
+| **Deep links** | Use **`ovaledge://...` resources** when you already have object ids; prefer lookup tools for rich formatted output. |
+| **Governed writes** | **`create_glossary_term`**, **`create_tag`**, **`update_asset_descriptions`**, **`update_governance_roles`**: show **`confirm_create`** / **`confirm_update`** preview, then POST only with **`create_confirmed_by_user=true`** (`dry_run` skips confirm on updates). |
+| **Glossary placement** | Domain → category (when categories exist) → subcategory; never invent **`description`**; pass **`domain_name`** on first call when the user names a domain in natural language. |
+| **Workflows** | Optional MCP **prompts** (discovery, lineage, stories, tags, drift, native access, creates, DQ, roles) — see [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md). |
 
 ## Tools, resources, and prompts
 
 ### Tools (`server/tools/`)
 
 - `search_catalog_assets`, `catalog_asset_details`, `column_profile_statistics`
-- `table_entity_relationships`, `asset_lineage`
-- `lookup_glossary_term`, `lookup_tags`, `search_platform_docs`
+- `table_entity_relationships`, `asset_lineage`, `metadata_changes_between_crawls`
+- `lookup_glossary_term`, `create_glossary_term`, `lookup_tags`, `create_tag`, `lookup_datastory`, `search_platform_docs`
+- `source_system_access` (Redshift / Snowflake / Tableau grant previews)
+- `update_asset_descriptions`, `update_governance_roles`, `lookup_dq_rule`
+
+**`create_glossary_term` workflow:** (1) `term_name` → domain picker; (2) `term_name` + `domain_id` → category picker when categories exist (skip only after user says skip: `skip_category=true` + `category_skip_confirmed=true`); (3) subcategory picker when applicable; (4) non-blank `description` required; (5) `confirm_create` preview; (6) POST with `create_confirmed_by_user=true`. Manual pickers: `search_on=oeglobaldomain|category|subcategory`.
+
+**`create_tag` workflow:** OPEN or SECURE mode from create-options; master/parent pickers with user confirmation flags; `confirm_create` preview; POST with `create_confirmed_by_user=true`. See [server/docs/tags_guide.md](server/docs/tags_guide.md).
+
+**`update_asset_descriptions` / `update_governance_roles`:** Same confirm gate (`confirm_update`, `create_confirmed_by_user=true`) before POST; `dry_run=true` validates without confirm.
+
+**Data stories:** Prefer `lookup_datastory` (`content_query`) for organizational knowledge; use `organizational_knowledge` prompt. Not `search_platform_docs`. See [server/docs/data_stories.md](server/docs/data_stories.md).
+
+**Agent guides (static MCP doc resources):** [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md) (tools, resources, prompts index), [glossary_guide.md](server/docs/glossary_guide.md), [governance_model.md](server/docs/governance_model.md), [asset_types.md](server/docs/asset_types.md). Exposed as `docs://ovaledge/{name}` (e.g. `docs://ovaledge/mcp_workflows`).
 
 ### Resources (`server/resources/`)
 
-- `ovaledge://catalog/table/{object_id}`
-- `ovaledge://governance/glossary-term/{object_id}`
+- `ovaledge://catalog/table/{object_id}` — oetable catalog document
+- `ovaledge://catalog/file/{object_id}` — oefile catalog document
+- `ovaledge://governance/glossary-term/{object_id}` — glossary term
+- `ovaledge://governance/data-story/{object_id}` — data story (prefer `lookup_datastory` for narrative)
+- `ovaledge://governance/tag/{object_id}` — tag (prefer `lookup_tags` for hierarchy)
 
-### Prompts (`server/prompts/workflows.py`)
+Static product docs: `docs://ovaledge/...` (all `server/docs/*.md`, including `mcp_workflows`, `data_stories`, `tags_guide`).
 
-Data discovery, explain business term, trust assessment, explore domain, trace lineage, find related assets, platform help.
+### Prompts (`server/prompts/workflows/`)
+
+Sixteen workflow prompts (discovery, knowledge, lineage/quality, native access, governed writes). Full list: [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md#workflow-prompts).
+
+Discovery: `data_discovery`, `explore_data_domain`, `find_related_assets`.  
+Knowledge: `explain_business_term`, `organizational_knowledge`, `explain_tag`, `explain_dq_rule`, `platform_help`.  
+Lineage & quality: `trust_assessment`, `trace_data_lineage`, `metadata_drift`.  
+Access: `native_source_access`.  
+Writes (human-in-the-loop): `create_business_glossary_term`, `create_governance_tag`, `document_asset_descriptions`, `assign_governance_roles`.
 
 ## Development
 
 ```bash
 poetry run ruff check .
 poetry run mypy server/ entrypoints/ evals/
-poetry run pytest
+./scripts/run_tests.sh          # recommended: Poetry venv + coverage
+# or: poetry run pytest         # fast, no coverage (after poetry install --with dev)
 ```
 
-Unit tests measure coverage for `server/` and `entrypoints/` (report-only threshold for now; see `[tool.coverage.*]` in `pyproject.toml`). HTML report: `poetry run pytest --cov-report=html` then open `htmlcov/index.html`.
+Use `./scripts/run_tests.sh` on macOS and Linux so tests always run in the project `.venv` with coverage. Plain `pytest` on system Python can pick up this repo’s config but lacks dev plugins — prefer `poetry run pytest` or the script.
+
+Unit tests measure coverage for `server/` and `entrypoints/` (report-only threshold for now; see `[tool.coverage.*]` in `pyproject.toml`). HTML report: `./scripts/run_tests.sh --cov-report=html` then open `htmlcov/index.html`.
 
 Git hooks (**ruff** + full **pytest** on each **commit**; optional pytest again on **push**) are installed automatically when you run `./scripts/setup_local_mcp.sh` in a git clone. To install or refresh hooks only:
 

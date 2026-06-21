@@ -18,7 +18,7 @@ mangum = ">=0.17"
 tenacity = ">=8.2"
 
 [tool.poetry.group.dev.dependencies]
-pre-commit = "*"
+pre-commit = ">=3.2.0"
 pytest = "*"
 pytest-asyncio = "*"
 pytest-httpx = "*"
@@ -47,12 +47,8 @@ strict = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = [
-    "--cov=server",
-    "--cov=entrypoints",
-    "--cov-report=term-missing:skip-covered",
-    "--cov-fail-under=0",
-]
+# Coverage is opt-in via scripts/run_tests.sh or explicit --cov flags (see README).
+# Do not add --cov* to addopts: system pytest outside .venv would fail on Ubuntu/macOS.
 
 [tool.coverage.run]
 branch = true

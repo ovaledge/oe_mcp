@@ -142,4 +142,5 @@ $mcpConfig | ConvertTo-Json -Depth 8
 
 Write-Host ""
 Write-Host "    Replace env placeholders with your values (or omit env and rely on .env in the repo)."
+Write-Host "    Cursor: cp .cursor/mcp.json.example .cursor/mcp.json — see .cursor/README.md"
 Write-Host "Done."

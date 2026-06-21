@@ -1,7 +1,18 @@
 {
   "mcpServers": {
+    "ovaledge-local": {
+      "command": "poetry",
+      "args": ["-C", "${workspaceFolder}", "run", "oe-mcp-local"],
+      "env": {
+        "AUTH_MODE": "local",
+        "OVALEDGE_BASE_URL": "${env:OVALEDGE_BASE_URL}",
+        "OVALEDGE_USER_TOKEN": "${env:OVALEDGE_USER_TOKEN}",
+        "OVALEDGE_USER_SECRET": "${env:OVALEDGE_USER_SECRET}",
+        "OVALEDGE_HTTP_AUTH_SCHEME": "jwt"
+      }
+    },
     "ovaledge-remote-local": {
-      "url": "http://127.0.0.1:8000/mcp",
+      "url": "https://YOUR_API_ID.execute-api.YOUR_REGION.amazonaws.com/mcp",
       "headers": {
         "X-Forwarded-Proto": "https",
         "X-OvalEdge-Token": "${env:OVALEDGE_USER_TOKEN}",
@@ -16,7 +27,7 @@
       }
     },
     "ovaledge-remote-oauth-wip": {
-      "url": "http://127.0.0.1:8000/mcp",
+      "url": "https://YOUR_API_ID.execute-api.YOUR_REGION.amazonaws.com/mcp",
       "headers": {
         "X-Forwarded-Proto": "https",
         "Authorization": "Bearer ${env:OAUTH_ACCESS_TOKEN}"

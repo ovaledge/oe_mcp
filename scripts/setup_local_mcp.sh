@@ -78,8 +78,8 @@ ensure_poetry() {
 ensure_poetry
 poetry --version
 
-echo "==> Installing Python dependencies (poetry install)..."
-poetry install --no-interaction
+echo "==> Installing Python dependencies (poetry install --with dev)..."
+poetry install --with dev --no-interaction
 
 echo "==> Ensuring local .env file..."
 if [[ ! -f .env ]]; then
@@ -101,8 +101,8 @@ if [[ "$RUN_DEV" -eq 1 ]]; then
   poetry run ruff check .
   echo "==> Running mypy..."
   poetry run mypy server/ entrypoints/
-  echo "==> Running pytest..."
-  poetry run pytest
+  echo "==> Running pytest (with coverage)..."
+  "$REPO_ROOT/scripts/run_tests.sh"
 fi
 
 echo ""
@@ -135,6 +135,6 @@ PY
 
 echo ""
 echo "    Replace env placeholders with your values (or omit env and rely on .env in the repo)."
-echo "    Cursor: typically ~/.cursor/mcp.json or project .cursor/mcp.json (see Cursor docs)."
+echo "    Cursor: cp .cursor/mcp.json.example .cursor/mcp.json (or ~/.cursor/mcp.json) — see .cursor/README.md"
 echo ""
 echo "Done."

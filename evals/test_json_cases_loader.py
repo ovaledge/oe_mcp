@@ -51,6 +51,12 @@ def test_load_example_mcp_use_json() -> None:
             "search_catalog_assets",
             "catalog_asset_details",
         ]
+    if "example_datastory_lookup" in by_name:
+        c = by_name["example_datastory_lookup"]
+        assert _mcp_tools_called(c)[0].name == "lookup_datastory"
+    if "example_glossary_lookup" in by_name:
+        c = by_name["example_glossary_lookup"]
+        assert _mcp_tools_called(c)[0].args.get("term_name") == "PII"
 
 
 def test_load_root_array(tmp_path: Path) -> None:

@@ -23,6 +23,22 @@ Certification is enforced and interpreted in OvalEdge; the MCP surfaces values a
 
 Access to catalog assets, glossary content, lineage nodes, and previews is enforced **only** by OvalEdge. The MCP does not bypass, broaden, or reinterpret permissions. If a user cannot see an object in the OvalEdge UI, they should not expect to retrieve it via MCP.
 
+Write tools (e.g. `create_tag`, `create_glossary_term`, `update_asset_descriptions`, `update_governance_roles`) invoke the same OvalEdge APIs as the UI; they succeed only when the authenticated user has the required governance privileges.
+
+The MCP adds **human-in-the-loop** steps for governed writes: picker responses (`formattedResponse`) on creates, explicit confirmation flags, and a final **`create_confirmed_by_user`** gate before POST (creates and updates). Agents must not skip pickers or auto-confirm on behalf of users.
+
+## Data stories
+
+**Data stories** (`oestory`) hold narrative organizational knowledge (policies, playbooks, domain context). They are governed and RBAC-scoped like other assets. Use `lookup_datastory` for search and display; see [data_stories](data_stories).
+
+## Tags
+
+**Tags** (`oetag`) classify assets. Lookup via `lookup_tags`; creation follows secure or open master/parent flows via `create_tag`. See [tags_guide](tags_guide).
+
+## Native source access (RDAM)
+
+**`source_system_access`** returns **native** Redshift, Snowflake, or Tableau grants from **RDAM SQL metadata** — not catalog ACLs, not Elasticsearch, and not `search_catalog_assets`. Do not fall back to catalog when RDAM is empty or errors. Instance/Connector **Data Access Admin** is enforced on the API. Use the **`native_source_access`** workflow prompt for grant questions. See [mcp_workflows](mcp_workflows#native-source-access-rdam) for `query_direction`, `object_path`, `object_type`, and examples.
+
 ## Glossary–catalog sync and inheritance
 
 Terms in the business glossary can be linked to physical columns and tables. When sync is enabled, governance properties (e.g. classifications, masking, restriction flags) may **inherit** from the term to the asset. Responses may indicate whether masking or restriction came from term sync versus direct assignment on the asset.
