@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "oe-mcp"
-version = "1.0.0"
+version = "1.0.1"
 description = "OvalEdge MCP Server"
 authors = ["Rohit Anand <rohit.anand@ovaledge.com>"]
 readme = "README.md"
