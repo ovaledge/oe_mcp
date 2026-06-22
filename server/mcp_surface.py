@@ -20,6 +20,7 @@ from server.constants import (
     TOOL_CREATE_DQ_RULES,
     TOOL_CREATE_GLOSSARY_TERM,
     TOOL_CREATE_TAG,
+    TOOL_GET_USER_OBJECT_ACCESS,
     TOOL_LOOKUP_DATASTORY,
     TOOL_LOOKUP_DQ_RULE,
     TOOL_LOOKUP_GLOSSARY_TERM,
@@ -58,6 +59,7 @@ MCP_TOOL_NAMES: frozenset[str] = frozenset(
         TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
         TOOL_CREATE_DQ_RULES,
         TOOL_SOURCE_SYSTEM_ACCESS,
+        TOOL_GET_USER_OBJECT_ACCESS,
     }
 )
 
@@ -74,6 +76,7 @@ MCP_WORKFLOW_PROMPT_NAMES: frozenset[str] = frozenset(
         "metadata_drift",
         "native_source_access",
         "dam_object_browse",
+        "catalog_object_access",
         "explain_tag",
         "explain_dq_rule",
         "create_business_glossary_term",

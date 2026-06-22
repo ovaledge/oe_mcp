@@ -17,6 +17,7 @@ from server.constants import (
     TOOL_CREATE_DQ_RULES,
     TOOL_CREATE_GLOSSARY_TERM,
     TOOL_CREATE_TAG,
+    TOOL_GET_USER_OBJECT_ACCESS,
     TOOL_LOOKUP_DATASTORY,
     TOOL_LOOKUP_DQ_RULE,
     TOOL_LOOKUP_GLOSSARY_TERM,
@@ -69,6 +70,7 @@ _PROMPT_REQUIRED_TOOLS: dict[str, tuple[str, ...]] = {
     ),
     "native_source_access": (TOOL_SOURCE_SYSTEM_ACCESS,),
     "dam_object_browse": (TOOL_SOURCE_SYSTEM_ACCESS,),
+    "catalog_object_access": (TOOL_GET_USER_OBJECT_ACCESS, TOOL_SEARCH_CATALOG),
     "platform_help": (TOOL_SEARCH_DOCS,),
     "metadata_drift": (
         TOOL_METADATA_CHANGES_BETWEEN_CRAWLS,

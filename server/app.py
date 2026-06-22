@@ -19,6 +19,7 @@ _MCP_SERVER_INSTRUCTIONS = (
     "Org knowledge in data stories: lookup_datastory (not search_platform_docs). "
     "Physical datasets: search_catalog_assets; native DB/BI grants: source_system_access only — "
     "never fall back to catalog search for RDAM. "
+    "Catalog ACL permissions (user/role grants on catalog objects): get_user_object_access. "
     "User-facing links: navLink or redirectUrl from tool responses; never show ovaledge:// URIs. "
     "RBAC is enforced server-side; write tools need appropriate OvalEdge permissions."
 )

@@ -2,7 +2,7 @@
 Native source-system access helpers (RDAM harvest).
 
 Queries OvalEdge-harvested RDAM privilege metadata — not OvalEdge catalog ACLs
-(see get_catalog_object_access when that ships) and not catalog data-sources.
+(see get_user_object_access) and not catalog data-sources.
 """
 
 from __future__ import annotations
@@ -963,7 +963,7 @@ _DESC_SOURCE_SYSTEM_ACCESS = (
     f"Backend: GET {MCP_PATH_SOURCE_SYSTEM_ACCESS}\n\n"
     "**browse** returns **objects** (DAM inventory — active + RDAM-crawled), not grant rows. "
     "Use **object_to_users** / **user_to_objects** for native privileges.\n\n"
-    "**Not** OvalEdge `get_catalog_object_access` (catalog ACL layer; may ship later).\n\n"
+    "**Not** OvalEdge `get_user_object_access` (catalog ACL layer).\n\n"
     "**source_system** (required): "
     + MCP_SOURCE_SYSTEMS_DOC
     + ".\n\n"

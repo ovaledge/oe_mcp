@@ -938,6 +938,82 @@ class TestLookupTags:
         )
         assert "redirectUrl" not in out
 
+    async def test_include_children_forwards_param(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {"ok": True, "data": {"objectId": 1}}
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_tags")
+        await fn(tag_name="Parent", include_children=True)
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_TAGS,
+            params={
+                "tagName": "Parent",
+                "limit": MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
+                "includeChildren": True,
+            },
+        )
+
+    async def test_include_parent_forwards_param(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {"ok": True, "data": {"objectId": 2}}
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_tags")
+        await fn(object_id=2, include_parent=True)
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_TAGS,
+            params={"objectId": 2, "limit": MCP_GLOSSARY_TAGS_LIMIT_DEFAULT, "includeParent": True},
+        )
+
+    async def test_hierarchy_enriches_formatted_response(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "objectId": 100,
+                "objectName": "ParentTag",
+                "navLink": "#nav/tag?id=100&objectType=oetag&masterTagId=1",
+                "childTags": [
+                    {
+                        "objectId": 101,
+                        "objectName": "ChildA",
+                        "navLink": "#nav/tag?id=101&objectType=oetag&masterTagId=1",
+                        "hasChildren": False,
+                    }
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_tags")
+        out = await fn(tag_name="ParentTag", include_children=True)
+        assert "formattedResponse" in out
+        assert "Child tags (1)" in out["formattedResponse"]
+        assert "ChildA" in out["formattedResponse"]
+        child = out["data"]["childTags"][0]
+        assert child["redirectUrl"].startswith("https://mock.ovaledge.com/")
+
+    async def test_parent_tag_enriched_in_response(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "objectId": 201,
+                "objectName": "ChildTag",
+                "navLink": "#nav/tag?id=201&objectType=oetag&masterTagId=1",
+                "parentTag": {
+                    "objectId": 100,
+                    "objectName": "ParentTag",
+                    "navLink": "#nav/tag?id=100&objectType=oetag&masterTagId=1",
+                },
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_tags")
+        out = await fn(object_id=201, include_parent=True)
+        assert "Parent tag:" in out["formattedResponse"]
+        assert out["data"]["parentTag"]["redirectUrl"].startswith("https://mock.ovaledge.com/")
+
 
 class TestBuildUserSelectableMasters:
     def test_lists_all_masters_without_parent_truncation(self) -> None:

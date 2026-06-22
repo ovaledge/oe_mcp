@@ -22,6 +22,7 @@ TOOL_UPDATE_GOVERNANCE_ROLES = "update_governance_roles"
 TOOL_UPDATE_CUSTOM_FIELD_VALUE = "update_custom_field_value"
 TOOL_LOOKUP_DQ_RULE = "lookup_dq_rule"
 TOOL_SOURCE_SYSTEM_ACCESS = "source_system_access"
+TOOL_GET_USER_OBJECT_ACCESS = "get_user_object_access"
 TOOL_ASSESS_CDE_DQ = "assess_cde_dq"
 TOOL_ASSOCIATE_DQ_RULE_OBJECTS = "associate_dq_rule_objects"
 TOOL_CREATE_DQ_RULES = "create_dq_rules"
@@ -48,6 +49,7 @@ MCP_CATALOG_OBJECT_TYPES = frozenset(
         "oetag",
         "mastertag",
         "oeglobaldomain",
+        "storyzone",
         "dp_domain",
         "oestory",
     }
@@ -130,6 +132,7 @@ MCP_PATH_TAGS_CREATE_OPTIONS = "/api/v1/mcp/tags/create-options"
 MCP_PATH_TAGS_PARENT_OPTIONS = "/api/v1/mcp/tags/parent-options"
 MCP_PATH_SEARCH_PLATFORM_DOCS = "/api/v1/mcp/search-platform-docs"
 MCP_PATH_SOURCE_SYSTEM_ACCESS = "/api/v1/mcp/source-system-access"
+MCP_PATH_GET_USER_OBJECT_ACCESS = "/api/v1/mcp/get-user-object-access"
 MCP_PATH_LOOKUP_DATASTORY = "/api/v1/mcp/lookup-datastory"
 
 # Secure-mode create_tag wizard phases (matches OvalEdge UI).
@@ -322,6 +325,47 @@ MCP_SOURCE_SYSTEM_ACCESS_OVERVIEW_DOC = (
     "(SELECT, INSERT, ALL, …) |\n"
     "| Object scope | All OvalEdge asset types | RS/SF database/schema/table/column; "
     "Tableau project/report |"
+)
+MCP_CATALOG_OBJECT_ACCESS_OVERVIEW_DOC = (
+    "Answers who can see or use a catalog object in OvalEdge (ACL grants), including "
+    "metadata-read/write and data permission levels. Effective permission is the highest "
+    "across direct user grants and role grants. Use source_system_access for native "
+    "database/BI grants only. Connectors (connections) are resolved from the database by "
+    "name — they are not in catalog search. Data Domains, Data Products, glossary Domains, "
+    "and Story Zones are resolved from the database when Elasticsearch has no document."
+)
+MCP_CATALOG_OBJECT_ACCESS_DIRECTIONS = (
+    "`user_to_object` — what access does user X have on object Y? "
+    "`object_to_principals` — which users and roles have access on object Y?"
+)
+MCP_CATALOG_OBJECT_ACCESS_OBJECT_TYPES = frozenset(
+    {
+        "connection",
+        "oeschema",
+        "oetable",
+        "oecolumn",
+        "oefile",
+        "filefolder",
+        "oedomain",
+        "oechart",
+        "chartchild",
+        "oeapi",
+        "oeapicolumn",
+        "oequery",
+        "code",
+        "oecode",
+        "oeglobaldomain",
+        "storyzone",
+        "glossary",
+        "oetag",
+        "mastertag",
+        "oestory",
+        "dp_domain",
+        "dp_product",
+    }
+)
+MCP_CATALOG_OBJECT_ACCESS_OBJECT_TYPES_DOC = ", ".join(
+    sorted(MCP_CATALOG_OBJECT_ACCESS_OBJECT_TYPES)
 )
 MCP_SOURCE_SYSTEM_ACCESS_GRANT_MODELS_DOC = (
     "**Access grant models by source system** (each grant row includes `grant_mechanism` so "

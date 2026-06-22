@@ -880,6 +880,26 @@ def register(mcp: FastMCP) -> None:
                 ge=1,
             ),
         ] = MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
+        include_parent: Annotated[
+            bool,
+            Field(
+                description=(
+                    "When true, enrich each hit with parentTag (immediate parent in "
+                    "tagrelationship). Set when the user asks for parent tag details."
+                ),
+                default=False,
+            ),
+        ] = False,
+        include_children: Annotated[
+            bool,
+            Field(
+                description=(
+                    "When true, enrich each hit with childTags. Set when the user asks "
+                    "for child tags (e.g. 'What are the child tags of X?')."
+                ),
+                default=False,
+            ),
+        ] = False,
     ) -> dict[str, Any]:
         """Tag lookup (see MCP tool description)."""
         has_id = object_id is not None
@@ -899,7 +919,13 @@ def register(mcp: FastMCP) -> None:
             async with ovaledge_client() as client:
                 body = await client.get(
                     MCP_PATH_TAGS,
-                    params=_q(objectId=object_id, tagName=tag_name, limit=lim),
+                    params=_q(
+                        objectId=object_id,
+                        tagName=tag_name,
+                        limit=lim,
+                        includeParent=include_parent or None,
+                        includeChildren=include_children or None,
+                    ),
                 )
                 if isinstance(body, dict):
                     return _enrich_tag_lookup_response(body)
