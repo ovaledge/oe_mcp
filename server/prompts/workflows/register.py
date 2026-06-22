@@ -3,6 +3,7 @@ from fastmcp.prompts import Message
 
 from server.constants import (
     MCP_CATALOG_OBJECT_TYPES_DOC,
+    MCP_DAM_OBJECT_PATH_MATRIX_DOC,
     MCP_SOURCE_SYSTEMS_DOC,
     TOOL_ASSESS_CDE_DQ,
     TOOL_ASSET_LINEAGE,
@@ -293,14 +294,22 @@ def register(mcp: FastMCP) -> None:
             f"2. Call {TOOL_SOURCE_SYSTEM_ACCESS} with source_system='{source_system}' "
             f"({MCP_SOURCE_SYSTEMS_DOC}) and query_direction inferred from the question. "
             f"Only those two fields are mandatory; add username, object_path, object_name, "
-            f"object_type, connection_id, or privileges when the question supplies them. "
+            f"fully_qualified_name, object_type, connection_id, or privileges when the question "
+            f"supplies them. Always set object_type explicitly with object_path — Java uses "
+            f"objectType for resolution, not dot segment count alone. Path matrix: "
+            f"database=dbName; schema=dbName.schemaName or schemaName; "
+            f"table=dbName.schemaName.tableName, schemaName.tableName, or tableName; "
+            f"column=full four-part path or partial tableName.columnName / columnName. "
+            f"fully_qualified_name is an alias for object_path when catalog gives a dotted FQN. "
             f"object_name composes with object_path for table lookups (prod_db + orders). "
             f"object_type=table limits to tables; object_type=all returns every level "
             f"(Snowflake/Redshift user_to_objects). privileges filters write checks "
-            f"(INSERT/UPDATE). If multiple connectionIds return without connection_id, "
+            f"(INSERT/UPDATE). Prefer connection_id; use connectionName. path prefix only when "
+            f"names collide. If multiple connectionIds return without connection_id, "
             f"ask the user for connection_id and a narrower path.\n"
             f"3. Present grants with grant_mechanism (direct/group/role), contributing_group, "
             f"contributing_role, and privileges; use summary counts when returned. "
+            f"Java returns all harvested roles from RDAM MySQL (no system-role filter). "
             f"object_to_users includes parent hierarchy; user_to_objects is exact level only.\n"
             f"4. RDAM only — not OvalEdge catalog ACLs and not search_catalog_assets "
             f"(no Elasticsearch). If empty or error: report RDAM outcome; suggest harvest, "
@@ -309,7 +318,43 @@ def register(mcp: FastMCP) -> None:
             f"If ambiguousMatch, requiresSchemaSelection, or multiple matchCandidates, list schema "
             f"options and ask the user to pick one, then retry with dbName.schema.table. Do not "
             f"use resolve_all_matches unless the user wants all matches combined\n"
-            f"6. Other partial paths: explain matchCandidates or ask the user to disambiguate"
+            f"6. Other partial paths: explain matchCandidates or ask the user to disambiguate\n"
+            f"7. DAM inventory (list schemas/tables/columns in DAM): use "
+            f"{TOOL_SOURCE_SYSTEM_ACCESS} with query_direction=browse, connection_id; "
+            f"object_path is parent scope, object_type "
+            f"is child level to list (omit parent + object_type=database for databases; dbName + "
+            f"schema for schemas; dbName.schemaName + table for tables). Scoped \"who has access "
+            f"to all under schema\" → object_to_users with scope_mode=descendants"
+        )
+        return [Message(text)]
+
+    @mcp.prompt()
+    def dam_object_browse(
+        connection_id: int,
+        scope: str,
+    ) -> list[Message]:
+        """
+        P10b — Browse DAM-visible objects (inventory) on a connector.
+
+        Trigger: "List schemas in BUSINESS on connection 1000"
+                 "What tables are in BUSINESS.BANKING?"
+                 "Show columns in ORDERS table"
+        """
+        text = (
+            f"Browse DAM inventory on connection {connection_id} for: '{scope}'\n\n"
+            f"Steps:\n"
+            f"1. Call {TOOL_SOURCE_SYSTEM_ACCESS} with query_direction=browse, "
+            f"connection_id={connection_id}. "
+            f"object_type is the **child level to list**; object_path (or fully_qualified_name) "
+            f"is the **parent** scope.\n"
+            f"2. Routing: list databases → omit object_path, object_type=database; "
+            f"list schemas in db → object_path=dbName, object_type=schema; "
+            f"list tables in schema → object_path=dbName.schemaName, object_type=table; "
+            f"list columns in table → object_path=dbName.schemaName.tableName, "
+            f"object_type=column.\n"
+            f"3. {MCP_DAM_OBJECT_PATH_MATRIX_DOC}\n"
+            f"4. For access questions after browse, call "
+            f"{TOOL_SOURCE_SYSTEM_ACCESS} — do not use search_catalog_assets as fallback."
         )
         return [Message(text)]
 

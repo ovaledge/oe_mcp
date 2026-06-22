@@ -68,6 +68,7 @@ _PROMPT_REQUIRED_TOOLS: dict[str, tuple[str, ...]] = {
         TOOL_SEARCH_DOCS,
     ),
     "native_source_access": (TOOL_SOURCE_SYSTEM_ACCESS,),
+    "dam_object_browse": (TOOL_SOURCE_SYSTEM_ACCESS,),
     "platform_help": (TOOL_SEARCH_DOCS,),
     "metadata_drift": (
         TOOL_METADATA_CHANGES_BETWEEN_CRAWLS,
@@ -121,6 +122,8 @@ class TestWorkflowPromptBodies:
             "assign_governance_roles",
         ):
             messages = prompt.fn("sample-a", "sample-b")
+        elif prompt_name == "dam_object_browse":
+            messages = prompt.fn(1000, "sample-scope")
         else:
             messages = prompt.fn("sample-input")
         assert len(messages) == 1
@@ -131,6 +134,7 @@ class TestWorkflowPromptBodies:
         assert (
             "sample-input" in content.text
             or "sample-a" in content.text
+            or "sample-scope" in content.text
             or prompt_label in text_lower
         )
 
@@ -145,6 +149,8 @@ class TestWorkflowPromptBodies:
             "assign_governance_roles",
         ):
             messages = prompt.fn("acme", "details")
+        elif prompt_name == "dam_object_browse":
+            messages = prompt.fn(1000, "BUSINESS.BANKING")
         else:
             messages = prompt.fn("acme")
         text = messages[0].content.text
