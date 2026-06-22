@@ -119,14 +119,12 @@ def _payload_bytes(payload: Any) -> int:
     return len(json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8"))
 
 
-def slim_tool_response(payload: Any) -> Any:
+def slim_tool_response(payload: dict[str, Any]) -> dict[str, Any]:
     """
     Trim oversized description / wiki fields on tool responses.
 
-    No-op for error dicts and non-JSON payloads. Mutates a deep copy only.
+    Mutates a deep copy only. Error dicts (error + status_code) are returned unchanged.
     """
-    if not isinstance(payload, dict):
-        return payload
     if "error" in payload and "status_code" in payload:
         return payload
 

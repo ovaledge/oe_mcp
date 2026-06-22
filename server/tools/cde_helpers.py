@@ -101,7 +101,13 @@ def build_update_cde_body(
     for item in targets:
         raw_type = item.get("object_type") or item.get("objectType")
         raw_id = item.get("object_id") if "object_id" in item else item.get("objectId")
+        if raw_id is None or raw_type is None:
+            raise ValueError("Each target requires object_id and object_type.")
+        if isinstance(raw_id, bool) or not isinstance(raw_id, (int, str)):
+            raise ValueError(f"object_id must be an integer, got {raw_id!r}")
         canonical = normalize_cde_object_type(str(raw_type))
+        if canonical is None:
+            raise ValueError(f"Unsupported object_type {raw_type!r}")
         api_targets.append({"objectId": int(raw_id), "objectType": canonical})
     body: dict[str, Any] = {
         "targets": api_targets,

@@ -340,6 +340,8 @@ def register(mcp: FastMCP) -> None:
             )
             async with ovaledge_client() as client:
                 body = await client.get(MCP_PATH_SEARCH_CATALOG, params=params)
+                if not isinstance(body, dict):
+                    return {"data": body}
                 return slim_tool_response(_enrich_catalog_search_response(body))
         except OvalEdgeError as e:
             return map_ovaledge_error(e)
@@ -411,6 +413,8 @@ def register(mcp: FastMCP) -> None:
                 else:
                     od_params = _q(objectId=object_id, objectType=object_type)
                 body = await client.get(MCP_PATH_OBJECT_DETAILS, params=od_params)
+                if not isinstance(body, dict):
+                    return {"data": body}
                 return slim_tool_response(_enrich_catalog_details_response(body))
         except OvalEdgeError as e:
             return map_ovaledge_error(e)

@@ -21,7 +21,6 @@ from server.constants import (
     MCP_SEARCH_CUSTOM_FIELDS_PARAM,
     MCP_SEARCH_DATA_PRODUCTS_PARAM,
     MCP_SEARCH_GLOSSARY_TERMS_PARAM,
-    MCP_SEARCH_SERVER_TYPE_PARAM,
     MCP_SEARCH_TAGS_PARAM,
     MCP_SEARCH_TERMS_PARAM,
     MCP_SERVER_TYPES,
@@ -37,75 +36,30 @@ _DESC_SEARCH = (
     "Search the OvalEdge catalog (Elasticsearch hybrid / keyword search plus optional "
     "server-side vector context). Use for discovery: schemas, tables, columns, files, charts, "
     "APIs, queries, data products, glossary, tags, and stories.\n\n"
-    "**Not for native DB/BI grants** — who can SELECT in Redshift/Snowflake or view a Tableau "
-    "report is `source_system_access` (RDAM) only. Never use this tool as a fallback when "
-    "RDAM is empty or errors.\n\n"
+    "**Not for native DB/BI grants** — use `source_system_access` (RDAM) only; never fall back "
+    "to this tool when RDAM is empty or errors.\n\n"
     f"Backend: GET {MCP_PATH_SEARCH_CATALOG}\n\n"
-    "Infer parameters from the user's question before calling:\n"
-    "- **Lexical dimensions** (tool args are list[str]; wire as JSON array strings): "
+    "**Parameters:** Lexical lists (wire as JSON array strings): "
     f"{MCP_SEARCH_TERMS_PARAM}, {MCP_SEARCH_TAGS_PARAM}, {MCP_SEARCH_GLOSSARY_TERMS_PARAM}, "
     f"{MCP_SEARCH_CUSTOM_FIELDS_PARAM}, {MCP_SEARCH_DATA_PRODUCTS_PARAM}, "
-    f"{MCP_SEARCH_CLASSIFICATIONS_PARAM}, {MCP_SEARCH_CRITICAL_DATA_ELEMENT_PARAM}.\n"
-    "- **Exact filters** (tool args are str; narrow results, not full-text search): "
-    "connection_name, schema_name, server_type (connectionInfo.serverType), "
-    "owner, steward, custodian, object_type.\n"
-    "- **Glossary placement** (domain / category / subcategory): use domain_id or "
-    f"domain_name (required), plus optional category_id/category_name and "
-    f"subcategory_id/subcategory_name. With object_type=\"glossary\" (or "
-    "businessglossary), returns glossary terms in that placement. Without "
-    "object_type, returns any catalog assets linked to terms in that placement.\n"
-    "- **server_type**: Infer from the user question when they name a technology "
-    f"(e.g. MySQL → mysql, Snowflake → snowflake, Tableau → tableau). Maps to API "
-    f"{MCP_SEARCH_SERVER_TYPE_PARAM}. Omit when the question does not imply a "
-    "connector type — do not guess.\n"
-    f"- **Semantic ranking**: {MCP_SEARCH_CONTEXT_QUERY_PARAM} — pass the user's verbatim "
-    "question whenever they asked in natural language.\n\n"
-    "When the user asks for assets **with / tagged by / assigned** a governance tag, prefer "
-    f"tags=[\"<tag name>\"] (not search_terms alone). When they ask for assets linked to a "
-    f"glossary term, prefer {MCP_SEARCH_GLOSSARY_TERMS_PARAM}=[\"<term>\"]. When they ask for "
-    f"assets with a sensitivity/classification label (e.g. PII), prefer "
-    f'{MCP_SEARCH_CLASSIFICATIONS_PARAM}=["PII"]. Use search_terms '
-    "for general keywords in names/descriptions.\n\n"
+    f"{MCP_SEARCH_CLASSIFICATIONS_PARAM}, {MCP_SEARCH_CRITICAL_DATA_ELEMENT_PARAM}. "
+    "Exact filters: connection_name, schema_name, server_type, owner, steward, custodian, "
+    "object_type. Glossary placement: domain_id/domain_name plus optional category/subcategory. "
+    f"Semantic ranking: {MCP_SEARCH_CONTEXT_QUERY_PARAM} = user's verbatim question.\n\n"
+    "Prefer tags=[] for tag assignments, terms=[] for glossary links, classifications=[] for "
+    "sensitivity labels; use search_terms for general keywords.\n\n"
     "Examples:\n"
-    '1) "Find all assets with the Operations tag" → '
-    'tags=["Operations"], context_query=<verbatim question>.\n'
-    '2) "Certified tables in sakila schema" → '
-    'object_type="oetable", schema_name="sakila", search_terms=["certified"] (if needed).\n'
-    '3) "Customer tables owned by rohit.anand" → '
-    'search_terms=["customer"], object_type="oetable", owner="rohit.anand@ovaledge.com".\n'
-    '3b) "Find all assets related to MySQL databases" → '
-    'server_type="mysql", context_query=<verbatim question>.\n'
-    '4) "Data products related to revenue" → '
-    'data_products=["revenue"], context_query=<verbatim question>.\n'
-    '5) "Assets with Primary Business Function Operations" → '
-    'custom_fields=["Operations"] or search_terms as fallback.\n'
-    '6) "Finance Domain from Data Domains" → '
-    'object_type="dp_domain", search_terms=["Finance"], context_query=<verbatim question>. '
-    "Do not use object_type=\"domain\" or oeglobaldomain (that is glossary Global Domain, "
-    "not Data Domains).\n"
-    '7) "Tables classified as PII" → '
-    'classifications=["PII"], context_query=<verbatim question>.\n'
-    '8) "All glossary terms under category test in PrakashDOmain" → '
-    'object_type="glossary", domain_name="PrakashDOmain", category_name="test".\n'
-    '9) "Tables linked to terms in Finance domain" → '
-    'object_type="oetable", domain_name="Finance".\n'
-    '10) "All table columns marked as CDE" → '
-    'object_type="oecolumn", critical_data_element=["Yes"]; then assess_cde_dq '
-    "(discover_cde_columns=true or pass objects from hits) for DQ recommendations.\n\n"
-    "**Data Domains (dp_domain):** When the user says Data Domains, data domain, or dp_domain, "
-    "set object_type=\"dp_domain\" (alias datadomain). These assets are loaded from the database "
-    "(not the main Elasticsearch catalog index); search requires object_type=dp_domain alone — "
-    "do not combine with other object types.\n\n"
-    "Omit empty lists; filter-only search is valid (no lexical arrays). "
+    '1) "Assets with Operations tag" → tags=["Operations"], context_query=<question>.\n'
+    '2) "Customer tables owned by rohit" → search_terms=["customer"], object_type="oetable", '
+    'owner="rohit.anand@ovaledge.com".\n'
+    '3) "CDE columns" → object_type="oecolumn", critical_data_element=["Yes"]; '
+    "then assess_cde_dq.\n\n"
     "object_type must be one of: "
     + MCP_CATALOG_OBJECT_TYPES_DOC
-    + " — or omit for all types.\n\n"
-    "Each hit in items[] includes objectId and objectType (camelCase), relative navLink, "
-    "plus redirectUrl (absolute, from OVALEDGE_BASE_URL). Use those values "
-    "with update_asset_descriptions when the user asks to change descriptions.\n\n"
-    "When results include oestory (data story), call lookup_datastory (object_id or "
-    "content_query) for full narrative and storyCitation — do not answer from search "
-    "snippets alone."
+    + " — or omit for all types. For dp_domain (Data Domains), use object_type=dp_domain alone.\n\n"
+    "More filter combinations and examples: docs://ovaledge/mcp_workflows (Catalog search).\n\n"
+    "Each hit includes objectId, objectType, navLink, redirectUrl. For oestory hits, call "
+    "lookup_datastory for full narrative — do not answer from search snippets alone."
 )
 _DESC_DETAILS = (
     "Fetch one catalog document (JSON from Elasticsearch for most types; embeddings removed). "

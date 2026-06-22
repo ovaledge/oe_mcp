@@ -35,6 +35,28 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 
 **Data stories vs platform docs:** `lookup_datastory` searches **your organization’s** onboarded stories (`oestory`). `search_platform_docs` searches **OvalEdge product** documentation. Do not use platform docs for internal policy questions.
 
+## Catalog search (`search_catalog_assets`)
+
+Extended parameter patterns (tool description keeps a short summary; use this section when disambiguating filters):
+
+| User intent | Suggested parameters |
+|-------------|---------------------|
+| Certified tables in a schema | `object_type=oetable`, `schema_name`, optional `search_terms` |
+| Assets by connector technology | `server_type` (e.g. mysql, snowflake, tableau) + `context_query` |
+| Data products | `data_products=[...]`, `context_query` |
+| Custom field values | `custom_fields=[...]` or `search_terms` fallback |
+| Data Domains (not glossary Global Domain) | `object_type=dp_domain` alone — do not combine with other types |
+| PII / classification | `classifications=["PII"]`, `context_query` |
+| Glossary terms in placement | `object_type=glossary`, `domain_name`, optional `category_name` |
+| Assets linked to domain terms | `object_type=oetable`, `domain_name` |
+| CDE columns | `object_type=oecolumn`, `critical_data_element=["Yes"]` → then `assess_cde_dq` |
+
+**Glossary placement:** `domain_id` or `domain_name` (required), plus optional category/subcategory. With `object_type=glossary`, returns terms in that placement; without `object_type`, returns catalog assets linked to terms there.
+
+**server_type:** Infer from the user question when they name a technology; omit when not implied — do not guess.
+
+Omit empty list parameters; filter-only search is valid. Each hit includes `objectId`, `objectType`, `navLink`, `redirectUrl`. For `oestory` hits, follow with `lookup_datastory`.
+
 ## Native source access (RDAM)
 
 Use **`source_system_access`** for **native** grants harvested from Redshift, Snowflake, or Tableau (RDAM SQL only — **no Elasticsearch**). This is **not** OvalEdge catalog ACL (`get_catalog_object_access` may ship later) and **not** catalog discovery.

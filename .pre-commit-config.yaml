@@ -6,8 +6,8 @@
 #   ./scripts/setup_git_hooks.sh
 #   # or: poetry run pre-commit install && poetry run pre-commit install --hook-type pre-push
 #
-# On each `git commit`: ruff check + pytest (tests/).
-# On `git push` (if pre-push hook installed): ruff + pytest again.
+# On each `git commit`: ruff check, mypy, and pytest (tests/).
+# On `git push` (if pre-push hook installed): same checks again.
 #
 # Run manually:
 #   poetry run pre-commit run --all-files
@@ -21,6 +21,13 @@ repos:
       - id: ruff-check
         name: ruff check (full tree)
         entry: bash scripts/run_ruff.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: mypy
+        name: mypy (server/ entrypoints/ evals/)
+        entry: bash scripts/run_mypy.sh
         language: system
         pass_filenames: false
         always_run: true
