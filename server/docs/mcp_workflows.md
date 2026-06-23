@@ -59,7 +59,7 @@ Omit empty list parameters; filter-only search is valid. Each hit includes `obje
 
 ## Native source access (RDAM)
 
-Use **`source_system_access`** for **native** grants harvested from Redshift, Snowflake, or Tableau (RDAM SQL only — **no Elasticsearch**). This is **not** OvalEdge catalog ACL (`get_catalog_object_access` may ship later) and **not** catalog discovery.
+Use **`source_system_access`** for **native** grants harvested from Redshift, Snowflake, or Tableau (RDAM SQL only — **no Elasticsearch**). This is **not** OvalEdge catalog ACL (`get_user_object_access`) and **not** catalog discovery.
 
 **Never fall back to `search_catalog_assets`** when RDAM is empty, not-found, or errors — catalog search cannot return native grants. Report the RDAM/API outcome instead.
 

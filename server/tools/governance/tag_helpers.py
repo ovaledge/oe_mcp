@@ -37,7 +37,11 @@ _DESC_TAGS = (
     f"Optional query param limit (default {MCP_GLOSSARY_TAGS_LIMIT_DEFAULT} on server; "
     f"this client caps at {MCP_GLOSSARY_TAGS_LIMIT_MAX}).\n\n"
     "Provide either tag_name or object_id, never both.\n\n"
-    "Each hit includes relative navLink plus redirectUrl (absolute, from OVALEDGE_BASE_URL)."
+    "Hierarchy: set include_parent=true when the user asks for the parent tag; "
+    "include_children=true when they ask for child tags (or both). The API enriches "
+    "each hit with parentTag and/or childTags from tagrelationship.\n\n"
+    "Each hit includes relative navLink plus redirectUrl (absolute, from OVALEDGE_BASE_URL). "
+    "When hierarchy flags are set, formattedResponse summarizes tag, parent, and children."
 )
 _DESC_CREATE_TAG = (
     "Create a new OETAG in OvalEdge. Flow depends on tagSecurityMode from create-options.\n\n"
@@ -111,15 +115,85 @@ def _tag_nav_from_item(item: dict[str, Any]) -> str:
     )
 
 
+def _enrich_tag_hierarchy_nav(item: dict[str, Any]) -> dict[str, Any]:
+    """Normalize nav links on parent/child hierarchy items."""
+    out = dict(item)
+    nav = item.get("navLink")
+    if isinstance(nav, str) and nav.strip():
+        out["navLink"] = nav.strip()
+        out["redirectUrl"] = build_absolute_nav_url(nav.strip())
+    elif isinstance(item.get("redirectUrl"), str) and item["redirectUrl"].strip():
+        out["redirectUrl"] = item["redirectUrl"].strip()
+    return out
+
+
 def _enrich_tag_nav(item: dict[str, Any]) -> dict[str, Any]:
     """Add absolute redirectUrl from relative navLink (lookup hits)."""
     out = dict(item)
     nav = _tag_nav_from_item(out)
-    if not nav:
-        return out
-    out["navLink"] = nav
-    out["redirectUrl"] = build_absolute_nav_url(nav)
+    if nav:
+        out["navLink"] = nav
+        out["redirectUrl"] = build_absolute_nav_url(nav)
+    parent = item.get("parentTag")
+    if isinstance(parent, dict):
+        out["parentTag"] = _enrich_tag_hierarchy_nav(parent)
+    elif "parentTag" in item:
+        out["parentTag"] = parent
+    children = item.get("childTags")
+    if isinstance(children, list):
+        out["childTags"] = [
+            _enrich_tag_hierarchy_nav(c) for c in children if isinstance(c, dict)
+        ]
+    elif "childTags" in item:
+        out["childTags"] = children
     return out
+
+
+def _tag_has_hierarchy_fields(item: dict[str, Any]) -> bool:
+    return "parentTag" in item or "childTags" in item
+
+
+def _format_tag_hierarchy_line(item: dict[str, Any]) -> str:
+    name = str(item.get("objectName") or "?")
+    oid = item.get("objectId", "?")
+    line = f"- {name} (id {oid})"
+    if item.get("hasChildren"):
+        line += " [has children]"
+    url = item.get("redirectUrl") or item.get("navLink")
+    if isinstance(url, str) and url.strip():
+        line += f" — {markdown_link('Open', url.strip())}"
+    return line
+
+
+def _format_tag_lookup_display(hit: dict[str, Any]) -> str:
+    lines: list[str] = []
+    name = str(hit.get("objectName") or "?")
+    oid = hit.get("objectId", "?")
+    lines.append(f"**Tag:** {name} (id {oid})")
+    url = hit.get("redirectUrl") or hit.get("navLink")
+    if isinstance(url, str) and url.strip():
+        lines.append(markdown_link("Open tag", url.strip()))
+    if "parentTag" in hit:
+        parent = hit.get("parentTag")
+        if isinstance(parent, dict):
+            pname = parent.get("objectName") or "?"
+            pid = parent.get("objectId", "?")
+            lines.append(f"**Parent tag:** {pname} (id {pid})")
+            purl = parent.get("redirectUrl") or parent.get("navLink")
+            if isinstance(purl, str) and purl.strip():
+                lines.append(markdown_link("Open parent", purl.strip()))
+        else:
+            lines.append("**Parent tag:** none")
+    if "childTags" in hit:
+        children = hit.get("childTags")
+        if isinstance(children, list) and children:
+            lines.append(f"**Child tags ({len(children)}):**")
+            lines.extend(
+                _format_tag_hierarchy_line(c) for c in children if isinstance(c, dict)
+            )
+        else:
+            lines.append("**Child tags:** none")
+    return "\n".join(lines)
 
 
 def _enrich_tag_lookup_response(body: dict[str, Any]) -> dict[str, Any]:
@@ -128,11 +202,22 @@ def _enrich_tag_lookup_response(body: dict[str, Any]) -> dict[str, Any]:
         return body
     out = dict(body)
     data = body.get("data")
+    formatted_parts: list[str] = []
     if isinstance(data, list):
-        out["data"] = [_enrich_tag_nav(x) for x in data if isinstance(x, dict)]
-        return out
-    if isinstance(data, dict):
-        out["data"] = _enrich_tag_nav(data)
+        enriched_list = [_enrich_tag_nav(x) for x in data if isinstance(x, dict)]
+        out["data"] = enriched_list
+        if any(_tag_has_hierarchy_fields(h) for h in enriched_list):
+            formatted_parts = [_format_tag_lookup_display(h) for h in enriched_list]
+    elif isinstance(data, dict):
+        enriched_hit = _enrich_tag_nav(data)
+        out["data"] = enriched_hit
+        if _tag_has_hierarchy_fields(enriched_hit):
+            formatted_parts = [_format_tag_lookup_display(enriched_hit)]
+    if formatted_parts:
+        formatted = "\n\n".join(formatted_parts)
+        out["formattedResponse"] = formatted
+        if isinstance(out["data"], dict):
+            out["data"]["formattedResponse"] = formatted
     return out
 
 

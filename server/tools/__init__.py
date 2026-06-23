@@ -11,6 +11,6 @@ Each package exposes ``register(mcp)`` and optional ``helpers`` / ``formatters``
 - ``common`` — shared params, errors, validators, client factory
 """
 
-from server.tools import catalog, dataquality, docs, governance, rdam
+from server.tools import access, catalog, dataquality, docs, governance, rdam
 
-__all__ = ["catalog", "dataquality", "docs", "governance", "rdam"]
+__all__ = ["access", "catalog", "dataquality", "docs", "governance", "rdam"]

@@ -13,6 +13,7 @@ from server.constants import (
     TOOL_CREATE_DQ_RULES,
     TOOL_CREATE_GLOSSARY_TERM,
     TOOL_CREATE_TAG,
+    TOOL_GET_USER_OBJECT_ACCESS,
     TOOL_LOOKUP_DATASTORY,
     TOOL_LOOKUP_DQ_RULE,
     TOOL_LOOKUP_GLOSSARY_TERM,
@@ -359,6 +360,32 @@ def register(mcp: FastMCP) -> None:
         return [Message(text)]
 
     @mcp.prompt()
+    def catalog_object_access(question: str) -> list[Message]:
+        """
+        P10b — OvalEdge catalog ACL permissions (user/role grants), not native RDAM.
+
+        Trigger: "What access does john.doe have on CUSTOMER_MASTER?"
+                 "Who has access to the Finance schema?"
+                 "Which roles provide access to this report?"
+        """
+        text = (
+            f"Answer OvalEdge catalog access: '{question}'\n\n"
+            f"Steps:\n"
+            f"1. Infer query_direction: user_to_object when asking what a specific user can do; "
+            f"object_to_principals when asking who has access on an asset.\n"
+            f"2. Resolve the asset with {TOOL_SEARCH_CATALOG} when the user names it; pass "
+            f"object_id and object_type from the chosen hit. If multiple matches, ask the user "
+            f"to pick or use matchCandidates from get_user_object_access.\n"
+            f"3. Call {TOOL_GET_USER_OBJECT_ACCESS} with query_direction, username (for "
+            f"user_to_object), and resolved object_id+object_type.\n"
+            f"4. Present metadataPermission, dataPermission, grantSources, contributingRoles, "
+            f"inheritedFrom when columns/terms inherit parent ACLs, and redirectUrl.\n"
+            f"5. Catalog ACL only — not native DB grants. Use {TOOL_SOURCE_SYSTEM_ACCESS} for "
+            f"Redshift/Snowflake/Tableau native privileges."
+        )
+        return [Message(text)]
+
+    @mcp.prompt()
     def explain_tag(tag_name: str) -> list[Message]:
         """
         P11 — Tag definition, hierarchy, and linked assets.
@@ -369,10 +396,13 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Explain the governance tag '{tag_name}'.\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_LOOKUP_TAGS}(tag_name='{tag_name}')\n"
+            f"1. Call {TOOL_LOOKUP_TAGS}(tag_name='{tag_name}') — add "
+            f"include_parent=true and/or include_children=true when the user asks for "
+            f"parent or child tags in the hierarchy\n"
             f"2. If not found, call {TOOL_SEARCH_CATALOG} with search_terms including "
             f"'{tag_name}' and object_type=oetag\n"
-            f"3. Present tag description, master/parent hierarchy, and stewardship if returned\n"
+            f"3. Present tag description, master/parent hierarchy, child tags, and "
+            f"stewardship from formattedResponse or returned fields\n"
             f"4. Optionally list catalog assets tagged via {TOOL_SEARCH_CATALOG} with tags filter "
             f"when the user asks what data uses this tag"
         )
