@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from server.constants import MCP_CDE_ACTIONS, MCP_UPDATE_CDE_OBJECT_TYPES
+from server.constants import (
+    MCP_CDE_ACTIONS,
+    MCP_PATH_UPDATE_CDE_ASSOCIATIONS,
+    MCP_UPDATE_CDE_OBJECT_TYPES,
+)
+from server.tools.common.descriptions import classify_tool_desc
 
 _CDE_TYPE_ALIASES = {
     "apiobject": "oeapi",
@@ -13,9 +18,9 @@ _CDE_TYPE_ALIASES = {
     "code": "oequery",
 }
 
-_DESC_UPDATE_CDE = (
+_DESC_UPDATE_CDE = classify_tool_desc(
     "Update Critical Data Element (CDE) status on one or more catalog assets.\n\n"
-    "Backend: POST /api/v1/mcp/update-cde-associations\n\n"
+    f"Backend: POST {MCP_PATH_UPDATE_CDE_ASSOCIATIONS}\n\n"
     "Use search_catalog_assets or catalog_asset_details first to resolve object_id "
     "and object_type when the user names an asset ambiguously.\n\n"
     "action must be Yes (mark as CDE), No (explicitly not critical), or None "

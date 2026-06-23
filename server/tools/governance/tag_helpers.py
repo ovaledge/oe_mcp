@@ -25,12 +25,13 @@ from server.nav_links import (
 )
 from server.tools.common import as_dict as _as_dict
 from server.tools.common import blank as _blank
+from server.tools.common.descriptions import classify_tool_desc
 from server.tools.governance._shared import (
     _CREATE_CONFIRM_AGENT_INSTRUCTION,
     _positive_int,
 )
 
-_DESC_TAGS = (
+_DESC_TAGS = classify_tool_desc(
     "Look up OETAG (tag) document(s) by id or name from Elasticsearch; name search "
     "may return multiple hits.\n\n"
     f"Backend: GET {MCP_PATH_TAGS} (objectId OR tagName — mutually exclusive).\n"
@@ -43,7 +44,7 @@ _DESC_TAGS = (
     "Each hit includes relative navLink plus redirectUrl (absolute, from OVALEDGE_BASE_URL). "
     "When hierarchy flags are set, formattedResponse summarizes tag, parent, and children."
 )
-_DESC_CREATE_TAG = (
+_DESC_CREATE_TAG = classify_tool_desc(
     "Create a new OETAG (guided pickers). Flow depends on tagSecurityMode from create-options.\n\n"
     f"Backend: GET {MCP_PATH_TAGS_CREATE_OPTIONS}, GET {MCP_PATH_TAGS_PARENT_OPTIONS}, "
     f"POST {MCP_PATH_TAGS}.\n\n"

@@ -4,27 +4,30 @@
 
 - [ ] Confirmed OvalEdge API path and method (GET vs POST) with backend team or OpenAPI
 - [ ] No existing tool already calls this path (grep `MCP_PATH_` and path string)
-- [ ] Tool name is verb-led snake_case (`search_*`, `lookup_*`, `create_*`, `update_*`, `source_system_access`-style noun only when established)
+- [ ] Tool name is verb-led snake_case (`search_*`, `lookup_*`, `create_*`, `update_*`; established nouns like `source_system_access` only when already in the surface)
 - [ ] Documented **negative routing** (which existing tools must be used instead)
 - [ ] Decided read-only vs governed write (confirm gate required?)
+- [ ] Decided what stays in `_DESC_*` vs `mcp_workflows.md` / domain guide (keep `_DESC_*` ≤ 2,500 chars)
 
 ## `server/constants.py`
 
 - [ ] `TOOL_<NAME> = "<function_name>"`
 - [ ] `MCP_PATH_<NAME> = "/api/v1/mcp/..."`
-- [ ] Allow-lists / wire param names as `MCP_*` + `MCP_*_DOC` when reused in `Field(description=...)`
+- [ ] Allow-lists / wire param names as `MCP_*` + `MCP_*_DOC` for docs, prompts, and short `Field` hints
 
-## `server/tools/<domain>/helpers.py`
+## Helpers (`server/tools/<domain>/`)
 
-- [ ] `_DESC_<NAME>` with Backend line, not-confused-with, examples
+- [ ] `_DESC_<NAME>` via `classify_tool_desc()` — compact routing; `confidential=True` only for access/RDAM tools
+- [ ] Extended examples / matrices in `server/docs/mcp_workflows.md` or domain `*.md`
 - [ ] `validate_*` or param builder returning `dict | None` (`None` = ok, else `error_payload(...)`)
-- [ ] CamelCase mapping documented or centralized in builder
+- [ ] CamelCase mapping in builder or `drop_none`
 
 ## `server/tools/<domain>/register.py`
 
-- [ ] `_invoke_*` handles validation → `drop_none` → `ovaledge_client` → `map_ovaledge_error`
-- [ ] `@mcp.tool(description=_DESC_*)` with `Annotated` + `Field` per parameter
+- [ ] Prefer `_invoke_*`: validation → `drop_none` → `ovaledge_client` → `map_ovaledge_error`
+- [ ] `@mcp.tool(description=_DESC_*)` with `Annotated` + **one-line** `Field` per parameter
 - [ ] `register(mcp)` exported from `server/tools/<domain>/__init__.py`
+- [ ] Apply `slim_tool_response()` when tool returns large catalog/glossary payloads
 
 ## Registration wiring
 
@@ -37,7 +40,8 @@
 - [ ] `tests/tools/test_<name>.py` — happy path param forwarding
 - [ ] Validation cases (missing args, mutual exclusion, invalid enums)
 - [ ] `tests/client/test_mcp_surface_inventory.py` still passes
-- [ ] Description tests for security/routing keywords if critical
+- [ ] `tests/tools/test_tool_description_budget.py` still passes
+- [ ] Routing keywords in `_DESC_*`; deep rules in docs/constants if de-bloated
 
 ## Docs and prompts
 
@@ -46,6 +50,7 @@
 - [ ] `server/app.py` instructions — only if new top-level agent route (keep brief)
 - [ ] Workflow prompt in `server/prompts/workflows/register.py` if multi-step playbook needed
 - [ ] `tests/prompts/test_workflows.py` — `_PROMPT_REQUIRED_TOOLS` entry
+- [ ] Workflow prompts reference `docs://ovaledge/*` — do not embed full `MCP_*_DOC` allow-lists
 
 ## Optional
 
@@ -57,5 +62,5 @@
 
 ```bash
 poetry run ruff check .
-poetry run pytest tests/tools/ tests/client/test_mcp_surface_inventory.py -q
+poetry run pytest tests/tools/ tests/tools/test_tool_description_budget.py tests/client/test_mcp_surface_inventory.py -q
 ```

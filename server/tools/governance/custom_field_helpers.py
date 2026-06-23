@@ -5,9 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 from server.constants import MCP_CUSTOM_FIELD_OBJECT_TYPES_DOC, MCP_PATH_UPDATE_CUSTOM_FIELD_VALUES
+from server.tools.common.descriptions import classify_tool_desc
 from server.tools.governance._shared import _CREATE_CONFIRM_AGENT_INSTRUCTION
 
-_DESC_UPDATE_CUSTOM_FIELD_VALUE = (
+_DESC_UPDATE_CUSTOM_FIELD_VALUE = classify_tool_desc(
     "Update custom / additional field values on supported OvalEdge assets "
     "(NOT governance Owner/Steward/Custodian — use update_governance_roles for those).\n\n"
     "When the user names a field label like 'Data Owner' that appears in Additional "

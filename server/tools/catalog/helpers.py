@@ -29,10 +29,11 @@ from server.constants import (
     MCP_UPDATE_ASSET_DESCRIPTION_OBJECT_TYPES_DOC,
 )
 from server.nav_links import build_absolute_nav_url, extract_hash_nav_link
+from server.tools.common.descriptions import classify_tool_desc
 
 _TABLE_FILE_TYPES = frozenset({"oetable", "oefile"})
 
-_DESC_SEARCH = (
+_DESC_SEARCH = classify_tool_desc(
     "Search the OvalEdge catalog (Elasticsearch hybrid / keyword search plus optional "
     "server-side vector context). Use for discovery: schemas, tables, columns, files, charts, "
     "APIs, queries, data products, glossary, tags, and stories.\n\n"
@@ -60,7 +61,7 @@ _DESC_SEARCH = (
     "Each hit includes objectId, objectType, navLink, redirectUrl. For oestory hits, call "
     "lookup_datastory for full narrative — do not answer from search snippets alone."
 )
-_DESC_DETAILS = (
+_DESC_DETAILS = classify_tool_desc(
     "Fetch one catalog document (JSON from Elasticsearch for most types; embeddings removed). "
     "Long business/technical/wiki descriptions are truncated for MCP client limits "
     "(plain text up to ~6k chars; HTML/wiki markup shorter). "
@@ -78,22 +79,22 @@ _DESC_DETAILS = (
     "Response includes relative navLink plus redirectUrl "
     "(absolute, from OVALEDGE_BASE_URL)."
 )
-_DESC_COLUMN = (
+_DESC_COLUMN = classify_tool_desc(
     "Column-level profile statistics for one table or file asset.\n\n"
     f"Backend: GET {MCP_PATH_COLUMN_PROFILE}\n\n"
     "object_type must be oetable or oefile only."
 )
-_DESC_REL = (
+_DESC_REL = classify_tool_desc(
     "Table-only: entity relationships (columns, patterns) for one oetable.\n\n"
     f"Backend: GET {MCP_PATH_ENTITY_RELATIONSHIPS}\n\n"
     "Pass the table's internal object_id (oetable)."
 )
-_DESC_LINEAGE = (
+_DESC_LINEAGE = classify_tool_desc(
     "Data lineage graph from the database for a table or file.\n\n"
     f"Backend: GET {MCP_PATH_LINEAGE}\n\n"
     "object_type must be oetable or oefile. depth defaults to 2; server may clamp depth."
 )
-_DESC_UPDATE_DESCRIPTIONS = (
+_DESC_UPDATE_DESCRIPTIONS = classify_tool_desc(
     "Update description field(s) on a catalog or governance asset (RBAC on server).\n\n"
     f"Backend: POST {MCP_PATH_UPDATE_ASSET_DESCRIPTIONS}\n\n"
     "**Confirm gate:** confirm_update preview first; POST only with create_confirmed_by_user=true "
@@ -106,7 +107,7 @@ _DESC_UPDATE_DESCRIPTIONS = (
     "Field rules by object_type: docs://ovaledge/mcp_workflows (Update asset descriptions). "
     "Workflow prompt: `document_asset_descriptions`."
 )
-_DESC_METADATA_CHANGES = (
+_DESC_METADATA_CHANGES = classify_tool_desc(
     "Compare metadata changes between crawls using transactions_details as primary source, "
     "with schema-compare fallback when needed.\n\n"
     f"Backend: POST {MCP_PATH_METADATA_CHANGES_BETWEEN_CRAWLS}\n\n"

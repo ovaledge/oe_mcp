@@ -5,7 +5,7 @@ This document describes how the OvalEdge MCP server exposes **tools**, **resourc
 There is **no MCP protocol “tool priority” field**. Routing is guided by:
 
 1. **Server instructions** (`server/app.py`) — global behavior for every session  
-2. **Tool descriptions** — when to call each tool  
+2. **Tool descriptions** — when to call each tool (budget enforced by `tests/tools/test_tool_description_budget.py`; classification via `classify_tool_desc()`)
 3. **Workflow prompts** (`server/prompts/workflows/`) — optional multi-step playbooks  
 4. **Client rules** (e.g. Cursor project rules) — host-specific, outside this repo  
 

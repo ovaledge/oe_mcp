@@ -35,6 +35,7 @@ from server.constants import (
     MCP_TABLE_SCHEMA_DISCOVERY_PROBE_CONCURRENCY,
 )
 from server.tools.common import error_payload
+from server.tools.common.descriptions import classify_tool_desc
 
 _RDAM_OBJECT_TYPE_ALIASES = {
     "oeschema": "schema",
@@ -924,7 +925,7 @@ def filter_grants_by_object_level(
     }
 
 
-_DESC_SOURCE_SYSTEM_ACCESS = (
+_DESC_SOURCE_SYSTEM_ACCESS = classify_tool_desc(
     "Resolve **native** access grants harvested from Redshift, Snowflake, or Tableau (RDAM) — "
     "independent of OvalEdge catalog ACLs.\n\n"
     f"Backend: GET {MCP_PATH_SOURCE_SYSTEM_ACCESS}\n\n"
@@ -954,6 +955,8 @@ _DESC_SOURCE_SYSTEM_ACCESS = (
     "docs://ovaledge/mcp_workflows (Native source access) and workflow prompt "
     "`native_source_access`.\n\n"
     "Read-only. Instance/Connector **Data Access Admin** enforced server-side."
+,
+    confidential=True,
 )
 
 def validate_and_normalize_object_type(

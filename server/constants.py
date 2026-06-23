@@ -27,6 +27,15 @@ TOOL_ASSESS_CDE_DQ = "assess_cde_dq"
 TOOL_ASSOCIATE_DQ_RULE_OBJECTS = "associate_dq_rule_objects"
 TOOL_CREATE_DQ_RULES = "create_dq_rules"
 
+# MCP tool data classification (appended to every _DESC_* via classify_tool_desc).
+MCP_TOOL_CLASSIFICATION_INTERNAL = (
+    "Data classification: INTERNAL (OvalEdge governance metadata; RBAC enforced server-side)."
+)
+MCP_TOOL_CLASSIFICATION_CONFIDENTIAL = (
+    "Data classification: CONFIDENTIAL (access grants, principals, or native privileges; "
+    "RBAC/DAA enforced server-side)."
+)
+
 # Lowercase objectType for MCP search-catalog and object-details (matches OvalEdge API).
 MCP_CATALOG_OBJECT_TYPES = frozenset(
     {

@@ -16,9 +16,10 @@ from server.constants import (
 from server.nav_links import build_absolute_nav_url, extract_hash_nav_link
 from server.tools.common import as_dict as _as_dict
 from server.tools.common import blank as _blank
+from server.tools.common.descriptions import classify_tool_desc
 from server.tools.governance._shared import _CREATE_CONFIRM_AGENT_INSTRUCTION, _cell
 
-_DESC_GLOSSARY = (
+_DESC_GLOSSARY = classify_tool_desc(
     "Look up business glossary term(s) by id, name, or glossary placement "
     "(domain / category / subcategory). Server object type is always glossary.\n\n"
     f"Backend: GET {MCP_PATH_GLOSSARY_TERMS}. Use exactly one lookup mode:\n"
@@ -34,7 +35,7 @@ _DESC_GLOSSARY = (
     "Do not combine object_id, term_name, and placement filters in one call.\n\n"
     "Each hit includes relative navLink plus redirectUrl (absolute, from OVALEDGE_BASE_URL)."
 )
-_DESC_CREATE_GLOSSARY = (
+_DESC_CREATE_GLOSSARY = classify_tool_desc(
     "Create a business glossary term (guided pickers) or list domain/category/subcategory "
     "options.\n\n"
     f"Backend picker: GET {MCP_PATH_DOMAIN_METADATA}. "

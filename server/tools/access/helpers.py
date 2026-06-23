@@ -5,8 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 from server.constants import MCP_PATH_GET_USER_OBJECT_ACCESS
+from server.tools.common.descriptions import classify_tool_desc
 
-_DESC_GET_USER_OBJECT_ACCESS = (
+_DESC_GET_USER_OBJECT_ACCESS = classify_tool_desc(
     "Discover effective OvalEdge **catalog ACL** permissions (user and role grants). "
     "Not native Redshift/Snowflake/Tableau grants — use source_system_access for those.\n\n"
     f"Backend: GET {MCP_PATH_GET_USER_OBJECT_ACCESS}\n\n"
@@ -20,6 +21,8 @@ _DESC_GET_USER_OBJECT_ACCESS = (
     "`catalog_object_access`.\n\n"
     "Present effectiveAccess or principals, grantSources, contributingRoles, inheritedFrom, "
     "redirectUrl."
+,
+    confidential=True,
 )
 
 

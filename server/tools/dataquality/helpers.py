@@ -11,9 +11,10 @@ from server.constants import (
     MCP_PATH_CREATE_DQ_RULES,
     MCP_PATH_LOOKUP_DQ_RULES,
 )
+from server.tools.common.descriptions import classify_tool_desc
 from server.tools.common.errors import error_payload
 
-_DESC_ASSESS_CDE_DQ = (
+_DESC_ASSESS_CDE_DQ = classify_tool_desc(
     "Assess Critical Data Element (CDE) columns and DQ-applicable assets for coverage: "
     "business metadata, recommended DQ function, reusable DQ rule, and whether the "
     "object is already associated to the recommended rule.\n\n"
@@ -37,7 +38,7 @@ _DESC_ASSESS_CDE_DQ = (
     "RBAC applies server-side on catalog reads."
 )
 
-_DESC_ASSOCIATE_DQ_RULE_OBJECTS = (
+_DESC_ASSOCIATE_DQ_RULE_OBJECTS = classify_tool_desc(
     "Associate catalog objects to an existing draft DQ rule (idempotent when "
     "skip_already_associated=true).\n\n"
     f"Backend: POST {MCP_PATH_ASSOCIATE_DQ_RULE_OBJECTS}\n\n"
@@ -60,7 +61,7 @@ _DESC_ASSOCIATE_DQ_RULE_OBJECTS = (
     "Present formattedResponse to the user. Audit source OE-MCP."
 )
 
-_DESC_CREATE_DQ_RULES = (
+_DESC_CREATE_DQ_RULES = classify_tool_desc(
     "Assess CDE/DQ objects then associate to a recommended existing rule or auto-create "
     "draft DQ rules when function and business criteria are sufficient.\n\n"
     f"Backend: POST {MCP_PATH_CREATE_DQ_RULES}\n\n"
@@ -76,13 +77,32 @@ _DESC_CREATE_DQ_RULES = (
     "failed. Audit source OE-MCP."
 )
 
-_DESC_LOOKUP_DQ_RULE = (
+_DESC_LOOKUP_DQ_RULE = classify_tool_desc(
     "Look up Data Quality rules by name or id (not in search_catalog_assets).\n\n"
     f"Backend: GET {MCP_PATH_LOOKUP_DQ_RULES}\n\n"
     "Provide either rule_name (partial match) or object_id, never both.\n\n"
     "Each hit includes objectId, objectType (dqrule), objectName, steward, redirectUrl. "
     "Use with update_governance_roles: only steward may be updated on DQ rules."
 )
+
+
+def validate_lookup_dq_rule_args(
+    object_id: int | None,
+    rule_name: str | None,
+) -> dict[str, Any] | None:
+    has_id = object_id is not None and object_id > 0
+    has_name = rule_name is not None and str(rule_name).strip() != ""
+    if has_id and has_name:
+        return error_payload(
+            "Provide either rule_name or object_id for DQ rule lookup, not both.",
+            error_code="validation_mutually_exclusive",
+        )
+    if not has_id and not has_name:
+        return error_payload(
+            "Provide rule_name or object_id.",
+            error_code="validation_required",
+        )
+    return None
 
 
 def normalize_dq_object_type(object_type: str | None) -> str | None:

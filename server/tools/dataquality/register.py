@@ -33,6 +33,7 @@ from server.tools.dataquality.helpers import (
     validate_assess_cde_dq_args,
     validate_associate_dq_rule_objects_args,
     validate_create_dq_rules_args,
+    validate_lookup_dq_rule_args,
 )
 
 
@@ -61,29 +62,7 @@ def register(mcp: FastMCP) -> None:
         ] = MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
     ) -> dict[str, Any]:
         """Resolve Data Quality rules for governance updates (see MCP tool description)."""
-        has_id = object_id is not None and object_id > 0
-        has_name = rule_name is not None and str(rule_name).strip() != ""
-        if has_id and has_name:
-            return {
-                "error": "Provide either rule_name or object_id for DQ rule lookup, not both.",
-                "status_code": 400,
-            }
-        if not has_id and not has_name:
-            return {"error": "Provide rule_name or object_id.", "status_code": 400}
-        capped = min(limit, MCP_GLOSSARY_TAGS_LIMIT_MAX)
-        try:
-            async with ovaledge_client() as client:
-                body = await client.get(
-                    MCP_PATH_LOOKUP_DQ_RULES,
-                    params=_q(
-                        objectId=object_id if has_id else None,
-                        ruleName=strip_or_none(rule_name) if has_name else None,
-                        limit=capped,
-                    ),
-                )
-                return body if isinstance(body, dict) else {"data": body}
-        except OvalEdgeError as e:
-            return map_ovaledge_error(e)
+        return await _invoke_lookup_dq_rule(object_id, rule_name, limit)
 
     @mcp.tool(description=_DESC_ASSESS_CDE_DQ)
     async def assess_cde_dq(
@@ -206,6 +185,32 @@ def register(mcp: FastMCP) -> None:
             prefer_existing_rule,
             skip_duplicate_function_on_object,
         )
+
+
+async def _invoke_lookup_dq_rule(
+    object_id: int | None,
+    rule_name: str | None,
+    limit: int,
+) -> dict[str, Any]:
+    err = validate_lookup_dq_rule_args(object_id, rule_name)
+    if err is not None:
+        return err
+    has_id = object_id is not None and object_id > 0
+    has_name = rule_name is not None and str(rule_name).strip() != ""
+    capped = min(limit, MCP_GLOSSARY_TAGS_LIMIT_MAX)
+    try:
+        async with ovaledge_client() as client:
+            body = await client.get(
+                MCP_PATH_LOOKUP_DQ_RULES,
+                params=_q(
+                    objectId=object_id if has_id else None,
+                    ruleName=strip_or_none(rule_name) if has_name else None,
+                    limit=capped,
+                ),
+            )
+            return body if isinstance(body, dict) else {"data": body}
+    except OvalEdgeError as e:
+        return map_ovaledge_error(e)
 
 
 async def _invoke_assess_cde_dq(

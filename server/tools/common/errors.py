@@ -7,8 +7,16 @@ from typing import Any
 from server.client import OvalEdgeError
 
 
-def error_payload(message: str, status_code: int = 400, **extra: Any) -> dict[str, Any]:
+def error_payload(
+    message: str,
+    status_code: int = 400,
+    *,
+    error_code: str | None = None,
+    **extra: Any,
+) -> dict[str, Any]:
     out: dict[str, Any] = {"error": message, "status_code": status_code}
+    if error_code is not None:
+        out["error_code"] = error_code
     out.update(extra)
     return out
 

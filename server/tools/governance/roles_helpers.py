@@ -9,12 +9,13 @@ from server.constants import (
     MCP_GOVERNANCE_STEWARD_ONLY_OBJECT_TYPES,
     MCP_PATH_UPDATE_GOVERNANCE_ROLES,
 )
+from server.tools.common.descriptions import classify_tool_desc
 from server.tools.governance._shared import (
     _CREATE_CONFIRM_AGENT_INSTRUCTION,
     _ROLE_KEYS_CANONICAL,
 )
 
-_DESC_UPDATE_GOVERNANCE_ROLES = (
+_DESC_UPDATE_GOVERNANCE_ROLES = classify_tool_desc(
     "Assign, update, or remove governance responsibilities (Owner, Steward, Custodian, "
     "Governance Role 4/5/6) on supported OvalEdge assets.\n\n"
     f"Backend: POST {MCP_PATH_UPDATE_GOVERNANCE_ROLES}\n\n"

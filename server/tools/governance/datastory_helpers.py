@@ -8,9 +8,10 @@ from typing import Any
 
 from server.constants import MCP_PATH_LOOKUP_DATASTORY
 from server.tools.common import as_dict as _as_dict
+from server.tools.common.descriptions import classify_tool_desc
 from server.tools.governance._shared import _cell
 
-_DESC_DATASTORY = (
+_DESC_DATASTORY = classify_tool_desc(
     "Look up one OvalEdge data story the caller can access (Elasticsearch oestory + RBAC).\n\n"
     "**Prefer this tool when** the user asks about organizational knowledge onboarded as "
     "data stories: internal policies, standards, playbooks, onboarding, operating "
