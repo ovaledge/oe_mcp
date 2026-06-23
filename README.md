@@ -148,7 +148,10 @@ Optional LLM-level MCP checks: `poetry install --with eval`, then see [evals/REA
 
 ## Security (summary)
 
-See **[SECURITY.md](SECURITY.md)** for reporting, deployment surface, and dependency practices.
+See **[SECURITY.md](SECURITY.md)** for the GitHub security policy (supported versions, private vulnerability reporting, Dependabot).
+
+- Report vulnerabilities via **Security** → **Report a vulnerability** on GitHub (preferred), not public issues.
+- Dependabot opens weekly PRs for Python, GitHub Actions, and Docker dependencies (see `.github/dependabot.yml`).
 
 - Do not commit real OvalEdge tokens or secrets.
 - Remote header mode (`remote_credentials`) requires **HTTPS** at the edge; see [README_REMOTE_MCP.md](README_REMOTE_MCP.md#security-remote).
