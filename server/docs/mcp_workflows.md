@@ -101,6 +101,19 @@ Use **`source_system_access`** for **native** grants harvested from Redshift, Sn
 
 Partial paths (e.g. table name only) may return **`matchCandidates`** — disambiguate with a full path from the response, or set `resolve_all_matches=true`.
 
+### DAM object browse + scoped “who has access to all …”
+
+Use **`source_system_access`** for inventory browse and scoped grant rollups:
+
+| User intent | Approach |
+|-------------|----------|
+| List databases / schemas / tables / columns in DAM | `source_system_access` with `query_direction=browse` |
+| Who can access **one** table or schema grant | `source_system_access` `object_to_users` (default `scope_mode=exact`) |
+| Who has access to **all objects under** a schema or database | `source_system_access` with `scope_mode=descendants` |
+| Schema inventory **and** access audit | Browse tables/columns, then scoped grants call |
+
+Do not use `search_catalog_assets` for either browse or native grants.
+
 ### Grant models (what to expect in the response)
 
 - **Redshift:** direct user, group, and role grants (`grant_mechanism`: direct | group | role).
