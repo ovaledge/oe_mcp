@@ -4,45 +4,22 @@ from __future__ import annotations
 
 from typing import Any
 
-from server.constants import (
-    MCP_CATALOG_OBJECT_ACCESS_DIRECTIONS,
-    MCP_CATALOG_OBJECT_ACCESS_OBJECT_TYPES_DOC,
-    MCP_CATALOG_OBJECT_ACCESS_OVERVIEW_DOC,
-)
+from server.constants import MCP_PATH_GET_USER_OBJECT_ACCESS
 
 _DESC_GET_USER_OBJECT_ACCESS = (
-    "Discover effective OvalEdge **catalog ACL** permissions (user-based and role-based grants). "
+    "Discover effective OvalEdge **catalog ACL** permissions (user and role grants). "
     "Not native Redshift/Snowflake/Tableau grants — use source_system_access for those.\n\n"
-    f"{MCP_CATALOG_OBJECT_ACCESS_OVERVIEW_DOC}\n\n"
-    "**Directions:** "
-    f"{MCP_CATALOG_OBJECT_ACCESS_DIRECTIONS}\n\n"
-    "**Asset resolution (pick one):**\n"
-    "- `object_id` + `object_type` (preferred after search_catalog_assets or "
-    "GET /v1/mcp/data-sources)\n"
-    "- `fully_qualified_name` (connector name works for connections)\n"
-    "- `object_name` (may return matchCandidates when ambiguous)\n\n"
-    f"**Supported object_type values:** {MCP_CATALOG_OBJECT_ACCESS_OBJECT_TYPES_DOC}\n\n"
-    "**Connectors:** Use `object_type`=`connection` (aliases: `connector`, `data source`) with "
-    "`object_name` such as `looker` or `looker connector`. Connectors are not in "
-    "search_catalog_assets — resolve by connector display name. When multiple "
-    "Looker/Snowflake connections match, disambiguate using matchCandidates or pass "
-    "`object_id` from data-sources.\n\n"
-    "**JDBC-backed types (search then access):** These types may be absent from "
-    "Elasticsearch. Use `search_catalog_assets` with the matching exclusive `object_type`, "
-    "then `get_user_object_access` with `object_id` + `object_type` from the hit:\n"
-    "- **Data Domains** — `object_type=dp_domain` alone\n"
-    "- **Data Products** — `object_type=dp_product` alone (includes unpublished/NEW)\n"
-    "- **Glossary Domains** — `object_type=oeglobaldomain` alone\n"
-    "- **Story Zones** — `object_type=storyzone` alone\n"
-    "**Data Stories (`oestory`)** — discover via `search_catalog_assets` with "
-    "`object_type=oestory` or `lookup_datastory`; access is inherited from the parent "
-    "Story Zone (no story-level ACL). Present `inheritedFrom` when returned.\n\n"
-    "**Workflow:** When the user names a catalog asset, call search_catalog_assets "
-    "first, then pass "
-    "object_id and object_type from the chosen hit. For connectors, pass object_name + "
-    "object_type=connection (or a name ending in \"connector\"). Present effectiveAccess "
-    "(user-centric) or principals (object-centric), grantSources, contributingRoles, "
-    "inheritedFrom when present, and redirectUrl."
+    f"Backend: GET {MCP_PATH_GET_USER_OBJECT_ACCESS}\n\n"
+    "**Directions:** user_to_object | object_to_principals — username required for "
+    "user_to_object.\n\n"
+    "**Asset resolution (one mode):** object_id + object_type (preferred after search), "
+    "fully_qualified_name, or object_name (may return matchCandidates).\n\n"
+    "**Connectors:** object_type=connection with object_name; not in search_catalog_assets.\n\n"
+    "JDBC-backed types, story-zone inheritance, and resolution workflow: "
+    "docs://ovaledge/mcp_workflows (Catalog object access) and workflow prompt "
+    "`catalog_object_access`.\n\n"
+    "Present effectiveAccess or principals, grantSources, contributingRoles, inheritedFrom, "
+    "redirectUrl."
 )
 
 

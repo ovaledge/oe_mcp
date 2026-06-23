@@ -201,8 +201,7 @@ def register(mcp: FastMCP) -> None:
             Field(
                 description=(
                     MCP_QUERY_DIRECTIONS_DOC
-                    + " — infer from the question; do not ask the user to choose. "
-                    "Use browse to list DAM-visible databases/schemas/tables/columns."
+                    + " — infer from the question. See tool description for browse vs grants."
                 ),
             ),
         ],
@@ -211,12 +210,8 @@ def register(mcp: FastMCP) -> None:
             Field(
                 default=None,
                 description=(
-                    "Query scope. Redshift/Snowflake: dbName, dbName.schema, dbName.schema.table, "
-                    "schemaName, schemaName.table, tableName, column variants — always pair with "
-                    "object_type (see path matrix in tool description). Tableau: Project Name or "
-                    "Project/Report Name. For browse: parent scope (omit to list databases). "
-                    "For user_to_objects with connection_id, omit object_path to list all tables "
-                    "on the connector."
+                    "RDAM scope path; see docs://ovaledge/mcp_workflows. "
+                    "Pair with object_type."
                 ),
             ),
         ] = None,
@@ -224,12 +219,7 @@ def register(mcp: FastMCP) -> None:
             str | None,
             Field(
                 default=None,
-                description=(
-                    "Catalog-style dotted FQN (e.g. BUSINESS.BANKING.ORDERS). "
-                    "Alias for object_path when the user or catalog gives a fully "
-                    "qualified name; composed with object_name if both are set. "
-                    "Sent to Java as objectPath."
-                ),
+                description="Catalog-style dotted FQN; alias for object_path.",
             ),
         ] = None,
         object_name: Annotated[
@@ -237,11 +227,7 @@ def register(mcp: FastMCP) -> None:
             Field(
                 default=None,
                 description=(
-                    "Bare table or report name when database/schema scope is in object_path. "
-                    "Composed as object_path.object_name (e.g. object_path=prod_db + "
-                    "object_name=orders → prod_db.orders). May be used alone for a bare table "
-                    "name (e.g. ORDERS with object_type=table). Quotes and 'table X' phrasing "
-                    "are normalized. Use with object_type=table."
+                    "Bare table/report name; composes with object_path (object_type=table)."
                 ),
             ),
         ] = None,
@@ -250,11 +236,9 @@ def register(mcp: FastMCP) -> None:
             Field(
                 default=None,
                 description=(
-                    "RDAM native object level (required for browse; required whenever object_path "
-                    "is set for grants): "
+                    "RDAM object level: "
                     + MCP_RDAM_OBJECT_TYPES_DOC
-                    + ". E.g. database for BUSINESS, schema for SNOWFLAKE.ALERT, "
-                    "table for db.schema.table. Aliases: oeschema, oetable, oecolumn."
+                    + ". Required for browse and when object_path is set."
                 ),
             ),
         ] = None,
@@ -262,34 +246,21 @@ def register(mcp: FastMCP) -> None:
             int | list[int] | None,
             Field(
                 default=None,
-                description=(
-                    "OvalEdge connection id for the Redshift/Snowflake/Tableau connector "
-                    "(required for browse; strongly recommended for grants). Must come from the "
-                    "user — do not probe or discover connection ids."
-                ),
+                description="OvalEdge connector id (required for browse). From user only.",
             ),
         ] = None,
         username: Annotated[
             str | list[str] | None,
             Field(
                 default=None,
-                description=(
-                    "Remote login(s) / service account(s) for user_to_objects "
-                    "(what can this user access?). Pass one username or multiple. "
-                    "Exact match, case-insensitive — not LIKE/substring search. "
-                    "Not used for object_to_users or browse."
-                ),
+                description="Remote login for user_to_objects; exact match, case-insensitive.",
             ),
         ] = None,
         privileges: Annotated[
             str | list[str] | None,
             Field(
                 default=None,
-                description=(
-                    "Optional response filter: keep grants whose native privileges include any "
-                    "listed value (e.g. INSERT, UPDATE, DELETE for write-access checks). "
-                    "Case-insensitive. Not used for browse."
-                ),
+                description="Optional post-filter on native privilege names (e.g. INSERT, SELECT).",
             ),
         ] = None,
         include_columns: Annotated[
@@ -316,13 +287,7 @@ def register(mcp: FastMCP) -> None:
         scope_mode: Annotated[
             Literal["exact", "descendants"],
             Field(
-                description=(
-                    MCP_RDAM_SCOPE_MODES_DOC
-                    + ". object_to_users + descendants: who can access all objects under a "
-                    "schema/database/connector. user_to_objects + descendants: what the user can "
-                    "access under object_path (e.g. all tables/columns in a schema). "
-                    "object_path required for user_to_objects descendants."
-                ),
+                description=MCP_RDAM_SCOPE_MODES_DOC + " (default exact).",
                 default="exact",
             ),
         ] = "exact",

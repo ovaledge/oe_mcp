@@ -76,9 +76,7 @@ def register(mcp: FastMCP) -> None:
             list[str] | None,
             Field(
                 description=(
-                    "General lexical keywords (names, descriptions, metadata text). JSON array "
-                    f"on the wire as {MCP_SEARCH_TERMS_PARAM}. "
-                    'e.g. ["customer","revenue"]. Not for governance tag names — use tags instead.'
+                    f"Lexical keywords (wire: {MCP_SEARCH_TERMS_PARAM}). Not for tag names."
                 ),
                 default=None,
             ),
@@ -86,69 +84,42 @@ def register(mcp: FastMCP) -> None:
         tags: Annotated[
             list[str] | None,
             Field(
-                description=(
-                    "Governance tag names to match (OETAG assignments). JSON array on the wire "
-                    f"as {MCP_SEARCH_TAGS_PARAM}. "
-                    'Use when the user asks for assets "with tag X" or "tagged X". '
-                    'e.g. ["Operations","PII"].'
-                ),
+                description=f"Governance tag names (wire: {MCP_SEARCH_TAGS_PARAM}).",
                 default=None,
             ),
         ] = None,
         terms: Annotated[
             list[str] | None,
             Field(
-                description=(
-                    "Glossary term names for lexical search. JSON array on the wire as "
-                    f"{MCP_SEARCH_GLOSSARY_TERMS_PARAM}. "
-                    'Use when the user asks for assets linked to glossary/business terms. '
-                    'e.g. ["Revenue","Customer"].'
-                ),
+                description=f"Glossary term names (wire: {MCP_SEARCH_GLOSSARY_TERMS_PARAM}).",
                 default=None,
             ),
         ] = None,
         custom_fields: Annotated[
             list[str] | None,
             Field(
-                description=(
-                    "Custom field values or labels to match. JSON array on the wire as "
-                    f"{MCP_SEARCH_CUSTOM_FIELDS_PARAM}. "
-                    'e.g. ["Confidential","Operations"].'
-                ),
+                description=f"Custom field values (wire: {MCP_SEARCH_CUSTOM_FIELDS_PARAM}).",
                 default=None,
             ),
         ] = None,
         data_products: Annotated[
             list[str] | None,
             Field(
-                description=(
-                    "Data product names/keywords. JSON array on the wire as "
-                    f"{MCP_SEARCH_DATA_PRODUCTS_PARAM}. "
-                    'e.g. ["Customer 360"].'
-                ),
+                description=f"Data product names (wire: {MCP_SEARCH_DATA_PRODUCTS_PARAM}).",
                 default=None,
             ),
         ] = None,
         classifications: Annotated[
             list[str] | None,
             Field(
-                description=(
-                    "Governance classification labels to match (e.g. PII, Sensitive). "
-                    "JSON array on the wire as "
-                    f"{MCP_SEARCH_CLASSIFICATIONS_PARAM}. "
-                    'Use when the user asks for assets "classified as X" or with a '
-                    'sensitivity label. e.g. ["PII","Financial"].'
-                ),
+                description=f"Classification labels (wire: {MCP_SEARCH_CLASSIFICATIONS_PARAM}).",
                 default=None,
             ),
         ] = None,
         critical_data_element: Annotated[
             list[str] | None,
             Field(
-                description=(
-                    "Critical Data Element flag values (exact match). JSON array on the wire "
-                    'as criticalDataElement. e.g. ["Yes"] for marked CDE columns.'
-                ),
+                description='CDE flag values (wire: criticalDataElement), e.g. ["Yes"].',
                 default=None,
             ),
         ] = None,
@@ -156,9 +127,8 @@ def register(mcp: FastMCP) -> None:
             str | None,
             Field(
                 description=(
-                    "Full user question or contextual NL string for the server (maps to "
-                    f"API {MCP_SEARCH_CONTEXT_QUERY_PARAM}). Use for vector / semantic search "
-                    "or hybrid ranking alongside lexical params. Prefer verbatim user wording."
+                    "Verbatim user question for semantic ranking "
+                    f"(wire: {MCP_SEARCH_CONTEXT_QUERY_PARAM})."
                 ),
                 default=None,
             ),
@@ -173,76 +143,35 @@ def register(mcp: FastMCP) -> None:
         ] = 20,
         connection_name: Annotated[
             str | None,
-            Field(
-                description=(
-                    "Filter: exact connection name (API connectionName). "
-                    'Infer when user names a source, e.g. "ovaledgedb" or "Snowflake PROD".'
-                ),
-                default=None,
-            ),
+            Field(description="Exact connection name filter (API connectionName).", default=None),
         ] = None,
         server_type: Annotated[
             str | None,
             Field(
-                description=(
-                    "Filter: connection technology (API serverType → connectionInfo.serverType). "
-                    "Use a canonical connector id when the user names a platform, e.g. mysql, "
-                    "snowflake, postgres, redshift, bigquery, tableau, oracle, sqlserver. "
-                    "Omit when the question does not clearly imply one connector — do not guess. "
-                    "Case-insensitive match to the platform allowlist."
-                ),
+                description="Connector technology filter (API serverType); omit if not implied.",
                 default=None,
             ),
         ] = None,
         schema_name: Annotated[
             str | None,
-            Field(
-                description=(
-                    "Filter: exact schema name (API schemaName). "
-                    'Infer when user names a schema/database context, e.g. "sakila".'
-                ),
-                default=None,
-            ),
+            Field(description="Exact schema name filter (API schemaName).", default=None),
         ] = None,
         owner: Annotated[
             str | None,
-            Field(
-                description=(
-                    "Filter: asset owner login or display name (API owner). "
-                    "Infer when user asks for assets owned by someone."
-                ),
-                default=None,
-            ),
+            Field(description="Owner login or display name filter.", default=None),
         ] = None,
         steward: Annotated[
             str | None,
-            Field(
-                description=(
-                    "Filter: steward login or display name (API steward). "
-                    "Infer when user asks for stewarded assets."
-                ),
-                default=None,
-            ),
+            Field(description="Steward login or display name filter.", default=None),
         ] = None,
         custodian: Annotated[
             str | None,
-            Field(
-                description=(
-                    "Filter: custodian login or display name (API custodian). "
-                    "Infer when user asks for custodian-assigned assets."
-                ),
-                default=None,
-            ),
+            Field(description="Custodian login or display name filter.", default=None),
         ] = None,
         object_type: Annotated[
             str | None,
             Field(
-                description=(
-                    "Filter: restrict to one catalog object type (API objectType): "
-                    + MCP_CATALOG_OBJECT_TYPES_DOC
-                    + '. Infer when user asks for "tables", "reports/charts", "tags", etc. '
-                    "(e.g. tables → oetable, reports → oechart). Omit for all types."
-                ),
+                description="Catalog objectType filter; see docs://ovaledge/asset_types.",
                 default=None,
             ),
         ] = None,

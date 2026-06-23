@@ -67,22 +67,24 @@ Use **`source_system_access`** for **native** grants harvested from Redshift, Sn
 
 | Parameter | Values / notes |
 |-----------|----------------|
-| `source_system` | `redshift`, `snowflake`, `tableau` |
-| `query_direction` | See below |
-| `username` | **Required** on every call |
-| `object_path` | **Required** — path at the queried level (`BUSINESS`, `BUSINESS.BANKING`, `db.schema.table`, etc.) |
-| `object_type` | **Required** — RDAM level: `database`, `schema`, `table`, `column` (Redshift), `project`, `report` (Tableau) |
+| `source_system` | **Required** — `redshift`, `snowflake`, `tableau` |
+| `query_direction` | **Required** — infer from question: `user_to_objects`, `object_to_users`, `browse` |
+| `username` | **Required** for `user_to_objects` only |
+| `object_path` | **Required** for `object_to_users` (exact). Optional parent scope for `browse`. For `user_to_objects` + `connection_id` + `object_type=table`, omit to list all tables on the connector |
+| `object_type` | **Required** for `browse` and whenever `object_path` is set |
 | `include_columns` | Redshift only — column-level grants (default false) |
-| `connection_id` | **Required** — OvalEdge connector id |
+| `connection_id` | **Required** for `browse`; strongly recommended for grants — from the user only, do not probe |
 | `resolve_all_matches` | When `object_path` is ambiguous, return all matches (max 50); default returns `matchCandidates` |
 
 ### Query direction
 
 | Direction | Provide | Example question |
 |-----------|---------|------------------|
-| `user_to_objects` | `username`, `object_path`, `object_type`, `connection_id` | “What can `svc_analytics` access on `BUSINESS.BANKING`?” → `object_type=schema` |
+| `user_to_objects` | `username`; scope via `object_path`/`object_type`/`connection_id` as needed | “What can `svc_analytics` access on `BUSINESS.BANKING`?” → `object_type=schema` |
+| `user_to_objects` (all tables on connector) | `username`, `connection_id`, `object_type=table` (omit `object_path`) | “What **tables** can `svc_analytics` query?” |
 | `user_to_objects` (database level) | `username`, `object_path=BUSINESS`, `object_type=database`, `connection_id` | “What **database-level** permissions does `john_analyst` have?” |
-| `object_to_users` | `username`, `object_path`, `object_type`, `connection_id` | “Who has native access to `prod_db.public.orders`?” (`object_type=table`) |
+| `object_to_users` | `object_path`, `object_type`, `connection_id` recommended | “Who has native access to `prod_db.public.orders`?” (`object_type=table`) |
+| `browse` | `connection_id`, `object_type`; optional `object_path` as parent | “List tables in `BUSINESS.BANKING`” |
 
 ### `object_path` formats
 
@@ -121,6 +123,55 @@ Do not use `search_catalog_assets` for either browse or native grants.
 - **Tableau:** direct site-user grants and site-group grants on project/report (`grant_mechanism`: direct | group). Group access is expanded via harvested `rdam_usergroup` membership.
 
 **Authorization:** Instance or Connector **Data Access Admin** is enforced server-side; callers without DAA on the scoped connection see RDAM no-access. See [governance_model](governance_model#native-source-access-rdam).
+
+## Catalog object access (`get_user_object_access`)
+
+OvalEdge **catalog ACL** grants (metadata read/write, data permissions) — **not** native DB/BI grants (`source_system_access`).
+
+**Workflow prompt:** `catalog_object_access`.
+
+| Direction | Use when |
+|-----------|----------|
+| `user_to_object` | What access does user X have on object Y? (`username` required) |
+| `object_to_principals` | Which users and roles have access on object Y? |
+
+**Asset resolution (exactly one):** `object_id` + `object_type` (preferred after `search_catalog_assets`), `fully_qualified_name`, or `object_name` (may return `matchCandidates`).
+
+**Connectors:** `object_type=connection` (aliases: `connector`, `data source`) with `object_name`. Connectors are not in catalog search — resolve by display name or pass `object_id` from data-sources.
+
+**JDBC-backed types** (may be absent from Elasticsearch — use exclusive `search_catalog_assets` then access with ids from the hit):
+
+| Type | object_type | Notes |
+|------|-------------|--------|
+| Data Domains | `dp_domain` | Search alone, not combined with other types |
+| Data Products | `dp_product` | Includes unpublished |
+| Glossary Domains | `oeglobaldomain` | Search alone |
+| Story Zones | `storyzone` | Search alone |
+| Data Stories | `oestory` | Access inherited from parent Story Zone — present `inheritedFrom` |
+
+When the user names a catalog asset, call `search_catalog_assets` first, then pass `object_id` and `object_type` from the chosen hit.
+
+## Update asset descriptions (`update_asset_descriptions`)
+
+**Workflow prompt:** `document_asset_descriptions`.
+
+Resolve `object_id` via `search_catalog_assets`, `lookup_glossary_term`, or `lookup_tags` — do not guess ids. Required: `object_id`, `object_type`, and an explicit description slot.
+
+If the user says only "description", ask which slot applies — do not guess `business_description` vs `technical_description`. For multi-slot types, a typed field without `clientContext.prompt` naming the slot is rejected (HTTP 400).
+
+**Field applicability** (server returns 400 for unsupported combinations):
+
+| object_type group | Allowed fields |
+|-------------------|----------------|
+| Catalog assets (`oeschema`, `oetable`, `oecolumn`, `oefile`, `oefilecolumn`, `oechart`, `chartchild`, `oeapi`, `oeapicolumn`, `code`) | `business_description`, `technical_description` |
+| Glossary (`glossary`) | `business_description`, `detailed_description` (Draft terms only) |
+| Data product (`dp_product`) | `business_description`, `detailed_description` |
+| Glossary Global Domain (`oeglobaldomain`) | `domain_description` |
+| Data Domain (`dp_domain`) | `domain_description` |
+| Tag (`oetag`) | `tag_description` |
+| Master tag (`mastertag`) | `master_tag_description` |
+
+**Confirm gate:** call without `create_confirmed_by_user` for `confirm_update` preview → user approval → re-call with `create_confirmed_by_user=true` (unless `dry_run=true`).
 
 ## Resources (deep links by object id)
 
@@ -172,6 +223,8 @@ Invoke by name from the MCP client when supported. Each prompt returns instructi
 | Prompt | Purpose |
 |--------|---------|
 | `native_source_access` | Redshift / Snowflake / Tableau native grants (not catalog ACLs) |
+| `catalog_object_access` | OvalEdge catalog ACL (`get_user_object_access`) |
+| `dam_object_browse` | DAM inventory browse via `source_system_access` |
 
 ### Governed writes (human-in-the-loop)
 

@@ -13,31 +13,17 @@ from typing import Any
 
 from server.client import OvalEdgeError
 from server.constants import (
-    MCP_DAA_SCOPE_DOC,
-    MCP_DAM_OBJECT_PATH_MATRIX_DOC,
-    MCP_OBJECT_PATH_FORMATS_DOC,
-    MCP_OBJECT_PATH_PARTIAL_DOC,
     MCP_PATH_SOURCE_SYSTEM_ACCESS,
     MCP_QUERY_DIRECTIONS,
     MCP_QUERY_DIRECTIONS_DOC,
-    MCP_RDAM_NO_CATALOG_FALLBACK_DOC,
     MCP_RDAM_OBJECT_TYPE_ALL,
-    MCP_RDAM_OBJECT_TYPE_DOC,
     MCP_RDAM_OBJECT_TYPES,
-    MCP_RDAM_PRIVILEGE_MAP_DOC,
     MCP_RDAM_SCOPE_MODE_DESCENDANTS,
     MCP_RDAM_SCOPE_MODE_EXACT,
     MCP_RDAM_SCOPE_MODES_DOC,
-    MCP_SNOWFLAKE_BUILTIN_OBJECTS_DOC,
-    MCP_SOURCE_SYSTEM_ACCESS_AGENT_RULES_DOC,
-    MCP_SOURCE_SYSTEM_ACCESS_GRANT_MODELS_DOC,
-    MCP_SOURCE_SYSTEM_ACCESS_JAVA_BACKEND_DOC,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_CONNECTION_ERROR,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_OBJECT_TYPE_ERROR,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_SOURCE_ERROR,
-    MCP_SOURCE_SYSTEM_ACCESS_OVERVIEW_DOC,
-    MCP_SOURCE_SYSTEM_ACCESS_REQUIRED_DOC,
-    MCP_SOURCE_SYSTEM_ACCESS_SAMPLE_PROMPTS_DOC,
     MCP_SOURCE_SYSTEM_DESCENDANTS_CONNECTION_REQUIRED_ERROR,
     MCP_SOURCE_SYSTEM_OBJECT_PATH_REQUIRED_ERROR,
     MCP_SOURCE_SYSTEM_OBJECT_TYPE_REQUIRED_ERROR,
@@ -939,79 +925,35 @@ def filter_grants_by_object_level(
 
 
 _DESC_SOURCE_SYSTEM_ACCESS = (
-    "Resolve **native** access grants harvested from Redshift, Snowflake, or Tableau — "
-    "independent of OvalEdge catalog permissions.\n\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_OVERVIEW_DOC
-    + "\n\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_GRANT_MODELS_DOC
-    + "\n\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_REQUIRED_DOC
-    + "\n\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_AGENT_RULES_DOC
-    + "\n\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_SAMPLE_PROMPTS_DOC
-    + "\n\n"
-    "Use for questions like:\n"
-    '- "What tables can svc_analytics query in Redshift?" → user_to_objects; infer '
-    "`object_type=table`; omit `object_path` when `connection_id` scopes all tables on the "
-    "connector\n"
-    '- "Who has native access to prod_db.public.orders?" → object_to_users\n'
-    '- "Which Snowflake roles give john.doe access?" → user_to_objects\n'
-    '- "Who can view the Revenue Dashboard in Tableau?" → object_to_users\n'
-    '- "List tables in BUSINESS.BANKING" → browse; `connection_id`, '
-    "`object_path=BUSINESS.BANKING`, `object_type=table`\n\n"
+    "Resolve **native** access grants harvested from Redshift, Snowflake, or Tableau (RDAM) — "
+    "independent of OvalEdge catalog ACLs.\n\n"
     f"Backend: GET {MCP_PATH_SOURCE_SYSTEM_ACCESS}\n\n"
-    "**browse** returns **objects** (DAM inventory — active + RDAM-crawled), not grant rows. "
-    "Use **object_to_users** / **user_to_objects** for native privileges.\n\n"
-    "**Not** OvalEdge `get_user_object_access` (catalog ACL layer).\n\n"
-    "**source_system** (required): "
+    "**Not** `get_user_object_access` or `search_catalog_assets`. Never fall back to "
+    "`search_catalog_assets` when RDAM is empty or errors.\n\n"
+    "**Required always:** `source_system` ("
     + MCP_SOURCE_SYSTEMS_DOC
-    + ".\n\n"
-    "**query_direction** (required): "
+    + "), `query_direction` ("
     + MCP_QUERY_DIRECTIONS_DOC
-    + " — infer from the question; do not ask the user to pick manually.\n\n"
-    + MCP_RDAM_OBJECT_TYPE_DOC
-    + "\n\n"
-    + MCP_RDAM_PRIVILEGE_MAP_DOC
-    + "\n\n"
-    + MCP_OBJECT_PATH_FORMATS_DOC
-    + "\n\n"
-    + MCP_DAM_OBJECT_PATH_MATRIX_DOC
-    + "\n\n"
-    + MCP_SNOWFLAKE_BUILTIN_OBJECTS_DOC
-    + "\n\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_JAVA_BACKEND_DOC
-    + "\n\n"
-    "Response includes **grant_mechanism** per entry: direct | group | role, **principal_type** "
-    "(user | role | group), native **privileges** (SELECT, INSERT, …), and "
-    "**contributing_group** / **contributing_role** when access is indirect.\n"
-    "When **principal_note** is set on a row, the role/group name appears as **principal** because "
-    "no RDAM user memberships were harvested for that role/group; roles with members are expanded "
-    "to users (see **contributing_role**, e.g. associate, twitchdemo).\n\n"
-    "**summary** (server-computed): `totalGrants`, `byObjectLevel` "
-    "(database/schema/table/column for RS/SF; project/report for Tableau), "
-    "`byGrantMechanism` (direct/group/role).\n\n"
-    "Partial-path disambiguation: when the path is not exact and multiple assets match, returns "
-    "**matchCandidates** or **resolve_all_matches=true** (max 50).\n\n"
-    "**scope_mode**: "
+    + ") — infer direction from the question.\n"
+    "**browse:** `connection_id` + `object_type`; optional `object_path` as parent scope.\n"
+    "**user_to_objects:** `username` required; with `connection_id` + `object_type=table`, omit "
+    "`object_path` to list all tables on the connector.\n"
+    "**object_to_users:** `object_path` + `object_type` required for exact scope.\n"
+    "Whenever `object_path` is set, `object_type` is required. Do not probe or discover "
+    "`connection_id` — ask the user.\n\n"
+    "**browse** returns DAM inventory objects, not grant rows. **user_to_objects** / "
+    "**object_to_users** return native privileges (grant_mechanism, contributing_role/group, "
+    "privileges). Optional `object_name` composes with `object_path` for table lookups.\n\n"
+    "**scope_mode:** "
     + MCP_RDAM_SCOPE_MODES_DOC
-    + ". **object_to_users** + descendants: who has access to all objects under a schema, "
-    "database, or connector (returns principalIndex + grants). **user_to_objects** + descendants: "
-    "what a user can access under a scoped path (schema → schema/table/column grants for that "
-    "user). Default "
-    + MCP_RDAM_SCOPE_MODE_EXACT
-    + ".\n"
-    + MCP_OBJECT_PATH_PARTIAL_DOC
-    + "\n\n"
-    + MCP_DAA_SCOPE_DOC
-    + "\n\n"
-    + MCP_RDAM_NO_CATALOG_FALLBACK_DOC
-    + "\n\n"
-    "Read-only. Returns validation errors for unsupported source_system; not-found when "
-    "username or object_path is absent from catalog and harvested metadata; returns "
-    "**advisoryMessage** \"There is no permission available.\" when the object was resolved from "
-    "catalog but has no harvested RDAM privileges and no native grants; RDAM no-access "
-    "when the caller lacks Instance/Connector DAA for the scoped connection(s)."
+    + f" (default {MCP_RDAM_SCOPE_MODE_EXACT}). **descendants** rolls up grants under a "
+    "schema, database, or connector.\n\n"
+    "Partial paths may return `matchCandidates` or `requiresSchemaSelection`; use "
+    "`resolve_all_matches=true` only when the user wants all matches (max 50).\n\n"
+    "Full routing (path formats, grant models, agent rules, DAA): "
+    "docs://ovaledge/mcp_workflows (Native source access) and workflow prompt "
+    "`native_source_access`.\n\n"
+    "Read-only. Instance/Connector **Data Access Admin** enforced server-side."
 )
 
 def validate_and_normalize_object_type(

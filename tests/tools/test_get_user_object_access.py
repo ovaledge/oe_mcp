@@ -23,12 +23,8 @@ class TestGetUserObjectAccess:
         assert "source_system_access" in _DESC_GET_USER_OBJECT_ACCESS
         assert "user_to_object" in _DESC_GET_USER_OBJECT_ACCESS
         assert "connection" in _DESC_GET_USER_OBJECT_ACCESS
-        assert "connector" in _DESC_GET_USER_OBJECT_ACCESS
-        assert "dp_domain" in _DESC_GET_USER_OBJECT_ACCESS
-        assert "dp_product" in _DESC_GET_USER_OBJECT_ACCESS
-        assert "oeglobaldomain" in _DESC_GET_USER_OBJECT_ACCESS
-        assert "storyzone" in _DESC_GET_USER_OBJECT_ACCESS
-        assert "oestory" in _DESC_GET_USER_OBJECT_ACCESS
+        assert "docs://ovaledge/mcp_workflows" in _DESC_GET_USER_OBJECT_ACCESS
+        assert "catalog_object_access" in _DESC_GET_USER_OBJECT_ACCESS
 
     def test_validate_requires_direction(self) -> None:
         err = validate_get_user_object_access_args(None, "user1", 1, "oetable", None, None)
