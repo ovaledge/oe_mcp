@@ -2,40 +2,40 @@
 Native source-system access helpers (RDAM harvest).
 
 Queries OvalEdge-harvested RDAM privilege metadata — not OvalEdge catalog ACLs
-(see get_catalog_object_access when that ships) and not catalog data-sources.
+(see get_user_object_access) and not catalog data-sources.
 """
 
 from __future__ import annotations
 
+import asyncio
+import re
 from typing import Any
 
 from server.client import OvalEdgeError
 from server.constants import (
-    MCP_DAA_SCOPE_DOC,
-    MCP_OBJECT_PATH_FORMATS_DOC,
-    MCP_OBJECT_PATH_PARTIAL_DOC,
     MCP_PATH_SOURCE_SYSTEM_ACCESS,
     MCP_QUERY_DIRECTIONS,
     MCP_QUERY_DIRECTIONS_DOC,
-    MCP_RDAM_NO_CATALOG_FALLBACK_DOC,
     MCP_RDAM_OBJECT_TYPE_ALL,
-    MCP_RDAM_OBJECT_TYPE_DOC,
     MCP_RDAM_OBJECT_TYPES,
-    MCP_RDAM_PRIVILEGE_MAP_DOC,
-    MCP_SNOWFLAKE_BUILTIN_OBJECTS_DOC,
-    MCP_SOURCE_SYSTEM_ACCESS_AGENT_RULES_DOC,
-    MCP_SOURCE_SYSTEM_ACCESS_GRANT_MODELS_DOC,
+    MCP_RDAM_SCOPE_MODE_DESCENDANTS,
+    MCP_RDAM_SCOPE_MODE_EXACT,
+    MCP_RDAM_SCOPE_MODES_DOC,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_CONNECTION_ERROR,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_OBJECT_TYPE_ERROR,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_SOURCE_ERROR,
-    MCP_SOURCE_SYSTEM_ACCESS_OVERVIEW_DOC,
-    MCP_SOURCE_SYSTEM_ACCESS_REQUIRED_DOC,
-    MCP_SOURCE_SYSTEM_ACCESS_SAMPLE_PROMPTS_DOC,
+    MCP_SOURCE_SYSTEM_DESCENDANTS_CONNECTION_REQUIRED_ERROR,
+    MCP_SOURCE_SYSTEM_OBJECT_PATH_REQUIRED_ERROR,
+    MCP_SOURCE_SYSTEM_OBJECT_TYPE_REQUIRED_ERROR,
+    MCP_SOURCE_SYSTEM_USERNAME_REQUIRED_ERROR,
     MCP_SOURCE_SYSTEMS,
     MCP_SOURCE_SYSTEMS_DOC,
+    MCP_TABLE_SCHEMA_DISCOVERY_EARLY_EXIT_CANDIDATES,
     MCP_TABLE_SCHEMA_DISCOVERY_MAX_PROBES,
+    MCP_TABLE_SCHEMA_DISCOVERY_PROBE_CONCURRENCY,
 )
 from server.tools.common import error_payload
+from server.tools.common.descriptions import classify_tool_desc
 
 _RDAM_OBJECT_TYPE_ALIASES = {
     "oeschema": "schema",
@@ -48,8 +48,154 @@ _GRANT_MECHANISMS = ("direct", "group", "role")
 _FULL_TABLE_PATH_SEGMENTS = 3
 
 
+def _grant_privilege_set(grant: dict[str, Any]) -> set[str]:
+    privs = grant.get("privileges")
+    if isinstance(privs, str):
+        return {privs.strip().upper()} if privs.strip() else set()
+    if isinstance(privs, list):
+        return {str(priv).strip().upper() for priv in privs if str(priv).strip()}
+    return set()
+
+
+# Max dot segments per RDAM level (excluding optional connectionName prefix).
+_RDAM_MAX_PATH_SEGMENTS: dict[str, int] = {
+    "database": 1,
+    "schema": 2,
+    "table": 3,
+    "column": 4,
+}
+# browse (query_direction=browse): max parent path segments when listing children of each type.
+_BROWSE_PARENT_MAX_SEGMENTS: dict[str, int] = {
+    "database": 0,
+    "schema": 1,
+    "table": 2,
+    "column": 3,
+}
+_TABLE_NAME_PREFIX = re.compile(r"^(?:the\s+)?(?:table|view)\s+", re.IGNORECASE)
+_TABLE_NAME_SUFFIX = re.compile(r"\s+(?:table|view)$", re.IGNORECASE)
+_THE_OBJECT_TABLE = re.compile(r"^the\s+(.+?)\s+(?:table|view)$", re.IGNORECASE)
+
+
+def normalize_object_identifier(value: str) -> str:
+    """Strip quotes, backticks, and common 'table X' phrasing from a path segment."""
+    token = value.strip()
+    while len(token) >= 2 and token[0] in '"\'`' and token[-1] == token[0]:
+        token = token[1:-1].strip()
+    token = token.strip(" \t\r\n.,;")
+    if "/" not in token and "." not in token:
+        the_match = _THE_OBJECT_TABLE.match(token)
+        if the_match:
+            token = the_match.group(1).strip()
+        token = _TABLE_NAME_PREFIX.sub("", token).strip()
+        token = _TABLE_NAME_SUFFIX.sub("", token).strip()
+    return token
+
+
+def normalize_object_path_value(value: str) -> str:
+    """Normalize a dotted Redshift/Snowflake path or Tableau slash path."""
+    if "/" in value:
+        parts = [normalize_object_identifier(part) for part in value.split("/")]
+        return "/".join(part for part in parts if part)
+    segments = _path_segments(value)
+    if not segments:
+        return normalize_object_identifier(value)
+    return ".".join(normalize_object_identifier(segment) for segment in segments)
+
+
 def _path_segments(object_path: str) -> list[str]:
     return [segment.strip() for segment in object_path.split(".") if segment.strip()]
+
+
+def merge_rdam_object_path(
+    object_path: str | list[str] | None,
+    object_name: str | list[str] | None,
+    fully_qualified_name: str | None = None,
+) -> str | list[str] | None:
+    """Prefer object_path; fall back to fully_qualified_name; then compose object_name."""
+    base = object_path
+    if base is None and fully_qualified_name is not None:
+        fqn = normalize_object_path_value(str(fully_qualified_name))
+        base = fqn if fqn else None
+    return compose_object_path(base, object_name)
+
+
+def validate_path_matches_object_type(
+    object_path: str,
+    object_type: str,
+) -> dict[str, Any] | None:
+    """
+    Reject object_path segment counts that cannot match object_type for Java resolution.
+    Partial paths (fewer segments) are allowed; optional connectionName prefix adds one segment.
+    """
+    if "/" in object_path:
+        return None
+    normalized_type = normalize_rdam_object_type(object_type)
+    if normalized_type is None or normalized_type not in _RDAM_MAX_PATH_SEGMENTS:
+        return None
+    segments = _path_segments(object_path)
+    max_seg = _RDAM_MAX_PATH_SEGMENTS[normalized_type]
+    max_allowed = max_seg + 1  # connectionName.dbName… prefix
+    if len(segments) > max_allowed:
+        return error_payload(
+            f"object_path {object_path!r} has {len(segments)} segments but "
+            f"object_type={normalized_type!r} allows at most {max_seg} "
+            f"(plus optional connectionName prefix). See path matrix in tool description."
+        )
+    return None
+
+
+def validate_browse_parent_path(
+    object_path: str | None,
+    object_type: str,
+) -> dict[str, Any] | None:
+    """Validate parent scope for query_direction=browse before calling Java."""
+    normalized_type = normalize_rdam_object_type(object_type)
+    if normalized_type is None or normalized_type not in _BROWSE_PARENT_MAX_SEGMENTS:
+        return None
+    parent_max = _BROWSE_PARENT_MAX_SEGMENTS[normalized_type]
+    if object_path is None or not str(object_path).strip():
+        return None
+    if "/" in object_path:
+        return None
+    segments = _path_segments(normalize_object_path_value(object_path))
+    max_allowed = parent_max + 1  # connectionName prefix
+    if len(segments) > max_allowed:
+        return error_payload(
+            f"object_path {object_path!r} has {len(segments)} segments but listing "
+            f"object_type={normalized_type!r} children allows parent path with at most "
+            f"{parent_max} segment(s) (plus optional connectionName prefix)."
+        )
+    if parent_max == 0 and segments:
+        return error_payload(
+            "omit object_path when object_type=database (list databases on the connector)."
+        )
+    return None
+
+
+def validate_resolved_rdam_paths(
+    composed_path: str | list[str] | None,
+    object_type: str | None,
+    *,
+    browse: bool = False,
+) -> dict[str, Any] | None:
+    """Validate each resolved path against object_type before the Java API call."""
+    if composed_path is None or object_type is None:
+        return None
+    paths = normalize_string_list(composed_path)
+    if not paths:
+        return None
+    normalized_type = normalize_rdam_object_type(object_type)
+    if normalized_type is None:
+        return None
+    if browse:
+        if len(paths) != 1:
+            return None
+        return validate_browse_parent_path(paths[0], normalized_type)
+    for path in paths:
+        err = validate_path_matches_object_type(path, normalized_type)
+        if err is not None:
+            return err
+    return None
 
 
 def is_incomplete_table_object_path(object_path: str) -> bool:
@@ -180,6 +326,18 @@ def _has_table_level_grants(result: dict[str, Any]) -> bool:
     )
 
 
+def _catalog_resolved_without_grants(result: dict[str, Any]) -> bool:
+    """True when the object was resolved but RDAM returned no native privileges."""
+    data = result.get("data")
+    if not isinstance(data, dict):
+        return False
+    advisory = data.get("advisoryMessage")
+    return (
+        isinstance(advisory, str)
+        and "no permission available" in advisory.lower()
+    )
+
+
 def _probe_path_for_table(database: str | None, schema: str, table: str) -> str:
     if database:
         return f"{database}.{schema}.{table}"
@@ -249,31 +407,50 @@ async def discover_table_schema_candidates(
         return []
 
     schema_names = _schema_names_from_schema_grants(hint_data.get("grants") or [])
+    schemas_to_probe = schema_names[:MCP_TABLE_SCHEMA_DISCOVERY_MAX_PROBES]
+    if not schemas_to_probe:
+        return []
+
+    ss = source_system.strip().lower()
+    concurrency = max(1, MCP_TABLE_SCHEMA_DISCOVERY_PROBE_CONCURRENCY)
+    sem = asyncio.Semaphore(concurrency)
     candidates: list[dict[str, Any]] = []
-    for schema in schema_names[:MCP_TABLE_SCHEMA_DISCOVERY_MAX_PROBES]:
+
+    async def _probe_schema(schema: str) -> dict[str, Any] | None:
         probe_path = _probe_path_for_table(database, schema, table)
-        try:
-            probe = await client.get(
-                MCP_PATH_SOURCE_SYSTEM_ACCESS,
-                params={
-                    "sourceSystem": source_system.strip().lower(),
-                    "queryDirection": "object_to_users",
-                    "objectPath": probe_path,
-                    "objectType": "table",
-                    "connectionId": connection_id,
-                },
-            )
-        except OvalEdgeError:
-            continue
+        async with sem:
+            try:
+                probe = await client.get(
+                    MCP_PATH_SOURCE_SYSTEM_ACCESS,
+                    params={
+                        "sourceSystem": ss,
+                        "queryDirection": "object_to_users",
+                        "objectPath": probe_path,
+                        "objectType": "table",
+                        "connectionId": connection_id,
+                    },
+                )
+            except OvalEdgeError:
+                return None
         if not _has_table_level_grants(probe):
-            continue
-        candidates.append(
-            {
-                "objectPath": probe_path,
-                "objectLevel": "table",
-                "connectionId": connection_id,
-            }
+            return None
+        return {
+            "objectPath": probe_path,
+            "objectLevel": "table",
+            "connectionId": connection_id,
+        }
+
+    for batch_start in range(0, len(schemas_to_probe), concurrency):
+        batch = schemas_to_probe[batch_start : batch_start + concurrency]
+        probe_results = await asyncio.gather(
+            *(_probe_schema(schema) for schema in batch),
+            return_exceptions=True,
         )
+        for probe_result in probe_results:
+            if isinstance(probe_result, dict):
+                candidates.append(probe_result)
+        if len(candidates) >= MCP_TABLE_SCHEMA_DISCOVERY_EARLY_EXIT_CANDIDATES:
+            break
     return candidates
 
 
@@ -299,6 +476,10 @@ def should_discover_table_schema_candidates(
     if isinstance(data, dict) and data.get("requiresSchemaSelection"):
         return True
     if not result.get("ok"):
+        return True
+    if _catalog_resolved_without_grants(result):
+        return False
+    if not _has_table_level_grants(result):
         return True
     return False
 
@@ -420,7 +601,15 @@ def shape_object_to_users_disambiguation(
             },
         }
 
-    return result
+    return {
+        **result,
+        "data": {
+            **data,
+            "grants": [],
+            "requiresSchemaSelection": True,
+            "advisoryMessage": _schema_selection_advisory(path),
+        },
+    }
 
 
 def compose_object_path_segment(scope: str, object_name: str) -> str:
@@ -438,27 +627,37 @@ def compose_object_path(
     object_name: str | list[str] | None,
 ) -> str | list[str] | None:
     """Merge optional object_path scope with object_name before calling the API."""
-    names = normalize_string_list(object_name)
+    names = [
+        normalize_object_path_value(name)
+        for name in normalize_string_list(object_name)
+        if normalize_object_path_value(name)
+    ]
     if not names:
-        return object_path
+        if object_path is None:
+            return None
+        paths = [
+            normalize_object_path_value(path)
+            for path in normalize_string_list(object_path)
+            if normalize_object_path_value(path)
+        ]
+        if not paths:
+            return None
+        if len(paths) == 1:
+            return paths[0]
+        return paths
     if len(names) > 1:
         return names
     name = names[0]
-    paths = normalize_string_list(object_path)
+    paths = [
+        normalize_object_path_value(path)
+        for path in normalize_string_list(object_path)
+        if normalize_object_path_value(path)
+    ]
     if not paths:
         return name
     if len(paths) == 1:
         return compose_object_path_segment(paths[0], name)
     return [compose_object_path_segment(path, name) for path in paths]
-
-
-def _grant_privilege_set(grant: dict[str, Any]) -> set[str]:
-    privs = grant.get("privileges")
-    if isinstance(privs, str):
-        return {privs.strip().upper()} if privs.strip() else set()
-    if isinstance(privs, list):
-        return {str(priv).strip().upper() for priv in privs if str(priv).strip()}
-    return set()
 
 
 def filter_grants_by_privileges(
@@ -577,11 +776,114 @@ def normalize_rdam_object_type(object_type: str | None) -> str | None:
     return _RDAM_OBJECT_TYPE_ALIASES.get(normalized, normalized)
 
 
-def filter_user_to_objects_by_level(
+def _grants_at_level(result: dict[str, Any], object_level: str) -> list[dict[str, Any]]:
+    data = result.get("data")
+    if not isinstance(data, dict):
+        return []
+    grants = data.get("grants")
+    if not isinstance(grants, list):
+        return []
+    level = object_level.lower()
+    return [
+        grant
+        for grant in grants
+        if isinstance(grant, dict)
+        and isinstance(grant.get("objectLevel"), str)
+        and grant["objectLevel"].lower() == level
+    ]
+
+
+def _table_path_from_column_path(object_path: str) -> str | None:
+    parts = _path_segments(object_path)
+    if len(parts) >= 2:
+        return ".".join(parts[:-1])
+    return None
+
+
+def _skip_object_to_users_post_processing(result: dict[str, Any]) -> bool:
+    data = result.get("data")
+    if not isinstance(data, dict):
+        return True
+    if data.get("requiresSchemaSelection"):
+        return True
+    candidates = data.get("matchCandidates")
+    return (
+        isinstance(candidates, list)
+        and len(candidates) >= 2
+        and bool(data.get("ambiguousMatch"))
+    )
+
+
+async def enrich_column_grants_fallback(
+    client: Any,
+    result: dict[str, Any],
+    source_system: str,
+    connection_id: int | None,
+    object_path: str | list[str] | None,
+    object_type: str | None,
+) -> dict[str, Any]:
+    """
+    When object_to_users targets a column but the backend join omits column rows,
+    retry at table scope with includeColumns and keep column-level grants only.
+    """
+    if (
+        connection_id is None
+        or object_type is None
+        or object_type.lower() != "column"
+        or source_system.strip().lower() != "redshift"
+        or not result.get("ok")
+        or _skip_object_to_users_post_processing(result)
+    ):
+        return result
+    if _grants_at_level(result, "column"):
+        return result
+
+    paths = normalize_string_list(object_path)
+    if len(paths) != 1:
+        return result
+    table_path = _table_path_from_column_path(paths[0])
+    if not table_path:
+        return result
+
+    try:
+        retry = await client.get(
+            MCP_PATH_SOURCE_SYSTEM_ACCESS,
+            params={
+                "sourceSystem": source_system.strip().lower(),
+                "queryDirection": "object_to_users",
+                "objectPath": table_path,
+                "objectType": "table",
+                "connectionId": connection_id,
+                "includeColumns": True,
+            },
+        )
+    except OvalEdgeError:
+        return result
+    if not retry.get("ok"):
+        return result
+
+    column_grants = _grants_at_level(retry, "column")
+    if not column_grants:
+        return result
+
+    data = result.get("data")
+    if not isinstance(data, dict):
+        data = {}
+    return {
+        **result,
+        "data": {
+            **data,
+            "grants": column_grants,
+            "childGrantFallback": "table+includeColumns",
+        },
+    }
+
+
+def filter_grants_by_object_level(
     result: dict[str, Any],
     object_type: str | None,
 ) -> dict[str, Any]:
-    """Backend user_to_objects ignores objectType; keep only the requested level (no ancestors)."""
+    """Keep only grants at the requested RDAM level (drop ancestor rows)."""
     if not result.get("ok") or object_type is None:
         return result
     data = result.get("data")
@@ -623,64 +925,39 @@ def filter_user_to_objects_by_level(
     }
 
 
-_DESC_SOURCE_SYSTEM_ACCESS = (
-    "Resolve **native** access grants harvested from Redshift, Snowflake, or Tableau — "
-    "independent of OvalEdge catalog permissions.\n\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_OVERVIEW_DOC
-    + "\n\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_GRANT_MODELS_DOC
-    + "\n\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_REQUIRED_DOC
-    + "\n\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_AGENT_RULES_DOC
-    + "\n\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_SAMPLE_PROMPTS_DOC
-    + "\n\n"
-    "Use for questions like:\n"
-    '- "What tables can svc_analytics query in Redshift?" → user_to_objects; infer '
-    "`object_type=table`; omit `object_path` when `connection_id` scopes all tables on the "
-    "connector\n"
-    '- "Who has native access to prod_db.public.orders?" → object_to_users\n'
-    '- "Which Snowflake roles give john.doe access?" → user_to_objects\n'
-    '- "Who can view the Revenue Dashboard in Tableau?" → object_to_users\n\n'
+_DESC_SOURCE_SYSTEM_ACCESS = classify_tool_desc(
+    "Resolve **native** access grants harvested from Redshift, Snowflake, or Tableau (RDAM) — "
+    "independent of OvalEdge catalog ACLs.\n\n"
     f"Backend: GET {MCP_PATH_SOURCE_SYSTEM_ACCESS}\n\n"
-    "**Not** OvalEdge `get_catalog_object_access` (catalog ACL layer; may ship later).\n\n"
-    "**source_system** (required): "
+    "**Not** `get_user_object_access` or `search_catalog_assets`. Never fall back to "
+    "`search_catalog_assets` when RDAM is empty or errors.\n\n"
+    "**Required always:** `source_system` ("
     + MCP_SOURCE_SYSTEMS_DOC
-    + ".\n\n"
-    "**query_direction** (required): "
+    + "), `query_direction` ("
     + MCP_QUERY_DIRECTIONS_DOC
-    + " — infer from the question; do not ask the user to pick manually.\n\n"
-    + MCP_RDAM_OBJECT_TYPE_DOC
-    + "\n\n"
-    + MCP_RDAM_PRIVILEGE_MAP_DOC
-    + "\n\n"
-    + MCP_OBJECT_PATH_FORMATS_DOC
-    + "\n\n"
-    + MCP_SNOWFLAKE_BUILTIN_OBJECTS_DOC
-    + "\n\n"
-    "Response includes **grant_mechanism** per entry: direct | group | role, **principal_type** "
-    "(user | role | group), native **privileges** (SELECT, INSERT, …), and "
-    "**contributing_group** / **contributing_role** when access is indirect.\n"
-    "When **principal_note** is set on a row, the role/group name appears as **principal** because "
-    "no RDAM user memberships were harvested for that role/group; roles with members are expanded "
-    "to users (see **contributing_role**, e.g. associate, twitchdemo).\n\n"
-    "**summary** (server-computed): `totalGrants`, `byObjectLevel` "
-    "(database/schema/table/column for RS/SF; project/report for Tableau), "
-    "`byGrantMechanism` (direct/group/role).\n\n"
-    "Partial-path disambiguation: when the path is not exact and multiple assets match, returns "
-    "**matchCandidates** or **resolve_all_matches=true** (max 50).\n"
-    + MCP_OBJECT_PATH_PARTIAL_DOC
-    + "\n\n"
-    + MCP_DAA_SCOPE_DOC
-    + "\n\n"
-    + MCP_RDAM_NO_CATALOG_FALLBACK_DOC
-    + "\n\n"
-    "Read-only. Returns validation errors for unsupported source_system; not-found when "
-    "username or object_path is absent from harvested metadata; RDAM no-access when the caller "
-    "lacks Instance/Connector DAA for the scoped connection(s)."
+    + ") — infer direction from the question.\n"
+    "**browse:** `connection_id` + `object_type`; optional `object_path` as parent scope.\n"
+    "**user_to_objects:** `username` required; with `connection_id` + `object_type=table`, omit "
+    "`object_path` to list all tables on the connector.\n"
+    "**object_to_users:** `object_path` + `object_type` required for exact scope.\n"
+    "Whenever `object_path` is set, `object_type` is required. Do not probe or discover "
+    "`connection_id` — ask the user.\n\n"
+    "**browse** returns DAM inventory objects, not grant rows. **user_to_objects** / "
+    "**object_to_users** return native privileges (grant_mechanism, contributing_role/group, "
+    "privileges). Optional `object_name` composes with `object_path` for table lookups.\n\n"
+    "**scope_mode:** "
+    + MCP_RDAM_SCOPE_MODES_DOC
+    + f" (default {MCP_RDAM_SCOPE_MODE_EXACT}). **descendants** rolls up grants under a "
+    "schema, database, or connector.\n\n"
+    "Partial paths may return `matchCandidates` or `requiresSchemaSelection`; use "
+    "`resolve_all_matches=true` only when the user wants all matches (max 50).\n\n"
+    "Full routing (path formats, grant models, agent rules, DAA): "
+    "docs://ovaledge/mcp_workflows (Native source access) and workflow prompt "
+    "`native_source_access`.\n\n"
+    "Read-only. Instance/Connector **Data Access Admin** enforced server-side."
+,
+    confidential=True,
 )
-
 
 def validate_and_normalize_object_type(
     source_system: str,
@@ -758,24 +1035,6 @@ def resolve_single_object_type(object_type: str | list[str] | None) -> str | Non
     return values[0] if values else None
 
 
-def is_connection_wide_table_listing(
-    query_direction: str,
-    object_path: str | list[str] | None,
-    object_type: str | list[str] | None,
-    connection_id: int | list[int] | None,
-) -> bool:
-    """user_to_objects + table + connection_id with no object_path = all tables on connector."""
-    if normalize_string_list(object_path):
-        return False
-    qd = query_direction.strip().lower()
-    if qd != "user_to_objects":
-        return False
-    if resolve_single_connection_id(connection_id) is None:
-        return False
-    raw_type = resolve_single_object_type(object_type)
-    return normalize_rdam_object_type(raw_type) == "table"
-
-
 def validate_source_system_access_args(
     source_system: str | list[str],
     query_direction: str,
@@ -783,6 +1042,10 @@ def validate_source_system_access_args(
     object_path: str | list[str] | None,
     object_type: str | list[str] | None,
     connection_id: int | list[int] | None,
+    *,
+    object_name: str | list[str] | None = None,
+    fully_qualified_name: str | None = None,
+    scope_mode: str = MCP_RDAM_SCOPE_MODE_EXACT,
 ) -> dict[str, Any] | None:
     multi_source_err = reject_multiple_source_system(source_system)
     if multi_source_err is not None:
@@ -806,4 +1069,60 @@ def validate_source_system_access_args(
             f"query_direction must be one of {sorted(MCP_QUERY_DIRECTIONS)}, "
             f"got {query_direction!r}",
         )
+
+    usernames = normalize_string_list(username)
+    composed_path = merge_rdam_object_path(object_path, object_name, fully_qualified_name)
+    object_paths = normalize_string_list(composed_path)
+    raw_object_type = resolve_single_object_type(object_type)
+    normalized_type = (
+        normalize_rdam_object_type(raw_object_type) if raw_object_type is not None else None
+    )
+    resolved_connection_id = resolve_single_connection_id(connection_id)
+    normalized_scope = scope_mode.strip().lower()
+    if normalized_scope not in {MCP_RDAM_SCOPE_MODE_EXACT, MCP_RDAM_SCOPE_MODE_DESCENDANTS}:
+        return error_payload(
+            f"scope_mode must be {MCP_RDAM_SCOPE_MODE_EXACT!r} or "
+            f"{MCP_RDAM_SCOPE_MODE_DESCENDANTS!r}, got {scope_mode!r}",
+        )
+
+    if qd == "browse":
+        if resolved_connection_id is None:
+            return error_payload(
+                "connection_id is required for query_direction=browse.",
+            )
+        if normalized_type is None:
+            return error_payload(MCP_SOURCE_SYSTEM_OBJECT_TYPE_REQUIRED_ERROR)
+        return None
+
+    if qd == "user_to_objects" and not usernames:
+        return error_payload(MCP_SOURCE_SYSTEM_USERNAME_REQUIRED_ERROR)
+
+    if (
+        qd == "user_to_objects"
+        and normalized_scope == MCP_RDAM_SCOPE_MODE_DESCENDANTS
+        and not object_paths
+    ):
+        return error_payload(
+            "object_path is required for user_to_objects with scope_mode=descendants.",
+        )
+
+    if qd == "object_to_users":
+        if not object_paths:
+            if normalized_scope == MCP_RDAM_SCOPE_MODE_DESCENDANTS:
+                if resolved_connection_id is None:
+                    return error_payload(
+                        MCP_SOURCE_SYSTEM_DESCENDANTS_CONNECTION_REQUIRED_ERROR,
+                    )
+            else:
+                return error_payload(MCP_SOURCE_SYSTEM_OBJECT_PATH_REQUIRED_ERROR)
+
+    if object_paths and normalized_type is None:
+        return error_payload(MCP_SOURCE_SYSTEM_OBJECT_TYPE_REQUIRED_ERROR)
+
+    if (
+        normalized_scope == MCP_RDAM_SCOPE_MODE_DESCENDANTS
+        and normalized_type is None
+    ):
+        return error_payload(MCP_SOURCE_SYSTEM_OBJECT_TYPE_REQUIRED_ERROR)
+
     return None

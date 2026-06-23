@@ -47,11 +47,12 @@ class TestLambdaHandlerPublicRoutes:
         assert body["status"] == "degraded"
         assert "mcp_lifespan_detail" in body
 
-    async def test_favicon_no_content(self) -> None:
+    async def test_favicon_returns_png(self) -> None:
         from entrypoints.lambda_handler import favicon
 
         resp = await favicon()
-        assert resp.status_code == 204
+        assert resp.status_code == 200
+        assert resp.media_type == "image/png"
 
     async def test_root_remote_credentials_mode(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(settings, "auth_mode", "remote_credentials")

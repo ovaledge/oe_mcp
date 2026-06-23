@@ -178,6 +178,12 @@ Resources:
             Path: /health
             Method: GET
             ApiId: !Ref MCPApi
+        BrandIcon:
+          Type: HttpApi
+          Properties:
+            Path: /brand/ovaledge-mcp-icon.png
+            Method: GET
+            ApiId: !Ref MCPApi
 
   MCPApi:
     Type: AWS::Serverless::HttpApi
@@ -224,4 +230,16 @@ Outputs:
     Description: Health check endpoint
     Value: !Sub
       - "https://${ApiId}.execute-api.${AWS::Region}.amazonaws.com/health"
+      - ApiId: !Ref MCPApi
+  MCPPublicBaseUrl:
+    Description: >-
+      Set as Lambda env MCP_PUBLIC_BASE_URL (no path suffix) so MCP initialize
+      advertises the branding icon URL. Not injected automatically (CFN circular dep).
+    Value: !Sub
+      - "https://${ApiId}.execute-api.${AWS::Region}.amazonaws.com"
+      - ApiId: !Ref MCPApi
+  MCPBrandIconUrl:
+    Description: Public MCP server icon (GET, no auth)
+    Value: !Sub
+      - "https://${ApiId}.execute-api.${AWS::Region}.amazonaws.com/brand/ovaledge-mcp-icon.png"
       - ApiId: !Ref MCPApi

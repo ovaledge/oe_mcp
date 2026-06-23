@@ -5,8 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 from server.constants import MCP_PATH_SEARCH_PLATFORM_DOCS
+from server.tools.common.descriptions import classify_tool_desc
 
-_DESC_DOCS = (
+_DESC_DOCS = classify_tool_desc(
     "Semantic search over OvalEdge / EDGI **product** documentation (RAG: embedded query, "
     "vector KNN in Elasticsearch). Use for **how-to** questions about OvalEdge features, "
     "UI, and configuration.\n\n"

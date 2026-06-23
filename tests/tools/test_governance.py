@@ -15,9 +15,10 @@ from server.constants import (
     MCP_PATH_TAGS,
     MCP_PATH_TAGS_CREATE_OPTIONS,
     MCP_PATH_TAGS_PARENT_OPTIONS,
+    MCP_PATH_UPDATE_CUSTOM_FIELD_VALUES,
     MCP_PATH_UPDATE_GOVERNANCE_ROLES,
 )
-from server.tools import governance
+from server.tools import dataquality, governance
 from server.tools.governance import helpers as governance_helpers
 from tests.conftest import MOCK_GLOSSARY_RESULT
 from tests.helpers import get_tool_fn
@@ -936,6 +937,82 @@ class TestLookupTags:
             "#nav/tag?id=99&objectType=oetag&masterTagId=10"
         )
         assert "redirectUrl" not in out
+
+    async def test_include_children_forwards_param(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {"ok": True, "data": {"objectId": 1}}
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_tags")
+        await fn(tag_name="Parent", include_children=True)
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_TAGS,
+            params={
+                "tagName": "Parent",
+                "limit": MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
+                "includeChildren": True,
+            },
+        )
+
+    async def test_include_parent_forwards_param(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {"ok": True, "data": {"objectId": 2}}
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_tags")
+        await fn(object_id=2, include_parent=True)
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_TAGS,
+            params={"objectId": 2, "limit": MCP_GLOSSARY_TAGS_LIMIT_DEFAULT, "includeParent": True},
+        )
+
+    async def test_hierarchy_enriches_formatted_response(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "objectId": 100,
+                "objectName": "ParentTag",
+                "navLink": "#nav/tag?id=100&objectType=oetag&masterTagId=1",
+                "childTags": [
+                    {
+                        "objectId": 101,
+                        "objectName": "ChildA",
+                        "navLink": "#nav/tag?id=101&objectType=oetag&masterTagId=1",
+                        "hasChildren": False,
+                    }
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_tags")
+        out = await fn(tag_name="ParentTag", include_children=True)
+        assert "formattedResponse" in out
+        assert "Child tags (1)" in out["formattedResponse"]
+        assert "ChildA" in out["formattedResponse"]
+        child = out["data"]["childTags"][0]
+        assert child["redirectUrl"].startswith("https://mock.ovaledge.com/")
+
+    async def test_parent_tag_enriched_in_response(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "objectId": 201,
+                "objectName": "ChildTag",
+                "navLink": "#nav/tag?id=201&objectType=oetag&masterTagId=1",
+                "parentTag": {
+                    "objectId": 100,
+                    "objectName": "ParentTag",
+                    "navLink": "#nav/tag?id=100&objectType=oetag&masterTagId=1",
+                },
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_tags")
+        out = await fn(object_id=201, include_parent=True)
+        assert "Parent tag:" in out["formattedResponse"]
+        assert out["data"]["parentTag"]["redirectUrl"].startswith("https://mock.ovaledge.com/")
 
 
 class TestBuildUserSelectableMasters:
@@ -2045,7 +2122,7 @@ class TestLookupDqRule:
             ],
         }
         mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
+        dataquality.register(mcp)
         fn = await get_tool_fn(mcp, "lookup_dq_rule")
         out = await fn(rule_name="Null Data Density")
         assert out["ok"] is True
@@ -2056,7 +2133,7 @@ class TestLookupDqRule:
 
     async def test_rejects_both_id_and_name(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
+        dataquality.register(mcp)
         fn = await get_tool_fn(mcp, "lookup_dq_rule")
         out = await fn(object_id=1, rule_name="x")
         assert out["status_code"] == 400
@@ -2250,5 +2327,80 @@ class TestUpdateGovernanceRoles:
             create_confirmed_by_user=True,
         )
         assert out["status_code"] == 403
+
+
+class TestUpdateCustomFieldValue:
+    async def test_rejects_missing_field_updates(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_custom_field_value")
+        out = await fn(object_id=1, object_type="oetable", field_updates=[])
+        assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
+    async def test_rejects_unsupported_object_type(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_custom_field_value")
+        out = await fn(
+            object_id=1,
+            object_type="project",
+            field_updates=[{"field_name": "Retention Period", "value": "7 years"}],
+        )
+        assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
+    async def test_confirm_preview_blocks_post(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_custom_field_value")
+        out = await fn(
+            object_id=99,
+            object_type="oetable",
+            field_updates=[{"field_name": "Data Owner", "value": "John Smith"}],
+        )
+        assert out["workflowPhase"] == "confirm_update"
+        assert out["doNotUpdate"] is True
+        mock_oe_client.post.assert_not_called()
+
+    async def test_posts_body_and_enriches_response(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        api_resp = {
+            "status": "success",
+            "updatedFields": ["Data Owner"],
+            "blockedFields": [],
+            "target": {
+                "objectId": 99,
+                "objectType": "oetable",
+                "redirectUrl": "https://mock.ovaledge.com/#nav/table?id=99",
+            },
+            "audit": {"source": "OE-MCP"},
+        }
+        mock_oe_client.post.return_value = api_resp
+
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_custom_field_value")
+        out = await fn(
+            object_id=99,
+            object_type="oetable",
+            field_updates=[{"field_name": "Data Owner", "value": "John Smith"}],
+            prompt="Update Data Owner to John Smith",
+            create_confirmed_by_user=True,
+        )
+
+        assert out["status"] == "success"
+        assert "formattedResponse" in out
+        assert "OE-MCP" in out["formattedResponse"]
+
+        mock_oe_client.post.assert_called_once_with(
+            MCP_PATH_UPDATE_CUSTOM_FIELD_VALUES,
+            {
+                "target": {"objectId": 99, "objectType": "oetable"},
+                "fieldUpdates": [{"fieldName": "Data Owner", "value": "John Smith"}],
+                "clientContext": {"prompt": "Update Data Owner to John Smith"},
+            },
+        )
 
 

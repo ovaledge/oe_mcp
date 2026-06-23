@@ -46,3 +46,6 @@ class TestStaticDocResources:
         assert "Native source access (RDAM)" in text
         assert "user_to_objects" in text
         assert "source_system_access" in text
+        assert "Catalog object access" in text
+        assert "Update asset descriptions" in text
+        assert "dp_domain" in text

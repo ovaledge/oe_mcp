@@ -98,4 +98,8 @@ aws cloudformation describe-stacks \
   --output table
 
 echo ""
+echo "Branding: set Lambda env MCP_PUBLIC_BASE_URL to output MCPPublicBaseUrl (no /mcp suffix)."
+echo "          Verify MCPBrandIconUrl returns 200. Cursor may still show AWS badge on execute-api"
+echo "          hostnames — use a custom domain (see infra/DEPLOY.md#custom-domain-recommended-for-cursor-branding)."
+echo ""
 echo "Deployed with infra/template-zip.yaml (Lambda ZIP). Image-based deploy: ./scripts/deploy.sh"

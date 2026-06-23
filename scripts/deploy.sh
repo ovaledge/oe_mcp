@@ -201,3 +201,7 @@ aws cloudformation describe-stacks \
 echo ""
 echo "Tip: point Cursor MCP 'url' at MCPEndpointUrl (https). For remote_credentials, send the same"
 echo "     X-OvalEdge-* headers as locally. API Gateway has no authorizer; auth is in the app."
+echo ""
+echo "Branding: set Lambda env MCP_PUBLIC_BASE_URL to output MCPPublicBaseUrl (no /mcp suffix)."
+echo "          Verify MCPBrandIconUrl returns 200. Cursor may still show AWS badge on execute-api"
+echo "          hostnames — use a custom domain (see infra/DEPLOY.md#custom-domain-recommended-for-cursor-branding)."

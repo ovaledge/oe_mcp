@@ -32,6 +32,7 @@ deepeval = "~3.9.9"
 
 [tool.poetry.scripts]
 oe-mcp-local = "entrypoints.local:main"
+oe-mcp-http = "entrypoints.http_local:main"
 
 [tool.ruff]
 line-length = 100

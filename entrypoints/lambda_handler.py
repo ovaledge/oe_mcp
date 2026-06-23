@@ -38,17 +38,18 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastmcp.utilities.lifespan import combine_lifespans
 from mangum import Mangum
-from starlette.responses import Response
 
 from server.app import mcp
 from server.asgi_normalize_mcp_path import NormalizeMcpMountSlashMiddleware
+from server.auth.local_lifespan import local_oe_jwt_lifespan
 from server.auth.metadata import router as metadata_router
 from server.auth.middleware import AuthMiddleware
 from server.auth.registration import router as registration_router
 from server.auth.remote_credentials_discovery import router as remote_credentials_discovery_router
+from server.branding import MCP_BRAND_ICON_ROUTE, brand_icon_file, mcp_server_icons
 from server.config import settings
 from server.constants import HEADER_OE_USER_SECRET, HEADER_OE_USER_TOKEN
 from server.logging_config import configure_stderr_logging
@@ -60,6 +61,12 @@ mcp_http = mcp.http_app(
     transport="streamable-http",
     stateless_http=settings.mcp_http_stateless,
 )
+
+# Icons are resolved at ``server.app`` import; refresh here so HTTP entrypoints pick up
+# ``MCP_PUBLIC_BASE_URL`` from env / ``.env`` (stdio sets ``MCP_STDIO_TRANSPORT`` earlier).
+_refreshed_icons = mcp_server_icons()
+if _refreshed_icons is not None:
+    mcp._mcp_server.icons = _refreshed_icons  # noqa: SLF001
 
 
 def _running_on_aws_lambda() -> bool:
@@ -74,10 +81,30 @@ async def _fastapi_lifespan(_app: object) -> AsyncIterator[dict[str, Any]]:
 
 # Uvicorn: one process lifespan runs both. Lambda: Mangum would start/stop every invoke and break
 # StreamableHTTPSessionManager — MCP sub-app lifespan is pinned separately (see handler).
+def _uvicorn_lifespans() -> tuple[Any, ...]:
+    parts: list[Any] = [_fastapi_lifespan, mcp_http.lifespan]
+    if (
+        settings.auth_mode == "local"
+        and settings.ovaledge_user_token.strip()
+        and settings.ovaledge_user_secret.strip()
+    ):
+        parts.append(local_oe_jwt_lifespan)
+    return tuple(parts)
+
+
+@asynccontextmanager
+async def _uvicorn_combined_lifespan(app: object) -> AsyncIterator[dict[str, Any]]:
+    """Build lifespan chain at startup (tests, oe-mcp-http env overrides)."""
+    parts = _uvicorn_lifespans()
+    combined = combine_lifespans(*parts) if len(parts) > 1 else parts[0]
+    async with combined(app) as state:
+        yield state
+
+
 _app_lifespan: Any = (
     _fastapi_lifespan
     if _running_on_aws_lambda()
-    else combine_lifespans(_fastapi_lifespan, mcp_http.lifespan)
+    else _uvicorn_combined_lifespan
 )
 
 app = FastAPI(
@@ -124,8 +151,15 @@ async def root() -> JSONResponse:
 
 
 @app.get("/favicon.ico")
-async def favicon() -> Response:
-    return Response(status_code=204)
+async def favicon() -> FileResponse:
+    """Same PNG as ``/brand/...`` — some MCP clients probe origin favicon for branding."""
+    return FileResponse(brand_icon_file(), media_type="image/png")
+
+
+@app.get(MCP_BRAND_ICON_ROUTE)
+async def brand_icon() -> FileResponse:
+    """Public MCP branding icon (``server/static/``); no auth required."""
+    return FileResponse(brand_icon_file(), media_type="image/png")
 
 
 @app.get("/health")

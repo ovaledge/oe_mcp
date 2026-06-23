@@ -9,11 +9,15 @@ from fastmcp.prompts.function_prompt import FunctionPrompt
 from mcp.types import TextContent
 
 from server.constants import (
+    TOOL_ASSESS_CDE_DQ,
     TOOL_ASSET_LINEAGE,
+    TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
     TOOL_CATALOG_ASSET_DETAILS,
     TOOL_COLUMN_PROFILE,
+    TOOL_CREATE_DQ_RULES,
     TOOL_CREATE_GLOSSARY_TERM,
     TOOL_CREATE_TAG,
+    TOOL_GET_USER_OBJECT_ACCESS,
     TOOL_LOOKUP_DATASTORY,
     TOOL_LOOKUP_DQ_RULE,
     TOOL_LOOKUP_GLOSSARY_TERM,
@@ -65,6 +69,8 @@ _PROMPT_REQUIRED_TOOLS: dict[str, tuple[str, ...]] = {
         TOOL_SEARCH_DOCS,
     ),
     "native_source_access": (TOOL_SOURCE_SYSTEM_ACCESS,),
+    "dam_object_browse": (TOOL_SOURCE_SYSTEM_ACCESS,),
+    "catalog_object_access": (TOOL_GET_USER_OBJECT_ACCESS, TOOL_SEARCH_CATALOG),
     "platform_help": (TOOL_SEARCH_DOCS,),
     "metadata_drift": (
         TOOL_METADATA_CHANGES_BETWEEN_CRAWLS,
@@ -85,6 +91,13 @@ _PROMPT_REQUIRED_TOOLS: dict[str, tuple[str, ...]] = {
         TOOL_SEARCH_CATALOG,
         TOOL_CATALOG_ASSET_DETAILS,
         TOOL_UPDATE_GOVERNANCE_ROLES,
+    ),
+    "assess_cde_dq_coverage": (
+        TOOL_SEARCH_CATALOG,
+        TOOL_ASSESS_CDE_DQ,
+        TOOL_LOOKUP_DQ_RULE,
+        TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
+        TOOL_CREATE_DQ_RULES,
     ),
 }
 
@@ -111,6 +124,8 @@ class TestWorkflowPromptBodies:
             "assign_governance_roles",
         ):
             messages = prompt.fn("sample-a", "sample-b")
+        elif prompt_name == "dam_object_browse":
+            messages = prompt.fn(1000, "sample-scope")
         else:
             messages = prompt.fn("sample-input")
         assert len(messages) == 1
@@ -121,6 +136,7 @@ class TestWorkflowPromptBodies:
         assert (
             "sample-input" in content.text
             or "sample-a" in content.text
+            or "sample-scope" in content.text
             or prompt_label in text_lower
         )
 
@@ -135,6 +151,8 @@ class TestWorkflowPromptBodies:
             "assign_governance_roles",
         ):
             messages = prompt.fn("acme", "details")
+        elif prompt_name == "dam_object_browse":
+            messages = prompt.fn(1000, "BUSINESS.BANKING")
         else:
             messages = prompt.fn("acme")
         text = messages[0].content.text

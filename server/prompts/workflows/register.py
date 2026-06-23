@@ -2,13 +2,16 @@ from fastmcp import FastMCP
 from fastmcp.prompts import Message
 
 from server.constants import (
-    MCP_CATALOG_OBJECT_TYPES_DOC,
     MCP_SOURCE_SYSTEMS_DOC,
+    TOOL_ASSESS_CDE_DQ,
     TOOL_ASSET_LINEAGE,
+    TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
     TOOL_CATALOG_ASSET_DETAILS,
     TOOL_COLUMN_PROFILE,
+    TOOL_CREATE_DQ_RULES,
     TOOL_CREATE_GLOSSARY_TERM,
     TOOL_CREATE_TAG,
+    TOOL_GET_USER_OBJECT_ACCESS,
     TOOL_LOOKUP_DATASTORY,
     TOOL_LOOKUP_DQ_RULE,
     TOOL_LOOKUP_GLOSSARY_TERM,
@@ -42,7 +45,7 @@ def register(mcp: FastMCP) -> None:
             f"1. Extract search keywords from the query\n"
             f"2. Call {TOOL_SEARCH_CATALOG} with search_terms as a JSON array of those keywords, "
             f"and context_query set verbatim to: '{query}' (for server vector/semantic search); "
-            f"optionally set object_type to one of: {MCP_CATALOG_OBJECT_TYPES_DOC}\n"
+            f"optionally set object_type (see docs://ovaledge/asset_types)\n"
             f"3. Call {TOOL_LOOKUP_GLOSSARY_TERM} with term_name for each key business concept\n"
             f"4. Cross-reference glossary-linked objects against catalog hits\n"
             f"5. Use pagination or repeat search with filters "
@@ -76,8 +79,7 @@ def register(mcp: FastMCP) -> None:
             f"2. Traverse related-term and synonym fields from the response one level\n"
             f"3. For up to two linked physical objects, call {TOOL_CATALOG_ASSET_DETAILS} "
             f"with object_id and object_type from the payload "
-            f"(supported object_type values: {MCP_CATALOG_OBJECT_TYPES_DOC}; "
-            f"prefer oetable/oefile for physical data)\n"
+            f"(see docs://ovaledge/asset_types; prefer oetable/oefile for physical data)\n"
             f"4. Synthesise and present:\n"
             f"   - Organisational definition (not a generic one)\n"
             f"   - Calculation or method if described\n"
@@ -290,14 +292,22 @@ def register(mcp: FastMCP) -> None:
             f"2. Call {TOOL_SOURCE_SYSTEM_ACCESS} with source_system='{source_system}' "
             f"({MCP_SOURCE_SYSTEMS_DOC}) and query_direction inferred from the question. "
             f"Only those two fields are mandatory; add username, object_path, object_name, "
-            f"object_type, connection_id, or privileges when the question supplies them. "
+            f"fully_qualified_name, object_type, connection_id, or privileges when the question "
+            f"supplies them. Always set object_type explicitly with object_path — Java uses "
+            f"objectType for resolution, not dot segment count alone. Path matrix: "
+            f"database=dbName; schema=dbName.schemaName or schemaName; "
+            f"table=dbName.schemaName.tableName, schemaName.tableName, or tableName; "
+            f"column=full four-part path or partial tableName.columnName / columnName. "
+            f"fully_qualified_name is an alias for object_path when catalog gives a dotted FQN. "
             f"object_name composes with object_path for table lookups (prod_db + orders). "
             f"object_type=table limits to tables; object_type=all returns every level "
             f"(Snowflake/Redshift user_to_objects). privileges filters write checks "
-            f"(INSERT/UPDATE). If multiple connectionIds return without connection_id, "
+            f"(INSERT/UPDATE). Prefer connection_id; use connectionName. path prefix only when "
+            f"names collide. If multiple connectionIds return without connection_id, "
             f"ask the user for connection_id and a narrower path.\n"
             f"3. Present grants with grant_mechanism (direct/group/role), contributing_group, "
             f"contributing_role, and privileges; use summary counts when returned. "
+            f"Java returns all harvested roles from RDAM MySQL (no system-role filter). "
             f"object_to_users includes parent hierarchy; user_to_objects is exact level only.\n"
             f"4. RDAM only — not OvalEdge catalog ACLs and not search_catalog_assets "
             f"(no Elasticsearch). If empty or error: report RDAM outcome; suggest harvest, "
@@ -306,7 +316,70 @@ def register(mcp: FastMCP) -> None:
             f"If ambiguousMatch, requiresSchemaSelection, or multiple matchCandidates, list schema "
             f"options and ask the user to pick one, then retry with dbName.schema.table. Do not "
             f"use resolve_all_matches unless the user wants all matches combined\n"
-            f"6. Other partial paths: explain matchCandidates or ask the user to disambiguate"
+            f"6. Other partial paths: explain matchCandidates or ask the user to disambiguate\n"
+            f"7. DAM inventory (list schemas/tables/columns in DAM): use "
+            f"{TOOL_SOURCE_SYSTEM_ACCESS} with query_direction=browse, connection_id; "
+            f"object_path is parent scope, object_type "
+            f"is child level to list (omit parent + object_type=database for databases; dbName + "
+            f"schema for schemas; dbName.schemaName + table for tables). Scoped \"who has access "
+            f"to all under schema\" → object_to_users with scope_mode=descendants"
+        )
+        return [Message(text)]
+
+    @mcp.prompt()
+    def dam_object_browse(
+        connection_id: int,
+        scope: str,
+    ) -> list[Message]:
+        """
+        P10b — Browse DAM-visible objects (inventory) on a connector.
+
+        Trigger: "List schemas in BUSINESS on connection 1000"
+                 "What tables are in BUSINESS.BANKING?"
+                 "Show columns in ORDERS table"
+        """
+        text = (
+            f"Browse DAM inventory on connection {connection_id} for: '{scope}'\n\n"
+            f"Steps:\n"
+            f"1. Call {TOOL_SOURCE_SYSTEM_ACCESS} with query_direction=browse, "
+            f"connection_id={connection_id}. "
+            f"object_type is the **child level to list**; object_path (or fully_qualified_name) "
+            f"is the **parent** scope.\n"
+            f"2. Routing: list databases → omit object_path, object_type=database; "
+            f"list schemas in db → object_path=dbName, object_type=schema; "
+            f"list tables in schema → object_path=dbName.schemaName, object_type=table; "
+            f"list columns in table → object_path=dbName.schemaName.tableName, "
+            f"object_type=column.\n"
+            f"3. Path routing: see docs://ovaledge/mcp_workflows (Native source access — "
+            f"object_path formats and DAM browse).\n"
+            f"4. For access questions after browse, call "
+            f"{TOOL_SOURCE_SYSTEM_ACCESS} — do not use search_catalog_assets as fallback."
+        )
+        return [Message(text)]
+
+    @mcp.prompt()
+    def catalog_object_access(question: str) -> list[Message]:
+        """
+        P10b — OvalEdge catalog ACL permissions (user/role grants), not native RDAM.
+
+        Trigger: "What access does john.doe have on CUSTOMER_MASTER?"
+                 "Who has access to the Finance schema?"
+                 "Which roles provide access to this report?"
+        """
+        text = (
+            f"Answer OvalEdge catalog access: '{question}'\n\n"
+            f"Steps:\n"
+            f"1. Infer query_direction: user_to_object when asking what a specific user can do; "
+            f"object_to_principals when asking who has access on an asset.\n"
+            f"2. Resolve the asset with {TOOL_SEARCH_CATALOG} when the user names it; pass "
+            f"object_id and object_type from the chosen hit. If multiple matches, ask the user "
+            f"to pick or use matchCandidates from get_user_object_access.\n"
+            f"3. Call {TOOL_GET_USER_OBJECT_ACCESS} with query_direction, username (for "
+            f"user_to_object), and resolved object_id+object_type.\n"
+            f"4. Present metadataPermission, dataPermission, grantSources, contributingRoles, "
+            f"inheritedFrom when columns/terms inherit parent ACLs, and redirectUrl.\n"
+            f"5. Catalog ACL only — not native DB grants. Use {TOOL_SOURCE_SYSTEM_ACCESS} for "
+            f"Redshift/Snowflake/Tableau native privileges."
         )
         return [Message(text)]
 
@@ -321,10 +394,13 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Explain the governance tag '{tag_name}'.\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_LOOKUP_TAGS}(tag_name='{tag_name}')\n"
+            f"1. Call {TOOL_LOOKUP_TAGS}(tag_name='{tag_name}') — add "
+            f"include_parent=true and/or include_children=true when the user asks for "
+            f"parent or child tags in the hierarchy\n"
             f"2. If not found, call {TOOL_SEARCH_CATALOG} with search_terms including "
             f"'{tag_name}' and object_type=oetag\n"
-            f"3. Present tag description, master/parent hierarchy, and stewardship if returned\n"
+            f"3. Present tag description, master/parent hierarchy, child tags, and "
+            f"stewardship from formattedResponse or returned fields\n"
             f"4. Optionally list catalog assets tagged via {TOOL_SEARCH_CATALOG} with tags filter "
             f"when the user asks what data uses this tag"
         )
@@ -469,5 +545,30 @@ def register(mcp: FastMCP) -> None:
             f"   - Answer from general knowledge\n"
             f"   - Clearly label as 'General knowledge — not from OvalEdge docs'\n"
             f"5. Suggest related features where applicable"
+        )
+        return [Message(text)]
+
+    @mcp.prompt()
+    def assess_cde_dq_coverage(scope: str) -> list[Message]:
+        """
+        P17 — CDE column DQ assessment (read-only recommendations).
+
+        Trigger: "Which CDE columns need DQ rules?"
+                 "Recommend DQ functions for critical data elements in Finance"
+        """
+        text = (
+            f"Assess Critical Data Element (CDE) DQ coverage for: '{scope}'\n\n"
+            f"Steps:\n"
+            f"1. Call {TOOL_SEARCH_CATALOG} with search_terms from the scope and "
+            f"critical_data_element=Yes (and object_type oetable/oecolumn/oefile/oefilecolumn "
+            f"when narrowing)\n"
+            f"2. Build objects from hits (objectId + objectType) or call "
+            f"{TOOL_ASSESS_CDE_DQ}(discover_cde_columns=true) when listing all CDE columns\n"
+            f"3. Call {TOOL_ASSESS_CDE_DQ} with those objects — read-only; present "
+            f"recommendedFunction, recommendedRule, associatedToDqRule, and redirect URLs\n"
+            f"4. Use {TOOL_LOOKUP_DQ_RULE} when the user names an existing rule; do not use "
+            f"{TOOL_SEARCH_CATALOG} for dqrule objects\n"
+            f"5. Only after explicit user approval for writes: {TOOL_ASSOCIATE_DQ_RULE_OBJECTS} "
+            f"for a known draft rule id, or {TOOL_CREATE_DQ_RULES} to create/associate in one step"
         )
         return [Message(text)]
