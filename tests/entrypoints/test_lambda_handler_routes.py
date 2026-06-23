@@ -166,12 +166,40 @@ class TestLambdaMcpLifespanPinning:
                 patch.object(lh.mcp_http.router, "lifespan_context", hanging_lifespan),
                 patch.object(lh.time, "monotonic", fake_monotonic),
             ):
-                with pytest.raises(RuntimeError, match="MCP HTTP lifespan did not enter within"):
+                with pytest.raises(
+                    RuntimeError,
+                    match="StreamableHTTPSessionManager did not start within",
+                ):
                     lh._ensure_lambda_mcp_http_lifespan_pinned()
         finally:
             if lh._mcp_holder_task is not None and not lh._mcp_holder_task.done():
                 lh._mcp_holder_task.cancel()
                 with pytest.raises(asyncio.CancelledError):
                     loop.run_until_complete(lh._mcp_holder_task)
+            _reset_lambda_mcp_holder_state()
+            loop.close()
+
+    def test_ensure_pin_waits_when_holder_task_already_running(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import entrypoints.lambda_handler as lh
+
+        monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "fn")
+        _reset_lambda_mcp_holder_state()
+
+        loop = asyncio.new_event_loop()
+        running_task = loop.create_task(asyncio.sleep(3600))
+        lh._mcp_holder_task = running_task
+
+        try:
+            with patch.object(lh, "_wait_for_lambda_mcp_lifespan_ready") as wait_mock:
+                lh._ensure_lambda_mcp_http_lifespan_pinned()
+            wait_mock.assert_called_once()
+            assert lh._mcp_holder_task is running_task
+        finally:
+            running_task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                loop.run_until_complete(running_task)
             _reset_lambda_mcp_holder_state()
             loop.close()

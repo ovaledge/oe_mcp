@@ -234,3 +234,8 @@ export AWS_REGION=ap-south-1
 ```
 
 Then set **`MCP_PUBLIC_BASE_URL`** from output **`MCPPublicBaseUrl`**, or your custom domain after step 4.
+
+## Troubleshooting remote MCP
+
+502/500 on `POST /mcp`, stale API URLs, CloudWatch queries, and a **redeploy checklist**: [TROUBLESHOOTING_REMOTE.md](TROUBLESHOOTING_REMOTE.md).
+

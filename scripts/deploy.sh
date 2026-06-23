@@ -119,6 +119,8 @@ ENVIRONMENT="${ENVIRONMENT:-dev}"
 ECR_REPO="${ECR_REPO:-oe-mcp}"
 MCP_HTTP_STATELESS="${MCP_HTTP_STATELESS:-true}"
 LAMBDA_ARCHITECTURE="${LAMBDA_ARCHITECTURE:-x86_64}"
+LAMBDA_MEMORY_SIZE="${LAMBDA_MEMORY_SIZE:-1024}"
+LAMBDA_TIMEOUT="${LAMBDA_TIMEOUT:-30}"
 
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}}"
@@ -170,6 +172,8 @@ OVERRIDES=(
   "LambdaArchitecture=${LAMBDA_ARCHITECTURE}"
   "OvalEdgeHttpAuthScheme=${OVALEDGE_HTTP_AUTH_SCHEME}"
   "CredentialsCacheMaxEntries=${CREDENTIALS_CACHE_MAX_ENTRIES}"
+  "LambdaMemorySize=${LAMBDA_MEMORY_SIZE}"
+  "LambdaTimeout=${LAMBDA_TIMEOUT}"
 )
 if [[ -n "${SAM_OAUTH_ISSUER:-}" ]]; then
   OVERRIDES+=("OAuthIssuer=${SAM_OAUTH_ISSUER}")

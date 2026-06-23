@@ -71,11 +71,27 @@ Parameters:
     Description: >
       AUTH_MODE=remote_credentials only — max distinct credential-key JWT entries per Lambda
       instance (in-memory LRU).
+  LambdaMemorySize:
+    Type: Number
+    Default: 1024
+    MinValue: 512
+    MaxValue: 10240
+    Description: >
+      Lambda memory (MB). Higher values add CPU and help large tool responses (lineage, docs search).
+      HTTP API integration timeout remains 30s max.
+  LambdaTimeout:
+    Type: Number
+    Default: 30
+    MinValue: 10
+    MaxValue: 30
+    Description: >
+      Lambda timeout (seconds). API Gateway HTTP API caps integration at 30s; values above 30
+      have no effect on /mcp until a longer-timeout front end is used.
 
 Globals:
   Function:
-    Timeout: 30
-    MemorySize: 512
+    Timeout: !Ref LambdaTimeout
+    MemorySize: !Ref LambdaMemorySize
     Architectures:
       - !Ref LambdaArchitecture
 
