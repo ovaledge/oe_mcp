@@ -30,32 +30,43 @@ _DESC_ASSESS_CDE_DQ = classify_tool_desc(
     "**objects** (optional): "
     '[{"objectId": 123, "objectType": "oecolumn"}, ...] from search_catalog_assets.\n\n'
     "Each row includes tableColumnName, businessDescription, businessRule, "
-    "recommendedFunction (or Not Identified), recommendedRule (or Not Available), "
-    "associatedToDqRule, objectRedirectUrl, and dqRuleRedirectUrl.\n\n"
-    "**Not** associate_dq_rule_objects or create_dq_rules — those write draft rules; "
+    "descriptionSource, descriptionMessage (when none), availableCustomFields, "
+    "associatedTermDescriptions, recommendedFunction (or Not Identified), "
+    "recommendedRule (or Not Available), associatedToDqRule, objectRedirectUrl, "
+    "and dqRuleRedirectUrl.\n\n"
+    "Description resolution order (server-side):\n"
+    "1. Object/catalog description when present.\n"
+    "2. Associated glossary term description(s) when object description is empty.\n"
+    "3. Named custom field only when the user explicitly requests it — pass "
+    "description_custom_field_name with the field label/key the user named.\n"
+    "4. When still unavailable, descriptionMessage explains object id/type, term "
+    "status, and lists availableCustomFields for the user to choose from.\n\n"
+    "**Not** associate_dq_rule_objects or create_dq_rules — those write data quality rules; "
     "use this tool first for read-only recommendations, then writes only after user approval.\n\n"
     "Read-only. Returns validation errors when objects is empty and discover is false; "
     "RBAC applies server-side on catalog reads."
 )
 
 _DESC_ASSOCIATE_DQ_RULE_OBJECTS = classify_tool_desc(
-    "Associate catalog objects to an existing draft DQ rule (idempotent when "
+    "Associate catalog objects to an existing data quality rule (idempotent when "
     "skip_already_associated=true).\n\n"
     f"Backend: POST {MCP_PATH_ASSOCIATE_DQ_RULE_OBJECTS}\n\n"
     "Mirrors the UI flow: batch-validates each objectType against the rule function via "
     "getSupportedDQRuleObjectsForDQFunction (validateDQRuleObjectsForDQFunction), then "
     "associates only supported objects.\n\n"
     "**Not** assess_cde_dq — that is read-only assessment; use this after the user "
-    "confirms linking to a specific draft rule.\n\n"
+    "confirms linking to a specific data quality rule.\n\n"
     "**Not** create_dq_rules — use that when you need auto-create or prefer-existing "
     "in one call.\n\n"
-    "**dqrule_id** (required): draft rule id from assess_cde_dq or lookup_dq_rule.\n\n"
+    "**dqrule_id** (required): data quality rule id from assess_cde_dq or lookup_dq_rule.\n\n"
     "**objects** (required): "
     '[{"objectId": 123, "objectType": "oecolumn"}, ...]\n\n'
     f"**objectType**: {MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC} only.\n\n"
+    "Published (ACTIVE) data quality rules are temporarily demoted to draft for association, "
+    "then restored to published when complete. Rules already in draft proceed directly.\n\n"
     "Response includes statusMessage (batch function-support summary), counts "
     "(associatedCount, skippedCount, failedCount), and per-row status:\n"
-    "- associated: linked to the draft rule\n"
+    "- associated: linked to the data quality rule\n"
     "- skipped: already linked, or unsupported column data type / connector for the function\n"
     "- failed: invalid object type, not found, or license error\n\n"
     "Present formattedResponse to the user. Audit source OE-MCP."
@@ -63,18 +74,31 @@ _DESC_ASSOCIATE_DQ_RULE_OBJECTS = classify_tool_desc(
 
 _DESC_CREATE_DQ_RULES = classify_tool_desc(
     "Assess CDE/DQ objects then associate to a recommended existing rule or auto-create "
-    "draft DQ rules when function and business criteria are sufficient.\n\n"
+    "data quality rules when function and business criteria are sufficient.\n\n"
     f"Backend: POST {MCP_PATH_CREATE_DQ_RULES}\n\n"
     "**Not** assess_cde_dq — read-only only; use create_dq_rules when the user wants "
-    "draft rules created or associated in one step.\n\n"
-    "**Not** associate_dq_rule_objects — use that when the draft rule id is already known.\n\n"
-    "Run assess_cde_dq first when unsure; this endpoint re-assesses internally.\n\n"
-    "**discover_cde_columns** / **objects** / **limit**: same as assess_cde_dq.\n\n"
+    "data quality rules created or associated in one step.\n\n"
+    "**Not** associate_dq_rule_objects — use that when the data quality rule id "
+    "is already known.\n\n"
+    "**discover_cde_columns** / **objects** / **limit** / "
+    "**description_custom_field_name**: same as assess_cde_dq.\n\n"
     "**prefer_existing_rule** (default true): associate when a recommended rule exists.\n\n"
     "**skip_duplicate_function_on_object** (default true): skip if object already has a "
     "rule for the same function type.\n\n"
+    "Auto-create derives input/success operators and values from business metadata when "
+    "present; otherwise uses default operators/values from the DQ function definition "
+    "(dqfunctiondef_operator_map), matching the UI single-object rule flow.\n\n"
+    "Before creating a data quality rule, each object is validated against the "
+    "recommended function "
+    "(column/file-column data type, connector DQ support, addon license) using the same "
+    "checks as associate_dq_rule_objects. Unsupported objects return status skipped with "
+    "a clear message; no orphan data quality rule is created.\n\n"
     "Row statuses: created, associated, skipped, criteria_missing, function_not_identified, "
-    "failed. Audit source OE-MCP."
+    "failed. New rules use creation type OE MCP (manual-like behavior). When business metadata "
+    "has no parseable input/success bounds, the server falls back to default operators and "
+    "values from the recommended DQ function definition. criteria_missing includes "
+    "descriptionMessage when neither metadata nor function defaults are available. "
+    "Audit source OE-MCP."
 )
 
 _DESC_LOOKUP_DQ_RULE = classify_tool_desc(
@@ -129,12 +153,16 @@ def build_assess_cde_dq_payload(
     discover_cde_columns: bool,
     objects: list[dict[str, Any]] | None,
     limit: int,
+    description_custom_field_name: str | None = None,
 ) -> dict[str, Any]:
     capped = min(max(limit, 1), MCP_DQ_ASSESS_LIMIT_MAX)
     payload: dict[str, Any] = {
         "discoverCdeColumns": discover_cde_columns,
         "limit": capped,
     }
+    field_name = strip_or_none_description_field(description_custom_field_name)
+    if field_name is not None:
+        payload["descriptionCustomFieldName"] = field_name
     if not objects:
         return payload
     api_objects: list[dict[str, Any]] = []
@@ -162,6 +190,43 @@ def build_assess_cde_dq_payload(
         api_objects.append({"objectId": oid_int, "objectType": otype})
     payload["objects"] = api_objects
     return payload
+
+
+def strip_or_none_description_field(value: str | None) -> str | None:
+    if value is None:
+        return None
+    trimmed = str(value).strip()
+    return trimmed or None
+
+
+def format_assess_cde_dq_response(body: dict[str, Any]) -> str:
+    """Human-readable summary highlighting description gaps."""
+    data = body.get("data") if isinstance(body.get("data"), dict) else body
+    if not isinstance(data, dict):
+        return "CDE DQ assessment completed."
+    lines: list[str] = []
+    count = data.get("assessedCount")
+    if count is not None:
+        lines.append(f"Assessed {count} object(s).")
+    rows = data.get("rows")
+    if not isinstance(rows, list) or not rows:
+        return "\n".join(lines) if lines else "CDE DQ assessment completed."
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        name = row.get("tableColumnName", "?")
+        oid = row.get("objectId", "?")
+        otype = row.get("objectType", "?")
+        source = row.get("descriptionSource", "?")
+        lines.append(f"- {name} ({otype}, id={oid}): descriptionSource={source}")
+        message = row.get("descriptionMessage")
+        if isinstance(message, str) and message.strip():
+            lines.append(message.strip())
+        elif source == "none":
+            fields = row.get("availableCustomFields")
+            if isinstance(fields, list) and fields:
+                lines.append(f"  Available custom fields: {', '.join(str(f) for f in fields)}")
+    return "\n".join(lines)
 
 
 def validate_associate_dq_rule_objects_args(
@@ -239,8 +304,11 @@ def build_create_dq_rules_payload(
     limit: int,
     prefer_existing_rule: bool,
     skip_duplicate_function_on_object: bool,
+    description_custom_field_name: str | None = None,
 ) -> dict[str, Any]:
-    built = build_assess_cde_dq_payload(discover_cde_columns, objects, limit)
+    built = build_assess_cde_dq_payload(
+        discover_cde_columns, objects, limit, description_custom_field_name
+    )
     if "error" in built:
         return built
     payload: dict[str, Any] = {
@@ -249,6 +317,8 @@ def build_create_dq_rules_payload(
         "skipDuplicateFunctionOnObject": skip_duplicate_function_on_object,
         "limit": built.get("limit", limit),
     }
+    if built.get("descriptionCustomFieldName"):
+        payload["descriptionCustomFieldName"] = built["descriptionCustomFieldName"]
     if built.get("objects"):
         payload["objects"] = built["objects"]
     return payload

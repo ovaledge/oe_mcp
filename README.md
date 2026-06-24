@@ -37,8 +37,8 @@ Setup scripts (`scripts/setup_local_mcp.sh`, `scripts/setup_local_mcp.ps1`) crea
 - OvalEdge catalog ACL (`get_user_object_access`) — user/role grants on catalog objects, not native RDAM
 - DQ rule lookup (`lookup_dq_rule`)
 - CDE / column DQ assessment — read-only (`assess_cde_dq`)
-- Associate objects to draft DQ rules (`associate_dq_rule_objects`)
-- Auto-create or associate draft DQ rules for CDE columns (`create_dq_rules`)
+- Associate objects to data quality rules (`associate_dq_rule_objects`)
+- Auto-create or associate data quality rules for CDE columns (`create_dq_rules`)
 - Asset description, CDE, governance role, and custom field updates (`update_asset_descriptions`, `update_cde_associations`, `update_governance_roles`, `update_custom_field_value`)
 - Resource URIs (`ovaledge://catalog/...`, `ovaledge://governance/...`) and static guides (`docs://ovaledge/...`)
 - Nineteen workflow prompts under `server/prompts/workflows/` (see below; canonical list in `server/mcp_surface.py`)

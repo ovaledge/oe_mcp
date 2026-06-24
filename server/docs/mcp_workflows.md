@@ -20,7 +20,7 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 | Tag meaning or hierarchy | `lookup_tags` |
 | DQ rule lookup | `lookup_dq_rule` |
 | CDE columns / DQ function & rule recommendations | `assess_cde_dq` (after `search_catalog_assets` or `discover_cde_columns=true`) |
-| Associate objects to draft DQ rule | `associate_dq_rule_objects` (after `assess_cde_dq` / `lookup_dq_rule`) |
+| Associate objects to data quality rule | `associate_dq_rule_objects` (after `assess_cde_dq` / `lookup_dq_rule`) |
 | Auto-create or associate DQ rules for CDE columns | `create_dq_rules` (assess + create/associate in one call) |
 | Metadata drift between crawls | `metadata_changes_between_crawls` |
 | Native Redshift/Snowflake/Tableau grants | `source_system_access` |
@@ -250,8 +250,8 @@ See also: [glossary_guide](glossary_guide), [tags_guide](tags_guide), [data_stor
 | Find CDE assets | `search_catalog_assets` | Set `critical_data_element=Yes`; object types `oetable`, `oecolumn`, `oefile`, `oefilecolumn` |
 | Read-only assessment | `assess_cde_dq` | Pass `objects` from search hits, or `discover_cde_columns=true` to auto-discover CDE columns |
 | Resolve existing rule | `lookup_dq_rule` | DQ rules are not in catalog search |
-| Link to draft rule | `associate_dq_rule_objects` | Requires `dqrule_id` from assessment or lookup; user must approve write |
-| Create + associate | `create_dq_rules` | Re-assesses internally; prefer existing rule or auto-create draft when criteria sufficient |
+| Link to data quality rule | `associate_dq_rule_objects` | Requires `dqrule_id` from assessment or lookup; user must approve write |
+| Create + associate | `create_dq_rules` | Re-assesses internally; prefer existing rule or auto-create data quality rule when criteria sufficient |
 
 **Workflow prompt:** `assess_cde_dq_coverage` (pass `scope` = user question or domain name).
 
