@@ -64,10 +64,10 @@ _DESC_ASSOCIATE_DQ_RULE_OBJECTS = classify_tool_desc(
     f"**objectType**: {MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC} only.\n\n"
     "Published (ACTIVE) data quality rules are temporarily demoted to draft for association, "
     "then restored to published when complete. Rules already in draft proceed directly.\n\n"
-    "Response includes statusMessage (batch function-support summary), counts "
+    "Response includes statusMessage (outcome summary), counts "
     "(associatedCount, skippedCount, failedCount), and per-row status:\n"
-    "- associated: linked to the data quality rule\n"
-    "- skipped: already linked, or unsupported column data type / connector for the function\n"
+    "- associated: linked to the data quality rule (including already linked on idempotent retry)\n"
+    "- skipped: unsupported column data type / connector for the function\n"
     "- failed: invalid object type, not found, or license error\n\n"
     "Present formattedResponse to the user. Audit source OE-MCP."
 )
@@ -252,7 +252,7 @@ def format_associate_dq_rule_objects_response(body: dict[str, Any]) -> str:
         lines.append(f"DQ rule id: {rule_id}")
     status_message = data.get("statusMessage")
     if isinstance(status_message, str) and status_message.strip():
-        lines.append(f"Function support: {status_message.strip()}")
+        lines.append(f"Outcome: {status_message.strip()}")
     associated = data.get("associatedCount", 0)
     skipped = data.get("skippedCount", 0)
     failed = data.get("failedCount", 0)
@@ -271,6 +271,46 @@ def format_associate_dq_rule_objects_response(body: dict[str, Any]) -> str:
             message = row.get("message")
             detail = f" — {message}" if isinstance(message, str) and message.strip() else ""
             lines.append(f"  - {oid} ({otype}): {status}{detail}")
+    return "\n".join(lines)
+
+
+def format_create_dq_rules_response(body: dict[str, Any]) -> str:
+    """Human-readable summary of create_dq_rules API result."""
+    data = body.get("data") if isinstance(body.get("data"), dict) else body
+    if not isinstance(data, dict):
+        return "DQ rule create/associate completed."
+    lines: list[str] = []
+    created = data.get("createdCount", 0)
+    associated = data.get("associatedCount", 0)
+    skipped = data.get("skippedCount", 0)
+    failed = data.get("failedCount", 0)
+    lines.append(
+        f"Summary: {created} created, {associated} associated, "
+        f"{skipped} skipped, {failed} failed."
+    )
+    rows = data.get("rows")
+    if isinstance(rows, list) and rows:
+        lines.append("Per object:")
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            oid = row.get("objectId", "?")
+            otype = row.get("objectType", "?")
+            status = row.get("status", "?")
+            rule_name = row.get("ruleName")
+            dqrule_id = row.get("dqruleId")
+            object_linked = row.get("objectAssociated")
+            parts = [f"  - {oid} ({otype}): {status}"]
+            if isinstance(rule_name, str) and rule_name.strip():
+                parts.append(f"rule={rule_name}")
+            if dqrule_id is not None:
+                parts.append(f"dqruleId={dqrule_id}")
+            if object_linked is True or status == "created":
+                parts.append("object linked")
+            message = row.get("message")
+            if isinstance(message, str) and message.strip():
+                parts.append(f"— {message.strip()}")
+            lines.append(" ".join(parts))
     return "\n".join(lines)
 
 

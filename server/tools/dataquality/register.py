@@ -31,6 +31,7 @@ from server.tools.dataquality.helpers import (
     build_create_dq_rules_payload,
     format_assess_cde_dq_response,
     format_associate_dq_rule_objects_response,
+    format_create_dq_rules_response,
     validate_assess_cde_dq_args,
     validate_associate_dq_rule_objects_args,
     validate_create_dq_rules_args,
@@ -309,6 +310,8 @@ async def _invoke_create_dq_rules(
     try:
         async with ovaledge_client() as client:
             body = await client.post(MCP_PATH_CREATE_DQ_RULES, payload)
-            return body if isinstance(body, dict) else {"data": body}
+            out = body if isinstance(body, dict) else {"data": body}
+            out["formattedResponse"] = format_create_dq_rules_response(out)
+            return out
     except OvalEdgeError as e:
         return map_ovaledge_error(e)
