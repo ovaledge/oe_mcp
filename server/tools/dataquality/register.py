@@ -29,6 +29,7 @@ from server.tools.dataquality.helpers import (
     build_assess_cde_dq_payload,
     build_associate_dq_rule_objects_payload,
     build_create_dq_rules_payload,
+    format_assess_cde_dq_response,
     format_associate_dq_rule_objects_response,
     validate_assess_cde_dq_args,
     validate_associate_dq_rule_objects_args,
@@ -98,15 +99,28 @@ def register(mcp: FastMCP) -> None:
                 ge=1,
             ),
         ] = MCP_DQ_ASSESS_LIMIT_DEFAULT,
+        description_custom_field_name: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Custom field label/key to use as business description only when the user "
+                    "explicitly names it in the prompt. Applied after object and term "
+                    "descriptions are checked."
+                ),
+                default=None,
+            ),
+        ] = None,
     ) -> dict[str, Any]:
         """CDE / column DQ assessment (see MCP tool description)."""
-        return await _invoke_assess_cde_dq(discover_cde_columns, objects, limit)
+        return await _invoke_assess_cde_dq(
+            discover_cde_columns, objects, limit, description_custom_field_name
+        )
 
     @mcp.tool(description=_DESC_ASSOCIATE_DQ_RULE_OBJECTS)
     async def associate_dq_rule_objects(
         dqrule_id: Annotated[
             int,
-            Field(description="Draft DQ rule id to link objects to."),
+            Field(description="Data Quality rule id to link objects to."),
         ],
         objects: Annotated[
             list[dict[str, Any]],
@@ -125,7 +139,7 @@ def register(mcp: FastMCP) -> None:
             ),
         ] = True,
     ) -> dict[str, Any]:
-        """Link catalog objects to a draft DQ rule (see MCP tool description)."""
+        """Link catalog objects to a data quality rule (see MCP tool description)."""
         return await _invoke_associate_dq_rule_objects(
             dqrule_id, objects, skip_already_associated
         )
@@ -176,6 +190,16 @@ def register(mcp: FastMCP) -> None:
                 default=True,
             ),
         ] = True,
+        description_custom_field_name: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Custom field label/key from the user's prompt when object and term "
+                    "descriptions are empty."
+                ),
+                default=None,
+            ),
+        ] = None,
     ) -> dict[str, Any]:
         """Assess then create or associate DQ rules for CDE columns (see MCP tool description)."""
         return await _invoke_create_dq_rules(
@@ -184,6 +208,7 @@ def register(mcp: FastMCP) -> None:
             limit,
             prefer_existing_rule,
             skip_duplicate_function_on_object,
+            description_custom_field_name,
         )
 
 
@@ -217,17 +242,22 @@ async def _invoke_assess_cde_dq(
     discover_cde_columns: bool,
     objects: list[dict[str, Any]] | None,
     limit: int,
+    description_custom_field_name: str | None = None,
 ) -> dict[str, Any]:
     err = validate_assess_cde_dq_args(discover_cde_columns, objects)
     if err is not None:
         return err
-    payload = build_assess_cde_dq_payload(discover_cde_columns, objects, limit)
+    payload = build_assess_cde_dq_payload(
+        discover_cde_columns, objects, limit, description_custom_field_name
+    )
     if "error" in payload:
         return payload
     try:
         async with ovaledge_client() as client:
             body = await client.post(MCP_PATH_ASSESS_CDE_DQ, payload)
-            return body if isinstance(body, dict) else {"data": body}
+            out = body if isinstance(body, dict) else {"data": body}
+            out["formattedResponse"] = format_assess_cde_dq_response(out)
+            return out
     except OvalEdgeError as e:
         return map_ovaledge_error(e)
 
@@ -261,6 +291,7 @@ async def _invoke_create_dq_rules(
     limit: int,
     prefer_existing_rule: bool,
     skip_duplicate_function_on_object: bool,
+    description_custom_field_name: str | None = None,
 ) -> dict[str, Any]:
     err = validate_create_dq_rules_args(discover_cde_columns, objects)
     if err is not None:
@@ -271,6 +302,7 @@ async def _invoke_create_dq_rules(
         limit,
         prefer_existing_rule,
         skip_duplicate_function_on_object,
+        description_custom_field_name,
     )
     if "error" in payload:
         return payload

@@ -39,6 +39,7 @@ from server.tools.common import (
     ovaledge_client,
     strip_or_none,
 )
+from server.tools.common.tool_logging import logged_tool_invocation
 from server.tools.governance.helpers import (
     _block_llm_master_selection,
     _block_llm_parent_selection,
@@ -81,6 +82,7 @@ from server.tools.governance.helpers import (
 )
 
 
+@logged_tool_invocation
 async def _invoke_lookup_glossary_term(
     object_id: Annotated[
         int | None,
@@ -187,6 +189,7 @@ async def _invoke_lookup_glossary_term(
         return map_ovaledge_error(e)
 
 
+@logged_tool_invocation
 async def _invoke_create_glossary_term(
     search_on: Annotated[
         str | None,
@@ -849,6 +852,7 @@ async def _invoke_create_glossary_term(
         return map_ovaledge_error(e)
 
 
+@logged_tool_invocation
 async def _invoke_lookup_tags(
     object_id: Annotated[
         int | None,
@@ -922,6 +926,7 @@ async def _invoke_lookup_tags(
         return map_ovaledge_error(e)
 
 
+@logged_tool_invocation
 async def _invoke_create_tag(
     tag_name: Annotated[
         str,
@@ -1354,6 +1359,7 @@ async def _invoke_create_tag(
         return map_ovaledge_error(e)
 
 
+@logged_tool_invocation
 async def _invoke_lookup_datastory(
     story_zone_name: Annotated[
         str | None,
@@ -1431,6 +1437,7 @@ async def _invoke_lookup_datastory(
         return map_ovaledge_error(e)
 
 
+@logged_tool_invocation
 async def _invoke_update_governance_roles(
     object_id: Annotated[
         int,
@@ -1580,6 +1587,7 @@ async def _invoke_update_governance_roles(
         return map_ovaledge_error(e)
 
 
+@logged_tool_invocation
 async def _invoke_update_custom_field_value(
     object_id: Annotated[
         int,

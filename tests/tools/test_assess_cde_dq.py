@@ -36,12 +36,14 @@ class TestAssessCdeDq:
         await fn(
             objects=[{"object_id": 10, "object_type": "column"}],
             limit=25,
+            description_custom_field_name=" Business Definition ",
         )
         mock_oe_client.post.assert_called_once_with(
             MCP_PATH_ASSESS_CDE_DQ,
             {
                 "discoverCdeColumns": False,
                 "limit": 25,
+                "descriptionCustomFieldName": "Business Definition",
                 "objects": [{"objectId": 10, "objectType": "oecolumn"}],
             },
         )
@@ -68,5 +70,7 @@ class TestAssessCdeDq:
         assert "lookup_dq_rule" in desc
         assert "search_catalog_assets" in desc
         assert "associate_dq_rule_objects" in desc
+        assert "description_custom_field_name" in desc
+        assert "descriptionSource" in desc
         assert "Read-only" in desc
         assert MCP_PATH_ASSESS_CDE_DQ in desc

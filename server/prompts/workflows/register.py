@@ -569,6 +569,7 @@ def register(mcp: FastMCP) -> None:
             f"4. Use {TOOL_LOOKUP_DQ_RULE} when the user names an existing rule; do not use "
             f"{TOOL_SEARCH_CATALOG} for dqrule objects\n"
             f"5. Only after explicit user approval for writes: {TOOL_ASSOCIATE_DQ_RULE_OBJECTS} "
-            f"for a known draft rule id, or {TOOL_CREATE_DQ_RULES} to create/associate in one step"
+            f"for a known data quality rule id, or {TOOL_CREATE_DQ_RULES} "
+            f"to create/associate in one step"
         )
         return [Message(text)]

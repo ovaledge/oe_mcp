@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-Install pre-commit git hooks (ruff on commit, pytest on push).
+Install pre-commit git hooks (ruff, mypy, pytest on commit only).
 
 .DESCRIPTION
 Idempotent. Skips if not a git repository.
@@ -33,11 +33,10 @@ poetry run pre-commit --version
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 poetry run pre-commit install
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-poetry run pre-commit install --hook-type pre-push
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+poetry run pre-commit uninstall --hook-type pre-push 2>$null
 poetry run pre-commit validate-config .pre-commit-config.yaml
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "==> Git hooks ready:"
-Write-Host "    git commit -> ruff check + pytest (tests/)"
-Write-Host "    git push   -> pytest again (if you use pre-push hook)"
+Write-Host "    git commit -> ruff check + mypy + pytest (tests/)"
+Write-Host "    git push   -> no local hook (CI runs on the remote)"

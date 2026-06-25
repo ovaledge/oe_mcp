@@ -31,6 +31,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import sys
 import threading
 import time
 from collections.abc import AsyncIterator
@@ -43,6 +44,7 @@ from fastmcp.utilities.lifespan import combine_lifespans
 from mangum import Mangum
 
 from server.app import mcp
+from server.asgi_mcp_observability import McpObservabilityMiddleware
 from server.asgi_normalize_mcp_path import NormalizeMcpMountSlashMiddleware
 from server.auth.local_lifespan import local_oe_jwt_lifespan
 from server.auth.metadata import router as metadata_router
@@ -112,6 +114,7 @@ app = FastAPI(
     lifespan=_app_lifespan,
 )
 
+app.add_middleware(McpObservabilityMiddleware)
 app.add_middleware(AuthMiddleware)
 app.add_middleware(NormalizeMcpMountSlashMiddleware)
 
@@ -184,10 +187,22 @@ app.mount("/mcp", mcp_http)
 _mangum = Mangum(app, lifespan="off" if _running_on_aws_lambda() else "auto")
 
 _mcp_holder_lock = threading.Lock()
+_mcp_holder_loop_pump_lock = threading.Lock()
 _mcp_holder_task: asyncio.Task[Any] | None = None
 _mcp_holder_started = threading.Event()
 
-_LAMBDA_MCP_LIFESPAN_STARTUP_TIMEOUT_SECONDS = 15.0
+
+def _lambda_mcp_lifespan_startup_timeout_seconds() -> float:
+    """Seconds to wait for Streamable HTTP lifespan during cold start (INIT or first invoke)."""
+    raw = os.environ.get("LAMBDA_MCP_LIFESPAN_STARTUP_TIMEOUT_SECONDS", "").strip()
+    if raw:
+        return max(1.0, float(raw))
+    return 28.0
+
+
+def _lambda_mcp_lifespan_eager_bootstrap_enabled() -> bool:
+    raw = os.environ.get("LAMBDA_MCP_LIFESPAN_EAGER_BOOTSTRAP", "true").strip().lower()
+    return raw in ("1", "true", "yes", "on")
 
 
 def mcp_lifespan_ready() -> bool:
@@ -206,6 +221,46 @@ def mcp_lifespan_ready() -> bool:
     return True
 
 
+def _lambda_mcp_event_loop() -> asyncio.AbstractEventLoop:
+    loop = asyncio.get_event_loop()
+    if loop.is_closed():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    return loop
+
+
+def _pump_lambda_mcp_event_loop(loop: asyncio.AbstractEventLoop) -> None:
+    """Drive the shared loop briefly (thread-safe for concurrent Lambda invokes)."""
+    with _mcp_holder_loop_pump_lock:
+        loop.run_until_complete(asyncio.sleep(0.01))
+
+
+def _wait_for_lambda_mcp_lifespan_ready() -> None:
+    timeout = _lambda_mcp_lifespan_startup_timeout_seconds()
+    deadline = time.monotonic() + timeout
+    loop = _lambda_mcp_event_loop()
+    while time.monotonic() < deadline:
+        if _mcp_holder_started.is_set():
+            logger.info("MCP HTTP lifespan pinned and ready (Lambda)")
+            return
+        task = _mcp_holder_task
+        if task is not None and task.done():
+            exc = task.exception()
+            if exc is not None:
+                raise RuntimeError(
+                    "MCP HTTP lifespan holder task failed during startup"
+                ) from exc
+            raise RuntimeError("MCP HTTP lifespan holder task exited during startup")
+        _pump_lambda_mcp_event_loop(loop)
+
+    raise RuntimeError(
+        "StreamableHTTPSessionManager did not start within "
+        f"{timeout:.0f}s — check FastMCP / MCP versions. "
+        "Increase LAMBDA_MCP_LIFESPAN_STARTUP_TIMEOUT_SECONDS or Lambda memory if cold "
+        "starts are slow; see CloudWatch for holder task errors."
+    )
+
+
 def _ensure_lambda_mcp_http_lifespan_pinned() -> None:
     """
     Keep ``mcp_http``'s StreamableHTTPSessionManager ``run()`` entered for the whole warm
@@ -217,46 +272,55 @@ def _ensure_lambda_mcp_http_lifespan_pinned() -> None:
         if _mcp_holder_task is not None and not _mcp_holder_task.done():
             if _mcp_holder_started.is_set():
                 return
-
-        if _mcp_holder_task is not None and _mcp_holder_task.done():
+            # Another caller is already starting the holder — wait outside the lock.
+        elif _mcp_holder_task is not None and _mcp_holder_task.done():
             exc = _mcp_holder_task.exception()
             if exc is not None:
                 logger.exception("MCP http lifespan holder task ended with error", exc_info=exc)
             _mcp_holder_task = None
             _mcp_holder_started.clear()
 
-        loop = asyncio.get_event_loop()
+        if _mcp_holder_task is None:
+            loop = _lambda_mcp_event_loop()
 
-        async def _hold_mcp_http_lifespan_forever() -> None:
-            async with mcp_http.router.lifespan_context(mcp_http):
-                _mcp_holder_started.set()
-                await asyncio.Event().wait()
+            async def _hold_mcp_http_lifespan_forever() -> None:
+                async with mcp_http.router.lifespan_context(mcp_http):
+                    _mcp_holder_started.set()
+                    logger.info("MCP HTTP lifespan entered (Lambda holder task)")
+                    await asyncio.Event().wait()
 
-        _mcp_holder_started.clear()
-        _mcp_holder_task = loop.create_task(_hold_mcp_http_lifespan_forever())
-        deadline = time.monotonic() + _LAMBDA_MCP_LIFESPAN_STARTUP_TIMEOUT_SECONDS
-        while time.monotonic() < deadline:
-            if _mcp_holder_started.is_set():
-                logger.info("MCP HTTP lifespan pinned and ready (Lambda)")
-                return
-            if _mcp_holder_task.done():
-                exc = _mcp_holder_task.exception()
-                if exc is not None:
-                    raise RuntimeError(
-                        "MCP HTTP lifespan holder task failed during startup"
-                    ) from exc
-                raise RuntimeError("MCP HTTP lifespan holder task exited during startup")
-            loop.run_until_complete(asyncio.sleep(0.01))
+            _mcp_holder_started.clear()
+            _mcp_holder_task = loop.create_task(_hold_mcp_http_lifespan_forever())
 
-        raise RuntimeError(
-            "MCP HTTP lifespan did not enter within "
-            f"{_LAMBDA_MCP_LIFESPAN_STARTUP_TIMEOUT_SECONDS:.0f}s on this Lambda instance. "
-            "The pinned mcp_http lifespan task may be stuck; check CloudWatch for holder "
-            "task errors and confirm FastMCP streamable-http startup is compatible."
+    _wait_for_lambda_mcp_lifespan_ready()
+
+
+def _eager_bootstrap_lambda_mcp_lifespan_at_import() -> None:
+    if not _running_on_aws_lambda() or not _lambda_mcp_lifespan_eager_bootstrap_enabled():
+        return
+    if "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST"):
+        return
+    try:
+        _ensure_lambda_mcp_http_lifespan_pinned()
+    except Exception:
+        logger.exception(
+            "MCP HTTP lifespan eager bootstrap did not finish during Lambda import; "
+            "handler will retry on first request"
         )
 
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     if _running_on_aws_lambda():
         _ensure_lambda_mcp_http_lifespan_pinned()
-    return _mangum(event, context)
+    try:
+        return _mangum(event, context)
+    except Exception:
+        request_id = getattr(context, "aws_request_id", None) if context else None
+        logger.exception(
+            "Lambda handler uncaught error request_id=%s",
+            request_id or "-",
+        )
+        raise
+
+
+_eager_bootstrap_lambda_mcp_lifespan_at_import()

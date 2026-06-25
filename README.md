@@ -37,8 +37,8 @@ Setup scripts (`scripts/setup_local_mcp.sh`, `scripts/setup_local_mcp.ps1`) crea
 - OvalEdge catalog ACL (`get_user_object_access`) — user/role grants on catalog objects, not native RDAM
 - DQ rule lookup (`lookup_dq_rule`)
 - CDE / column DQ assessment — read-only (`assess_cde_dq`)
-- Associate objects to draft DQ rules (`associate_dq_rule_objects`)
-- Auto-create or associate draft DQ rules for CDE columns (`create_dq_rules`)
+- Associate objects to data quality rules (`associate_dq_rule_objects`)
+- Auto-create or associate data quality rules for CDE columns (`create_dq_rules`)
 - Asset description, CDE, governance role, and custom field updates (`update_asset_descriptions`, `update_cde_associations`, `update_governance_roles`, `update_custom_field_value`)
 - Resource URIs (`ovaledge://catalog/...`, `ovaledge://governance/...`) and static guides (`docs://ovaledge/...`)
 - Nineteen workflow prompts under `server/prompts/workflows/` (see below; canonical list in `server/mcp_surface.py`)
@@ -135,7 +135,7 @@ Use `./scripts/run_tests.sh` on macOS and Linux so tests always run in the proje
 
 Unit tests measure coverage for `server/` and `entrypoints/` (report-only threshold for now; see `[tool.coverage.*]` in `pyproject.toml`). HTML report: `./scripts/run_tests.sh --cov-report=html` then open `htmlcov/index.html`.
 
-Git hooks (**ruff** + full **pytest** on each **commit**; optional pytest again on **push**) are installed automatically when you run `./scripts/setup_local_mcp.sh` in a git clone. To install or refresh hooks only:
+Git hooks (**ruff**, **mypy**, and **pytest** on each **commit** only) are installed automatically when you run `./scripts/setup_local_mcp.sh` in a git clone. To install or refresh hooks only:
 
 ```bash
 chmod +x scripts/setup_git_hooks.sh   # once, if needed
@@ -148,7 +148,10 @@ Optional LLM-level MCP checks: `poetry install --with eval`, then see [evals/REA
 
 ## Security (summary)
 
-See **[SECURITY.md](SECURITY.md)** for reporting, deployment surface, and dependency practices.
+See **[SECURITY.md](SECURITY.md)** for the GitHub security policy (supported versions, private vulnerability reporting, Dependabot).
+
+- Report vulnerabilities via **Security** → **Report a vulnerability** on GitHub (preferred), not public issues.
+- Dependabot opens weekly PRs for Python, GitHub Actions, and Docker dependencies (see `.github/dependabot.yml`).
 
 - Do not commit real OvalEdge tokens or secrets.
 - Remote header mode (`remote_credentials`) requires **HTTPS** at the edge; see [README_REMOTE_MCP.md](README_REMOTE_MCP.md#security-remote).

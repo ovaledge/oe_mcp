@@ -57,8 +57,10 @@ from server.tools.catalog.helpers import (
 )
 from server.tools.common import drop_none as _q
 from server.tools.common import map_ovaledge_error, ovaledge_client, strip_or_none
+from server.tools.common.tool_logging import logged_tool_invocation
 
 
+@logged_tool_invocation
 async def _invoke_search_catalog_assets(
     search_terms: Annotated[
         list[str] | None,
@@ -263,6 +265,7 @@ async def _invoke_search_catalog_assets(
         return map_ovaledge_error(e)
 
 
+@logged_tool_invocation
 async def _invoke_catalog_asset_details(
     object_id: Annotated[
         int | None,
@@ -335,6 +338,7 @@ async def _invoke_catalog_asset_details(
         return map_ovaledge_error(e)
 
 
+@logged_tool_invocation
 async def _invoke_column_profile_statistics(
     object_id: Annotated[int, Field(description="Table or file internal object id.")],
     object_type: Annotated[
@@ -357,6 +361,7 @@ async def _invoke_column_profile_statistics(
         return map_ovaledge_error(e)
 
 
+@logged_tool_invocation
 async def _invoke_table_entity_relationships(
     object_id: Annotated[int, Field(description="oetable internal object id.")],
 ) -> dict[str, Any]:
@@ -370,6 +375,7 @@ async def _invoke_table_entity_relationships(
         return map_ovaledge_error(e)
 
 
+@logged_tool_invocation
 async def _invoke_asset_lineage(
     object_id: Annotated[int, Field(description="Table or file internal object id.")],
     object_type: Annotated[
@@ -400,6 +406,7 @@ async def _invoke_asset_lineage(
         return map_ovaledge_error(e)
 
 
+@logged_tool_invocation
 async def _invoke_update_asset_descriptions(
     object_id: Annotated[
         int,
@@ -567,6 +574,7 @@ async def _invoke_update_asset_descriptions(
         return map_ovaledge_error(e)
 
 
+@logged_tool_invocation
 async def _invoke_update_cde_associations(
     targets: Annotated[
         list[dict[str, Any]],
@@ -655,6 +663,7 @@ async def _invoke_update_cde_associations(
         return map_ovaledge_error(e)
 
 
+@logged_tool_invocation
 async def _invoke_metadata_changes_between_crawls(
     question: Annotated[
         str | None,
