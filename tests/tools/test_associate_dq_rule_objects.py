@@ -45,7 +45,7 @@ class TestAssociateDqRuleObjects:
         assert "formattedResponse" in out
         assert "associated" in out["formattedResponse"]
 
-    def test_format_associate_response_includes_function_support_summary(self) -> None:
+    def test_format_associate_response_includes_outcome_summary(self) -> None:
         formatted = format_associate_dq_rule_objects_response(
             {
                 "data": {
@@ -54,8 +54,7 @@ class TestAssociateDqRuleObjects:
                     "skippedCount": 1,
                     "failedCount": 0,
                     "statusMessage": (
-                        "Added 2 out of 3 object(s) added to the DQ rule. "
-                        "Skipped 1 object(s) due to unsupported column data type."
+                        "2 associated, 1 skipped, 0 failed out of 3 object(s)."
                     ),
                     "rows": [
                         {
@@ -73,8 +72,33 @@ class TestAssociateDqRuleObjects:
                 }
             }
         )
-        assert "Function support:" in formatted
+        assert "Outcome:" in formatted
         assert "2 associated, 1 skipped" in formatted
+
+    def test_format_associate_response_already_linked_idempotent(self) -> None:
+        formatted = format_associate_dq_rule_objects_response(
+            {
+                "data": {
+                    "dqruleId": 10264,
+                    "associatedCount": 1,
+                    "skippedCount": 0,
+                    "failedCount": 0,
+                    "statusMessage": (
+                        "All 1 of 1 object(s) are already associated with the DQ rule."
+                    ),
+                    "rows": [
+                        {
+                            "objectId": 10006,
+                            "objectType": "oetable",
+                            "status": "associated",
+                            "message": "Object is already associated to this DQ rule.",
+                        }
+                    ],
+                }
+            }
+        )
+        assert "1 associated, 0 skipped" in formatted
+        assert "already associated" in formatted
 
     async def test_rejects_invalid_dqrule_id(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
