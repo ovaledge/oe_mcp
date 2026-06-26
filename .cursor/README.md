@@ -76,3 +76,13 @@ After connect, use workflow prompts and tools as documented in [server/docs/mcp_
 | [oe-mcp-tool-design](skills/oe-mcp-tool-design/SKILL.md) | Adding or reviewing MCP tools in this codebase |
 
 Invoke in Cursor with `@oe-mcp-tool-design` or ask to follow the oe_mcp tool design skill.
+
+## CodeGraph (structural code index)
+
+For **contributing to this repo**, use [CodeGraph](https://github.com/colbymchenry/codegraph) to reduce grep/read loops. After `codegraph install` (once), run from repo root:
+
+```bash
+codegraph init -i
+```
+
+See [docs/contributing/CODEGRAPH.md](../docs/contributing/CODEGRAPH.md) for MCP enablement, landmarks, and when to use CodeGraph vs `docs://ovaledge/*`.

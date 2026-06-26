@@ -146,6 +146,8 @@ See `.pre-commit-config.yaml` for hook definitions.
 
 Optional LLM-level MCP checks: `poetry install --with eval`, then see [evals/README.md](evals/README.md).
 
+**Contributors (Cursor):** optional [CodeGraph](docs/contributing/CODEGRAPH.md) index for faster structural navigation (`codegraph init -i` from repo root).
+
 ## Security (summary)
 
 See **[SECURITY.md](SECURITY.md)** for the GitHub security policy (supported versions, private vulnerability reporting, Dependabot).
