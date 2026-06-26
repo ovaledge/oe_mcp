@@ -637,6 +637,16 @@ def register(mcp: FastMCP) -> None:
             str | None,
             Field(description="Optional client key to dedupe retries.", default=None),
         ] = None,
+        time_zone: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "IANA time zone for date custom fields (e.g. Asia/Kolkata). "
+                    "Defaults to OVALEDGE_CLIENT_TIMEZONE or host zone so dates match the UI."
+                ),
+                default=None,
+            ),
+        ] = None,
         create_confirmed_by_user: Annotated[
             bool,
             Field(
@@ -647,6 +657,16 @@ def register(mcp: FastMCP) -> None:
                 default=False,
             ),
         ] = False,
+        code_update_mode: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "For multi-select code fields with multiple values: replace_all, add, "
+                    "or remove. Omit for single values or until the user chooses a mode."
+                ),
+                default=None,
+            ),
+        ] = None,
     ) -> dict[str, Any]:
         """update custom field value (see MCP tool description)."""
         return await _invoke_update_custom_field_value(
@@ -658,5 +678,7 @@ def register(mcp: FastMCP) -> None:
             dry_run,
             fail_on_blocked_field,
             idempotency_key,
-            create_confirmed_by_user
+            time_zone,
+            create_confirmed_by_user,
+            code_update_mode,
         )

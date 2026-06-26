@@ -7,6 +7,7 @@ from typing import Annotated, Any
 from pydantic import Field
 
 from server.client import OvalEdgeError
+from server.config import resolve_client_timezone
 from server.constants import (
     MCP_CATALOG_OBJECT_TYPES,
     MCP_CUSTOM_FIELD_OBJECT_TYPES,
@@ -41,6 +42,7 @@ from server.tools.common import (
 )
 from server.tools.common.tool_logging import logged_tool_invocation
 from server.tools.governance.helpers import (
+    _apply_code_field_update_policies,
     _block_llm_master_selection,
     _block_llm_parent_selection,
     _consume_parent_picker_shown,
@@ -1645,6 +1647,16 @@ async def _invoke_update_custom_field_value(
         str | None,
         Field(description="Optional client key to dedupe retries.", default=None),
     ] = None,
+    time_zone: Annotated[
+        str | None,
+        Field(
+            description=(
+                "IANA time zone for date custom fields (e.g. Asia/Kolkata). "
+                "Defaults to OVALEDGE_CLIENT_TIMEZONE or host zone so dates match the UI."
+            ),
+            default=None,
+        ),
+    ] = None,
     create_confirmed_by_user: Annotated[
         bool,
         Field(
@@ -1655,6 +1667,16 @@ async def _invoke_update_custom_field_value(
             default=False,
         ),
     ] = False,
+    code_update_mode: Annotated[
+        str | None,
+        Field(
+            description=(
+                "For multi-select code fields with multiple values: replace_all, add, "
+                "or remove. Omit for single values or until the user chooses a mode."
+            ),
+            default=None,
+        ),
+    ] = None,
 ) -> dict[str, Any]:
     """Update custom field values (see MCP tool description)."""
     if object_type is None or str(object_type).strip() == "":
@@ -1669,13 +1691,20 @@ async def _invoke_update_custom_field_value(
             "status_code": 400,
         }
     normalized_updates, err = _normalize_field_updates(field_updates)
-    if err:
-        return {"error": err, "status_code": 400}
+    if err or normalized_updates is None:
+        return {"error": err or "field_updates is required.", "status_code": 400}
 
     body: dict[str, Any] = {
         "target": {"objectId": object_id, "objectType": str(object_type).strip()},
         "fieldUpdates": normalized_updates,
     }
+    resolved_tz = (
+        str(time_zone).strip()
+        if time_zone is not None and str(time_zone).strip()
+        else resolve_client_timezone()
+    )
+    if resolved_tz:
+        body["timeZone"] = resolved_tz
     options: dict[str, Any] = {}
     if dry_run is not None:
         options["dryRun"] = dry_run
@@ -1694,6 +1723,29 @@ async def _invoke_update_custom_field_value(
         body["clientContext"] = client_context
 
     is_dry = dry_run is True
+    # Resolve code-field values (split multi-option input, validate, merge) for BOTH the
+    # confirmation preview and the final confirmed POST. The confirm step re-sends the
+    # original field_updates, so resolution must run again here or unresolved values
+    # (e.g. lists or "a and b" strings) would reach the API and be rejected.
+    if not is_dry:
+        try:
+            async with ovaledge_client() as client:
+                policy_result = await _apply_code_field_update_policies(
+                    client,
+                    object_id,
+                    str(object_type).strip(),
+                    normalized_updates,
+                    code_update_mode,
+                )
+        except OvalEdgeError as e:
+            return map_ovaledge_error(e)
+        if policy_result.get("workflowPhase"):
+            return policy_result
+        if policy_result.get("error"):
+            return policy_result
+        normalized_updates = policy_result.get("fieldUpdates") or normalized_updates
+        body["fieldUpdates"] = normalized_updates
+
     if not is_dry and not create_confirmed_by_user:
         return _format_update_custom_field_value_confirmation_preview(body)
 
