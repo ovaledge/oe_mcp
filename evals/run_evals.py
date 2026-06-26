@@ -11,8 +11,14 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-# Opt out before importing deepeval (reads env at import time in some versions).
-os.environ.setdefault("DEEPEVAL_TELEMETRY_OPT_OUT", "YES")
+from evals.config import (
+    deepeval_threshold,
+    ensure_deepeval_telemetry_opt_out,
+    has_openai_key,
+    judge_model,
+)
+
+ensure_deepeval_telemetry_opt_out()
 
 
 @dataclass
@@ -25,14 +31,6 @@ class MetricReport:
     reason: str | None = None
 
 
-def _judge_model() -> str:
-    return os.environ.get("DEEPEVAL_JUDGE_MODEL", "gpt-4o-mini")
-
-
-def _has_openai_key() -> bool:
-    return bool(os.environ.get("OPENAI_API_KEY") or os.environ.get("DEEPEVAL_OPENAI_API_KEY"))
-
-
 def _optional_float(value: float | None) -> float | None:
     """Normalize metric scores for JSON (DeepEval `measure` may return None)."""
     if value is None:
@@ -40,13 +38,43 @@ def _optional_float(value: float | None) -> float | None:
     return float(value)
 
 
+def _append_metric_report(
+    reports: list[MetricReport],
+    *,
+    metric: Any,
+    metric_name: str,
+    case_name: str,
+    exc: Exception | None = None,
+) -> None:
+    if exc is not None:
+        reports.append(
+            MetricReport(
+                metric=metric_name,
+                case_name=case_name,
+                score=None,
+                success=False,
+                error=str(exc),
+            )
+        )
+        return
+    reports.append(
+        MetricReport(
+            metric=metric_name,
+            case_name=case_name,
+            score=_optional_float(getattr(metric, "score", None)),
+            success=bool(getattr(metric, "success", None)),
+            reason=getattr(metric, "reason", None),
+        )
+    )
+
+
 def dry_run(cases_json: str | None) -> int:
     import evals.golden_cases as golden_cases
 
     for fn_name in golden_cases.all_mcp_use_golden_fns():
         getattr(golden_cases, fn_name)()
-    golden_cases.golden_task_completion_discovery()
-    golden_cases.golden_multi_turn_lineage_followup()
+    for fn_name in golden_cases.all_conversational_golden_fns():
+        getattr(golden_cases, fn_name)()
     if cases_json:
         from evals.json_cases import load_mcp_use_cases_from_json
 
@@ -63,7 +91,7 @@ def run_metrics(threshold: float, cases_json: str | None) -> tuple[int, list[Met
     import evals.golden_cases as golden_cases
     from evals.json_cases import load_mcp_use_cases_from_json
 
-    model = _judge_model()
+    model = judge_model()
     reports: list[MetricReport] = []
 
     if cases_json:
@@ -79,73 +107,59 @@ def run_metrics(threshold: float, cases_json: str | None) -> tuple[int, list[Met
             # MCPUseMetric.measure(async_mode=True) runs a_measure but does not return
             # self.score (library quirk); read score from the metric instance.
             m_use.measure(case, _log_metric_to_confident=False)
-            reports.append(
-                MetricReport(
-                    metric="MCPUseMetric",
-                    case_name=case.name or "",
-                    score=_optional_float(getattr(m_use, "score", None)),
-                    success=bool(getattr(m_use, "success", None)),
-                    reason=getattr(m_use, "reason", None),
-                )
+            _append_metric_report(
+                reports,
+                metric=m_use,
+                metric_name="MCPUseMetric",
+                case_name=case.name or "",
             )
         except Exception as exc:  # noqa: BLE001 — surface eval failures in report
-            reports.append(
-                MetricReport(
-                    metric="MCPUseMetric",
-                    case_name=case.name or "",
-                    score=None,
-                    success=False,
-                    error=str(exc),
-                )
+            _append_metric_report(
+                reports,
+                metric=m_use,
+                metric_name="MCPUseMetric",
+                case_name=case.name or "",
+                exc=exc,
             )
 
     task_m = MCPTaskCompletionMetric(threshold=threshold, model=model, verbose_mode=False)
     try:
         tc = golden_cases.golden_task_completion_discovery()
         task_m.measure(tc, _log_metric_to_confident=False)
-        reports.append(
-            MetricReport(
-                metric="MCPTaskCompletionMetric",
-                case_name=tc.name or "",
-                score=_optional_float(getattr(task_m, "score", None)),
-                success=bool(getattr(task_m, "success", None)),
-                reason=getattr(task_m, "reason", None),
-            )
+        _append_metric_report(
+            reports,
+            metric=task_m,
+            metric_name="MCPTaskCompletionMetric",
+            case_name=tc.name or "",
         )
     except Exception as exc:  # noqa: BLE001
-        reports.append(
-            MetricReport(
-                metric="MCPTaskCompletionMetric",
-                case_name="task_completion_discovery",
-                score=None,
-                success=False,
-                error=str(exc),
-            )
+        _append_metric_report(
+            reports,
+            metric=task_m,
+            metric_name="MCPTaskCompletionMetric",
+            case_name="task_completion_discovery",
+            exc=exc,
         )
 
-    multi_m = MultiTurnMCPUseMetric(threshold=threshold, model=model, verbose_mode=False)
-    try:
-        tc2 = golden_cases.golden_multi_turn_lineage_followup()
-        multi_m.measure(tc2, _log_metric_to_confident=False)
-        reports.append(
-            MetricReport(
-                metric="MultiTurnMCPUseMetric",
-                case_name=tc2.name or "",
-                score=_optional_float(getattr(multi_m, "score", None)),
-                success=bool(getattr(multi_m, "success", None)),
-                reason=getattr(multi_m, "reason", None),
+    for fn_name in golden_cases.all_multi_turn_mcp_use_golden_fns():
+        multi_m = MultiTurnMCPUseMetric(threshold=threshold, model=model, verbose_mode=False)
+        try:
+            tc = getattr(golden_cases, fn_name)()
+            multi_m.measure(tc, _log_metric_to_confident=False)
+            _append_metric_report(
+                reports,
+                metric=multi_m,
+                metric_name="MultiTurnMCPUseMetric",
+                case_name=tc.name or fn_name,
             )
-        )
-    except Exception as exc:  # noqa: BLE001
-        reports.append(
-            MetricReport(
-                metric="MultiTurnMCPUseMetric",
-                case_name="multi_turn_lineage_followup",
-                score=None,
-                success=False,
-                error=str(exc),
+        except Exception as exc:  # noqa: BLE001
+            _append_metric_report(
+                reports,
+                metric=multi_m,
+                metric_name="MultiTurnMCPUseMetric",
+                case_name=fn_name,
+                exc=exc,
             )
-        )
 
     failed = [r for r in reports if r.success is False]
     exit_code = 1 if failed else 0
@@ -162,7 +176,7 @@ def main() -> int:
     parser.add_argument(
         "--threshold",
         type=float,
-        default=float(os.environ.get("DEEPEVAL_THRESHOLD", "0.5")),
+        default=deepeval_threshold(),
         help="Metric pass threshold (default 0.5 or DEEPEVAL_THRESHOLD).",
     )
     parser.add_argument(
@@ -183,7 +197,7 @@ def main() -> int:
         metavar="PATH",
         help=(
             "JSON file of MCP-use cases for MCPUseMetric (see evals/json_cases.py). "
-            "When set, replaces the two built-in single-turn MCPUse goldens; "
+            "When set, replaces built-in single-turn MCPUse goldens; "
             "task-completion and multi-turn cases still come from golden_cases.py."
         ),
     )
@@ -193,7 +207,7 @@ def main() -> int:
     if args.dry_run:
         return dry_run(cases_json)
 
-    if not _has_openai_key():
+    if not has_openai_key():
         msg = "OPENAI_API_KEY not set; skipping DeepEval LLM metrics."
         print(msg, file=sys.stderr)
         if args.require_key:
@@ -202,7 +216,7 @@ def main() -> int:
 
     exit_code, reports = run_metrics(args.threshold, cases_json)
     payload: dict[str, Any] = {
-        "judge_model": _judge_model(),
+        "judge_model": judge_model(),
         "threshold": args.threshold,
         "cases_json": cases_json,
         "reports": [asdict(r) for r in reports],

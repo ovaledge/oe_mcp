@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock
 
 from fastmcp import FastMCP
 
+from server.client import OvalEdgeError
 from server.constants import MCP_PATH_ASSOCIATE_DQ_RULE_OBJECTS, TOOL_ASSOCIATE_DQ_RULE_OBJECTS
 from server.tools import dataquality
 from server.tools.dataquality.helpers import format_associate_dq_rule_objects_response
@@ -115,3 +116,14 @@ class TestAssociateDqRuleObjects:
         out = await fn(dqrule_id=5, objects=[])
         assert out["status_code"] == 400
         mock_oe_client.post.assert_not_called()
+
+    async def test_oval_edge_error_returns_structured_dict(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.side_effect = OvalEdgeError(409, "Conflict")
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ASSOCIATE_DQ_RULE_OBJECTS)
+        out = await fn(
+            dqrule_id=42,
+            objects=[{"object_id": 10, "object_type": "column"}],
+        )
+        assert out["status_code"] == 409

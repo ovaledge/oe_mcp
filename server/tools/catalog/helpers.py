@@ -29,6 +29,7 @@ from server.constants import (
     MCP_UPDATE_ASSET_DESCRIPTION_OBJECT_TYPES_DOC,
 )
 from server.nav_links import build_absolute_nav_url, extract_hash_nav_link
+from server.tools.common.confirm_gate import attach_confirmation_token
 from server.tools.common.descriptions import classify_tool_desc
 
 _TABLE_FILE_TYPES = frozenset({"oetable", "oefile"})
@@ -97,7 +98,7 @@ _DESC_LINEAGE = classify_tool_desc(
 _DESC_UPDATE_DESCRIPTIONS = classify_tool_desc(
     "Update description field(s) on a catalog or governance asset (RBAC on server).\n\n"
     f"Backend: POST {MCP_PATH_UPDATE_ASSET_DESCRIPTIONS}\n\n"
-    "**Confirm gate:** confirm_update preview first; POST only with create_confirmed_by_user=true "
+    "**Confirm gate:** confirm_update preview first; POST only with write_confirmed_by_user=true "
     "(same pattern as create_glossary_term / create_tag). Never confirm until user approves.\n\n"
     "Resolve object_id via search_catalog_assets, lookup_glossary_term, or lookup_tags — do not "
     "guess ids. Required: object_id, object_type, and an explicit description slot.\n\n"
@@ -117,7 +118,7 @@ _DESC_METADATA_CHANGES = classify_tool_desc(
     '"What changed in CUSTOMER schema after the latest crawl?", '
     '"Did any tables get added or deleted this week?", '
     '"Show datatype changes in CUSTOMER_ANALYTICS from last 2 crawls." '
-    "When details are missing, response may recommend running ANALYSYS_TRANSACTION_JOB."
+    "When details are missing, response may recommend running ANALYSIS_TRANSACTION_JOB."
 )
 
 
@@ -404,8 +405,9 @@ def _enrich_update_descriptions_response(body: dict[str, Any]) -> dict[str, Any]
 
 _UPDATE_CONFIRM_AGENT_INSTRUCTION = (
     "Show formattedResponse and wait for explicit user approval. "
-    "Do not set create_confirmed_by_user=true until the user confirms. "
-    "Then re-call with create_confirmed_by_user=true and the same parameters."
+    "Do not set write_confirmed_by_user=true until the user confirms. "
+    "Then re-call with write_confirmed_by_user=true, confirmation_token from the "
+    "preview, and the same parameters."
 )
 
 
@@ -437,24 +439,25 @@ def _format_update_descriptions_confirmation_preview(
     dry_note = ""
     if isinstance(dry, dict) and dry.get("dryRun"):
         dry_note = "\n- **Note:** dry_run=true — preview only; no persist on confirm.\n"
-    return {
+    preview = {
         "ok": True,
         "awaitingUserConfirmation": True,
         "workflowPhase": "confirm_update",
         "doNotUpdate": True,
-        "createConfirmedByUser": False,
+        "writeConfirmedByUser": False,
         "formattedResponse": (
             "**Confirm description update**\n\n"
             f"- **Target:** {otype} (id {oid})\n"
             f"{fields_block}\n"
             f"{dry_note}\n"
             "Ask the user to confirm. After they approve, call again with "
-            "`create_confirmed_by_user=true` and the same object_id, object_type, "
-            "description fields, and clientContext."
+            "`write_confirmed_by_user=true`, `confirmation_token` from this preview, "
+            "and the same object_id, object_type, description fields, and clientContext."
         ),
         "agentInstruction": _UPDATE_CONFIRM_AGENT_INSTRUCTION,
         "pendingUpdate": {"target": target, "descriptions": body.get("descriptions")},
     }
+    return attach_confirmation_token(preview, body)
 
 def _resolve_server_type(raw: str | None) -> str | None:
     """Return canonical serverType for API, or None when unset (no filter)."""

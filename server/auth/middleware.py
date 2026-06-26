@@ -58,8 +58,11 @@ _UNPROTECTED = {
 
 
 def _request_is_https(request: Request) -> bool:
+    """True when the request is HTTPS or behind a trusted proxy that sets x-forwarded-proto."""
     if request.url.scheme == "https":
         return True
+    # Trusted-proxy assumption: ALB/API Gateway terminate TLS and set this header.
+    # Do not expose this process directly to clients without a proxy that strips spoofed values.
     forwarded = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
     return forwarded == "https"
 
@@ -175,6 +178,15 @@ async def _auth_response_or_none(request: Request) -> Response | None:
 
     if request.url.path in _UNPROTECTED:
         return None
+
+    if not _request_is_https(request):
+        return JSONResponse(
+            {
+                "error": "tls_required",
+                "error_description": "HTTPS is required for remote MCP requests",
+            },
+            status_code=400,
+        )
 
     auth_header = request.headers.get("Authorization", "")
 

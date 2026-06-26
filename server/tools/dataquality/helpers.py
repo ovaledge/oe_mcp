@@ -136,6 +136,38 @@ def normalize_dq_object_type(object_type: str | None) -> str | None:
     return MCP_DQ_OBJECT_TYPE_ALIASES.get(key)
 
 
+def _normalize_dq_api_objects(
+    objects: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]] | None, dict[str, Any] | None]:
+    """Validate and normalize catalog object refs for DQ assess/create payloads."""
+    api_objects: list[dict[str, Any]] = []
+    for idx, raw in enumerate(objects):
+        if not isinstance(raw, dict):
+            return None, error_payload(
+                f"objects[{idx}] must be an object with objectId and objectType."
+            )
+        oid = raw.get("objectId", raw.get("object_id"))
+        otype_raw = raw.get("objectType", raw.get("object_type"))
+        if oid is None:
+            return None, error_payload(f"objects[{idx}] requires objectId (or object_id).")
+        try:
+            oid_int = int(oid)
+        except (TypeError, ValueError):
+            return None, error_payload(f"objects[{idx}].objectId must be a positive integer.")
+        if oid_int <= 0:
+            return None, error_payload(f"objects[{idx}].objectId must be a positive integer.")
+        otype = normalize_dq_object_type(
+            str(otype_raw) if otype_raw is not None else None
+        )
+        if otype is None:
+            return None, error_payload(
+                f"objects[{idx}].objectType must be one of {MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC}, "
+                f"got {otype_raw!r}.",
+            )
+        api_objects.append({"objectId": oid_int, "objectType": otype})
+    return api_objects, None
+
+
 def validate_assess_cde_dq_args(
     discover_cde_columns: bool,
     objects: list[dict[str, Any]] | None,
@@ -146,6 +178,10 @@ def validate_assess_cde_dq_args(
             "Provide objects from search_catalog_assets, or set discover_cde_columns=true "
             "to discover CDE columns.",
         )
+    if refs:
+        _, err = _normalize_dq_api_objects(refs)
+        if err is not None:
+            return err
     return None
 
 
@@ -165,29 +201,9 @@ def build_assess_cde_dq_payload(
         payload["descriptionCustomFieldName"] = field_name
     if not objects:
         return payload
-    api_objects: list[dict[str, Any]] = []
-    for idx, raw in enumerate(objects):
-        if not isinstance(raw, dict):
-            return error_payload(f"objects[{idx}] must be an object with objectId and objectType.")
-        oid = raw.get("objectId", raw.get("object_id"))
-        otype_raw = raw.get("objectType", raw.get("object_type"))
-        if oid is None:
-            return error_payload(f"objects[{idx}] requires objectId (or object_id).")
-        try:
-            oid_int = int(oid)
-        except (TypeError, ValueError):
-            return error_payload(f"objects[{idx}].objectId must be a positive integer.")
-        if oid_int <= 0:
-            return error_payload(f"objects[{idx}].objectId must be a positive integer.")
-        otype = normalize_dq_object_type(
-            str(otype_raw) if otype_raw is not None else None
-        )
-        if otype is None:
-            return error_payload(
-                f"objects[{idx}].objectType must be one of {MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC}, "
-                f"got {otype_raw!r}.",
-            )
-        api_objects.append({"objectId": oid_int, "objectType": otype})
+    api_objects, err = _normalize_dq_api_objects(objects)
+    if err is not None:
+        return err
     payload["objects"] = api_objects
     return payload
 

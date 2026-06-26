@@ -9,6 +9,7 @@ from server.constants import (
     MCP_GOVERNANCE_STEWARD_ONLY_OBJECT_TYPES,
     MCP_PATH_UPDATE_GOVERNANCE_ROLES,
 )
+from server.tools.common.confirm_gate import attach_confirmation_token
 from server.tools.common.descriptions import classify_tool_desc
 from server.tools.governance._shared import (
     _CREATE_CONFIRM_AGENT_INSTRUCTION,
@@ -21,10 +22,10 @@ _DESC_UPDATE_GOVERNANCE_ROLES = classify_tool_desc(
     f"Backend: POST {MCP_PATH_UPDATE_GOVERNANCE_ROLES}\n\n"
     "**Human confirmation (same pattern as create_glossary_term / create_tag):** "
     "When ready to persist (and dry_run is not true), call without "
-    "create_confirmed_by_user to receive a confirm_update preview (doNotUpdate=true). "
+    "write_confirmed_by_user to receive a confirm_update preview (doNotUpdate=true). "
     "Show formattedResponse; wait for explicit user approval. Re-call with "
-    "create_confirmed_by_user=true and the same object_id, object_type, role_updates, "
-    "and clientContext — then POST. Never set create_confirmed_by_user until the user "
+    "write_confirmed_by_user=true and the same object_id, object_type, role_updates, "
+    "and clientContext — then POST. Never set write_confirmed_by_user until the user "
     "confirms.\n\n"
     "Workflow — resolve the target first:\n"
     "- Catalog assets (tables, columns, files, schemas, reports, APIs, queries, glossary, "
@@ -144,20 +145,20 @@ def _format_update_governance_roles_confirmation_preview(
     dry_note = ""
     if isinstance(dry, dict) and dry.get("dryRun"):
         dry_note = "\n- **Note:** dry_run=true — validate only on confirm.\n"
-    return {
+    preview = {
         "ok": True,
         "awaitingUserConfirmation": True,
         "workflowPhase": "confirm_update",
         "doNotUpdate": True,
-        "createConfirmedByUser": False,
+        "writeConfirmedByUser": False,
         "formattedResponse": (
             "**Confirm governance role update**\n\n"
             f"- **Target:** {otype} (id {oid})\n"
             f"{roles_block}\n"
             f"{dry_note}\n"
             "Ask the user to confirm. After they approve, call again with "
-            "`create_confirmed_by_user=true` and the same object_id, object_type, "
-            "role_updates, and clientContext."
+            "`write_confirmed_by_user=true`, `confirmation_token` from this preview, "
+            "and the same object_id, object_type, role_updates, and clientContext."
         ),
         "agentInstruction": _CREATE_CONFIRM_AGENT_INSTRUCTION,
         "pendingUpdate": {
@@ -165,5 +166,6 @@ def _format_update_governance_roles_confirmation_preview(
             "roleUpdates": role_updates,
         },
     }
+    return attach_confirmation_token(preview, body)
 
 

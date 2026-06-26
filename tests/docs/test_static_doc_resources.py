@@ -30,6 +30,7 @@ class TestStaticDocResources:
         assert "mcp_workflows" in {f.stem for f in md_files}
         assert "data_stories" in {f.stem for f in md_files}
         assert "tags_guide" in {f.stem for f in md_files}
+        assert "rdam_source_access" in {f.stem for f in md_files}
 
     async def test_read_mcp_workflows_resource(self) -> None:
         path = DOCS_DIR / "mcp_workflows.md"

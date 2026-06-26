@@ -2,11 +2,8 @@ from unittest.mock import AsyncMock
 
 from fastmcp import FastMCP
 
-from server.constants import (
-    MCP_DQ_ASSESS_LIMIT_DEFAULT,
-    MCP_PATH_ASSESS_CDE_DQ,
-    TOOL_ASSESS_CDE_DQ,
-)
+from server.client import OvalEdgeError
+from server.constants import MCP_DQ_ASSESS_LIMIT_DEFAULT, MCP_PATH_ASSESS_CDE_DQ, TOOL_ASSESS_CDE_DQ
 from server.tools import dataquality
 from server.tools.dataquality import helpers as dataquality_helpers
 from tests.helpers import get_tool_fn
@@ -64,6 +61,14 @@ class TestAssessCdeDq:
         assert out["status_code"] == 400
         assert "objectType" in out["error"]
         mock_oe_client.post.assert_not_called()
+
+    async def test_oval_edge_error_returns_structured_dict(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.side_effect = OvalEdgeError(500, "Internal error")
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ASSESS_CDE_DQ)
+        out = await fn(discover_cde_columns=True)
+        assert out["status_code"] == 500
 
     def test_description_routing_phrases(self) -> None:
         desc = dataquality_helpers._DESC_ASSESS_CDE_DQ

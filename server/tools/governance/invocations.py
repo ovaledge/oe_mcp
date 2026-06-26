@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
-
-from pydantic import Field
+from typing import Any
 
 from server.client import OvalEdgeError
 from server.config import resolve_client_timezone
@@ -13,7 +11,6 @@ from server.constants import (
     MCP_CUSTOM_FIELD_OBJECT_TYPES,
     MCP_DOMAIN_METADATA_SEARCH_ON,
     MCP_DOMAIN_METADATA_SIZE_DEFAULT,
-    MCP_DOMAIN_METADATA_SIZE_MAX,
     MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
     MCP_GLOSSARY_TAGS_LIMIT_MAX,
     MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES,
@@ -25,7 +22,6 @@ from server.constants import (
     MCP_PATH_UPDATE_CUSTOM_FIELD_VALUES,
     MCP_PATH_UPDATE_GOVERNANCE_ROLES,
 )
-from server.mcp_response_slim import slim_tool_response
 from server.tools.common import (
     as_dict as _as_dict,
 )
@@ -40,6 +36,7 @@ from server.tools.common import (
     ovaledge_client,
     strip_or_none,
 )
+from server.tools.common.confirm_gate import verify_write_confirmation
 from server.tools.common.tool_logging import logged_tool_invocation
 from server.tools.governance.helpers import (
     _apply_code_field_update_policies,
@@ -86,68 +83,15 @@ from server.tools.governance.helpers import (
 
 @logged_tool_invocation
 async def _invoke_lookup_glossary_term(
-    object_id: Annotated[
-        int | None,
-        Field(
-            description="Glossary term internal id; omit for name or placement lookup.",
-            default=None,
-        ),
-    ] = None,
-    term_name: Annotated[
-        str | None,
-        Field(
-            description="Term name / label to look up; omit if using object_id or placement.",
-            default=None,
-        ),
-    ] = None,
-    domain_id: Annotated[
-        int | None,
-        Field(
-            description=(
-                "Global domain id for placement lookup; use with optional category/subcategory."
-            ),
-            default=None,
-        ),
-    ] = None,
-    domain_name: Annotated[
-        str | None,
-        Field(
-            description="Global domain name for placement lookup when domain_id is unknown.",
-            default=None,
-        ),
-    ] = None,
-    category_id: Annotated[
-        int | None,
-        Field(description="Category id (category1Id) for placement lookup.", default=None),
-    ] = None,
-    category_name: Annotated[
-        str | None,
-        Field(
-            description="Category name for placement lookup when category_id is unknown.",
-            default=None,
-        ),
-    ] = None,
-    subcategory_id: Annotated[
-        int | None,
-        Field(description="Subcategory id (category2Id) for placement lookup.", default=None),
-    ] = None,
-    subcategory_name: Annotated[
-        str | None,
-        Field(
-            description="Subcategory name for placement lookup when subcategory_id is unknown.",
-            default=None,
-        ),
-    ] = None,
-    limit: Annotated[
-        int,
-        Field(
-            description=(
-                f"Max hits to return (default {MCP_GLOSSARY_TAGS_LIMIT_DEFAULT}; "
-                f"capped at {MCP_GLOSSARY_TAGS_LIMIT_MAX})."
-            ),
-            ge=1,
-        ),
-    ] = MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
+    object_id: int | None = None,
+    term_name: str | None = None,
+    domain_id: int | None = None,
+    domain_name: str | None = None,
+    category_id: int | None = None,
+    category_name: str | None = None,
+    subcategory_id: int | None = None,
+    subcategory_name: str | None = None,
+    limit: int = MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
 ) -> dict[str, Any]:
     """Glossary lookup (see MCP tool description)."""
     has_id = object_id is not None
@@ -185,7 +129,7 @@ async def _invoke_lookup_glossary_term(
             )
             body = await client.get(MCP_PATH_GLOSSARY_TERMS, params=params)
             if isinstance(body, dict):
-                return slim_tool_response(_enrich_glossary_lookup_response(body))
+                return _enrich_glossary_lookup_response(body)
             return body
     except OvalEdgeError as e:
         return map_ovaledge_error(e)
@@ -193,147 +137,25 @@ async def _invoke_lookup_glossary_term(
 
 @logged_tool_invocation
 async def _invoke_create_glossary_term(
-    search_on: Annotated[
-        str | None,
-        Field(
-            description=(
-                "Picker mode: oeglobaldomain | category | subcategory. "
-                "Omit when creating a term (term_name set)."
-            ),
-            default=None,
-        ),
-    ] = None,
-    term_name: Annotated[
-        str | None,
-        Field(
-            description="Term name; required for create. Omit for picker mode.",
-            default=None,
-        ),
-    ] = None,
-    domain_id: Annotated[
-        int | None,
-        Field(
-            description="Global domain id (required for create; required for category picker).",
-            default=None,
-        ),
-    ] = None,
-    category_id: Annotated[
-        int | None,
-        Field(
-            description=(
-                "Category id for subcategory picker or create (maps to category1Id). "
-                "Required when subcategory_id is set."
-            ),
-            default=None,
-        ),
-    ] = None,
-    subcategory_id: Annotated[
-        int | None,
-        Field(
-            description="Subcategory id for create (maps to category2Id).",
-            default=None,
-        ),
-    ] = None,
-    description: Annotated[
-        str | None,
-        Field(
-            description="Business description (required for create; non-blank).",
-            default=None,
-        ),
-    ] = None,
-    definition: Annotated[
-        str | None,
-        Field(description="Optional formal definition for create.", default=None),
-    ] = None,
-    domain_name: Annotated[
-        str | None,
-        Field(
-            description="Optional display name for placementPath on create.",
-            default=None,
-        ),
-    ] = None,
-    category_name: Annotated[
-        str | None,
-        Field(
-            description="Optional display name for placementPath on create.",
-            default=None,
-        ),
-    ] = None,
-    subcategory_name: Annotated[
-        str | None,
-        Field(
-            description="Optional display name for placementPath on create.",
-            default=None,
-        ),
-    ] = None,
-    publish: Annotated[
-        bool,
-        Field(description="When true, term is published; default is draft.", default=False),
-    ] = False,
-    skip_category: Annotated[
-        bool,
-        Field(
-            description=(
-                "When true with category_skip_confirmed, user skipped category after "
-                "seeing the list; term goes under domain only."
-            ),
-            default=False,
-        ),
-    ] = False,
-    category_skip_confirmed: Annotated[
-        bool,
-        Field(
-            description=(
-                "Set true only after the user replied skip on the category picker. "
-                "Required with skip_category when categories exist under the domain."
-            ),
-            default=False,
-        ),
-    ] = False,
-    skip_subcategory: Annotated[
-        bool,
-        Field(
-            description=(
-                "When true, user skipped subcategory placement; term stays under category."
-            ),
-            default=False,
-        ),
-    ] = False,
-    subcategory_skip_confirmed: Annotated[
-        bool,
-        Field(
-            description=(
-                "Set true only after the user replied skip on the subcategory picker. "
-                "Required with skip_subcategory when subcategories exist."
-            ),
-            default=False,
-        ),
-    ] = False,
-    size: Annotated[
-        int,
-        Field(
-            description=(
-                f"Picker page size (default {MCP_DOMAIN_METADATA_SIZE_DEFAULT}; "
-                f"max {MCP_DOMAIN_METADATA_SIZE_MAX})."
-            ),
-            ge=1,
-        ),
-    ] = MCP_DOMAIN_METADATA_SIZE_DEFAULT,
-    page: Annotated[
-        int,
-        Field(description="Picker page index (0-based).", ge=0),
-    ] = 0,
-    create_confirmed_by_user: Annotated[
-        bool,
-        Field(
-            description=(
-                "Final create gate: true only after the user explicitly approved "
-                "the confirm_create preview. Re-call with the same term_name, "
-                "domain_id, placement, and description."
-            ),
-            default=False,
-        ),
-    ] = False,
+    search_on: str | None = None,
+    term_name: str | None = None,
+    domain_id: int | None = None,
+    category_id: int | None = None,
+    subcategory_id: int | None = None,
+    description: str | None = None,
+    definition: str | None = None,
+    domain_name: str | None = None,
+    category_name: str | None = None,
+    subcategory_name: str | None = None,
+    publish: bool = False,
+    skip_category: bool = False,
+    category_skip_confirmed: bool = False,
+    skip_subcategory: bool = False,
+    subcategory_skip_confirmed: bool = False,
+    size: int = MCP_DOMAIN_METADATA_SIZE_DEFAULT,
+    page: int = 0,
+    write_confirmed_by_user: bool = False,
+    confirmation_token: str | None = None,
 ) -> dict[str, Any]:
     """Create glossary term or list placement options (see MCP tool description)."""
     has_term = not _blank(term_name)
@@ -810,7 +632,17 @@ async def _invoke_create_glossary_term(
         if no_categories_in_domain and cat_create <= 0
         else None
     )
-    if not create_confirmed_by_user:
+    post_body: dict[str, object] = {
+        "termName": str(term_name).strip(),
+        "domainId": dom_create,
+        "description": str(description).strip(),
+        "category1Id": cat_create,
+        "category2Id": sub_create,
+        "publish": publish,
+    }
+    if not _blank(definition):
+        post_body["definition"] = str(definition).strip()
+    if not write_confirmed_by_user:
         return _format_glossary_create_confirmation_preview(
             term_name=pending_name,
             domain_id=dom_create,
@@ -823,17 +655,15 @@ async def _invoke_create_glossary_term(
             definition=definition,
             publish=publish,
             placement_note=glossary_placement_note,
+            post_body=post_body,
         )
-    post_body: dict[str, object] = {
-        "termName": str(term_name).strip(),
-        "domainId": dom_create,
-        "description": str(description).strip(),
-        "category1Id": cat_create,
-        "category2Id": sub_create,
-        "publish": publish,
-    }
-    if not _blank(definition):
-        post_body["definition"] = str(definition).strip()
+    confirm_err = verify_write_confirmation(
+        post_body,
+        write_confirmed_by_user=write_confirmed_by_user,
+        confirmation_token=confirmation_token,
+    )
+    if confirm_err is not None:
+        return confirm_err
     try:
         async with ovaledge_client() as client:
             body = await client.post(MCP_PATH_GLOSSARY_TERMS, body=post_body)
@@ -856,44 +686,11 @@ async def _invoke_create_glossary_term(
 
 @logged_tool_invocation
 async def _invoke_lookup_tags(
-    object_id: Annotated[
-        int | None,
-        Field(description="Tag internal id; omit if using tag_name.", default=None),
-    ] = None,
-    tag_name: Annotated[
-        str | None,
-        Field(description="Tag name to look up; omit if using object_id.", default=None),
-    ] = None,
-    limit: Annotated[
-        int,
-        Field(
-            description=(
-                f"Max hits to return (default {MCP_GLOSSARY_TAGS_LIMIT_DEFAULT}; "
-                f"capped at {MCP_GLOSSARY_TAGS_LIMIT_MAX})."
-            ),
-            ge=1,
-        ),
-    ] = MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
-    include_parent: Annotated[
-        bool,
-        Field(
-            description=(
-                "When true, enrich each hit with parentTag (immediate parent in "
-                "tagrelationship). Set when the user asks for parent tag details."
-            ),
-            default=False,
-        ),
-    ] = False,
-    include_children: Annotated[
-        bool,
-        Field(
-            description=(
-                "When true, enrich each hit with childTags. Set when the user asks "
-                "for child tags (e.g. 'What are the child tags of X?')."
-            ),
-            default=False,
-        ),
-    ] = False,
+    object_id: int | None = None,
+    tag_name: str | None = None,
+    limit: int = MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
+    include_parent: bool = False,
+    include_children: bool = False,
 ) -> dict[str, Any]:
     """Tag lookup (see MCP tool description)."""
     has_id = object_id is not None
@@ -930,108 +727,17 @@ async def _invoke_lookup_tags(
 
 @logged_tool_invocation
 async def _invoke_create_tag(
-    tag_name: Annotated[
-        str,
-        Field(description="Name of the new tag (required)."),
-    ],
-    description: Annotated[
-        str | None,
-        Field(
-            description=(
-                "Optional wiki/HTML description for the tag. When omitted on the final "
-                "create call, MCP generates a short HTML description from tag_name and "
-                "master/parent names (set OVALEDGE_TAG_AUTO_DESCRIPTION=false to skip)."
-            ),
-            default=None,
-        ),
-    ] = None,
-    master_tag_id: Annotated[
-        int | None,
-        Field(
-            description=(
-                "SECURE mode only (required after step 1): masterTagId the human chose "
-                "from userSelectableMasters. Never set in OPEN mode. Omit on first call "
-                "(tag_name only)."
-            ),
-            default=None,
-        ),
-    ] = None,
-    master_tag_id_confirmed_by_user: Annotated[
-        bool,
-        Field(
-            description=(
-                "Secure mode: must be true when master_tag_id is set, and only after "
-                "the human explicitly selected that id from masterTagChoices."
-            ),
-            default=False,
-        ),
-    ] = False,
-    parent_tag_id: Annotated[
-        int | None,
-        Field(
-            description=(
-                "Optional. SECURE: parent under the chosen master (from step 2 list). "
-                "OPEN: any parent from userSelectableParents. Omit when creating "
-                "under master only (secure) or with no parent (open)."
-            ),
-            default=None,
-        ),
-    ] = None,
-    parent_tag_id_confirmed_by_user: Annotated[
-        bool,
-        Field(
-            description=(
-                "Step 3: true only after the human picked parentTagId from "
-                "userSelectableParents for the chosen master."
-            ),
-            default=False,
-        ),
-    ] = False,
-    browse_parent_tag_id: Annotated[
-        int | None,
-        Field(
-            description=(
-                "Optional nested browse: list child tags under this parentTagId "
-                "(GET parent-options browseParentTagId). Use when a parent row has "
-                "hasChildren=true to reach deeper levels (e.g. MCPNEWcreated under "
-                "MCPCreated). Keep master_tag_id and master confirmations when set."
-            ),
-            default=None,
-        ),
-    ] = None,
-    create_directly_under_master: Annotated[
-        bool,
-        Field(
-            description=(
-                "SECURE: create as direct child of masterTagId only (no parentTagId). "
-                "OPEN: create with no parent (do not send masterTagId). Set after user "
-                "sees parent options."
-            ),
-            default=False,
-        ),
-    ] = False,
-    parent_step_completed_by_user: Annotated[
-        bool,
-        Field(
-            description=(
-                "Required on the final create call (open and secure): true only after "
-                "the human was shown userSelectableParents and chose a parent or "
-                "declined. Never set on the first call (tag_name only)."
-            ),
-            default=False,
-        ),
-    ] = False,
-    create_confirmed_by_user: Annotated[
-        bool,
-        Field(
-            description=(
-                "Final create gate: true only after the user explicitly approved "
-                "the confirm_create preview. Re-call with the same tag_name, "
-                "placement parameters, and optional description."
-            ),
-            default=False,
-        ),
-    ] = False,
+    tag_name: str,
+    description: str | None = None,
+    master_tag_id: int | None = None,
+    master_tag_id_confirmed_by_user: bool = False,
+    parent_tag_id: int | None = None,
+    parent_tag_id_confirmed_by_user: bool = False,
+    browse_parent_tag_id: int | None = None,
+    create_directly_under_master: bool = False,
+    parent_step_completed_by_user: bool = False,
+    write_confirmed_by_user: bool = False,
+    confirmation_token: str | None = None,
 ) -> dict[str, Any]:
     """Create tag (see MCP tool description)."""
     name = tag_name.strip() if tag_name is not None else ""
@@ -1254,7 +960,26 @@ async def _invoke_create_tag(
                     secure_guidance=secure_guidance,
                 )
             )
-            if not create_confirmed_by_user:
+            if not write_confirmed_by_user:
+                wire_body = _q(
+                    tagName=name,
+                    description=_resolve_create_tag_description(
+                        name,
+                        description,
+                        master_tag_name=master_name_for_desc,
+                        parent_tag_name=parent_name_for_desc,
+                    ),
+                    masterTagId=(
+                        master_tag_id
+                        if secure_mode
+                        and master_tag_id is not None
+                        and master_tag_id > 0
+                        else None
+                    ),
+                    parentTagId=(
+                        parent_tag_id if parent_tag_id is not None and parent_tag_id > 0 else None
+                    ),
+                )
                 return _format_tag_create_confirmation_preview(
                     tag_name=name,
                     description=description,
@@ -1264,6 +989,7 @@ async def _invoke_create_tag(
                     parent_tag_id=parent_tag_id,
                     parent_tag_name=parent_name_for_desc,
                     create_directly_under_master=create_directly_under_master,
+                    wire_body=wire_body,
                 )
             if not _consume_parent_picker_shown(name):
                 if secure_mode:
@@ -1305,7 +1031,7 @@ async def _invoke_create_tag(
                 out["message"] = (
                     "Parent picker session expired or was not completed. "
                     "Present userSelectableParents again, then retry with "
-                    "parent_step_completed_by_user=true and create_confirmed_by_user=true."
+                    "parent_step_completed_by_user=true and write_confirmed_by_user=true."
                 )
                 return out
             body = _q(
@@ -1327,6 +1053,13 @@ async def _invoke_create_tag(
                     parent_tag_id if parent_tag_id is not None and parent_tag_id > 0 else None
                 ),
             )
+            confirm_err = verify_write_confirmation(
+                body,
+                write_confirmed_by_user=write_confirmed_by_user,
+                confirmation_token=confirmation_token,
+            )
+            if confirm_err is not None:
+                return confirm_err
             created = await client.post(MCP_PATH_TAGS, body=body)
             if not isinstance(created, dict) or not created.get("ok"):
                 return created
@@ -1363,46 +1096,10 @@ async def _invoke_create_tag(
 
 @logged_tool_invocation
 async def _invoke_lookup_datastory(
-    story_zone_name: Annotated[
-        str | None,
-        Field(
-            description=(
-                "Optional story zone (globaldomain.domain); use with story_name title lookup "
-                "or as a filter with content_query."
-            ),
-            default=None,
-        ),
-    ] = None,
-    story_name: Annotated[
-        str | None,
-        Field(
-            description=(
-                "Story title for name lookup, or optional filter when using content_query."
-            ),
-            default=None,
-        ),
-    ] = None,
-    content_query: Annotated[
-        str | None,
-        Field(
-            description=(
-                "Search story body text (narrative and indexed sections). "
-                "Optional story_zone_name and/or story_name narrow results. "
-                "Omit for object_id or title-only lookup."
-            ),
-            default=None,
-        ),
-    ] = None,
-    object_id: Annotated[
-        int | None,
-        Field(
-            description=(
-                "Story internal object id (numeric identifier); "
-                "omit for other modes."
-            ),
-            default=None,
-        ),
-    ] = None,
+    story_zone_name: str | None = None,
+    story_name: str | None = None,
+    content_query: str | None = None,
+    object_id: int | None = None,
 ) -> dict[str, Any]:
     """Data story lookup (see MCP tool description)."""
     has_id = object_id is not None and object_id > 0
@@ -1441,69 +1138,15 @@ async def _invoke_lookup_datastory(
 
 @logged_tool_invocation
 async def _invoke_update_governance_roles(
-    object_id: Annotated[
-        int,
-        Field(
-            description=(
-                "Internal object id from search_catalog_assets, lookup_dq_rule, "
-                "lookup_glossary_term, or lookup_tags."
-            ),
-            ge=1,
-        ),
-    ],
-    object_type: Annotated[
-        str,
-        Field(
-            description=(
-                "OvalEdge objectType: catalog types (oetable, oecolumn, glossary, …) or "
-                "non-catalog governance types (dqrule, dqscheme, dag, policy, …). "
-                "Use lookup_dq_rule for dqrule — not search_catalog_assets."
-            ),
-        ),
-    ],
-    role_updates: Annotated[
-        dict[str, str | None] | None,
-        Field(
-            description=(
-                "Map of role -> user identifier. Value is a user (assign/update) or null "
-                "(remove). Keys: owner, steward, custodian, governance_role_4/5/6."
-            ),
-            default=None,
-        ),
-    ] = None,
-    prompt: Annotated[
-        str | None,
-        Field(
-            description="Original user prompt for audit (clientContext.prompt).",
-            default=None,
-        ),
-    ] = None,
-    reason: Annotated[
-        str | None,
-        Field(
-            description="Short reason for the change (clientContext.reason).",
-            default=None,
-        ),
-    ] = None,
-    dry_run: Annotated[
-        bool | None,
-        Field(description="If true, validate only; do not persist.", default=None),
-    ] = None,
-    idempotency_key: Annotated[
-        str | None,
-        Field(description="Optional client key to dedupe retries.", default=None),
-    ] = None,
-    create_confirmed_by_user: Annotated[
-        bool,
-        Field(
-            description=(
-                "Final update gate: true only after the user explicitly approved "
-                "the confirm_update preview. Re-call with the same object_id, "
-                "object_type, role_updates, and clientContext."
-            ),
-            default=False,
-        ),
-    ] = False,
+    object_id: int,
+    object_type: str,
+    role_updates: dict[str, str | None] | None = None,
+    prompt: str | None = None,
+    reason: str | None = None,
+    dry_run: bool | None = None,
+    idempotency_key: str | None = None,
+    write_confirmed_by_user: bool = False,
+    confirmation_token: str | None = None,
 ) -> dict[str, Any]:
     """
     Update governance responsibilities (see MCP tool description).
@@ -1565,8 +1208,16 @@ async def _invoke_update_governance_roles(
         body["clientContext"] = client_context
 
     is_dry = dry_run is True
-    if not is_dry and not create_confirmed_by_user:
+    if not is_dry and not write_confirmed_by_user:
         return _format_update_governance_roles_confirmation_preview(body)
+    if not is_dry:
+        confirm_err = verify_write_confirmation(
+            body,
+            write_confirmed_by_user=write_confirmed_by_user,
+            confirmation_token=confirmation_token,
+        )
+        if confirm_err is not None:
+            return confirm_err
 
     try:
         async with ovaledge_client() as client:
@@ -1591,92 +1242,18 @@ async def _invoke_update_governance_roles(
 
 @logged_tool_invocation
 async def _invoke_update_custom_field_value(
-    object_id: Annotated[
-        int,
-        Field(
-            description=(
-                "Internal object id from search_catalog_assets or governance lookups."
-            ),
-            ge=1,
-        ),
-    ],
-    object_type: Annotated[
-        str,
-        Field(
-            description=(
-                "OvalEdge objectType for custom fields "
-                f"(e.g. {', '.join(sorted(MCP_CUSTOM_FIELD_OBJECT_TYPES))})."
-            ),
-        ),
-    ],
-    field_updates: Annotated[
-        list[dict[str, Any]],
-        Field(
-            description=(
-                "Fields to update. Each item: {field_name, value} or "
-                "{field_key, value}. Supports multi-field in one call."
-            ),
-        ),
-    ],
-    prompt: Annotated[
-        str | None,
-        Field(
-            description="Original user prompt for audit (clientContext.prompt).",
-            default=None,
-        ),
-    ] = None,
-    reason: Annotated[
-        str | None,
-        Field(
-            description="Short reason for the change (clientContext.reason).",
-            default=None,
-        ),
-    ] = None,
-    dry_run: Annotated[
-        bool | None,
-        Field(description="If true, validate only; do not persist.", default=None),
-    ] = None,
-    fail_on_blocked_field: Annotated[
-        bool | None,
-        Field(
-            description="If true, treat any blocked field as a full request failure.",
-            default=None,
-        ),
-    ] = None,
-    idempotency_key: Annotated[
-        str | None,
-        Field(description="Optional client key to dedupe retries.", default=None),
-    ] = None,
-    time_zone: Annotated[
-        str | None,
-        Field(
-            description=(
-                "IANA time zone for date custom fields (e.g. Asia/Kolkata). "
-                "Defaults to OVALEDGE_CLIENT_TIMEZONE or host zone so dates match the UI."
-            ),
-            default=None,
-        ),
-    ] = None,
-    create_confirmed_by_user: Annotated[
-        bool,
-        Field(
-            description=(
-                "Final update gate: true only after the user explicitly approved "
-                "the confirm_update preview."
-            ),
-            default=False,
-        ),
-    ] = False,
-    code_update_mode: Annotated[
-        str | None,
-        Field(
-            description=(
-                "For multi-select code fields with multiple values: replace_all, add, "
-                "or remove. Omit for single values or until the user chooses a mode."
-            ),
-            default=None,
-        ),
-    ] = None,
+    object_id: int,
+    object_type: str,
+    field_updates: list[dict[str, Any]],
+    prompt: str | None = None,
+    reason: str | None = None,
+    dry_run: bool | None = None,
+    fail_on_blocked_field: bool | None = None,
+    idempotency_key: str | None = None,
+    time_zone: str | None = None,
+    write_confirmed_by_user: bool = False,
+    confirmation_token: str | None = None,
+    code_update_mode: str | None = None,
 ) -> dict[str, Any]:
     """Update custom field values (see MCP tool description)."""
     if object_type is None or str(object_type).strip() == "":
@@ -1723,10 +1300,8 @@ async def _invoke_update_custom_field_value(
         body["clientContext"] = client_context
 
     is_dry = dry_run is True
-    # Resolve code-field values (split multi-option input, validate, merge) for BOTH the
-    # confirmation preview and the final confirmed POST. The confirm step re-sends the
-    # original field_updates, so resolution must run again here or unresolved values
-    # (e.g. lists or "a and b" strings) would reach the API and be rejected.
+    # Resolve code-field values for both preview and confirmed POST (confirm re-sends
+    # the same field_updates, so resolution must run before preview as well).
     if not is_dry:
         try:
             async with ovaledge_client() as client:
@@ -1746,8 +1321,16 @@ async def _invoke_update_custom_field_value(
         normalized_updates = policy_result.get("fieldUpdates") or normalized_updates
         body["fieldUpdates"] = normalized_updates
 
-    if not is_dry and not create_confirmed_by_user:
+    if not is_dry and not write_confirmed_by_user:
         return _format_update_custom_field_value_confirmation_preview(body)
+    if not is_dry:
+        confirm_err = verify_write_confirmation(
+            body,
+            write_confirmed_by_user=write_confirmed_by_user,
+            confirmation_token=confirmation_token,
+        )
+        if confirm_err is not None:
+            return confirm_err
 
     try:
         async with ovaledge_client() as client:

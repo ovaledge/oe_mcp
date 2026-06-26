@@ -27,6 +27,11 @@ Parameters:
     Description: >
       (AUTH_MODE=remote) Authorization Server issuer URL (must match JWT iss). Discovery loads
       /.well-known/openid-configuration or oauth-authorization-server under this base.
+  OAuthAllowedIssuers:
+    Type: String
+    Default: ""
+    Description: >
+      Comma-separated additional trusted JWT iss values (e.g. Auth0 custom domain and *.auth0.com).
   OAuthAudience:
     Type: String
     Default: ""
@@ -119,6 +124,7 @@ Resources:
           # Lambda env values must be strings (SAM / CFN strict validation).
           OVALEDGE_MAX_RETRIES: !Ref OvalEdgeMaxRetries
           OAUTH_ISSUER: !Ref OAuthIssuer
+          OAUTH_ALLOWED_ISSUERS: !Ref OAuthAllowedIssuers
           OAUTH_AUDIENCE: !Ref OAuthAudience
           # Do not set MCP_PUBLIC_BASE_URL from !Ref MCPApi here — it creates a CloudFormation
           # circular dependency (function → API → function). Leave unset; metadata uses

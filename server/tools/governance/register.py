@@ -15,6 +15,7 @@ from server.constants import (
     MCP_GLOSSARY_TAGS_LIMIT_MAX,
     TOOL_UPDATE_CUSTOM_FIELD_VALUE,
 )
+from server.tools.common.confirm_gate import CONFIRMATION_TOKEN_PARAM_DESCRIPTION
 from server.tools.governance.helpers import (
     _DESC_CREATE_GLOSSARY,
     _DESC_CREATE_TAG,
@@ -104,15 +105,15 @@ def register(mcp: FastMCP) -> None:
     ) -> dict[str, Any]:
         """lookup glossary term (see MCP tool description)."""
         return await _invoke_lookup_glossary_term(
-            object_id,
-            term_name,
-            domain_id,
-            domain_name,
-            category_id,
-            category_name,
-            subcategory_id,
-            subcategory_name,
-            limit
+            object_id=object_id,
+            term_name=term_name,
+            domain_id=domain_id,
+            domain_name=domain_name,
+            category_id=category_id,
+            category_name=category_name,
+            subcategory_id=subcategory_id,
+            subcategory_name=subcategory_name,
+            limit=limit,
         )
 
     @mcp.tool(description=_DESC_CREATE_GLOSSARY)
@@ -247,7 +248,7 @@ def register(mcp: FastMCP) -> None:
             int,
             Field(description="Picker page index (0-based).", ge=0),
         ] = 0,
-        create_confirmed_by_user: Annotated[
+        write_confirmed_by_user: Annotated[
             bool,
             Field(
                 description=(
@@ -258,27 +259,32 @@ def register(mcp: FastMCP) -> None:
                 default=False,
             ),
         ] = False,
+        confirmation_token: Annotated[
+            str | None,
+            Field(description=CONFIRMATION_TOKEN_PARAM_DESCRIPTION, default=None),
+        ] = None,
     ) -> dict[str, Any]:
         """create glossary term (see MCP tool description)."""
         return await _invoke_create_glossary_term(
-            search_on,
-            term_name,
-            domain_id,
-            category_id,
-            subcategory_id,
-            description,
-            definition,
-            domain_name,
-            category_name,
-            subcategory_name,
-            publish,
-            skip_category,
-            category_skip_confirmed,
-            skip_subcategory,
-            subcategory_skip_confirmed,
-            size,
-            page,
-            create_confirmed_by_user
+            search_on=search_on,
+            term_name=term_name,
+            domain_id=domain_id,
+            category_id=category_id,
+            subcategory_id=subcategory_id,
+            description=description,
+            definition=definition,
+            domain_name=domain_name,
+            category_name=category_name,
+            subcategory_name=subcategory_name,
+            publish=publish,
+            skip_category=skip_category,
+            category_skip_confirmed=category_skip_confirmed,
+            skip_subcategory=skip_subcategory,
+            subcategory_skip_confirmed=subcategory_skip_confirmed,
+            size=size,
+            page=page,
+            write_confirmed_by_user=write_confirmed_by_user,
+            confirmation_token=confirmation_token,
         )
 
     @mcp.tool(description=_DESC_TAGS)
@@ -324,11 +330,11 @@ def register(mcp: FastMCP) -> None:
     ) -> dict[str, Any]:
         """lookup tags (see MCP tool description)."""
         return await _invoke_lookup_tags(
-            object_id,
-            tag_name,
-            limit,
-            include_parent,
-            include_children
+            object_id=object_id,
+            tag_name=tag_name,
+            limit=limit,
+            include_parent=include_parent,
+            include_children=include_children,
         )
 
     @mcp.tool(description=_DESC_CREATE_TAG)
@@ -424,7 +430,7 @@ def register(mcp: FastMCP) -> None:
                 default=False,
             ),
         ] = False,
-        create_confirmed_by_user: Annotated[
+        write_confirmed_by_user: Annotated[
             bool,
             Field(
                 description=(
@@ -435,19 +441,24 @@ def register(mcp: FastMCP) -> None:
                 default=False,
             ),
         ] = False,
+        confirmation_token: Annotated[
+            str | None,
+            Field(description=CONFIRMATION_TOKEN_PARAM_DESCRIPTION, default=None),
+        ] = None,
     ) -> dict[str, Any]:
         """create tag (see MCP tool description)."""
         return await _invoke_create_tag(
-            tag_name,
-            description,
-            master_tag_id,
-            master_tag_id_confirmed_by_user,
-            parent_tag_id,
-            parent_tag_id_confirmed_by_user,
-            browse_parent_tag_id,
-            create_directly_under_master,
-            parent_step_completed_by_user,
-            create_confirmed_by_user
+            tag_name=tag_name,
+            description=description,
+            master_tag_id=master_tag_id,
+            master_tag_id_confirmed_by_user=master_tag_id_confirmed_by_user,
+            parent_tag_id=parent_tag_id,
+            parent_tag_id_confirmed_by_user=parent_tag_id_confirmed_by_user,
+            browse_parent_tag_id=browse_parent_tag_id,
+            create_directly_under_master=create_directly_under_master,
+            parent_step_completed_by_user=parent_step_completed_by_user,
+            write_confirmed_by_user=write_confirmed_by_user,
+            confirmation_token=confirmation_token,
         )
 
     @mcp.tool(description=_DESC_DATASTORY)
@@ -495,10 +506,10 @@ def register(mcp: FastMCP) -> None:
     ) -> dict[str, Any]:
         """lookup datastory (see MCP tool description)."""
         return await _invoke_lookup_datastory(
-            story_zone_name,
-            story_name,
-            content_query,
-            object_id
+            story_zone_name=story_zone_name,
+            story_name=story_name,
+            content_query=content_query,
+            object_id=object_id,
         )
 
     @mcp.tool(description=_DESC_UPDATE_GOVERNANCE_ROLES)
@@ -555,7 +566,7 @@ def register(mcp: FastMCP) -> None:
             str | None,
             Field(description="Optional client key to dedupe retries.", default=None),
         ] = None,
-        create_confirmed_by_user: Annotated[
+        write_confirmed_by_user: Annotated[
             bool,
             Field(
                 description=(
@@ -566,17 +577,22 @@ def register(mcp: FastMCP) -> None:
                 default=False,
             ),
         ] = False,
+        confirmation_token: Annotated[
+            str | None,
+            Field(description=CONFIRMATION_TOKEN_PARAM_DESCRIPTION, default=None),
+        ] = None,
     ) -> dict[str, Any]:
         """update governance roles (see MCP tool description)."""
         return await _invoke_update_governance_roles(
-            object_id,
-            object_type,
-            role_updates,
-            prompt,
-            reason,
-            dry_run,
-            idempotency_key,
-            create_confirmed_by_user
+            object_id=object_id,
+            object_type=object_type,
+            role_updates=role_updates,
+            prompt=prompt,
+            reason=reason,
+            dry_run=dry_run,
+            idempotency_key=idempotency_key,
+            write_confirmed_by_user=write_confirmed_by_user,
+            confirmation_token=confirmation_token,
         )
 
     @mcp.tool(description=_DESC_UPDATE_CUSTOM_FIELD_VALUE, name=TOOL_UPDATE_CUSTOM_FIELD_VALUE)
@@ -647,7 +663,7 @@ def register(mcp: FastMCP) -> None:
                 default=None,
             ),
         ] = None,
-        create_confirmed_by_user: Annotated[
+        write_confirmed_by_user: Annotated[
             bool,
             Field(
                 description=(
@@ -667,18 +683,23 @@ def register(mcp: FastMCP) -> None:
                 default=None,
             ),
         ] = None,
+        confirmation_token: Annotated[
+            str | None,
+            Field(description=CONFIRMATION_TOKEN_PARAM_DESCRIPTION, default=None),
+        ] = None,
     ) -> dict[str, Any]:
         """update custom field value (see MCP tool description)."""
         return await _invoke_update_custom_field_value(
-            object_id,
-            object_type,
-            field_updates,
-            prompt,
-            reason,
-            dry_run,
-            fail_on_blocked_field,
-            idempotency_key,
-            time_zone,
-            create_confirmed_by_user,
-            code_update_mode,
+            object_id=object_id,
+            object_type=object_type,
+            field_updates=field_updates,
+            prompt=prompt,
+            reason=reason,
+            dry_run=dry_run,
+            fail_on_blocked_field=fail_on_blocked_field,
+            idempotency_key=idempotency_key,
+            time_zone=time_zone,
+            write_confirmed_by_user=write_confirmed_by_user,
+            confirmation_token=confirmation_token,
+            code_update_mode=code_update_mode,
         )

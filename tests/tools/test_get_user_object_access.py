@@ -107,3 +107,22 @@ class TestGetUserObjectAccess:
         call_kwargs = mock_client.get.await_args.kwargs
         assert call_kwargs["params"]["objectName"] == "looker connector"
         assert call_kwargs["params"]["objectType"] == "connection"
+
+    @patch("server.tools.access.register.ovaledge_client")
+    async def test_oval_edge_error_returns_structured_dict(self, mock_client_factory) -> None:
+        from server.client import OvalEdgeError
+
+        mock_client = AsyncMock()
+        mock_client.get.side_effect = OvalEdgeError(403, "Forbidden")
+        mock_client_factory.return_value.__aenter__.return_value = mock_client
+
+        mcp = FastMCP("test")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_GET_USER_OBJECT_ACCESS)
+        out = await fn(
+            query_direction="user_to_object",
+            username="john.doe",
+            object_id=42,
+            object_type="oetable",
+        )
+        assert out["status_code"] == 403

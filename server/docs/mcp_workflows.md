@@ -122,7 +122,7 @@ Do not use `search_catalog_assets` for either browse or native grants.
 - **Snowflake:** role assignment only (no direct user grants / groups).
 - **Tableau:** direct site-user grants and site-group grants on project/report (`grant_mechanism`: direct | group). Group access is expanded via harvested `rdam_usergroup` membership.
 
-**Authorization:** Instance or Connector **Data Access Admin** is enforced server-side; callers without DAA on the scoped connection see RDAM no-access. See [governance_model](governance_model#native-source-access-rdam).
+**Authorization:** Instance or Connector **Data Access Admin** is enforced server-side; callers without DAA on the scoped connection see RDAM no-access. See [governance_model](governance_model#data-access-admin-daa). Deep routing (agent rules, privilege map, disambiguation): [rdam_source_access](rdam_source_access).
 
 ## Catalog object access (`get_user_object_access`)
 
@@ -171,7 +171,7 @@ If the user says only "description", ask which slot applies — do not guess `bu
 | Tag (`oetag`) | `tag_description` |
 | Master tag (`mastertag`) | `master_tag_description` |
 
-**Confirm gate:** call without `create_confirmed_by_user` for `confirm_update` preview → user approval → re-call with `create_confirmed_by_user=true` (unless `dry_run=true`).
+**Confirm gate:** call without `write_confirmed_by_user` for `confirm_update` preview → user approval → re-call with `write_confirmed_by_user=true` (unless `dry_run=true`).
 
 ## Resources (deep links by object id)
 
@@ -237,7 +237,7 @@ Invoke by name from the MCP client when supported. Each prompt returns instructi
 
 ## Human confirmation before write (MCP-only)
 
-`create_glossary_term`, `create_tag`, `update_asset_descriptions`, and `update_governance_roles` require **`create_confirmed_by_user=true`** on the call that performs the OvalEdge POST (unless `dry_run=true` on update tools). Earlier calls return **`confirm_create`** or **`confirm_update`** previews (`doNotCreate` / `doNotUpdate`) with `formattedResponse` — the agent must show them and wait for explicit user approval.
+`create_glossary_term`, `create_tag`, `update_asset_descriptions`, and `update_governance_roles` require **`write_confirmed_by_user=true`** on the call that performs the OvalEdge POST (unless `dry_run=true` on update tools). Earlier calls return **`confirm_create`** or **`confirm_update`** previews (`doNotCreate` / `doNotUpdate`) with `formattedResponse` — the agent must show them and wait for explicit user approval.
 
 This gate is enforced in the MCP server only; **no OvalEdge backend change** is required.
 
@@ -255,4 +255,4 @@ See also: [glossary_guide](glossary_guide), [tags_guide](tags_guide), [data_stor
 
 **Workflow prompt:** `assess_cde_dq_coverage` (pass `scope` = user question or domain name).
 
-Read-only path: search → `assess_cde_dq` only. Do not call write tools without explicit user approval (unlike glossary/tag, these DQ writes do not use `create_confirmed_by_user`; approval is conversational).
+Read-only path: search → `assess_cde_dq` only. Do not call write tools without explicit user approval (unlike glossary/tag, these DQ writes do not use `write_confirmed_by_user`; approval is conversational).

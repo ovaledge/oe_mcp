@@ -21,6 +21,7 @@ from server.constants import (
 )
 from server.tools.common import drop_none as _q
 from server.tools.common import map_ovaledge_error, ovaledge_client, strip_or_none
+from server.tools.common.tool_logging import logged_tool_invocation
 from server.tools.dataquality.helpers import (
     _DESC_ASSESS_CDE_DQ,
     _DESC_ASSOCIATE_DQ_RULE_OBJECTS,
@@ -64,7 +65,11 @@ def register(mcp: FastMCP) -> None:
         ] = MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
     ) -> dict[str, Any]:
         """Resolve Data Quality rules for governance updates (see MCP tool description)."""
-        return await _invoke_lookup_dq_rule(object_id, rule_name, limit)
+        return await _invoke_lookup_dq_rule(
+            object_id=object_id,
+            rule_name=rule_name,
+            limit=limit,
+        )
 
     @mcp.tool(description=_DESC_ASSESS_CDE_DQ)
     async def assess_cde_dq(
@@ -114,7 +119,10 @@ def register(mcp: FastMCP) -> None:
     ) -> dict[str, Any]:
         """CDE / column DQ assessment (see MCP tool description)."""
         return await _invoke_assess_cde_dq(
-            discover_cde_columns, objects, limit, description_custom_field_name
+            discover_cde_columns=discover_cde_columns,
+            objects=objects,
+            limit=limit,
+            description_custom_field_name=description_custom_field_name,
         )
 
     @mcp.tool(description=_DESC_ASSOCIATE_DQ_RULE_OBJECTS)
@@ -142,7 +150,9 @@ def register(mcp: FastMCP) -> None:
     ) -> dict[str, Any]:
         """Link catalog objects to a data quality rule (see MCP tool description)."""
         return await _invoke_associate_dq_rule_objects(
-            dqrule_id, objects, skip_already_associated
+            dqrule_id=dqrule_id,
+            objects=objects,
+            skip_already_associated=skip_already_associated,
         )
 
     @mcp.tool(description=_DESC_CREATE_DQ_RULES)
@@ -204,15 +214,16 @@ def register(mcp: FastMCP) -> None:
     ) -> dict[str, Any]:
         """Assess then create or associate DQ rules for CDE columns (see MCP tool description)."""
         return await _invoke_create_dq_rules(
-            discover_cde_columns,
-            objects,
-            limit,
-            prefer_existing_rule,
-            skip_duplicate_function_on_object,
-            description_custom_field_name,
+            discover_cde_columns=discover_cde_columns,
+            objects=objects,
+            limit=limit,
+            prefer_existing_rule=prefer_existing_rule,
+            skip_duplicate_function_on_object=skip_duplicate_function_on_object,
+            description_custom_field_name=description_custom_field_name,
         )
 
 
+@logged_tool_invocation
 async def _invoke_lookup_dq_rule(
     object_id: int | None,
     rule_name: str | None,
@@ -239,6 +250,7 @@ async def _invoke_lookup_dq_rule(
         return map_ovaledge_error(e)
 
 
+@logged_tool_invocation
 async def _invoke_assess_cde_dq(
     discover_cde_columns: bool,
     objects: list[dict[str, Any]] | None,
@@ -263,6 +275,7 @@ async def _invoke_assess_cde_dq(
         return map_ovaledge_error(e)
 
 
+@logged_tool_invocation
 async def _invoke_associate_dq_rule_objects(
     dqrule_id: int,
     objects: list[dict[str, Any]],
@@ -286,6 +299,7 @@ async def _invoke_associate_dq_rule_objects(
         return map_ovaledge_error(e)
 
 
+@logged_tool_invocation
 async def _invoke_create_dq_rules(
     discover_cde_columns: bool,
     objects: list[dict[str, Any]] | None,

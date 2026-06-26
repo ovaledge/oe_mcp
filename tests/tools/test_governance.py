@@ -12,17 +12,17 @@ from server.constants import (
     MCP_PATH_DOMAIN_METADATA,
     MCP_PATH_GLOSSARY_TERMS,
     MCP_PATH_LOOKUP_DATASTORY,
-    MCP_PATH_LOOKUP_DQ_RULES,
     MCP_PATH_TAGS,
     MCP_PATH_TAGS_CREATE_OPTIONS,
     MCP_PATH_TAGS_PARENT_OPTIONS,
     MCP_PATH_UPDATE_CUSTOM_FIELD_VALUES,
     MCP_PATH_UPDATE_GOVERNANCE_ROLES,
 )
-from server.tools import dataquality, governance
+from server.tools import governance
 from server.tools.governance import helpers as governance_helpers
 from tests.conftest import MOCK_GLOSSARY_RESULT
 from tests.helpers import get_tool_fn
+from tests.tools.confirm_test_helpers import invoke_write_confirmed
 
 
 class TestLookupGlossaryTerm:
@@ -350,7 +350,8 @@ class TestCreateGlossaryTerm:
         )
         assert out["workflowPhase"] == "confirm_create"
         assert out.get("doNotCreate") is True
-        assert out.get("createConfirmedByUser") is False
+        assert out.get("writeConfirmedByUser") is False
+        assert "confirmationToken" in out
         mock_oe_client.post.assert_not_called()
 
     async def test_create_happy_path(self, mock_oe_client: AsyncMock) -> None:
@@ -388,7 +389,8 @@ class TestCreateGlossaryTerm:
             domain_name="Finance",
             category_name="cost",
             subcategory_name="money",
-            create_confirmed_by_user=True,
+            write_confirmed_by_user=True,
+            confirmation_token=preview["confirmationToken"],
         )
         assert out["placementPath"] == "Finance > cost > money > Revenue Recognition"
         assert "navUrl" in out
@@ -423,13 +425,13 @@ class TestCreateGlossaryTerm:
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
         fn = await get_tool_fn(mcp, "create_glossary_term")
-        out = await fn(
+        out = await invoke_write_confirmed(
+            fn,
             term_name="joyful",
             domain_id=1066,
             description="joyful description",
             skip_category=True,
             category_skip_confirmed=True,
-            create_confirmed_by_user=True,
         )
         assert out["navLink"] == "#nav/glossary?browse=summary&id=2463"
         assert out["redirectUrl"].endswith("#nav/glossary?browse=summary&id=2463")
@@ -835,13 +837,13 @@ class TestCreateGlossaryTerm:
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
         fn = await get_tool_fn(mcp, "create_glossary_term")
-        out = await fn(
+        out = await invoke_write_confirmed(
+            fn,
             term_name="X",
             domain_id=12,
             description="desc",
             skip_category=True,
             category_skip_confirmed=True,
-            create_confirmed_by_user=True,
         )
         assert out["status_code"] == 409
 
@@ -1114,7 +1116,8 @@ class TestCreateTag:
             parent_tag_id=20,
             parent_tag_id_confirmed_by_user=True,
             parent_step_completed_by_user=True,
-            create_confirmed_by_user=True,
+            write_confirmed_by_user=True,
+            confirmation_token=confirm["confirmationToken"],
         )
         assert out["ok"] is True
         mock_oe_client.post.assert_called_once_with(
@@ -1181,7 +1184,7 @@ class TestCreateTag:
         fn = await get_tool_fn(mcp, "create_tag")
         step1 = await fn(tag_name="Ranchi")
         assert step1.get("selectionPhase") == "PARENT_OPTIONAL"
-        await fn(
+        preview = await fn(
             tag_name="Ranchi",
             create_directly_under_master=True,
             parent_step_completed_by_user=True,
@@ -1190,7 +1193,8 @@ class TestCreateTag:
             tag_name="Ranchi",
             create_directly_under_master=True,
             parent_step_completed_by_user=True,
-            create_confirmed_by_user=True,
+            write_confirmed_by_user=True,
+            confirmation_token=preview["confirmationToken"],
         )
         assert out["ok"] is True
         assert out["navLink"].endswith(
@@ -1216,7 +1220,7 @@ class TestCreateTag:
         governance.register(mcp)
         fn = await get_tool_fn(mcp, "create_tag")
         await fn(tag_name="PII")
-        await fn(
+        preview = await fn(
             tag_name="PII",
             create_directly_under_master=True,
             parent_step_completed_by_user=True,
@@ -1225,7 +1229,8 @@ class TestCreateTag:
             tag_name="PII",
             create_directly_under_master=True,
             parent_step_completed_by_user=True,
-            create_confirmed_by_user=True,
+            write_confirmed_by_user=True,
+            confirmation_token=preview["confirmationToken"],
         )
         assert out["ok"] is True
         assert "#nav/tag?id=5" in out["data"]["navLink"]
@@ -1256,7 +1261,7 @@ class TestCreateTag:
         governance.register(mcp)
         fn = await get_tool_fn(mcp, "create_tag")
         await fn(tag_name="x")
-        await fn(
+        preview = await fn(
             tag_name="x",
             create_directly_under_master=True,
             parent_step_completed_by_user=True,
@@ -1265,7 +1270,8 @@ class TestCreateTag:
             tag_name="x",
             create_directly_under_master=True,
             parent_step_completed_by_user=True,
-            create_confirmed_by_user=True,
+            write_confirmed_by_user=True,
+            confirmation_token=preview["confirmationToken"],
         )
         assert out["status_code"] == 400
 
@@ -1571,7 +1577,7 @@ class TestCreateTag:
         assert step1.get("selectionPhase") == "PARENT_OPTIONAL"
         assert step1.get("userSelectableParents")
         mock_oe_client.post.assert_not_called()
-        await fn(
+        preview = await fn(
             tag_name="SkipTest",
             create_directly_under_master=True,
             parent_step_completed_by_user=True,
@@ -1580,7 +1586,8 @@ class TestCreateTag:
             tag_name="SkipTest",
             create_directly_under_master=True,
             parent_step_completed_by_user=True,
-            create_confirmed_by_user=True,
+            write_confirmed_by_user=True,
+            confirmation_token=preview["confirmationToken"],
         )
         assert out["ok"] is True
         mock_oe_client.post.assert_called_once()
@@ -1615,7 +1622,7 @@ class TestCreateTag:
         governance.register(mcp)
         fn = await get_tool_fn(mcp, "create_tag")
         await fn(tag_name="Child")
-        await fn(
+        preview = await fn(
             tag_name="Child",
             parent_tag_id=1055,
             parent_tag_id_confirmed_by_user=True,
@@ -1626,7 +1633,8 @@ class TestCreateTag:
             parent_tag_id=1055,
             parent_tag_id_confirmed_by_user=True,
             parent_step_completed_by_user=True,
-            create_confirmed_by_user=True,
+            write_confirmed_by_user=True,
+            confirmation_token=preview["confirmationToken"],
         )
         assert out["ok"] is True
         body = mock_oe_client.post.call_args.kwargs.get("body") or {}
@@ -1707,7 +1715,7 @@ class TestCreateTag:
         )
         assert preview["workflowPhase"] == "confirm_create"
         assert preview.get("doNotCreateTag") is True
-        assert preview.get("createConfirmedByUser") is False
+        assert preview.get("writeConfirmedByUser") is False
         mock_oe_client.post.assert_not_called()
 
     async def test_open_mode_create_without_parent(self, mock_oe_client: AsyncMock) -> None:
@@ -1732,7 +1740,7 @@ class TestCreateTag:
         governance.register(mcp)
         fn = await get_tool_fn(mcp, "create_tag")
         await fn(tag_name="OpenChild")
-        await fn(
+        preview = await fn(
             tag_name="OpenChild",
             create_directly_under_master=True,
             parent_step_completed_by_user=True,
@@ -1741,7 +1749,8 @@ class TestCreateTag:
             tag_name="OpenChild",
             create_directly_under_master=True,
             parent_step_completed_by_user=True,
-            create_confirmed_by_user=True,
+            write_confirmed_by_user=True,
+            confirmation_token=preview["confirmationToken"],
         )
         assert out["ok"] is True
         mock_oe_client.post.assert_called_once()
@@ -1794,7 +1803,7 @@ class TestCreateTag:
             master_tag_id=1031,
             master_tag_id_confirmed_by_user=True,
         )
-        await fn(
+        preview = await fn(
             tag_name="Pouse",
             master_tag_id=1031,
             master_tag_id_confirmed_by_user=True,
@@ -1809,7 +1818,8 @@ class TestCreateTag:
             parent_tag_id=1042,
             parent_tag_id_confirmed_by_user=True,
             parent_step_completed_by_user=True,
-            create_confirmed_by_user=True,
+            write_confirmed_by_user=True,
+            confirmation_token=preview["confirmationToken"],
         )
         assert out["ok"] is True
         body = mock_oe_client.post.call_args.kwargs.get("body") or {}
@@ -2110,37 +2120,6 @@ class TestLookupDatastory:
         )
 
 
-class TestLookupDqRule:
-    async def test_rule_name_lookup(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = {
-            "ok": True,
-            "data": [
-                {
-                    "objectId": 42,
-                    "objectType": "dqrule",
-                    "objectName": "Null Data Density Check",
-                }
-            ],
-        }
-        mcp = FastMCP(name="test", version="0.0.1")
-        dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_dq_rule")
-        out = await fn(rule_name="Null Data Density")
-        assert out["ok"] is True
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_LOOKUP_DQ_RULES,
-            params={"ruleName": "Null Data Density", "limit": MCP_GLOSSARY_TAGS_LIMIT_DEFAULT},
-        )
-
-    async def test_rejects_both_id_and_name(self, mock_oe_client: AsyncMock) -> None:
-        mcp = FastMCP(name="test", version="0.0.1")
-        dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_dq_rule")
-        out = await fn(object_id=1, rule_name="x")
-        assert out["status_code"] == 400
-        mock_oe_client.get.assert_not_called()
-
-
 class TestUpdateGovernanceRoles:
     async def test_rejects_unsupported_object_type(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
@@ -2199,6 +2178,7 @@ class TestUpdateGovernanceRoles:
         )
         assert out["workflowPhase"] == "confirm_update"
         assert out["doNotUpdate"] is True
+        assert "confirmationToken" in out
         mock_oe_client.post.assert_not_called()
 
     async def test_posts_body_and_enriches_response(
@@ -2220,13 +2200,13 @@ class TestUpdateGovernanceRoles:
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
         fn = await get_tool_fn(mcp, "update_governance_roles")
-        out = await fn(
+        out = await invoke_write_confirmed(
+            fn,
             object_id=99,
             object_type="oetable",
             role_updates={"Owner": "mike", "Steward": "john"},
             prompt="Assign John as Steward and Mike as Owner",
             reason="Ownership update request",
-            create_confirmed_by_user=True,
         )
 
         assert out["status"] == "partial_success"
@@ -2259,11 +2239,11 @@ class TestUpdateGovernanceRoles:
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
         fn = await get_tool_fn(mcp, "update_governance_roles")
-        await fn(
+        await invoke_write_confirmed(
+            fn,
             object_id=1,
             object_type="oetable",
             role_updates={"custodian": ""},
-            create_confirmed_by_user=True,
         )
         mock_oe_client.post.assert_called_once_with(
             MCP_PATH_UPDATE_GOVERNANCE_ROLES,
@@ -2283,11 +2263,11 @@ class TestUpdateGovernanceRoles:
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
         fn = await get_tool_fn(mcp, "update_governance_roles")
-        await fn(
+        await invoke_write_confirmed(
+            fn,
             object_id=1,
             object_type="oetable",
             role_updates={"govrole5": "sarah"},
-            create_confirmed_by_user=True,
         )
         mock_oe_client.post.assert_called_once_with(
             MCP_PATH_UPDATE_GOVERNANCE_ROLES,
@@ -2306,11 +2286,11 @@ class TestUpdateGovernanceRoles:
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
         fn = await get_tool_fn(mcp, "update_governance_roles")
-        out = await fn(
+        out = await invoke_write_confirmed(
+            fn,
             object_id=1,
             object_type="oetable",
             role_updates={"governance_role_5": "sarah"},
-            create_confirmed_by_user=True,
         )
         assert out["status_code"] == 400
         assert out["reason_code"] == "GOVERNANCE_ROLE_NOT_ENABLED"
@@ -2321,11 +2301,11 @@ class TestUpdateGovernanceRoles:
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
         fn = await get_tool_fn(mcp, "update_governance_roles")
-        out = await fn(
+        out = await invoke_write_confirmed(
+            fn,
             object_id=1,
             object_type="oetable",
             role_updates={"owner": "sarah"},
-            create_confirmed_by_user=True,
         )
         assert out["status_code"] == 403
 
@@ -2377,6 +2357,7 @@ class TestUpdateCustomFieldValue:
         )
         assert out["workflowPhase"] == "confirm_update"
         assert out["doNotUpdate"] is True
+        assert "confirmationToken" in out
         mock_oe_client.post.assert_not_called()
 
     async def test_posts_body_and_enriches_response(
@@ -2417,12 +2398,12 @@ class TestUpdateCustomFieldValue:
             "server.tools.governance.invocations.resolve_client_timezone",
             return_value="Asia/Kolkata",
         ):
-            out = await fn(
+            out = await invoke_write_confirmed(
+                fn,
                 object_id=99,
                 object_type="oetable",
                 field_updates=[{"field_name": "Data Owner", "value": "John Smith"}],
                 prompt="Update Data Owner to John Smith",
-                create_confirmed_by_user=True,
             )
 
         assert out["status"] == "success"
