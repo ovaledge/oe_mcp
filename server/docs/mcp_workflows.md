@@ -244,7 +244,7 @@ Invoke by name from the MCP client when supported. Each prompt returns instructi
 
 ## Human confirmation before write (MCP-only)
 
-`create_glossary_term`, `create_tag`, `update_asset_descriptions`, and `update_governance_roles` require **`write_confirmed_by_user=true`** on the call that performs the OvalEdge POST (unless `dry_run=true` on update tools). Earlier calls return **`confirm_create`** or **`confirm_update`** previews (`doNotCreate` / `doNotUpdate`) with `formattedResponse` — the agent must show them and wait for explicit user approval.
+`create_glossary_term`, `create_tag`, `update_asset_descriptions`, `update_governance_roles`, `update_custom_field_value`, `update_cde_associations`, `associate_dq_rule_objects`, and `create_dq_rules` require **`write_confirmed_by_user=true`** on the call that performs the OvalEdge POST (unless `dry_run=true` on update tools). Earlier calls return **`confirm_create`** or **`confirm_update`** previews (`doNotCreate` / `doNotUpdate`) with `formattedResponse` and **`confirmationToken`** — the agent must show them and wait for explicit user approval.
 
 This gate is enforced in the MCP server only; **no OvalEdge backend change** is required.
 
@@ -257,9 +257,9 @@ See also: [glossary_guide](glossary_guide), [tags_guide](tags_guide), [data_stor
 | Find CDE assets | `search_catalog_assets` | Set `critical_data_element=Yes`; object types `oetable`, `oecolumn`, `oefile`, `oefilecolumn` |
 | Read-only assessment | `assess_cde_dq` | Pass `objects` from search hits, or `discover_cde_columns=true` to auto-discover CDE columns |
 | Resolve existing rule | `lookup_dq_rule` | DQ rules are not in catalog search |
-| Link to data quality rule | `associate_dq_rule_objects` | Requires `dqrule_id` from assessment or lookup; user must approve write |
-| Create + associate | `create_dq_rules` | Re-assesses internally; prefer existing rule or auto-create data quality rule when criteria sufficient |
+| Link to data quality rule | `associate_dq_rule_objects` | Requires `dqrule_id` from assessment or lookup; **confirm gate** (`write_confirmed_by_user`) |
+| Create + associate | `create_dq_rules` | Re-assesses internally; prefer existing rule or auto-create when criteria sufficient; **confirm gate** |
 
 **Workflow prompt:** `assess_cde_dq_coverage` (pass `scope` = user question or domain name).
 
-Read-only path: search → `assess_cde_dq` only. Do not call write tools without explicit user approval (unlike glossary/tag, these DQ writes do not use `write_confirmed_by_user`; approval is conversational).
+Read-only path: search → `assess_cde_dq` only. For writes, call without `write_confirmed_by_user` for a preview, then re-call with `write_confirmed_by_user=true` and `confirmation_token` after explicit user approval (same pattern as glossary/tag governed writes).

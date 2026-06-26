@@ -21,6 +21,10 @@ from server.constants import (
 )
 from server.tools.common import drop_none as _q
 from server.tools.common import map_ovaledge_error, ovaledge_client, strip_or_none
+from server.tools.common.confirm_gate import (
+    CONFIRMATION_TOKEN_PARAM_DESCRIPTION,
+    verify_write_confirmation,
+)
 from server.tools.common.tool_logging import logged_tool_invocation
 from server.tools.dataquality.helpers import (
     _DESC_ASSESS_CDE_DQ,
@@ -31,7 +35,9 @@ from server.tools.dataquality.helpers import (
     build_associate_dq_rule_objects_payload,
     build_create_dq_rules_payload,
     format_assess_cde_dq_response,
+    format_associate_dq_rule_confirmation_preview,
     format_associate_dq_rule_objects_response,
+    format_create_dq_rules_confirmation_preview,
     format_create_dq_rules_response,
     validate_assess_cde_dq_args,
     validate_associate_dq_rule_objects_args,
@@ -157,12 +163,29 @@ def register(mcp: FastMCP) -> None:
                 default=True,
             ),
         ] = True,
+        write_confirmed_by_user: Annotated[
+            bool,
+            Field(
+                description=(
+                    "Final update gate: true only after the user explicitly approved "
+                    "the confirm_update preview. Re-call with the same dqrule_id, "
+                    "objects, and skip_already_associated."
+                ),
+                default=False,
+            ),
+        ] = False,
+        confirmation_token: Annotated[
+            str | None,
+            Field(description=CONFIRMATION_TOKEN_PARAM_DESCRIPTION, default=None),
+        ] = None,
     ) -> dict[str, Any]:
         """Link catalog objects to a data quality rule (see MCP tool description)."""
         return await _invoke_associate_dq_rule_objects(
             dqrule_id=dqrule_id,
             objects=objects,
             skip_already_associated=skip_already_associated,
+            write_confirmed_by_user=write_confirmed_by_user,
+            confirmation_token=confirmation_token,
         )
 
     @mcp.tool(description=_DESC_CREATE_DQ_RULES)
@@ -241,6 +264,21 @@ def register(mcp: FastMCP) -> None:
                 default=None,
             ),
         ] = None,
+        write_confirmed_by_user: Annotated[
+            bool,
+            Field(
+                description=(
+                    "Final create gate: true only after the user explicitly approved "
+                    "the confirm_create preview. Re-call with the same discover_cde_columns, "
+                    "objects, limit, flags, and optional description_custom_field_name."
+                ),
+                default=False,
+            ),
+        ] = False,
+        confirmation_token: Annotated[
+            str | None,
+            Field(description=CONFIRMATION_TOKEN_PARAM_DESCRIPTION, default=None),
+        ] = None,
     ) -> dict[str, Any]:
         """Assess then create or associate DQ rules for CDE columns (see MCP tool description)."""
         return await _invoke_create_dq_rules(
@@ -252,6 +290,8 @@ def register(mcp: FastMCP) -> None:
             description_custom_field_name=description_custom_field_name,
             description_term_name=description_term_name,
             supplemental_criteria_text=supplemental_criteria_text,
+            write_confirmed_by_user=write_confirmed_by_user,
+            confirmation_token=confirmation_token,
         )
 
 
@@ -317,6 +357,8 @@ async def _invoke_associate_dq_rule_objects(
     dqrule_id: int,
     objects: list[dict[str, Any]],
     skip_already_associated: bool,
+    write_confirmed_by_user: bool = False,
+    confirmation_token: str | None = None,
 ) -> dict[str, Any]:
     err = validate_associate_dq_rule_objects_args(dqrule_id, objects)
     if err is not None:
@@ -326,6 +368,15 @@ async def _invoke_associate_dq_rule_objects(
     )
     if "error" in payload:
         return payload
+    if not write_confirmed_by_user:
+        return format_associate_dq_rule_confirmation_preview(payload)
+    confirm_err = verify_write_confirmation(
+        payload,
+        write_confirmed_by_user=write_confirmed_by_user,
+        confirmation_token=confirmation_token,
+    )
+    if confirm_err is not None:
+        return confirm_err
     try:
         async with ovaledge_client() as client:
             body = await client.post(MCP_PATH_ASSOCIATE_DQ_RULE_OBJECTS, payload)
@@ -346,6 +397,8 @@ async def _invoke_create_dq_rules(
     description_custom_field_name: str | None = None,
     description_term_name: str | None = None,
     supplemental_criteria_text: str | None = None,
+    write_confirmed_by_user: bool = False,
+    confirmation_token: str | None = None,
 ) -> dict[str, Any]:
     err = validate_create_dq_rules_args(discover_cde_columns, objects)
     if err is not None:
@@ -362,6 +415,15 @@ async def _invoke_create_dq_rules(
     )
     if "error" in payload:
         return payload
+    if not write_confirmed_by_user:
+        return format_create_dq_rules_confirmation_preview(payload)
+    confirm_err = verify_write_confirmation(
+        payload,
+        write_confirmed_by_user=write_confirmed_by_user,
+        confirmation_token=confirmation_token,
+    )
+    if confirm_err is not None:
+        return confirm_err
     try:
         async with ovaledge_client() as client:
             body = await client.post(MCP_PATH_CREATE_DQ_RULES, payload)
