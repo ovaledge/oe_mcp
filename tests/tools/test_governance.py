@@ -2801,14 +2801,14 @@ class TestUpdateCustomFieldValue:
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
         fn = await get_tool_fn(mcp, "update_custom_field_value")
-        out = await fn(
+        out = await invoke_write_confirmed(
+            fn,
             object_id=1000,
             object_type="oeschema",
             field_updates=[
                 {"field_name": "Automation_CodeCF", "value": ["option 1", "option 2"]}
             ],
             code_update_mode="replace_all",
-            create_confirmed_by_user=True,
         )
         assert out["status"] == "success"
         posted_body = mock_oe_client.post.call_args.args[1]
@@ -2843,14 +2843,14 @@ class TestUpdateCustomFieldValue:
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
         fn = await get_tool_fn(mcp, "update_custom_field_value")
-        out = await fn(
+        out = await invoke_write_confirmed(
+            fn,
             object_id=1000,
             object_type="oeschema",
             field_updates=[
                 {"field_name": "Automation_CodeCF", "value": "['option 1', 'option 2']"}
             ],
             code_update_mode="replace_all",
-            create_confirmed_by_user=True,
         )
         assert out["status"] == "success"
         posted_body = mock_oe_client.post.call_args.args[1]
