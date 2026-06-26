@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from server.tools.governance.custom_field_helpers import (
     _DESC_UPDATE_CUSTOM_FIELD_VALUE,
+    _apply_code_field_update_policies,
     _enrich_update_custom_field_value_response,
     _format_update_custom_field_value_confirmation_preview,
     _normalize_field_updates,
@@ -102,6 +103,7 @@ __all__ = [
     "_load_secure_create_guidance",
     "_lookup_tag_after_create",
     "_master_tag_ids_from_guidance_data",
+    "_apply_code_field_update_policies",
     "_normalize_field_updates",
     "_normalize_role_updates",
     "_parent_choice_finalized",

@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastmcp import FastMCP
@@ -8,6 +8,7 @@ from server.constants import (
     MCP_DOMAIN_METADATA_SIZE_DEFAULT,
     MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
     MCP_GLOSSARY_TAGS_LIMIT_MAX,
+    MCP_PATH_CUSTOM_FIELDS,
     MCP_PATH_DOMAIN_METADATA,
     MCP_PATH_GLOSSARY_TERMS,
     MCP_PATH_LOOKUP_DATASTORY,
@@ -2351,6 +2352,21 @@ class TestUpdateCustomFieldValue:
         mock_oe_client.post.assert_not_called()
 
     async def test_confirm_preview_blocks_post(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "fields": [
+                    {
+                        "fieldName": "Data Owner",
+                        "fieldKey": "gtcf1",
+                        "type": "text",
+                        "allowMultiple": False,
+                        "currentValue": "",
+                        "options": [],
+                    }
+                ]
+            },
+        }
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
         fn = await get_tool_fn(mcp, "update_custom_field_value")
@@ -2378,17 +2394,36 @@ class TestUpdateCustomFieldValue:
             "audit": {"source": "OE-MCP"},
         }
         mock_oe_client.post.return_value = api_resp
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "fields": [
+                    {
+                        "fieldName": "Data Owner",
+                        "fieldKey": "gtcf1",
+                        "type": "text",
+                        "allowMultiple": False,
+                        "currentValue": "",
+                        "options": [],
+                    }
+                ]
+            },
+        }
 
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
         fn = await get_tool_fn(mcp, "update_custom_field_value")
-        out = await fn(
-            object_id=99,
-            object_type="oetable",
-            field_updates=[{"field_name": "Data Owner", "value": "John Smith"}],
-            prompt="Update Data Owner to John Smith",
-            create_confirmed_by_user=True,
-        )
+        with patch(
+            "server.tools.governance.invocations.resolve_client_timezone",
+            return_value="Asia/Kolkata",
+        ):
+            out = await fn(
+                object_id=99,
+                object_type="oetable",
+                field_updates=[{"field_name": "Data Owner", "value": "John Smith"}],
+                prompt="Update Data Owner to John Smith",
+                create_confirmed_by_user=True,
+            )
 
         assert out["status"] == "success"
         assert "formattedResponse" in out
@@ -2399,8 +2434,478 @@ class TestUpdateCustomFieldValue:
             {
                 "target": {"objectId": 99, "objectType": "oetable"},
                 "fieldUpdates": [{"fieldName": "Data Owner", "value": "John Smith"}],
+                "timeZone": "Asia/Kolkata",
                 "clientContext": {"prompt": "Update Data Owner to John Smith"},
             },
+        )
+
+    async def test_single_value_text_field_reaches_confirm(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "fields": [
+                    {
+                        "fieldName": "Automation_TextCF",
+                        "fieldKey": "gtcf1",
+                        "type": "text",
+                        "allowMultiple": False,
+                        "currentValue": "old",
+                        "options": [],
+                    }
+                ]
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_custom_field_value")
+        out = await fn(
+            object_id=99,
+            object_type="oeschema",
+            field_updates=[{"field_name": "Automation_TextCF", "value": "hello"}],
+        )
+        assert out["workflowPhase"] == "confirm_update"
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_CUSTOM_FIELDS,
+            params={
+                "objectId": 99,
+                "objectType": "oeschema",
+                "fieldName": "Automation_TextCF",
+            },
+        )
+
+    async def test_single_value_invalid_code_option_rejected(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "fields": [
+                    {
+                        "fieldName": "added",
+                        "fieldKey": "gccf3",
+                        "type": "code",
+                        "allowMultiple": False,
+                        "currentValue": "false",
+                        "options": [
+                            {"name": "true", "codeId": 1262},
+                            {"name": "false", "codeId": 1263},
+                        ],
+                    }
+                ]
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_custom_field_value")
+        out = await fn(
+            object_id=6432,
+            object_type="oeschema",
+            field_updates=[{"field_name": "added", "value": "maybe"}],
+        )
+        assert out["workflowPhase"] == "invalid_code_options"
+        assert out["status_code"] == 400
+        assert "maybe" in out["formattedResponse"]
+        assert "true, false" in out["formattedResponse"]
+        mock_oe_client.post.assert_not_called()
+
+    async def test_multi_value_invalid_code_option_rejected(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "fields": [
+                    {
+                        "fieldName": "Automation_CodeCF",
+                        "fieldKey": "gccf1",
+                        "type": "code",
+                        "allowMultiple": True,
+                        "currentValue": "option 1, option 2",
+                        "options": [
+                            {"name": "option 1", "codeId": 1008},
+                            {"name": "option 2", "codeId": 1009},
+                        ],
+                    }
+                ]
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_custom_field_value")
+        out = await fn(
+            object_id=1000,
+            object_type="oeschema",
+            field_updates=[
+                {
+                    "field_name": "Automation_CodeCF",
+                    "value": ["option 1", "option 2", "option 3"],
+                }
+            ],
+            code_update_mode="replace_all",
+        )
+        assert out["workflowPhase"] == "invalid_code_options"
+        assert out["status_code"] == 400
+        assert "option 3" in out["formattedResponse"]
+        mock_oe_client.post.assert_not_called()
+
+    async def test_single_value_code_option_canonicalized(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "fields": [
+                    {
+                        "fieldName": "added",
+                        "fieldKey": "gccf3",
+                        "type": "code",
+                        "allowMultiple": False,
+                        "currentValue": "false",
+                        "options": [
+                            {"name": "true", "codeId": 1262},
+                            {"name": "false", "codeId": 1263},
+                        ],
+                    }
+                ]
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_custom_field_value")
+        out = await fn(
+            object_id=6432,
+            object_type="oeschema",
+            field_updates=[{"field_name": "added", "value": "TRUE"}],
+        )
+        assert out["workflowPhase"] == "confirm_update"
+        assert out["pendingUpdate"]["fieldUpdates"][0]["value"] == "true"
+
+    async def test_multi_value_single_select_code_field_asks_clarification(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "fields": [
+                    {
+                        "fieldName": "added",
+                        "fieldKey": "gccf3",
+                        "type": "code",
+                        "allowMultiple": False,
+                        "currentValue": "false",
+                        "options": [
+                            {"name": "true", "codeId": 1262},
+                            {"name": "false", "codeId": 1263},
+                        ],
+                    }
+                ]
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_custom_field_value")
+        out = await fn(
+            object_id=6432,
+            object_type="oeschema",
+            field_updates=[{"field_name": "added", "value": "TRUE,FALSE"}],
+        )
+        assert out["workflowPhase"] == "clarify_single_select"
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_CUSTOM_FIELDS,
+            params={
+                "objectId": 6432,
+                "objectType": "oeschema",
+                "fieldName": "added",
+            },
+        )
+        mock_oe_client.post.assert_not_called()
+
+    async def test_multi_value_multi_select_without_mode_asks_clarification(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "fields": [
+                    {
+                        "fieldName": "tags",
+                        "fieldKey": "gccf1",
+                        "type": "code",
+                        "allowMultiple": True,
+                        "currentValue": "a",
+                        "options": [
+                            {"name": "a", "codeId": 1},
+                            {"name": "b", "codeId": 2},
+                            {"name": "c", "codeId": 3},
+                        ],
+                    }
+                ]
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_custom_field_value")
+        out = await fn(
+            object_id=10,
+            object_type="oeschema",
+            field_updates=[{"field_name": "tags", "value": "b,c"}],
+        )
+        assert out["workflowPhase"] == "clarify_multi_select_mode"
+        mock_oe_client.post.assert_not_called()
+
+    async def test_multi_value_multi_select_replace_all_reaches_confirm(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "fields": [
+                    {
+                        "fieldName": "tags",
+                        "fieldKey": "gccf1",
+                        "type": "code",
+                        "allowMultiple": True,
+                        "currentValue": "a",
+                        "options": [
+                            {"name": "a", "codeId": 1},
+                            {"name": "b", "codeId": 2},
+                            {"name": "c", "codeId": 3},
+                        ],
+                    }
+                ]
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_custom_field_value")
+        out = await fn(
+            object_id=10,
+            object_type="oeschema",
+            field_updates=[{"field_name": "tags", "value": "b,c"}],
+            code_update_mode="replace_all",
+        )
+        assert out["workflowPhase"] == "confirm_update"
+        assert out["pendingUpdate"]["fieldUpdates"][0]["value"] == "b,c"
+
+    async def test_list_value_joined_into_comma_string(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "fields": [
+                    {
+                        "fieldName": "tags",
+                        "fieldKey": "gccf1",
+                        "type": "code",
+                        "allowMultiple": True,
+                        "currentValue": "a",
+                        "options": [
+                            {"name": "a", "codeId": 1},
+                            {"name": "b", "codeId": 2},
+                            {"name": "c", "codeId": 3},
+                        ],
+                    }
+                ]
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_custom_field_value")
+        out = await fn(
+            object_id=10,
+            object_type="oeschema",
+            field_updates=[{"field_name": "tags", "value": ["b", "c"]}],
+            code_update_mode="replace_all",
+        )
+        assert out["workflowPhase"] == "confirm_update"
+        assert out["pendingUpdate"]["fieldUpdates"][0]["value"] == "b,c"
+
+    async def test_and_separator_splits_code_values(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "fields": [
+                    {
+                        "fieldName": "tags",
+                        "fieldKey": "gccf1",
+                        "type": "code",
+                        "allowMultiple": True,
+                        "currentValue": "a",
+                        "options": [
+                            {"name": "a", "codeId": 1},
+                            {"name": "b", "codeId": 2},
+                            {"name": "c", "codeId": 3},
+                        ],
+                    }
+                ]
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_custom_field_value")
+        out = await fn(
+            object_id=10,
+            object_type="oeschema",
+            field_updates=[{"field_name": "tags", "value": "b and c"}],
+            code_update_mode="replace_all",
+        )
+        assert out["workflowPhase"] == "confirm_update"
+        assert out["pendingUpdate"]["fieldUpdates"][0]["value"] == "b,c"
+
+    async def test_mixed_comma_and_separators_split_code_values(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "fields": [
+                    {
+                        "fieldName": "tags",
+                        "fieldKey": "gccf1",
+                        "type": "code",
+                        "allowMultiple": True,
+                        "currentValue": "",
+                        "options": [
+                            {"name": "a", "codeId": 1},
+                            {"name": "b", "codeId": 2},
+                            {"name": "c", "codeId": 3},
+                        ],
+                    }
+                ]
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_custom_field_value")
+        out = await fn(
+            object_id=10,
+            object_type="oeschema",
+            field_updates=[{"field_name": "tags", "value": "a, b and c"}],
+            code_update_mode="replace_all",
+        )
+        assert out["workflowPhase"] == "confirm_update"
+        assert out["pendingUpdate"]["fieldUpdates"][0]["value"] == "a,b,c"
+
+    async def test_confirmed_post_resolves_list_value_before_sending(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "fields": [
+                    {
+                        "fieldName": "Automation_CodeCF",
+                        "fieldKey": "gccf1",
+                        "type": "code",
+                        "allowMultiple": True,
+                        "currentValue": "",
+                        "options": [
+                            {"name": "option 1", "codeId": 1},
+                            {"name": "option 2", "codeId": 2},
+                        ],
+                    }
+                ]
+            },
+        }
+        mock_oe_client.post.return_value = {
+            "status": "success",
+            "updatedFields": ["gccf1"],
+            "target": {"objectId": 1000, "objectType": "oeschema"},
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_custom_field_value")
+        out = await fn(
+            object_id=1000,
+            object_type="oeschema",
+            field_updates=[
+                {"field_name": "Automation_CodeCF", "value": ["option 1", "option 2"]}
+            ],
+            code_update_mode="replace_all",
+            create_confirmed_by_user=True,
+        )
+        assert out["status"] == "success"
+        posted_body = mock_oe_client.post.call_args.args[1]
+        assert posted_body["fieldUpdates"][0]["value"] == "option 1,option 2"
+
+    async def test_stringified_list_value_coerced_to_comma_string(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "fields": [
+                    {
+                        "fieldName": "Automation_CodeCF",
+                        "fieldKey": "gccf1",
+                        "type": "code",
+                        "allowMultiple": True,
+                        "currentValue": "",
+                        "options": [
+                            {"name": "option 1", "codeId": 1008},
+                            {"name": "option 2", "codeId": 1009},
+                        ],
+                    }
+                ]
+            },
+        }
+        mock_oe_client.post.return_value = {
+            "status": "success",
+            "updatedFields": ["gccf1"],
+            "target": {"objectId": 1000, "objectType": "oeschema"},
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_custom_field_value")
+        out = await fn(
+            object_id=1000,
+            object_type="oeschema",
+            field_updates=[
+                {"field_name": "Automation_CodeCF", "value": "['option 1', 'option 2']"}
+            ],
+            code_update_mode="replace_all",
+            create_confirmed_by_user=True,
+        )
+        assert out["status"] == "success"
+        posted_body = mock_oe_client.post.call_args.args[1]
+        assert posted_body["fieldUpdates"][0]["value"] == "option 1,option 2"
+
+    async def test_multi_value_text_field_skips_code_policy(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "fields": [
+                    {
+                        "fieldName": "Automation_TextCF",
+                        "fieldKey": "gtcf1",
+                        "type": "text",
+                        "allowMultiple": False,
+                        "currentValue": "old",
+                        "options": [],
+                    }
+                ]
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_custom_field_value")
+        out = await fn(
+            object_id=1000,
+            object_type="oeschema",
+            field_updates=[
+                {"field_name": "Automation_TextCF", "value": "Hello, World"}
+            ],
+        )
+        assert out["workflowPhase"] == "confirm_update"
+        assert (
+            out["pendingUpdate"]["fieldUpdates"][0]["value"] == "Hello, World"
         )
 
 
