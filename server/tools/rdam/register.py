@@ -22,6 +22,7 @@ from server.constants import (
 )
 from server.tools.access.disambiguation import validate_access_intent_confirmed
 from server.tools.common import drop_none, map_ovaledge_error, ovaledge_client
+from server.tools.common.tool_logging import logged_tool_invocation
 from server.tools.rdam.helpers import (
     _DESC_SOURCE_SYSTEM_ACCESS,
     annotate_multi_connection_advisory,
@@ -41,6 +42,7 @@ from server.tools.rdam.helpers import (
 )
 
 
+@logged_tool_invocation
 async def _invoke_source_system_access(
     source_system: str | list[str],
     query_direction: str,
@@ -312,17 +314,17 @@ def register(mcp: FastMCP) -> None:
     ) -> dict[str, Any]:
         """Native source-system access and DAM browse (see MCP tool description)."""
         return await _invoke_source_system_access(
-            source_system,
-            query_direction,
-            object_path,
-            object_name,
-            object_type,
-            connection_id,
-            username,
-            privileges,
-            include_columns,
-            resolve_all_matches,
-            scope_mode,
-            fully_qualified_name,
-            access_intent_confirmed,
+            source_system=source_system,
+            query_direction=query_direction,
+            object_path=object_path,
+            object_name=object_name,
+            object_type=object_type,
+            connection_id=connection_id,
+            username=username,
+            privileges=privileges,
+            include_columns=include_columns,
+            resolve_all_matches=resolve_all_matches,
+            scope_mode=scope_mode,
+            fully_qualified_name=fully_qualified_name,
+            access_intent_confirmed=access_intent_confirmed,
         )

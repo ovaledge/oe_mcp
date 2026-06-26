@@ -59,6 +59,18 @@ def test_load_example_mcp_use_json() -> None:
         assert _mcp_tools_called(c)[0].args.get("term_name") == "PII"
 
 
+def test_example_json_covers_all_mcp_tools() -> None:
+    from server.mcp_surface import MCP_TOOL_NAMES
+
+    cases = load_mcp_use_cases_from_json(_EXAMPLES)
+    covered: set[str] = set()
+    for case in cases:
+        for tool in _mcp_tools_called(case):
+            covered.add(tool.name)
+    missing = MCP_TOOL_NAMES - covered
+    assert not missing, f"example JSON missing tools: {sorted(missing)}"
+
+
 def test_load_root_array(tmp_path: Path) -> None:
     p = tmp_path / "cases.json"
     p.write_text(

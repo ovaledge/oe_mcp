@@ -19,6 +19,10 @@ def clear_caches() -> Generator[None, None, None]:
 @pytest.mark.asyncio
 async def test_verify_oauth_access_token_decodes(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("server.config.settings.oauth_audience", "api://my-api")
+    monkeypatch.setattr(
+        "server.config.settings.oauth_issuer",
+        "https://idp.example.com",
+    )
 
     claims = {"sub": "user-1", "email": "u@example.com"}
     fake_meta = {
@@ -60,6 +64,18 @@ async def test_get_jwks_fetches_and_caches(monkeypatch: pytest.MonkeyPatch) -> N
 
     assert j1 == j2 == {"keys": []}
     assert mock_client.get.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_verify_rejects_issuer_not_in_allowlist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("server.config.settings.oauth_audience", "api://my-api")
+    monkeypatch.setattr("server.config.settings.oauth_issuer", "https://trusted.example.com")
+    unverified = {"iss": "https://evil.example.com", "aud": "api://my-api"}
+    with patch("server.auth.bearer_jwt.jwt.get_unverified_claims", return_value=unverified):
+        with pytest.raises(ValueError, match="not in the OAuth allowlist"):
+            await bearer_jwt.verify_oauth_access_token("header.payload.sig")
 
 
 @pytest.mark.asyncio

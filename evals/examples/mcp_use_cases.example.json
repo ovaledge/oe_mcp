@@ -88,8 +88,11 @@
       "mcp_tools_called": [
         {
           "name": "metadata_changes_between_crawls",
-          "args": { "schema_name": "CUSTOMER" },
-          "result": { "ok": true, "changes": [] }
+          "args": {
+            "question": "What changed in the CUSTOMER schema after the latest crawl?",
+            "schema_names": ["CUSTOMER"]
+          },
+          "result": { "ok": true, "data": { "changeSummary": "2 tables added" } }
         }
       ]
     },
@@ -150,6 +153,347 @@
               { "objectId": "obj-a", "name": "churn_scores" },
               { "objectId": "obj-b", "name": "customer_360" }
             ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_asset_lineage",
+      "input": "What feeds customer_transactions upstream?",
+      "actual_output": "I called asset_lineage on the table (not search_catalog_assets alone) to show upstream nodes.",
+      "mcp_tools_called": [
+        {
+          "name": "asset_lineage",
+          "args": {
+            "object_id": 1,
+            "object_type": "oetable",
+            "depth": 3
+          },
+          "result": {
+            "rootObjectId": "1",
+            "nodes": [
+              { "id": "raw_events", "name": "raw_events", "direction": "UPSTREAM" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_column_profile_trust",
+      "input": "Show column statistics for customer_revenue_daily to assess data quality.",
+      "actual_output": "I used column_profile_statistics on the resolved oetable for null rates and distributions.",
+      "mcp_tools_called": [
+        {
+          "name": "column_profile_statistics",
+          "args": { "object_id": 42, "object_type": "oetable" },
+          "result": {
+            "columns": [
+              { "name": "revenue_amt", "nullPct": 0.01, "distinctCount": 1200 }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_table_entity_relationships",
+      "input": "What tables are related to orders_fact?",
+      "actual_output": "I called table_entity_relationships for graph edges from orders_fact.",
+      "mcp_tools_called": [
+        {
+          "name": "table_entity_relationships",
+          "args": { "object_id": 88 },
+          "result": {
+            "relationships": [
+              { "relatedObjectId": 90, "name": "customers_dim", "relationshipType": "FK" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_lookup_tags",
+      "input": "What does our Confidential tag mean?",
+      "actual_output": "I used lookup_tags with tag_name (not lookup_glossary_term) for governance tag metadata.",
+      "mcp_tools_called": [
+        {
+          "name": "lookup_tags",
+          "args": { "tag_name": "Confidential" },
+          "result": {
+            "tagName": "Confidential",
+            "description": "Restricted to authorized finance and legal users."
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_catalog_object_access",
+      "input": "Can john.doe read payroll_fact in OvalEdge?",
+      "actual_output": "I used get_user_object_access for catalog ACLs, not source_system_access (native DB grants).",
+      "mcp_tools_called": [
+        {
+          "name": "get_user_object_access",
+          "args": {
+            "query_direction": "user_to_object",
+            "username": "john.doe",
+            "object_id": 101,
+            "object_type": "oetable"
+          },
+          "result": {
+            "ok": true,
+            "data": {
+              "queryDirection": "user_to_object",
+              "username": "john.doe",
+              "objectId": 101,
+              "accessLevel": "read"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_lookup_dq_rule",
+      "input": "Explain the Null Data Density Check DQ rule.",
+      "actual_output": "I called lookup_dq_rule by rule_name before any write or association tools.",
+      "mcp_tools_called": [
+        {
+          "name": "lookup_dq_rule",
+          "args": { "rule_name": "Null Data Density Check" },
+          "result": {
+            "ok": true,
+            "data": [
+              {
+                "objectId": 42,
+                "objectType": "dqrule",
+                "objectName": "Null Data Density Check"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_assess_cde_dq",
+      "input": "Assess DQ coverage for CDE columns on customer_profile.",
+      "actual_output": "I called assess_cde_dq with explicit table objects (read-only assessment).",
+      "mcp_tools_called": [
+        {
+          "name": "assess_cde_dq",
+          "args": {
+            "objects": [{ "object_id": 10, "object_type": "oetable" }],
+            "limit": 50
+          },
+          "result": {
+            "assessedCount": 3,
+            "rows": [{ "objectId": 101, "objectType": "oecolumn", "cdeStatus": "Yes" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_associate_dq_rule_objects",
+      "input": "Link rule 42 to column revenue_amt.",
+      "actual_output": "I called associate_dq_rule_objects with dqrule_id and normalized object refs.",
+      "mcp_tools_called": [
+        {
+          "name": "associate_dq_rule_objects",
+          "args": {
+            "dqrule_id": 42,
+            "objects": [{ "object_id": 101, "object_type": "oecolumn" }]
+          },
+          "result": {
+            "data": {
+              "dqruleId": 42,
+              "associatedCount": 1,
+              "statusMessage": "Added 1 out of 1 object(s) added to the DQ rule."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_create_dq_rules_discover",
+      "input": "Discover and create missing DQ rules for CDE columns.",
+      "actual_output": "I called create_dq_rules in discover mode (discover_cde_columns=true).",
+      "mcp_tools_called": [
+        {
+          "name": "create_dq_rules",
+          "args": {
+            "discover_cde_columns": true,
+            "prefer_existing_rule": true,
+            "limit": 100
+          },
+          "result": {
+            "rows": [{ "status": "created", "dqruleId": 55, "objectId": 101 }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_update_descriptions_preview",
+      "input": "Update the business description on table 42 — show me a preview first.",
+      "actual_output": "I called update_asset_descriptions with write_confirmed_by_user=false for confirm_update preview only.",
+      "mcp_tools_called": [
+        {
+          "name": "update_asset_descriptions",
+          "args": {
+            "object_id": 42,
+            "object_type": "oetable",
+            "description_field": "business_description",
+            "description_text": "Quarterly revenue summary for finance analysts.",
+            "write_confirmed_by_user": false
+          },
+          "result": {
+            "workflowPhase": "confirm_update",
+            "doNotUpdate": true,
+            "confirmationToken": "preview-token-placeholder",
+            "formattedResponse": "**Confirm description update**"
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_update_cde_preview",
+      "input": "Mark schema 3337 as a CDE — preview before applying.",
+      "actual_output": "I previewed update_cde_associations without POST (write_confirmed_by_user=false).",
+      "mcp_tools_called": [
+        {
+          "name": "update_cde_associations",
+          "args": {
+            "targets": [{ "object_id": 3337, "object_type": "oeschema" }],
+            "action": "Yes",
+            "cde_justification": "Critical data element for finance reporting",
+            "write_confirmed_by_user": false
+          },
+          "result": {
+            "workflowPhase": "confirm_update",
+            "doNotUpdate": true,
+            "confirmationToken": "preview-token-placeholder",
+            "formattedResponse": "**Confirm CDE update**"
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_update_governance_roles_preview",
+      "input": "Assign Mike as Owner on table 99 — preview the role change.",
+      "actual_output": "I previewed update_governance_roles and waited for explicit user confirmation.",
+      "mcp_tools_called": [
+        {
+          "name": "update_governance_roles",
+          "args": {
+            "object_id": 99,
+            "object_type": "oetable",
+            "role_updates": { "owner": "mike" },
+            "write_confirmed_by_user": false
+          },
+          "result": {
+            "workflowPhase": "confirm_update",
+            "doNotUpdate": true,
+            "confirmationToken": "preview-token-placeholder",
+            "formattedResponse": "**Confirm role updates**"
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_update_custom_field_preview",
+      "input": "Set Data Owner to John Smith on table 99 — preview only.",
+      "actual_output": "I called update_custom_field_value for a confirm_update preview, not an immediate POST.",
+      "mcp_tools_called": [
+        {
+          "name": "update_custom_field_value",
+          "args": {
+            "object_id": 99,
+            "object_type": "oetable",
+            "field_updates": [{ "field_name": "Data Owner", "value": "John Smith" }],
+            "write_confirmed_by_user": false
+          },
+          "result": {
+            "workflowPhase": "confirm_update",
+            "doNotUpdate": true,
+            "confirmationToken": "preview-token-placeholder",
+            "formattedResponse": "**Confirm custom field update**"
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_create_glossary_term_preview",
+      "input": "Create glossary term Revenue Recognition under domain 12 — preview first.",
+      "actual_output": "I previewed create_glossary_term (confirm_create, doNotCreate=true) before any POST.",
+      "mcp_tools_called": [
+        {
+          "name": "create_glossary_term",
+          "args": {
+            "term_name": "Revenue Recognition",
+            "domain_id": 12,
+            "description": "ASC 606 revenue recognition policy.",
+            "skip_category": true,
+            "category_skip_confirmed": true,
+            "write_confirmed_by_user": false
+          },
+          "result": {
+            "workflowPhase": "confirm_create",
+            "doNotCreate": true,
+            "confirmationToken": "preview-token-placeholder",
+            "formattedResponse": "**Confirm glossary term creation**"
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_create_tag_preview",
+      "input": "Create tag Logistics in open mode — show confirm preview.",
+      "actual_output": "I previewed create_tag after parent step; no POST until user confirms with confirmation_token.",
+      "mcp_tools_called": [
+        {
+          "name": "create_tag",
+          "args": {
+            "tag_name": "Logistics",
+            "create_directly_under_master": true,
+            "parent_step_completed_by_user": true,
+            "write_confirmed_by_user": false
+          },
+          "result": {
+            "workflowPhase": "confirm_create",
+            "doNotCreateTag": true,
+            "confirmationToken": "preview-token-placeholder",
+            "formattedResponse": "**Confirm tag creation**"
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_trust_assessment_chain",
+      "input": "How trustworthy is customer_revenue_daily for executive reporting?",
+      "actual_output": "I searched the catalog, loaded catalog_asset_details, then column_profile_statistics for trust signals.",
+      "mcp_tools_called": [
+        {
+          "name": "search_catalog_assets",
+          "args": {
+            "search_terms": ["customer", "revenue", "daily"],
+            "object_type": "oetable"
+          },
+          "result": {
+            "total": 1,
+            "results": [{ "objectId": 42, "name": "customer_revenue_daily" }]
+          }
+        },
+        {
+          "name": "catalog_asset_details",
+          "args": { "object_id": 42, "object_type": "oetable" },
+          "result": {
+            "objectId": 42,
+            "name": "customer_revenue_daily",
+            "certified": true,
+            "steward": "finance-team"
+          }
+        },
+        {
+          "name": "column_profile_statistics",
+          "args": { "object_id": 42, "object_type": "oetable" },
+          "result": {
+            "columns": [{ "name": "revenue_amt", "nullPct": 0.01 }]
           }
         }
       ]

@@ -26,7 +26,6 @@ _DESCRIPTION_OBJECT_KEYS = frozenset(
 _PLAIN_TEXT_KEYS = ("plainText", "wikitextplain", "wikiTextPlain", "plain_text")
 _MARKUP_TEXT_KEYS = ("wikitext", "wikiText", "html", "techtext", "techText", "richText")
 
-# Long string fields often returned on catalog / glossary payloads.
 _STRING_DESCRIPTION_KEYS = frozenset(
     {
         "description",

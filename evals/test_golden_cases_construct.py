@@ -16,7 +16,7 @@ def test_all_golden_cases_construct() -> None:
         assert (case.input or "").strip()
         assert case.mcp_tools_called
 
-    tc = golden_cases.golden_task_completion_discovery()
-    assert tc.turns
-    mt = golden_cases.golden_multi_turn_lineage_followup()
-    assert mt.turns
+    for fn_name in golden_cases.all_conversational_golden_fns():
+        case = getattr(golden_cases, fn_name)()
+        assert case.turns
+        assert (case.expected_outcome or "").strip()

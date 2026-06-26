@@ -6,7 +6,6 @@ from server.tools.common.params import drop_none
 from server.tools.common.runtime import (
     get_ovaledge_client,
     ovaledge_client,
-    ovaledge_tool,
     set_ovaledge_client_factory,
 )
 from server.tools.common.validators import (
@@ -28,7 +27,6 @@ __all__ = [
     "map_ovaledge_error",
     "mutual_exclusion",
     "ovaledge_client",
-    "ovaledge_tool",
     "require_exactly_one_of",
     "require_one_of",
     "set_ovaledge_client_factory",

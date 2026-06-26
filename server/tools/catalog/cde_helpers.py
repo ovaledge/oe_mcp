@@ -9,6 +9,7 @@ from server.constants import (
     MCP_PATH_UPDATE_CDE_ASSOCIATIONS,
     MCP_UPDATE_CDE_OBJECT_TYPES,
 )
+from server.tools.common.confirm_gate import attach_confirmation_token
 from server.tools.common.descriptions import classify_tool_desc
 
 _CDE_TYPE_ALIASES = {
@@ -27,14 +28,15 @@ _DESC_UPDATE_CDE = classify_tool_desc(
     "(remove CDE designation). Optional cde_category and cde_justification apply when "
     "marking or setting No; they are cleared when action is None.\n\n"
     "**Human confirmation:** Unless dry_run=true, the first call without "
-    "create_confirmed_by_user returns a confirm_update preview (doNotUpdate=true). "
-    "Re-call with create_confirmed_by_user=true after the user approves."
+    "write_confirmed_by_user returns a confirm_update preview (doNotUpdate=true). "
+    "Re-call with write_confirmed_by_user=true after the user approves."
 )
 
 _UPDATE_CDE_CONFIRM_INSTRUCTION = (
     "Show formattedResponse and wait for explicit user approval. "
-    "Do not set create_confirmed_by_user=true until the user confirms. "
-    "Then re-call with create_confirmed_by_user=true and the same parameters."
+    "Do not set write_confirmed_by_user=true until the user confirms. "
+    "Then re-call with write_confirmed_by_user=true, confirmation_token from the "
+    "preview, and the same parameters."
 )
 
 
@@ -213,25 +215,27 @@ def format_update_cde_confirmation_preview(body: dict[str, Any]) -> dict[str, An
     if category is not None and str(category).strip():
         meta_lines.append(f"- **cdeCategory:** {category}")
     if justification is not None and str(justification).strip():
-        preview = str(justification).strip()
-        if len(preview) > 120:
-            preview = preview[:117] + "..."
-        meta_lines.append(f"- **cdeJustification:** {preview}")
+        justification_preview = str(justification).strip()
+        if len(justification_preview) > 120:
+            justification_preview = justification_preview[:117] + "..."
+        meta_lines.append(f"- **cdeJustification:** {justification_preview}")
     meta_block = "\n".join(meta_lines) if meta_lines else ""
-    return {
+    preview = {
         "ok": True,
         "awaitingUserConfirmation": True,
         "workflowPhase": "confirm_update",
         "doNotUpdate": True,
-        "createConfirmedByUser": False,
+        "writeConfirmedByUser": False,
         "formattedResponse": (
             "**Confirm CDE update**\n\n"
             + "\n".join(target_lines)
             + (f"\n{meta_block}" if meta_block else "")
             + f"{dry_note}\n"
             "Ask the user to confirm. After they approve, call again with "
-            "`create_confirmed_by_user=true` and the same targets, action, and optional fields."
+            "`write_confirmed_by_user=true`, `confirmation_token` from this preview, "
+            "and the same targets, action, and optional fields."
         ),
         "agentInstruction": _UPDATE_CDE_CONFIRM_INSTRUCTION,
         "pendingUpdate": body,
     }
+    return attach_confirmation_token(preview, body)

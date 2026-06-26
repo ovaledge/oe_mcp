@@ -11,6 +11,12 @@ from server.constants import DOCS_RESOURCE_URI_PREFIX
 DOCS_DIR = pathlib.Path(__file__).resolve().parent
 
 
+def read_doc_markdown(stem: str) -> str:
+    """Load one markdown file from server/docs/ by stem (filename without .md)."""
+    path = DOCS_DIR / f"{stem}.md"
+    return path.read_text(encoding="utf-8")
+
+
 def make_doc_resource(mcp: FastMCP, uri: str, content: str, name: str) -> None:
     """
     Register one markdown file as an MCP resource.

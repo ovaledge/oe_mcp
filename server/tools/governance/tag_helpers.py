@@ -25,6 +25,7 @@ from server.nav_links import (
 )
 from server.tools.common import as_dict as _as_dict
 from server.tools.common import blank as _blank
+from server.tools.common.confirm_gate import attach_confirmation_token
 from server.tools.common.descriptions import classify_tool_desc
 from server.tools.governance._shared import (
     _CREATE_CONFIRM_AGENT_INSTRUCTION,
@@ -51,7 +52,7 @@ _DESC_CREATE_TAG = classify_tool_desc(
     "**User-facing:** Present formattedResponse; never guess master_tag_id or parent_tag_id. "
     "SECURE: master required, parent optional. OPEN: parent optional, no master step.\n\n"
     "Complete placement steps → confirm_create preview → POST only after "
-    "create_confirmed_by_user=true.\n\n"
+    "write_confirmed_by_user=true.\n\n"
     "Full OPEN/SECURE steps: docs://ovaledge/tags_guide and workflow prompt "
     "`create_governance_tag`."
 )
@@ -201,6 +202,7 @@ def _format_tag_create_confirmation_preview(
     parent_tag_id: int | None,
     parent_tag_name: str | None,
     create_directly_under_master: bool,
+    wire_body: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if secure_mode:
         if parent_tag_id is not None and parent_tag_id > 0:
@@ -232,12 +234,12 @@ def _format_tag_create_confirmation_preview(
             "- **Description:** (auto-generated from tag and hierarchy if omitted on create)\n"
         )
 
-    return {
+    preview = {
         "ok": True,
         "awaitingUserConfirmation": True,
         "workflowPhase": "confirm_create",
         "doNotCreateTag": True,
-        "createConfirmedByUser": False,
+        "writeConfirmedByUser": False,
         "tagSecurityMode": "secure" if secure_mode else "open",
         "formattedResponse": (
             f"**Confirm tag creation** ({mode_label} mode)\n\n"
@@ -245,8 +247,8 @@ def _format_tag_create_confirmation_preview(
             f"- **Placement:** {placement}\n"
             f"{desc_line}\n"
             "Ask the user to confirm. After they approve, call again with "
-            "`create_confirmed_by_user=true` and the same `tag_name`, placement "
-            "parameters, and optional `description`."
+            "`write_confirmed_by_user=true`, `confirmation_token` from this preview, "
+            "and the same `tag_name`, placement parameters, and optional `description`."
         ),
         "agentInstruction": _CREATE_CONFIRM_AGENT_INSTRUCTION,
         "pendingCreate": {
@@ -256,6 +258,9 @@ def _format_tag_create_confirmation_preview(
             "createDirectlyUnderMaster": create_directly_under_master,
         },
     }
+    if wire_body is not None:
+        return attach_confirmation_token(preview, wire_body)
+    return preview
 
 
 _ROLE_KEYS_CANONICAL: dict[str, str] = {

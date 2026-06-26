@@ -16,6 +16,7 @@ from server.constants import (
 from server.nav_links import build_absolute_nav_url, extract_hash_nav_link
 from server.tools.common import as_dict as _as_dict
 from server.tools.common import blank as _blank
+from server.tools.common.confirm_gate import attach_confirmation_token
 from server.tools.common.descriptions import classify_tool_desc
 from server.tools.governance._shared import _CREATE_CONFIRM_AGENT_INSTRUCTION, _cell
 
@@ -44,7 +45,7 @@ _DESC_CREATE_GLOSSARY = classify_tool_desc(
     "domain_id, category_id, subcategory_id, or description.\n\n"
     "Flow: term_name → domain (or domain_name on first call) → optional category/subcategory "
     "pickers → required description → confirm_create preview → POST only after "
-    "create_confirmed_by_user=true.\n\n"
+    "write_confirmed_by_user=true.\n\n"
     "Full step-by-step: docs://ovaledge/glossary_guide and workflow prompt "
     "`create_business_glossary_term`."
 )
@@ -507,6 +508,7 @@ def _format_glossary_create_confirmation_preview(
     definition: str | None,
     publish: bool,
     placement_note: str | None = None,
+    post_body: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     path = _build_placement_path(
         term_name=term_name,
@@ -522,12 +524,12 @@ def _format_glossary_create_confirmation_preview(
         desc_text if len(desc_text) <= 400 else desc_text[:397] + "..."
     )
     publish_label = "published" if publish else "draft"
-    return {
+    preview = {
         "ok": True,
         "awaitingUserConfirmation": True,
         "workflowPhase": "confirm_create",
         "doNotCreate": True,
-        "createConfirmedByUser": False,
+        "writeConfirmedByUser": False,
         "placementPath": path,
         "formattedResponse": (
             "**Confirm glossary term creation**\n\n"
@@ -542,8 +544,9 @@ def _format_glossary_create_confirmation_preview(
             )
             + f"- **Publish:** {publish_label}\n\n"
             "Ask the user to confirm. After they approve, call again with "
-            "`create_confirmed_by_user=true` and the same `term_name`, `domain_id`, "
-            "placement ids (or skip flags), and `description`."
+            "`write_confirmed_by_user=true`, `confirmation_token` from this preview, "
+            "and the same `term_name`, `domain_id`, placement ids (or skip flags), "
+            "and `description`."
         ),
         "agentInstruction": _CREATE_CONFIRM_AGENT_INSTRUCTION,
         "pendingCreate": {
@@ -554,4 +557,7 @@ def _format_glossary_create_confirmation_preview(
             "publish": publish,
         },
     }
+    if post_body is not None:
+        return attach_confirmation_token(preview, post_body)
+    return preview
 

@@ -954,7 +954,8 @@ _DESC_SOURCE_SYSTEM_ACCESS = classify_tool_desc(
     "Partial paths may return `matchCandidates` or `requiresSchemaSelection`; use "
     "`resolve_all_matches=true` only when the user wants all matches (max 50).\n\n"
     "Full routing (path formats, grant models, agent rules, DAA): "
-    "docs://ovaledge/mcp_workflows (Native source access) and workflow prompt "
+    "docs://ovaledge/rdam_source_access, "
+    "docs://ovaledge/mcp_workflows (Native source access), and workflow prompt "
     "`native_source_access`.\n\n"
     "Read-only. Instance/Connector **Data Access Admin** enforced server-side."
 ,

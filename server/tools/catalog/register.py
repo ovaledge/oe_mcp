@@ -37,6 +37,7 @@ from server.tools.catalog.invocations import (
     _invoke_update_asset_descriptions,
     _invoke_update_cde_associations,
 )
+from server.tools.common.confirm_gate import CONFIRMATION_TOKEN_PARAM_DESCRIPTION
 
 
 def register(mcp: FastMCP) -> None:
@@ -185,29 +186,29 @@ def register(mcp: FastMCP) -> None:
     ) -> dict[str, Any]:
         """search catalog assets (see MCP tool description)."""
         return await _invoke_search_catalog_assets(
-            search_terms,
-            tags,
-            terms,
-            custom_fields,
-            data_products,
-            classifications,
-            critical_data_element,
-            context_query,
-            page,
-            limit,
-            connection_name,
-            server_type,
-            schema_name,
-            owner,
-            steward,
-            custodian,
-            object_type,
-            domain_id,
-            domain_name,
-            category_id,
-            category_name,
-            subcategory_id,
-            subcategory_name
+            search_terms=search_terms,
+            tags=tags,
+            terms=terms,
+            custom_fields=custom_fields,
+            data_products=data_products,
+            classifications=classifications,
+            critical_data_element=critical_data_element,
+            context_query=context_query,
+            page=page,
+            limit=limit,
+            connection_name=connection_name,
+            server_type=server_type,
+            schema_name=schema_name,
+            owner=owner,
+            steward=steward,
+            custodian=custodian,
+            object_type=object_type,
+            domain_id=domain_id,
+            domain_name=domain_name,
+            category_id=category_id,
+            category_name=category_name,
+            subcategory_id=subcategory_id,
+            subcategory_name=subcategory_name,
         )
 
     @mcp.tool(description=_DESC_DETAILS)
@@ -239,7 +240,11 @@ def register(mcp: FastMCP) -> None:
         ] = None,
     ) -> dict[str, Any]:
         """catalog asset details (see MCP tool description)."""
-        return await _invoke_catalog_asset_details(object_id, object_type, fully_qualified_name)
+        return await _invoke_catalog_asset_details(
+            object_id=object_id,
+            object_type=object_type,
+            fully_qualified_name=fully_qualified_name,
+        )
 
     @mcp.tool(description=_DESC_COLUMN)
     async def column_profile_statistics(
@@ -250,14 +255,17 @@ def register(mcp: FastMCP) -> None:
         ],
     ) -> dict[str, Any]:
         """column profile statistics (see MCP tool description)."""
-        return await _invoke_column_profile_statistics(object_id, object_type)
+        return await _invoke_column_profile_statistics(
+            object_id=object_id,
+            object_type=object_type,
+        )
 
     @mcp.tool(description=_DESC_REL)
     async def table_entity_relationships(
         object_id: Annotated[int, Field(description="oetable internal object id.")],
     ) -> dict[str, Any]:
         """table entity relationships (see MCP tool description)."""
-        return await _invoke_table_entity_relationships(object_id)
+        return await _invoke_table_entity_relationships(object_id=object_id)
 
     @mcp.tool(description=_DESC_LINEAGE)
     async def asset_lineage(
@@ -272,7 +280,11 @@ def register(mcp: FastMCP) -> None:
         ] = 2,
     ) -> dict[str, Any]:
         """asset lineage (see MCP tool description)."""
-        return await _invoke_asset_lineage(object_id, object_type, depth)
+        return await _invoke_asset_lineage(
+            object_id=object_id,
+            object_type=object_type,
+            depth=depth,
+        )
 
     @mcp.tool(description=_DESC_UPDATE_DESCRIPTIONS)
     async def update_asset_descriptions(
@@ -370,7 +382,7 @@ def register(mcp: FastMCP) -> None:
                 default=None,
             ),
         ] = None,
-        create_confirmed_by_user: Annotated[
+        write_confirmed_by_user: Annotated[
             bool,
             Field(
                 description=(
@@ -381,25 +393,30 @@ def register(mcp: FastMCP) -> None:
                 default=False,
             ),
         ] = False,
+        confirmation_token: Annotated[
+            str | None,
+            Field(description=CONFIRMATION_TOKEN_PARAM_DESCRIPTION, default=None),
+        ] = None,
     ) -> dict[str, Any]:
         """update asset descriptions (see MCP tool description)."""
         return await _invoke_update_asset_descriptions(
-            object_id,
-            object_type,
-            business_description,
-            technical_description,
-            detailed_description,
-            domain_description,
-            tag_description,
-            master_tag_description,
-            description_field,
-            description_text,
-            dry_run,
-            fail_on_blocked_field,
-            idempotency_key,
-            prompt,
-            reason,
-            create_confirmed_by_user
+            object_id=object_id,
+            object_type=object_type,
+            business_description=business_description,
+            technical_description=technical_description,
+            detailed_description=detailed_description,
+            domain_description=domain_description,
+            tag_description=tag_description,
+            master_tag_description=master_tag_description,
+            description_field=description_field,
+            description_text=description_text,
+            dry_run=dry_run,
+            fail_on_blocked_field=fail_on_blocked_field,
+            idempotency_key=idempotency_key,
+            prompt=prompt,
+            reason=reason,
+            write_confirmed_by_user=write_confirmed_by_user,
+            confirmation_token=confirmation_token,
         )
 
     @mcp.tool(description=_DESC_UPDATE_CDE)
@@ -442,7 +459,7 @@ def register(mcp: FastMCP) -> None:
             str | None,
             Field(description="Short reason for the CDE change.", default=None),
         ] = None,
-        create_confirmed_by_user: Annotated[
+        write_confirmed_by_user: Annotated[
             bool,
             Field(
                 description=(
@@ -451,18 +468,23 @@ def register(mcp: FastMCP) -> None:
                 default=False,
             ),
         ] = False,
+        confirmation_token: Annotated[
+            str | None,
+            Field(description=CONFIRMATION_TOKEN_PARAM_DESCRIPTION, default=None),
+        ] = None,
     ) -> dict[str, Any]:
         """update cde associations (see MCP tool description)."""
         return await _invoke_update_cde_associations(
-            targets,
-            action,
-            cde_category,
-            cde_justification,
-            dry_run,
-            idempotency_key,
-            prompt,
-            reason,
-            create_confirmed_by_user
+            targets=targets,
+            action=action,
+            cde_category=cde_category,
+            cde_justification=cde_justification,
+            dry_run=dry_run,
+            idempotency_key=idempotency_key,
+            prompt=prompt,
+            reason=reason,
+            write_confirmed_by_user=write_confirmed_by_user,
+            confirmation_token=confirmation_token,
         )
 
     @mcp.tool(description=_DESC_METADATA_CHANGES)
@@ -510,14 +532,14 @@ def register(mcp: FastMCP) -> None:
     ) -> dict[str, Any]:
         """metadata changes between crawls (see MCP tool description)."""
         return await _invoke_metadata_changes_between_crawls(
-            question,
-            connection_name,
-            schema_names,
-            table_names,
-            from_timestamp,
-            to_timestamp,
-            last_n_days,
-            last_n_weeks,
-            from_crawl_id,
-            to_crawl_id
+            question=question,
+            connection_name=connection_name,
+            schema_names=schema_names,
+            table_names=table_names,
+            from_timestamp=from_timestamp,
+            to_timestamp=to_timestamp,
+            last_n_days=last_n_days,
+            last_n_weeks=last_n_weeks,
+            from_crawl_id=from_crawl_id,
+            to_crawl_id=to_crawl_id,
         )

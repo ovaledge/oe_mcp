@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock
 
 from fastmcp import FastMCP
 
+from server.client import OvalEdgeError
 from server.constants import (
     MCP_DQ_ASSESS_LIMIT_DEFAULT,
     MCP_PATH_CREATE_DQ_RULES,
@@ -83,6 +84,14 @@ class TestCreateDqRules:
         out = await fn()
         assert out["status_code"] == 400
         mock_oe_client.post.assert_not_called()
+
+    async def test_oval_edge_error_returns_structured_dict(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.side_effect = OvalEdgeError(502, "Bad gateway")
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
+        out = await fn(discover_cde_columns=True)
+        assert out["status_code"] == 502
 
 
 def test_format_create_dq_rules_created_with_object_linked():

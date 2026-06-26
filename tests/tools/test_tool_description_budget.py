@@ -72,6 +72,7 @@ class TestToolDescriptionBudget:
         from server.tools.rdam.helpers import _DESC_SOURCE_SYSTEM_ACCESS
 
         assert len(_DESC_SOURCE_SYSTEM_ACCESS) <= MCP_TOOL_DESC_MAX_CHARS
+        assert "docs://ovaledge/rdam_source_access" in _DESC_SOURCE_SYSTEM_ACCESS
 
     def test_search_catalog_description_points_to_docs_not_inline_allowlist(self) -> None:
         from server.tools.catalog.helpers import _DESC_SEARCH

@@ -178,14 +178,27 @@ class TestWorkflowPromptsOnFullApp:
 
 class TestMcpServerInstructions:
     def test_instructions_prioritize_data_stories_for_org_knowledge(self) -> None:
-        from server.app import create_mcp
+        from server.app import MCP_SERVER_INSTRUCTION_TOOL_NAMES, create_mcp
+        from server.constants import (
+            TOOL_GET_USER_OBJECT_ACCESS,
+            TOOL_LOOKUP_DATASTORY,
+            TOOL_SEARCH_CATALOG,
+            TOOL_SEARCH_DOCS,
+            TOOL_SOURCE_SYSTEM_ACCESS,
+        )
+        from server.mcp_surface import MCP_TOOL_NAMES
 
         mcp = create_mcp()
         instructions = (mcp.instructions or "").lower()
-        assert "lookup_datastory" in instructions
-        assert "search_platform_docs" in instructions
+        assert TOOL_LOOKUP_DATASTORY in instructions
+        assert TOOL_SEARCH_DOCS in instructions
+        assert TOOL_SEARCH_CATALOG in instructions
+        assert TOOL_SOURCE_SYSTEM_ACCESS in instructions
+        assert TOOL_GET_USER_OBJECT_ACCESS in instructions
+        assert "write_confirmed_by_user" in instructions
         assert "never show ovaledge://" in instructions
         assert "navlink" in instructions or "redirecturl" in instructions
+        assert MCP_SERVER_INSTRUCTION_TOOL_NAMES <= MCP_TOOL_NAMES
 
     def test_instructions_platform_name_alone_does_not_skip_disambiguation(self) -> None:
         from server.app import create_mcp
