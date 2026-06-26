@@ -41,7 +41,8 @@ codegraph sync
 
 1. Enable the **CodeGraph** MCP server in Cursor Settings → MCP (added by `codegraph install`).
 2. Open this repo as the workspace root.
-3. Prefer **`codegraph_explore`** (or related CodeGraph tools) when you need:
+3. **Project rule:** `.cursor/rules/codegraph.mdc` applies when you edit `server/`, `tests/`, `evals/`, or `entrypoints/` Python — agents should call **`codegraph_explore`** before Grep/Read for structural work.
+4. Prefer **`codegraph_explore`** when you need:
    - Who calls `verify_write_confirmation` or `register` in a domain package
    - Impact before changing `server/constants.py` or `mcp_surface.py`
    - The path from `helpers._DESC_*` → `register.py` → tests
