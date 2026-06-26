@@ -86,3 +86,5 @@ codegraph init -i
 ```
 
 See [docs/contributing/CODEGRAPH.md](../docs/contributing/CODEGRAPH.md) for MCP enablement, landmarks, and when to use CodeGraph vs `docs://ovaledge/*`.
+
+**Cursor rule:** [.cursor/rules/codegraph.mdc](rules/codegraph.mdc) — applies when editing Python under `server/`, `tests/`, `evals/`, `entrypoints/` so agents call `codegraph_explore` before grep/read loops.
