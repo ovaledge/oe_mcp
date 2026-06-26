@@ -7,9 +7,24 @@ from server.constants import MCP_PATH_ASSOCIATE_DQ_RULE_OBJECTS, TOOL_ASSOCIATE_
 from server.tools import dataquality
 from server.tools.dataquality.helpers import format_associate_dq_rule_objects_response
 from tests.helpers import get_tool_fn
+from tests.tools.confirm_test_helpers import invoke_write_confirmed
 
 
 class TestAssociateDqRuleObjects:
+    async def test_preview_before_post(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ASSOCIATE_DQ_RULE_OBJECTS)
+        preview = await fn(
+            dqrule_id=42,
+            objects=[{"object_id": 10, "object_type": "column"}],
+            skip_already_associated=False,
+        )
+        assert preview["workflowPhase"] == "confirm_update"
+        assert preview["doNotUpdate"] is True
+        assert preview.get("confirmationToken")
+        mock_oe_client.post.assert_not_called()
+
     async def test_posts_normalized_payload(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.post.return_value = {
             "data": {
@@ -30,7 +45,8 @@ class TestAssociateDqRuleObjects:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
         fn = await get_tool_fn(mcp, TOOL_ASSOCIATE_DQ_RULE_OBJECTS)
-        out = await fn(
+        out = await invoke_write_confirmed(
+            fn,
             dqrule_id=42,
             objects=[{"object_id": 10, "object_type": "column"}],
             skip_already_associated=False,
@@ -122,7 +138,8 @@ class TestAssociateDqRuleObjects:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
         fn = await get_tool_fn(mcp, TOOL_ASSOCIATE_DQ_RULE_OBJECTS)
-        out = await fn(
+        out = await invoke_write_confirmed(
+            fn,
             dqrule_id=42,
             objects=[{"object_id": 10, "object_type": "column"}],
         )

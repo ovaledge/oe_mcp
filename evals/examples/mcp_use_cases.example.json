@@ -292,20 +292,19 @@
     {
       "name": "example_associate_dq_rule_objects",
       "input": "Link rule 42 to column revenue_amt.",
-      "actual_output": "I called associate_dq_rule_objects with dqrule_id and normalized object refs.",
+      "actual_output": "I previewed associate_dq_rule_objects (write_confirmed_by_user=false) before POST.",
       "mcp_tools_called": [
         {
           "name": "associate_dq_rule_objects",
           "args": {
             "dqrule_id": 42,
-            "objects": [{ "object_id": 101, "object_type": "oecolumn" }]
+            "objects": [{ "object_id": 101, "object_type": "oecolumn" }],
+            "write_confirmed_by_user": false
           },
           "result": {
-            "data": {
-              "dqruleId": 42,
-              "associatedCount": 1,
-              "statusMessage": "Added 1 out of 1 object(s) added to the DQ rule."
-            }
+            "workflowPhase": "confirm_update",
+            "doNotUpdate": true,
+            "confirmationToken": "preview-token-placeholder"
           }
         }
       ]
@@ -313,17 +312,19 @@
     {
       "name": "example_create_dq_rules_discover",
       "input": "Discover and create missing DQ rules for CDE columns.",
-      "actual_output": "I called create_dq_rules in discover mode (discover_cde_columns=true).",
+      "actual_output": "I previewed create_dq_rules in discover mode before POST.",
       "mcp_tools_called": [
         {
           "name": "create_dq_rules",
           "args": {
             "discover_cde_columns": true,
             "prefer_existing_rule": true,
-            "limit": 100
+            "write_confirmed_by_user": false
           },
           "result": {
-            "rows": [{ "status": "created", "dqruleId": 55, "objectId": 101 }]
+            "workflowPhase": "confirm_create",
+            "doNotCreate": true,
+            "confirmationToken": "preview-token-placeholder"
           }
         }
       ]

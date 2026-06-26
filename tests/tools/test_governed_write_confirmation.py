@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock
 import pytest
 from fastmcp import FastMCP
 
-from server.tools import catalog, governance
+from server.tools import catalog, dataquality, governance
 from server.tools.common.confirm_gate import compute_confirmation_token
 from tests.helpers import get_tool_fn
 
@@ -94,6 +94,21 @@ STALE_TOKEN_CASES: tuple[StaleTokenCase, ...] = (
         tamper_kwargs={
             "field_updates": [{"field_name": "Data Owner", "value": "Jane Doe"}],
         },
+    ),
+    StaleTokenCase(
+        tool_name="associate_dq_rule_objects",
+        register=dataquality.register,
+        preview_kwargs={
+            "dqrule_id": 42,
+            "objects": [{"objectId": 10, "objectType": "oecolumn"}],
+        },
+        tamper_kwargs={"dqrule_id": 99},
+    ),
+    StaleTokenCase(
+        tool_name="create_dq_rules",
+        register=dataquality.register,
+        preview_kwargs={"discover_cde_columns": True},
+        tamper_kwargs={"prefer_existing_rule": False},
     ),
 )
 

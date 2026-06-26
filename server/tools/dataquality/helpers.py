@@ -11,8 +11,18 @@ from server.constants import (
     MCP_PATH_CREATE_DQ_RULES,
     MCP_PATH_LOOKUP_DQ_RULES,
 )
+from server.tools.common.confirm_gate import attach_confirmation_token
 from server.tools.common.descriptions import classify_tool_desc
 from server.tools.common.errors import error_payload
+
+_DQ_ASSOCIATE_CONFIRM_INSTRUCTION = (
+    "Present formattedResponse and wait for explicit user approval before setting "
+    "write_confirmed_by_user=true."
+)
+_DQ_CREATE_CONFIRM_INSTRUCTION = (
+    "Present formattedResponse and wait for explicit user approval before setting "
+    "write_confirmed_by_user=true."
+)
 
 _DESC_ASSESS_CDE_DQ = classify_tool_desc(
     "Assess Critical Data Element (CDE) columns and DQ-applicable assets for coverage: "
@@ -64,11 +74,10 @@ _DESC_ASSOCIATE_DQ_RULE_OBJECTS = classify_tool_desc(
     f"**objectType**: {MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC} only.\n\n"
     "Published (ACTIVE) data quality rules are temporarily demoted to draft for association, "
     "then restored to published when complete. Rules already in draft proceed directly.\n\n"
-    "Response includes statusMessage (outcome summary), counts "
-    "(associatedCount, skippedCount, failedCount), and per-row status:\n"
-    "- associated: linked to the data quality rule (including already linked on idempotent retry)\n"
-    "- skipped: unsupported column data type / connector for the function\n"
-    "- failed: invalid object type, not found, or license error\n\n"
+    "Response: statusMessage, associatedCount/skippedCount/failedCount, per-row status "
+    "(associated, skipped, failed).\n\n"
+    "**Confirm gate:** preview without write_confirmed_by_user → user approval → "
+    "write_confirmed_by_user=true + confirmation_token from preview.\n\n"
     "Present formattedResponse to the user. Audit source OE-MCP."
 )
 
@@ -85,19 +94,12 @@ _DESC_CREATE_DQ_RULES = classify_tool_desc(
     "**prefer_existing_rule** (default true): associate when a recommended rule exists.\n\n"
     "**skip_duplicate_function_on_object** (default true): skip if object already has a "
     "rule for the same function type.\n\n"
-    "Auto-create derives input/success operators and values from business metadata when "
-    "present; otherwise uses default operators/values from the DQ function definition "
-    "(dqfunctiondef_operator_map), matching the UI single-object rule flow.\n\n"
-    "Before creating a data quality rule, each object is validated against the "
-    "recommended function "
-    "(column/file-column data type, connector DQ support, addon license) using the same "
-    "checks as associate_dq_rule_objects. Unsupported objects return status skipped with "
-    "a clear message; no orphan data quality rule is created.\n\n"
-    "Row statuses: created, associated, skipped, criteria_missing, function_not_identified, "
-    "failed. New rules use creation type OE MCP (manual-like behavior). When business metadata "
-    "has no parseable input/success bounds, the server falls back to default operators and "
-    "values from the recommended DQ function definition. criteria_missing includes "
-    "descriptionMessage when neither metadata nor function defaults are available. "
+    "Validates objects like associate_dq_rule_objects; auto-creates from business metadata "
+    "or function defaults. Row statuses: created, associated, skipped, criteria_missing, "
+    "function_not_identified, failed.\n\n"
+    "Extended routing: docs://ovaledge/mcp_workflows (CDE / DQ intelligence).\n\n"
+    "**Confirm gate:** preview without write_confirmed_by_user → user approval → "
+    "write_confirmed_by_user=true + confirmation_token from preview.\n\n"
     "Audit source OE-MCP."
 )
 
@@ -328,6 +330,81 @@ def format_create_dq_rules_response(body: dict[str, Any]) -> str:
                 parts.append(f"— {message.strip()}")
             lines.append(" ".join(parts))
     return "\n".join(lines)
+
+
+def _summarize_dq_object_refs(objects: list[dict[str, Any]] | None) -> list[str]:
+    lines: list[str] = []
+    if not isinstance(objects, list):
+        return lines
+    for obj in objects:
+        if not isinstance(obj, dict):
+            continue
+        oid = obj.get("objectId", "?")
+        otype = obj.get("objectType", "?")
+        lines.append(f"- **{otype}** (id {oid})")
+    return lines
+
+
+def format_associate_dq_rule_confirmation_preview(body: dict[str, Any]) -> dict[str, Any]:
+    rule_id = body.get("dqruleId")
+    skip = body.get("skipAlreadyAssociated")
+    object_lines = _summarize_dq_object_refs(body.get("objects"))
+    objects_block = "\n".join(object_lines) if object_lines else "- (no objects)"
+    preview = {
+        "ok": True,
+        "awaitingUserConfirmation": True,
+        "workflowPhase": "confirm_update",
+        "doNotUpdate": True,
+        "writeConfirmedByUser": False,
+        "formattedResponse": (
+            "**Confirm DQ rule association**\n\n"
+            f"- **DQ rule id:** {rule_id}\n"
+            f"- **skip_already_associated:** {skip}\n"
+            f"**Objects:**\n{objects_block}\n\n"
+            "Ask the user to confirm. After they approve, call again with "
+            "`write_confirmed_by_user=true`, `confirmation_token` from this preview, "
+            "and the same dqrule_id, objects, and skip_already_associated."
+        ),
+        "agentInstruction": _DQ_ASSOCIATE_CONFIRM_INSTRUCTION,
+        "pendingUpdate": body,
+    }
+    return attach_confirmation_token(preview, body)
+
+
+def format_create_dq_rules_confirmation_preview(body: dict[str, Any]) -> dict[str, Any]:
+    discover = body.get("discoverCdeColumns")
+    prefer = body.get("preferExistingRule")
+    skip_dup = body.get("skipDuplicateFunctionOnObject")
+    limit = body.get("limit")
+    field_name = body.get("descriptionCustomFieldName")
+    object_lines = _summarize_dq_object_refs(body.get("objects"))
+    objects_block = "\n".join(object_lines) if object_lines else "- (discover mode or empty)"
+    field_line = ""
+    if isinstance(field_name, str) and field_name.strip():
+        field_line = f"\n- **description_custom_field_name:** {field_name.strip()}"
+    preview = {
+        "ok": True,
+        "awaitingUserConfirmation": True,
+        "workflowPhase": "confirm_create",
+        "doNotCreate": True,
+        "writeConfirmedByUser": False,
+        "formattedResponse": (
+            "**Confirm DQ rule create/associate**\n\n"
+            f"- **discover_cde_columns:** {discover}\n"
+            f"- **prefer_existing_rule:** {prefer}\n"
+            f"- **skip_duplicate_function_on_object:** {skip_dup}\n"
+            f"- **limit:** {limit}"
+            f"{field_line}\n"
+            f"**Objects:**\n{objects_block}\n\n"
+            "Ask the user to confirm. After they approve, call again with "
+            "`write_confirmed_by_user=true`, `confirmation_token` from this preview, "
+            "and the same discover_cde_columns, objects, limit, flags, and optional "
+            "description_custom_field_name."
+        ),
+        "agentInstruction": _DQ_CREATE_CONFIRM_INSTRUCTION,
+        "pendingCreate": body,
+    }
+    return attach_confirmation_token(preview, body)
 
 
 def build_associate_dq_rule_objects_payload(

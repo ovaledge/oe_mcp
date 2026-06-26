@@ -11,15 +11,27 @@ from server.constants import (
 from server.tools import dataquality
 from server.tools.dataquality.helpers import format_create_dq_rules_response
 from tests.helpers import get_tool_fn
+from tests.tools.confirm_test_helpers import invoke_write_confirmed
 
 
 class TestCreateDqRules:
+    async def test_preview_before_post(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
+        preview = await fn(discover_cde_columns=True)
+        assert preview["workflowPhase"] == "confirm_create"
+        assert preview["doNotCreate"] is True
+        assert preview.get("confirmationToken")
+        mock_oe_client.post.assert_not_called()
+
     async def test_discover_posts_payload(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.post.return_value = {"rows": []}
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
         fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
-        out = await fn(
+        out = await invoke_write_confirmed(
+            fn,
             discover_cde_columns=True,
             prefer_existing_rule=False,
             skip_duplicate_function_on_object=False,
@@ -40,7 +52,8 @@ class TestCreateDqRules:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
         fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
-        out = await fn(
+        out = await invoke_write_confirmed(
+            fn,
             objects=[{"objectId": 99, "objectType": "oetable"}],
             limit=10,
         )
@@ -69,7 +82,7 @@ class TestCreateDqRules:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
         fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
-        out = await fn(discover_cde_columns=True)
+        out = await invoke_write_confirmed(fn, discover_cde_columns=True)
         assert out["status_code"] == 502
 
 

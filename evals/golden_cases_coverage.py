@@ -13,6 +13,7 @@ from mcp.types import GetPromptResult, PromptMessage, TextContent
 
 from evals.mcp_eval_helpers import ovaledge_eval_mcp_server, tool_call_result
 from server.constants import (
+    MCP_DQ_ASSESS_LIMIT_DEFAULT,
     TOOL_ASSESS_CDE_DQ,
     TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
     TOOL_CATALOG_ASSET_DETAILS,
@@ -95,7 +96,8 @@ _ASSESS_CDE_DQ_PROMPT_TEXT = (
     "Steps:\n"
     "1. assess_cde_dq for CDE columns on target tables.\n"
     "2. lookup_dq_rule for matching rules.\n"
-    "3. associate_dq_rule_objects or create_dq_rules as needed."
+    "3. associate_dq_rule_objects or create_dq_rules with confirm gate "
+    "(preview, then write_confirmed_by_user=true + confirmation_token)."
 )
 
 _GLOSSARY_CREATE_POST_BODY: dict[str, object] = {
@@ -137,6 +139,21 @@ _CUSTOM_FIELD_POST_BODY: dict[str, object] = {
     "clientContext": {"prompt": "Update Data Owner to John Smith"},
 }
 _CUSTOM_FIELD_CONFIRM_TOKEN = compute_confirmation_token(_CUSTOM_FIELD_POST_BODY)
+
+_ASSOCIATE_DQ_POST_BODY: dict[str, object] = {
+    "dqruleId": 42,
+    "skipAlreadyAssociated": True,
+    "objects": [{"objectId": 101, "objectType": "oecolumn"}],
+}
+_ASSOCIATE_DQ_CONFIRM_TOKEN = compute_confirmation_token(_ASSOCIATE_DQ_POST_BODY)
+
+_CREATE_DQ_POST_BODY: dict[str, object] = {
+    "discoverCdeColumns": True,
+    "preferExistingRule": True,
+    "skipDuplicateFunctionOnObject": True,
+    "limit": MCP_DQ_ASSESS_LIMIT_DEFAULT,
+}
+_CREATE_DQ_CONFIRM_TOKEN = compute_confirmation_token(_CREATE_DQ_POST_BODY)
 
 
 def golden_mcp_use_trust_assessment() -> LLMTestCase:
@@ -826,7 +843,8 @@ def golden_dq_coverage_workflow() -> ConversationalTestCase:
         name="dq_coverage_workflow",
         scenario="Analyst assesses CDE DQ coverage and links rules to columns.",
         expected_outcome=(
-            "Agent runs assess_cde_dq, looks up a rule, associates it, and can create rules."
+            "Agent runs assess_cde_dq, looks up a rule, previews and confirms association, "
+            "then previews and confirms create_dq_rules when needed."
         ),
         mcp_servers=[srv],
         turns=[
@@ -876,7 +894,7 @@ def golden_dq_coverage_workflow() -> ConversationalTestCase:
             ),
             Turn(
                 role="assistant",
-                content="Looking up DQ rule then associating objects.",
+                content="Looking up DQ rule, then previewing association.",
                 mcp_tools_called=[
                     MCPToolCall(
                         name=TOOL_LOOKUP_DQ_RULE,
@@ -890,6 +908,30 @@ def golden_dq_coverage_workflow() -> ConversationalTestCase:
                         args={
                             "dqrule_id": 42,
                             "objects": [{"object_id": 101, "object_type": "oecolumn"}],
+                            "write_confirmed_by_user": False,
+                        },
+                        result=tool_call_result(
+                            {
+                                "workflowPhase": "confirm_update",
+                                "doNotUpdate": True,
+                                "confirmationToken": _ASSOCIATE_DQ_CONFIRM_TOKEN,
+                            },
+                        ),
+                    ),
+                ],
+            ),
+            Turn(role="user", content="Approved — link the rule."),
+            Turn(
+                role="assistant",
+                content="POSTing association with preview token.",
+                mcp_tools_called=[
+                    MCPToolCall(
+                        name=TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
+                        args={
+                            "dqrule_id": 42,
+                            "objects": [{"object_id": 101, "object_type": "oecolumn"}],
+                            "write_confirmed_by_user": True,
+                            "confirmation_token": _ASSOCIATE_DQ_CONFIRM_TOKEN,
                         },
                         result=tool_call_result(
                             {"data": {"associatedCount": 1, "dqruleId": 42}},
@@ -903,13 +945,37 @@ def golden_dq_coverage_workflow() -> ConversationalTestCase:
             ),
             Turn(
                 role="assistant",
-                content="Calling create_dq_rules for discover mode.",
+                content="Previewing create_dq_rules in discover mode.",
                 mcp_tools_called=[
                     MCPToolCall(
                         name=TOOL_CREATE_DQ_RULES,
                         args={
                             "discover_cde_columns": True,
                             "prefer_existing_rule": True,
+                            "write_confirmed_by_user": False,
+                        },
+                        result=tool_call_result(
+                            {
+                                "workflowPhase": "confirm_create",
+                                "doNotCreate": True,
+                                "confirmationToken": _CREATE_DQ_CONFIRM_TOKEN,
+                            },
+                        ),
+                    ),
+                ],
+            ),
+            Turn(role="user", content="Approved — create rules."),
+            Turn(
+                role="assistant",
+                content="POSTing create_dq_rules with preview token.",
+                mcp_tools_called=[
+                    MCPToolCall(
+                        name=TOOL_CREATE_DQ_RULES,
+                        args={
+                            "discover_cde_columns": True,
+                            "prefer_existing_rule": True,
+                            "write_confirmed_by_user": True,
+                            "confirmation_token": _CREATE_DQ_CONFIRM_TOKEN,
                         },
                         result=tool_call_result(
                             {"rows": [{"status": "created", "dqruleId": 55}]},
