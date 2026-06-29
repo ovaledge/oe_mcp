@@ -110,6 +110,30 @@ STALE_TOKEN_CASES: tuple[StaleTokenCase, ...] = (
         preview_kwargs={"discover_cde_columns": True},
         tamper_kwargs={"prefer_existing_rule": False},
     ),
+    StaleTokenCase(
+        tool_name="validate_dq_queries",
+        register=dataquality.register,
+        preview_kwargs={
+            "connection_id": 1,
+            "schema_id": 2,
+            "rule_query": "SELECT 1",
+            "stats_query": "SELECT 2",
+            "failed_values_query": "SELECT 3",
+        },
+        tamper_kwargs={"rule_query": "SELECT 9"},
+    ),
+    StaleTokenCase(
+        tool_name="create_sql_dq_rule",
+        register=dataquality.register,
+        preview_kwargs={
+            "objects": [{"objectId": 101, "objectType": "oecolumn"}],
+            "rule_name": "mcp_rule",
+            "rule_query": "SELECT 1",
+            "stats_query": "SELECT 2",
+            "failed_values_query": "SELECT 3",
+        },
+        tamper_kwargs={"rule_name": "tampered"},
+    ),
 )
 
 

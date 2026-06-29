@@ -39,6 +39,7 @@ Setup scripts (`scripts/setup_local_mcp.sh`, `scripts/setup_local_mcp.ps1`) crea
 - CDE / column DQ assessment — read-only (`assess_cde_dq`)
 - Associate objects to data quality rules (`associate_dq_rule_objects`)
 - Auto-create or associate data quality rules for CDE columns (`create_dq_rules`)
+- Custom SQL DQ: `generate_dq_queries`, `validate_dq_queries`, `create_sql_dq_rule` (workflow prompt: `create_custom_sql_dq_workflow`)
 - Asset description, CDE, governance role, and custom field updates (`update_asset_descriptions`, `update_cde_associations`, `update_governance_roles`, `update_custom_field_value`)
 - Resource URIs (`ovaledge://catalog/...`, `ovaledge://governance/...`) and static guides (`docs://ovaledge/...`)
 - Nineteen workflow prompts under `server/prompts/workflows/` (see below; canonical list in `server/mcp_surface.py`)
@@ -63,7 +64,7 @@ These rules apply to every MCP session (also exposed to clients as server **inst
 
 ## Tools, resources, and prompts
 
-### Tools (`server/tools/`) — 22 tools
+### Tools (`server/tools/`) — 25 tools
 
 Canonical inventory: `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 
@@ -85,7 +86,7 @@ Canonical inventory: `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 
 **Data quality**
 
-- `lookup_dq_rule`, `assess_cde_dq`, `associate_dq_rule_objects`, `create_dq_rules`
+- `lookup_dq_rule`, `assess_cde_dq`, `associate_dq_rule_objects`, `create_dq_rules`, `generate_dq_queries`, `validate_dq_queries`, `create_sql_dq_rule`
 
 **Platform docs**
 
@@ -111,7 +112,7 @@ Canonical inventory: `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 
 Static product docs: `docs://ovaledge/...` (all `server/docs/*.md`, including `mcp_workflows`, `data_stories`, `tags_guide`).
 
-### Prompts (`server/prompts/workflows/`) — 19 prompts
+### Prompts (`server/prompts/workflows/`) — 20 prompts
 
 Full list: [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md#workflow-prompts). Inventory: `server/mcp_surface.py` (`MCP_WORKFLOW_PROMPT_NAMES`).
 

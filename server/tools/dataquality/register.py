@@ -17,7 +17,10 @@ from server.constants import (
     MCP_PATH_ASSESS_CDE_DQ,
     MCP_PATH_ASSOCIATE_DQ_RULE_OBJECTS,
     MCP_PATH_CREATE_DQ_RULES,
+    MCP_PATH_CREATE_SQL_DQ_RULE,
+    MCP_PATH_GENERATE_DQ_QUERIES,
     MCP_PATH_LOOKUP_DQ_RULES,
+    MCP_PATH_VALIDATE_DQ_QUERIES,
 )
 from server.tools.common import drop_none as _q
 from server.tools.common import map_ovaledge_error, ovaledge_client, strip_or_none
@@ -30,19 +33,33 @@ from server.tools.dataquality.helpers import (
     _DESC_ASSESS_CDE_DQ,
     _DESC_ASSOCIATE_DQ_RULE_OBJECTS,
     _DESC_CREATE_DQ_RULES,
+    _DESC_CREATE_SQL_DQ_RULE,
+    _DESC_GENERATE_DQ_QUERIES,
     _DESC_LOOKUP_DQ_RULE,
+    _DESC_VALIDATE_DQ_QUERIES,
     build_assess_cde_dq_payload,
     build_associate_dq_rule_objects_payload,
     build_create_dq_rules_payload,
+    build_create_sql_dq_rule_payload,
+    build_generate_dq_queries_payload,
+    build_validate_dq_queries_payload,
     format_assess_cde_dq_response,
     format_associate_dq_rule_confirmation_preview,
     format_associate_dq_rule_objects_response,
     format_create_dq_rules_confirmation_preview,
     format_create_dq_rules_response,
+    format_create_sql_dq_rule_confirmation_preview,
+    format_create_sql_dq_rule_response,
+    format_generate_dq_queries_response,
+    format_validate_dq_queries_confirmation_preview,
+    format_validate_dq_queries_response,
     validate_assess_cde_dq_args,
     validate_associate_dq_rule_objects_args,
     validate_create_dq_rules_args,
+    validate_create_sql_dq_rule_args,
+    validate_generate_dq_queries_args,
     validate_lookup_dq_rule_args,
+    validate_validate_dq_queries_args,
 )
 
 
@@ -262,6 +279,150 @@ def register(mcp: FastMCP) -> None:
             confirmation_token=confirmation_token,
         )
 
+    @mcp.tool(description=_DESC_GENERATE_DQ_QUERIES)
+    async def generate_dq_queries(
+        objects: Annotated[
+            list[dict[str, Any]],
+            Field(
+                description=(
+                    "Catalog object to generate SQL for. objectType: "
+                    + MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC
+                ),
+            ),
+        ],
+        business_rule: Annotated[
+            str | None,
+            Field(description="Optional business rule text override.", default=None),
+        ] = None,
+        business_description: Annotated[
+            str | None,
+            Field(description="Optional business description override.", default=None),
+        ] = None,
+    ) -> dict[str, Any]:
+        """Generate custom SQL DQ queries for a catalog object (see MCP tool description)."""
+        return await _invoke_generate_dq_queries(
+            objects=objects,
+            business_rule=business_rule,
+            business_description=business_description,
+        )
+
+    @mcp.tool(description=_DESC_VALIDATE_DQ_QUERIES)
+    async def validate_dq_queries(
+        connection_id: Annotated[
+            int,
+            Field(description="OvalEdge connection id from generate_dq_queries context."),
+        ],
+        schema_id: Annotated[
+            int,
+            Field(description="OvalEdge schema id from generate_dq_queries context."),
+        ],
+        rule_query: Annotated[str, Field(description="Rule SELECT SQL.")],
+        stats_query: Annotated[str, Field(description="Stats SELECT SQL.")],
+        failed_values_query: Annotated[
+            str, Field(description="Failed-values SELECT SQL.")
+        ],
+        write_confirmed_by_user: Annotated[
+            bool,
+            Field(
+                description=(
+                    "Final gate: true only after the user explicitly approved "
+                    "the confirm_create preview. Re-call with the same connection_id, "
+                    "schema_id, and three queries."
+                ),
+                default=False,
+            ),
+        ] = False,
+        confirmation_token: Annotated[
+            str | None,
+            Field(description=CONFIRMATION_TOKEN_PARAM_DESCRIPTION, default=None),
+        ] = None,
+    ) -> dict[str, Any]:
+        """Validate DQ SQL via Query Sheet execution (see MCP tool description)."""
+        return await _invoke_validate_dq_queries(
+            connection_id=connection_id,
+            schema_id=schema_id,
+            rule_query=rule_query,
+            stats_query=stats_query,
+            failed_values_query=failed_values_query,
+            write_confirmed_by_user=write_confirmed_by_user,
+            confirmation_token=confirmation_token,
+        )
+
+    @mcp.tool(description=_DESC_CREATE_SQL_DQ_RULE)
+    async def create_sql_dq_rule(
+        objects: Annotated[
+            list[dict[str, Any]],
+            Field(
+                description=(
+                    "Catalog objects (first is primary). objectType: "
+                    + MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC
+                ),
+            ),
+        ],
+        rule_name: Annotated[str, Field(description="Draft DQ rule name.")],
+        rule_query: Annotated[
+            str | None,
+            Field(description="Rule SELECT SQL (omit when code_object_id is set).", default=None),
+        ] = None,
+        stats_query: Annotated[
+            str | None,
+            Field(description="Stats SELECT SQL.", default=None),
+        ] = None,
+        failed_values_query: Annotated[
+            str | None,
+            Field(description="Failed-values SELECT SQL.", default=None),
+        ] = None,
+        connection_id: Annotated[
+            int | None,
+            Field(description="Connection id from generate/validate context.", default=None),
+        ] = None,
+        schema_id: Annotated[
+            int | None,
+            Field(description="Schema id from generate/validate context.", default=None),
+        ] = None,
+        purpose: Annotated[
+            str | None,
+            Field(description="Optional DQ rule purpose.", default=None),
+        ] = None,
+        recommended_function: Annotated[
+            str | None,
+            Field(description="DQ function from assess/generate.", default=None),
+        ] = None,
+        code_object_id: Annotated[
+            int | None,
+            Field(description="Reuse existing oequery code object.", default=None),
+        ] = None,
+        write_confirmed_by_user: Annotated[
+            bool,
+            Field(
+                description=(
+                    "Final create gate: true only after the user explicitly approved "
+                    "the confirm_create preview. Re-call with the same parameters."
+                ),
+                default=False,
+            ),
+        ] = False,
+        confirmation_token: Annotated[
+            str | None,
+            Field(description=CONFIRMATION_TOKEN_PARAM_DESCRIPTION, default=None),
+        ] = None,
+    ) -> dict[str, Any]:
+        """Create draft custom SQL DQ rule (see MCP tool description)."""
+        return await _invoke_create_sql_dq_rule(
+            objects=objects,
+            rule_name=rule_name,
+            rule_query=rule_query,
+            stats_query=stats_query,
+            failed_values_query=failed_values_query,
+            connection_id=connection_id,
+            schema_id=schema_id,
+            purpose=purpose,
+            recommended_function=recommended_function,
+            code_object_id=code_object_id,
+            write_confirmed_by_user=write_confirmed_by_user,
+            confirmation_token=confirmation_token,
+        )
+
 
 @logged_tool_invocation
 async def _invoke_lookup_dq_rule(
@@ -389,5 +550,114 @@ async def _invoke_create_dq_rules(
             out = body if isinstance(body, dict) else {"data": body}
             out["formattedResponse"] = format_create_dq_rules_response(out)
             return out
+    except OvalEdgeError as e:
+        return map_ovaledge_error(e)
+
+
+@logged_tool_invocation
+async def _invoke_generate_dq_queries(
+    objects: list[dict[str, Any]] | None,
+    business_rule: str | None,
+    business_description: str | None,
+) -> dict[str, Any]:
+    err = validate_generate_dq_queries_args(objects)
+    if err is not None:
+        return err
+    payload = build_generate_dq_queries_payload(objects, business_rule, business_description)
+    if "error" in payload:
+        return payload
+    try:
+        async with ovaledge_client() as client:
+            body = await client.post(MCP_PATH_GENERATE_DQ_QUERIES, payload)
+            out = body if isinstance(body, dict) else {"data": body}
+            return format_generate_dq_queries_response(out)
+    except OvalEdgeError as e:
+        return map_ovaledge_error(e)
+
+
+@logged_tool_invocation
+async def _invoke_validate_dq_queries(
+    connection_id: int,
+    schema_id: int,
+    rule_query: str,
+    stats_query: str,
+    failed_values_query: str,
+    write_confirmed_by_user: bool = False,
+    confirmation_token: str | None = None,
+) -> dict[str, Any]:
+    err = validate_validate_dq_queries_args(
+        connection_id, schema_id, rule_query, stats_query, failed_values_query
+    )
+    if err is not None:
+        return err
+    payload = build_validate_dq_queries_payload(
+        connection_id, schema_id, rule_query, stats_query, failed_values_query
+    )
+    if not write_confirmed_by_user:
+        return format_validate_dq_queries_confirmation_preview(payload)
+    confirm_err = verify_write_confirmation(
+        payload,
+        write_confirmed_by_user=write_confirmed_by_user,
+        confirmation_token=confirmation_token,
+    )
+    if confirm_err is not None:
+        return confirm_err
+    try:
+        async with ovaledge_client() as client:
+            body = await client.post(MCP_PATH_VALIDATE_DQ_QUERIES, payload)
+            out = body if isinstance(body, dict) else {"data": body}
+            return format_validate_dq_queries_response(out)
+    except OvalEdgeError as e:
+        return map_ovaledge_error(e)
+
+
+@logged_tool_invocation
+async def _invoke_create_sql_dq_rule(
+    objects: list[dict[str, Any]] | None,
+    rule_name: str,
+    rule_query: str | None,
+    stats_query: str | None,
+    failed_values_query: str | None,
+    connection_id: int | None,
+    schema_id: int | None,
+    purpose: str | None,
+    recommended_function: str | None,
+    code_object_id: int | None,
+    write_confirmed_by_user: bool = False,
+    confirmation_token: str | None = None,
+) -> dict[str, Any]:
+    err = validate_create_sql_dq_rule_args(
+        objects, rule_name, rule_query, stats_query, failed_values_query, code_object_id
+    )
+    if err is not None:
+        return err
+    payload = build_create_sql_dq_rule_payload(
+        objects,
+        rule_name,
+        rule_query,
+        stats_query,
+        failed_values_query,
+        connection_id,
+        schema_id,
+        purpose,
+        recommended_function,
+        code_object_id,
+    )
+    if "error" in payload:
+        return payload
+    if not write_confirmed_by_user:
+        return format_create_sql_dq_rule_confirmation_preview(payload)
+    confirm_err = verify_write_confirmation(
+        payload,
+        write_confirmed_by_user=write_confirmed_by_user,
+        confirmation_token=confirmation_token,
+    )
+    if confirm_err is not None:
+        return confirm_err
+    try:
+        async with ovaledge_client() as client:
+            body = await client.post(MCP_PATH_CREATE_SQL_DQ_RULE, payload)
+            out = body if isinstance(body, dict) else {"data": body}
+            return format_create_sql_dq_rule_response(out)
     except OvalEdgeError as e:
         return map_ovaledge_error(e)

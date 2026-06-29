@@ -10,7 +10,9 @@ from server.constants import (
     TOOL_COLUMN_PROFILE,
     TOOL_CREATE_DQ_RULES,
     TOOL_CREATE_GLOSSARY_TERM,
+    TOOL_CREATE_SQL_DQ_RULE,
     TOOL_CREATE_TAG,
+    TOOL_GENERATE_DQ_QUERIES,
     TOOL_GET_USER_OBJECT_ACCESS,
     TOOL_LOOKUP_DATASTORY,
     TOOL_LOOKUP_DQ_RULE,
@@ -23,6 +25,7 @@ from server.constants import (
     TOOL_TABLE_ENTITY_RELATIONSHIPS,
     TOOL_UPDATE_ASSET_DESCRIPTIONS,
     TOOL_UPDATE_GOVERNANCE_ROLES,
+    TOOL_VALIDATE_DQ_QUERIES,
 )
 
 
@@ -550,5 +553,34 @@ def register(mcp: FastMCP) -> None:
             f"5. Only after explicit user approval for writes: {TOOL_ASSOCIATE_DQ_RULE_OBJECTS} "
             f"for a known data quality rule id, or {TOOL_CREATE_DQ_RULES} "
             f"to create/associate in one step"
+        )
+        return [Message(text)]
+
+    @mcp.prompt()
+    def create_custom_sql_dq_workflow(user_intent: str) -> list[Message]:
+        """
+        P18 — CDE DQ assess, associate, and custom SQL rule creation.
+
+        Trigger: "Create custom SQL DQ rules for CDE columns"
+                 "Associate CDE columns to existing DQ rules"
+        """
+        text = (
+            f"CDE / custom SQL DQ workflow for: {user_intent}\n\n"
+            f"Steps:\n"
+            f"1. If column ids are unknown, call {TOOL_SEARCH_CATALOG} with "
+            f"criticalDataElement filter or search_terms for CDE columns\n"
+            f"2. Call {TOOL_ASSESS_CDE_DQ}(discover_cde_columns=true) or pass explicit objects\n"
+            f"3. Present assessment; prioritize reuse before create\n"
+            f"4. For rows with recommended rule and Associated?=No: confirm, then "
+            f"{TOOL_ASSOCIATE_DQ_RULE_OBJECTS} with write_confirmed_by_user + confirmation_token\n"
+            f"5. For function-based rows: {TOOL_CREATE_DQ_RULES}(prefer_existing_rule=true) "
+            f"with confirm gate\n"
+            f"6. For custom_sql workflow: {TOOL_GENERATE_DQ_QUERIES} → use "
+            f"connection_id/schema_id from formattedResponse or data.context → "
+            f"{TOOL_VALIDATE_DQ_QUERIES} (confirm gate) → {TOOL_CREATE_SQL_DQ_RULE} "
+            f"(confirm gate) after canCreateRule is true; on code_found follow "
+            f"recommendedReuseAction ({TOOL_ASSOCIATE_DQ_RULE_OBJECTS} or "
+            f"{TOOL_CREATE_SQL_DQ_RULE} with code_object_id)\n"
+            f"7. Ad-hoc rule lookup: {TOOL_LOOKUP_DQ_RULE} (not catalog search)"
         )
         return [Message(text)]
