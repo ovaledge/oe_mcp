@@ -26,6 +26,9 @@ TOOL_GET_USER_OBJECT_ACCESS = "get_user_object_access"
 TOOL_ASSESS_CDE_DQ = "assess_cde_dq"
 TOOL_ASSOCIATE_DQ_RULE_OBJECTS = "associate_dq_rule_objects"
 TOOL_CREATE_DQ_RULES = "create_dq_rules"
+TOOL_GENERATE_DQ_QUERIES = "generate_dq_queries"
+TOOL_VALIDATE_DQ_QUERIES = "validate_dq_queries"
+TOOL_CREATE_SQL_DQ_RULE = "create_sql_dq_rule"
 
 # MCP tool data classification (appended to every _DESC_* via classify_tool_desc).
 MCP_TOOL_CLASSIFICATION_INTERNAL = (
@@ -748,3 +751,6 @@ MCP_PATH_LOOKUP_DQ_RULES = "/api/v1/mcp/lookup-dq-rules"
 MCP_PATH_ASSESS_CDE_DQ = "/api/v1/mcp/dq-intelligence/assess-cde"
 MCP_PATH_ASSOCIATE_DQ_RULE_OBJECTS = "/api/v1/mcp/dq-intelligence/associate-rule-objects"
 MCP_PATH_CREATE_DQ_RULES = "/api/v1/mcp/dq-intelligence/create-rules"
+MCP_PATH_GENERATE_DQ_QUERIES = "/api/v1/mcp/dq-intelligence/generate-queries"
+MCP_PATH_VALIDATE_DQ_QUERIES = "/api/v1/mcp/dq-intelligence/validate-queries"
+MCP_PATH_CREATE_SQL_DQ_RULE = "/api/v1/mcp/dq-intelligence/create-sql-rule"

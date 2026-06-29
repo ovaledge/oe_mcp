@@ -22,6 +22,10 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 | CDE columns / DQ function & rule recommendations | `assess_cde_dq` (after `search_catalog_assets` or `discover_cde_columns=true`) |
 | Associate objects to data quality rule | `associate_dq_rule_objects` (after `assess_cde_dq` / `lookup_dq_rule`) |
 | Auto-create or associate DQ rules for CDE columns | `create_dq_rules` (assess + create/associate in one call) |
+| Generate custom SQL DQ queries | `generate_dq_queries` (after `assess_cde_dq` when workflow is custom_sql) |
+| Validate custom SQL DQ queries | `validate_dq_queries` (confirm gate; executes SELECT on connection) |
+| Create custom SQL DQ rule | `create_sql_dq_rule` (confirm gate; after validate when canCreateRule) |
+| CDE / custom SQL DQ workflow (prompt) | `create_custom_sql_dq_workflow` chains assess, associate, create_rules, generate, validate, create |
 | Metadata drift between crawls | `metadata_changes_between_crawls` |
 | Native Redshift/Snowflake/Tableau grants | `source_system_access` |
 | Lineage | `asset_lineage` |
@@ -223,6 +227,7 @@ Invoke by name from the MCP client when supported. Each prompt returns instructi
 | `trace_data_lineage` | Upstream/downstream narrative |
 | `metadata_drift` | Changes between crawls |
 | `assess_cde_dq_coverage` | CDE columns: catalog search → read-only `assess_cde_dq`; optional writes after approval |
+| `create_custom_sql_dq_workflow` | CDE assess → associate/create_rules → generate/validate/create SQL via thin DQ tools |
 
 ### Access
 

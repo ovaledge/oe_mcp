@@ -5,7 +5,7 @@ Each package exposes ``register(mcp)`` and optional ``helpers`` / ``formatters``
 
 - ``catalog`` — search, details, lineage, metadata drift, descriptions
 - ``governance`` — glossary, tags, data stories, governance roles
-- ``dataquality`` — CDE assessment, DQ rule lookup, associate, create
+- ``dataquality`` — CDE assessment, DQ rules, custom SQL generate/validate/create
 - ``docs`` — platform documentation semantic search
 - ``rdam`` — native Redshift/Snowflake/Tableau access (source-system grants)
 - ``common`` — shared params, errors, validators, client factory
