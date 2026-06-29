@@ -20,7 +20,9 @@ from server.constants import (
     TOOL_COLUMN_PROFILE,
     TOOL_CREATE_DQ_RULES,
     TOOL_CREATE_GLOSSARY_TERM,
+    TOOL_CREATE_SQL_DQ_RULE,
     TOOL_CREATE_TAG,
+    TOOL_GENERATE_DQ_QUERIES,
     TOOL_LOOKUP_DQ_RULE,
     TOOL_LOOKUP_GLOSSARY_TERM,
     TOOL_LOOKUP_TAGS,
@@ -30,6 +32,7 @@ from server.constants import (
     TOOL_UPDATE_CDE_ASSOCIATIONS,
     TOOL_UPDATE_CUSTOM_FIELD_VALUE,
     TOOL_UPDATE_GOVERNANCE_ROLES,
+    TOOL_VALIDATE_DQ_QUERIES,
 )
 from server.tools.common.confirm_gate import compute_confirmation_token
 
@@ -100,6 +103,14 @@ _ASSESS_CDE_DQ_PROMPT_TEXT = (
     "(preview, then write_confirmed_by_user=true + confirmation_token)."
 )
 
+_CUSTOM_SQL_DQ_PROMPT_TEXT = (
+    "Custom SQL DQ workflow for CDE column.\n\n"
+    "Steps:\n"
+    "1. generate_dq_queries for the column (custom_sql path)\n"
+    "2. validate_dq_queries with confirm gate using connection_id/schema_id from context\n"
+    "3. create_sql_dq_rule with confirm gate when canCreateRule is true"
+)
+
 _GLOSSARY_CREATE_POST_BODY: dict[str, object] = {
     "termName": "Revenue Recognition",
     "domainId": 12,
@@ -154,6 +165,35 @@ _CREATE_DQ_POST_BODY: dict[str, object] = {
     "limit": MCP_DQ_ASSESS_LIMIT_DEFAULT,
 }
 _CREATE_DQ_CONFIRM_TOKEN = compute_confirmation_token(_CREATE_DQ_POST_BODY)
+
+_VALIDATE_DQ_QUERIES_POST_BODY: dict[str, object] = {
+    "connectionId": 1,
+    "schemaId": 2,
+    "ruleQuery": "SELECT COUNT(*) FROM sales.revenue WHERE amount IS NULL",
+    "statsQuery": "SELECT COUNT(*) FROM sales.revenue",
+    "failedValuesQuery": (
+        "SELECT amount FROM sales.revenue WHERE amount IS NULL LIMIT 1"
+    ),
+}
+_VALIDATE_DQ_QUERIES_CONFIRM_TOKEN = compute_confirmation_token(
+    _VALIDATE_DQ_QUERIES_POST_BODY
+)
+
+_CREATE_SQL_DQ_RULE_POST_BODY: dict[str, object] = {
+    "objectId": 101,
+    "objectType": "oecolumn",
+    "ruleName": "revenue_null_check",
+    "ruleQuery": "SELECT COUNT(*) FROM sales.revenue WHERE amount IS NULL",
+    "statsQuery": "SELECT COUNT(*) FROM sales.revenue",
+    "failedValuesQuery": (
+        "SELECT amount FROM sales.revenue WHERE amount IS NULL LIMIT 1"
+    ),
+    "connectionId": 1,
+    "schemaId": 2,
+}
+_CREATE_SQL_DQ_RULE_CONFIRM_TOKEN = compute_confirmation_token(
+    _CREATE_SQL_DQ_RULE_POST_BODY
+)
 
 
 def golden_mcp_use_trust_assessment() -> LLMTestCase:
@@ -988,6 +1028,200 @@ def golden_dq_coverage_workflow() -> ConversationalTestCase:
     )
 
 
+def golden_custom_sql_dq_workflow() -> ConversationalTestCase:
+    srv = ovaledge_eval_mcp_server(
+        tool_names=frozenset({
+            TOOL_GENERATE_DQ_QUERIES,
+            TOOL_VALIDATE_DQ_QUERIES,
+            TOOL_CREATE_SQL_DQ_RULE,
+        }),
+        prompt_names=frozenset({"create_custom_sql_dq_workflow"}),
+    )
+    prompt_result = GetPromptResult(
+        messages=[
+            PromptMessage(
+                role="user",
+                content=TextContent(type="text", text=_CUSTOM_SQL_DQ_PROMPT_TEXT),
+            )
+        ],
+    )
+    validate_preview = tool_call_result(
+        {
+            "workflowPhase": "confirm_create",
+            "doNotCreate": True,
+            "confirmationToken": _VALIDATE_DQ_QUERIES_CONFIRM_TOKEN,
+            "formattedResponse": "**Confirm DQ SQL validation**",
+        }
+    )
+    validate_post = tool_call_result(
+        {
+            "workflowPhase": "validate_queries",
+            "canCreateRule": True,
+            "formattedResponse": "Can create rule: Yes",
+        }
+    )
+    create_preview = tool_call_result(
+        {
+            "workflowPhase": "confirm_create",
+            "doNotCreate": True,
+            "confirmationToken": _CREATE_SQL_DQ_RULE_CONFIRM_TOKEN,
+            "formattedResponse": "**Confirm custom SQL DQ rule create**",
+        }
+    )
+    create_post = tool_call_result(
+        {
+            "workflowPhase": "create_sql_rule",
+            "data": {"dqruleId": 9001, "ruleName": "revenue_null_check"},
+        }
+    )
+    return ConversationalTestCase(
+        name="custom_sql_dq_workflow",
+        scenario="Analyst generates, validates, and creates a custom SQL DQ rule.",
+        expected_outcome=(
+            "Agent calls generate_dq_queries, previews and confirms validate_dq_queries, "
+            "then previews and confirms create_sql_dq_rule when validation allows."
+        ),
+        mcp_servers=[srv],
+        turns=[
+            Turn(
+                role="user",
+                content="Create a custom SQL DQ rule for revenue column 101.",
+            ),
+            Turn(
+                role="assistant",
+                content="Following create_custom_sql_dq_workflow.",
+                mcp_prompts_called=[
+                    MCPPromptCall(
+                        name="create_custom_sql_dq_workflow",
+                        result=prompt_result,
+                    ),
+                ],
+                mcp_tools_called=[
+                    MCPToolCall(
+                        name=TOOL_GENERATE_DQ_QUERIES,
+                        args={
+                            "objects": [{"object_id": 101, "object_type": "oecolumn"}],
+                        },
+                        result=tool_call_result(
+                            {
+                                "workflowPhase": "generate_queries",
+                                "connectionId": 1,
+                                "schemaId": 2,
+                                "data": {
+                                    "status": "generated",
+                                    "ruleQuery": _VALIDATE_DQ_QUERIES_POST_BODY[
+                                        "ruleQuery"
+                                    ],
+                                    "statsQuery": _VALIDATE_DQ_QUERIES_POST_BODY[
+                                        "statsQuery"
+                                    ],
+                                    "failedValuesQuery": _VALIDATE_DQ_QUERIES_POST_BODY[
+                                        "failedValuesQuery"
+                                    ],
+                                    "context": {"connectionId": 1, "schemaId": 2},
+                                },
+                            },
+                        ),
+                    ),
+                ],
+            ),
+            Turn(
+                role="user",
+                content="Validate the SQL on the connection, then create the rule if valid.",
+            ),
+            Turn(
+                role="assistant",
+                content="Previewing validate_dq_queries — no execution yet.",
+                mcp_tools_called=[
+                    MCPToolCall(
+                        name=TOOL_VALIDATE_DQ_QUERIES,
+                        args={
+                            "connection_id": 1,
+                            "schema_id": 2,
+                            "rule_query": _VALIDATE_DQ_QUERIES_POST_BODY["ruleQuery"],
+                            "stats_query": _VALIDATE_DQ_QUERIES_POST_BODY["statsQuery"],
+                            "failed_values_query": _VALIDATE_DQ_QUERIES_POST_BODY[
+                                "failedValuesQuery"
+                            ],
+                            "write_confirmed_by_user": False,
+                        },
+                        result=validate_preview,
+                    ),
+                ],
+            ),
+            Turn(role="user", content="Approved — run validation."),
+            Turn(
+                role="assistant",
+                content="Executing validate_dq_queries with preview token.",
+                mcp_tools_called=[
+                    MCPToolCall(
+                        name=TOOL_VALIDATE_DQ_QUERIES,
+                        args={
+                            "connection_id": 1,
+                            "schema_id": 2,
+                            "rule_query": _VALIDATE_DQ_QUERIES_POST_BODY["ruleQuery"],
+                            "stats_query": _VALIDATE_DQ_QUERIES_POST_BODY["statsQuery"],
+                            "failed_values_query": _VALIDATE_DQ_QUERIES_POST_BODY[
+                                "failedValuesQuery"
+                            ],
+                            "write_confirmed_by_user": True,
+                            "confirmation_token": _VALIDATE_DQ_QUERIES_CONFIRM_TOKEN,
+                        },
+                        result=validate_post,
+                    ),
+                ],
+            ),
+            Turn(
+                role="assistant",
+                content="Previewing create_sql_dq_rule.",
+                mcp_tools_called=[
+                    MCPToolCall(
+                        name=TOOL_CREATE_SQL_DQ_RULE,
+                        args={
+                            "objects": [{"object_id": 101, "object_type": "oecolumn"}],
+                            "rule_name": "revenue_null_check",
+                            "rule_query": _CREATE_SQL_DQ_RULE_POST_BODY["ruleQuery"],
+                            "stats_query": _CREATE_SQL_DQ_RULE_POST_BODY["statsQuery"],
+                            "failed_values_query": _CREATE_SQL_DQ_RULE_POST_BODY[
+                                "failedValuesQuery"
+                            ],
+                            "connection_id": 1,
+                            "schema_id": 2,
+                            "write_confirmed_by_user": False,
+                        },
+                        result=create_preview,
+                    ),
+                ],
+            ),
+            Turn(role="user", content="Approved — create the draft rule."),
+            Turn(
+                role="assistant",
+                content="POSTing create_sql_dq_rule with preview token.",
+                mcp_tools_called=[
+                    MCPToolCall(
+                        name=TOOL_CREATE_SQL_DQ_RULE,
+                        args={
+                            "objects": [{"object_id": 101, "object_type": "oecolumn"}],
+                            "rule_name": "revenue_null_check",
+                            "rule_query": _CREATE_SQL_DQ_RULE_POST_BODY["ruleQuery"],
+                            "stats_query": _CREATE_SQL_DQ_RULE_POST_BODY["statsQuery"],
+                            "failed_values_query": _CREATE_SQL_DQ_RULE_POST_BODY[
+                                "failedValuesQuery"
+                            ],
+                            "connection_id": 1,
+                            "schema_id": 2,
+                            "write_confirmed_by_user": True,
+                            "confirmation_token": _CREATE_SQL_DQ_RULE_CONFIRM_TOKEN,
+                        },
+                        result=create_post,
+                    ),
+                ],
+            ),
+            Turn(role="assistant", content="Custom SQL DQ rule created."),
+        ],
+    )
+
+
 COVERAGE_MCP_USE_GOLDEN_FNS: list[str] = [
     "golden_mcp_use_trust_assessment",
     "golden_mcp_use_explain_business_term",
@@ -1004,6 +1238,7 @@ COVERAGE_CONVERSATIONAL_GOLDEN_FNS: list[str] = [
     "golden_governed_cde_confirm_two_step",
     "golden_governed_custom_field_confirm_two_step",
     "golden_dq_coverage_workflow",
+    "golden_custom_sql_dq_workflow",
 ]
 
 __all__ = [
