@@ -2247,31 +2247,51 @@ class TestUpdateGovernanceRoles:
             },
         )
 
-    async def test_role_value_empty_string_as_remove(
+    async def test_rejects_empty_string_role_value(
         self, mock_oe_client: AsyncMock
     ) -> None:
-        mock_oe_client.post.return_value = {
-            "status": "success",
-            "updatedRoles": ["custodian"],
-            "blockedRoles": [],
-            "target": {"objectId": 1, "objectType": "oetable"},
-        }
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
         fn = await get_tool_fn(mcp, "update_governance_roles")
-        await fn(
+        out = await fn(
             object_id=1,
             object_type="oetable",
             role_updates={"custodian": ""},
             create_confirmed_by_user=True,
         )
-        mock_oe_client.post.assert_called_once_with(
-            MCP_PATH_UPDATE_GOVERNANCE_ROLES,
-            {
-                "target": {"objectId": 1, "objectType": "oetable"},
-                "roleUpdates": {"custodian": None},
-            },
+        assert out["status_code"] == 400
+        assert "cannot be empty/none" in out["error"].lower()
+        assert "custodian" in out["error"].lower()
+        mock_oe_client.post.assert_not_called()
+
+    async def test_rejects_null_role_value(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_governance_roles")
+        out = await fn(
+            object_id=1,
+            object_type="oetable",
+            role_updates={"owner": None},
+            create_confirmed_by_user=True,
         )
+        assert out["status_code"] == 400
+        assert "cannot be empty/none" in out["error"].lower()
+        assert "owner" in out["error"].lower()
+        mock_oe_client.post.assert_not_called()
+
+    async def test_rejects_whitespace_role_value(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_governance_roles")
+        out = await fn(
+            object_id=1,
+            object_type="oetable",
+            role_updates={"steward": "   "},
+            create_confirmed_by_user=True,
+        )
+        assert out["status_code"] == 400
+        assert "cannot be empty/none" in out["error"].lower()
+        mock_oe_client.post.assert_not_called()
 
     async def test_accepts_govrole5_synonym(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.post.return_value = {

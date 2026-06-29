@@ -46,6 +46,7 @@ Extended parameter patterns (tool description keeps a short summary; use this se
 | Data products | `data_products=[...]`, `context_query` |
 | Custom field values | `custom_fields=[...]` or `search_terms` fallback |
 | Data Domains (not glossary Global Domain) | `object_type=dp_domain` alone — do not combine with other types |
+| Report Groups | `object_type=oedomain` alone — do not combine with other types |
 | PII / classification | `classifications=["PII"]`, `context_query` |
 | Glossary terms in placement | `object_type=glossary`, `domain_name`, optional `category_name` |
 | Assets linked to domain terms | `object_type=oetable`, `domain_name` |
@@ -147,6 +148,7 @@ OvalEdge **catalog ACL** grants (metadata read/write, data permissions) — **no
 | Data Products | `dp_product` | Includes unpublished |
 | Glossary Domains | `oeglobaldomain` | Search alone |
 | Story Zones | `storyzone` | Search alone |
+| Report Groups | `oedomain` | Search alone (aliases: `reportgroup`); not ES-indexed |
 | Data Stories | `oestory` | Access inherited from parent Story Zone — present `inheritedFrom` |
 
 When the user names a catalog asset, call `search_catalog_assets` first, then pass `object_id` and `object_type` from the chosen hit.

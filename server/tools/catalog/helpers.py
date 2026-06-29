@@ -56,7 +56,8 @@ _DESC_SEARCH = classify_tool_desc(
     '3) "CDE columns" → object_type="oecolumn", critical_data_element=["Yes"]; '
     "then assess_cde_dq.\n\n"
     "object_type: one catalog type or omit for all — allowlist in docs://ovaledge/asset_types. "
-    "JDBC-backed exclusive types (use alone): dp_domain, dp_product, oeglobaldomain, storyzone.\n\n"
+    "JDBC-backed exclusive types (use alone): dp_domain, dp_product, oeglobaldomain, "
+    "storyzone, oedomain.\n\n"
     "More filter combinations and examples: docs://ovaledge/mcp_workflows (Catalog search).\n\n"
     "Each hit includes objectId, objectType, navLink, redirectUrl. For oestory hits, call "
     "lookup_datastory for full narrative — do not answer from search snippets alone."
@@ -70,9 +71,9 @@ _DESC_DETAILS = classify_tool_desc(
     "Exactly one lookup mode: (1) fully_qualified_name alone, OR "
     "(2) object_id AND object_type together. Never mix FQN with id/type.\n\n"
     "For **dp_domain** (Data Domains), **dp_product** (Data Products), **oeglobaldomain** "
-    "(glossary Domains), and **storyzone** (Story Zones), use object_id + object_type from "
-    "search_catalog_assets hits; FQN lookup is not supported. Details are resolved from "
-    "the database and wiki when no ES document exists.\n\n"
+    "(glossary Domains), **storyzone** (Story Zones), and **oedomain** (Report Groups), use "
+    "object_id + object_type from search_catalog_assets hits; FQN lookup is not supported. "
+    "Details are resolved from the database and wiki when no ES document exists.\n\n"
     "object_type must be one of: "
     + MCP_CATALOG_OBJECT_TYPES_DOC
     + ".\n\n"

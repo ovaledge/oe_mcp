@@ -1465,8 +1465,9 @@ async def _invoke_update_governance_roles(
         dict[str, str | None] | None,
         Field(
             description=(
-                "Map of role -> user identifier. Value is a user (assign/update) or null "
-                "(remove). Keys: owner, steward, custodian, governance_role_4/5/6."
+                "Map of role -> user identifier. Each value must be a non-empty user/team id "
+                "(assign/update); a governance role cannot be cleared or set to null/empty. "
+                "Keys: owner, steward, custodian, governance_role_4/5/6."
             ),
             default=None,
         ),
