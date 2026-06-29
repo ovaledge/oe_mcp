@@ -2251,7 +2251,6 @@ class TestUpdateGovernanceRoles:
             object_id=1,
             object_type="oetable",
             role_updates={"owner": None},
-            create_confirmed_by_user=True,
         )
         assert out["status_code"] == 400
         assert "cannot be empty/none" in out["error"].lower()
@@ -2266,7 +2265,6 @@ class TestUpdateGovernanceRoles:
             object_id=1,
             object_type="oetable",
             role_updates={"steward": "   "},
-            create_confirmed_by_user=True,
         )
         assert out["status_code"] == 400
         assert "cannot be empty/none" in out["error"].lower()
