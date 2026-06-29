@@ -60,6 +60,7 @@ MCP_CATALOG_OBJECT_TYPES = frozenset(
         "oeglobaldomain",
         "storyzone",
         "dp_domain",
+        "oedomain",
         "oestory",
     }
 )
@@ -163,7 +164,7 @@ MCP_DAA_SCOPE_DOC = (
 )
 
 # Optional on glossary-terms and tags (Spring default 20).
-MCP_GLOSSARY_TAGS_LIMIT_DEFAULT = 20
+MCP_GLOSSARY_TAGS_LIMIT_DEFAULT = 25
 MCP_GLOSSARY_TAGS_LIMIT_MAX = 100
 MCP_PATH_UPDATE_ASSET_DESCRIPTIONS = "/api/v1/mcp/update-asset-descriptions"
 MCP_PATH_UPDATE_CDE_ASSOCIATIONS = "/api/v1/mcp/update-cde-associations"
