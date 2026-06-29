@@ -105,8 +105,17 @@ def register(mcp: FastMCP) -> None:
             Field(
                 description=(
                     "Custom field label/key to use as business description only when the user "
-                    "explicitly names it in the prompt. Applied after object and term "
-                    "descriptions are checked."
+                    "explicitly names it in the prompt."
+                ),
+                default=None,
+            ),
+        ] = None,
+        description_term_name: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Glossary term name to use as business description only when the user "
+                    "explicitly names it in the prompt."
                 ),
                 default=None,
             ),
@@ -114,7 +123,11 @@ def register(mcp: FastMCP) -> None:
     ) -> dict[str, Any]:
         """CDE / column DQ assessment (see MCP tool description)."""
         return await _invoke_assess_cde_dq(
-            discover_cde_columns, objects, limit, description_custom_field_name
+            discover_cde_columns,
+            objects,
+            limit,
+            description_custom_field_name,
+            description_term_name,
         )
 
     @mcp.tool(description=_DESC_ASSOCIATE_DQ_RULE_OBJECTS)
@@ -195,8 +208,18 @@ def register(mcp: FastMCP) -> None:
             str | None,
             Field(
                 description=(
-                    "Custom field label/key from the user's prompt when object and term "
-                    "descriptions are empty."
+                    "Custom field label/key from the user's prompt when they name a field "
+                    "instead of the catalog description."
+                ),
+                default=None,
+            ),
+        ] = None,
+        description_term_name: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Glossary term name from the user's prompt when they name a term "
+                    "instead of the catalog description."
                 ),
                 default=None,
             ),
@@ -210,6 +233,7 @@ def register(mcp: FastMCP) -> None:
             prefer_existing_rule,
             skip_duplicate_function_on_object,
             description_custom_field_name,
+            description_term_name,
         )
 
 
@@ -244,12 +268,17 @@ async def _invoke_assess_cde_dq(
     objects: list[dict[str, Any]] | None,
     limit: int,
     description_custom_field_name: str | None = None,
+    description_term_name: str | None = None,
 ) -> dict[str, Any]:
     err = validate_assess_cde_dq_args(discover_cde_columns, objects)
     if err is not None:
         return err
     payload = build_assess_cde_dq_payload(
-        discover_cde_columns, objects, limit, description_custom_field_name
+        discover_cde_columns,
+        objects,
+        limit,
+        description_custom_field_name,
+        description_term_name,
     )
     if "error" in payload:
         return payload
@@ -293,6 +322,7 @@ async def _invoke_create_dq_rules(
     prefer_existing_rule: bool,
     skip_duplicate_function_on_object: bool,
     description_custom_field_name: str | None = None,
+    description_term_name: str | None = None,
 ) -> dict[str, Any]:
     err = validate_create_dq_rules_args(discover_cde_columns, objects)
     if err is not None:
@@ -304,6 +334,7 @@ async def _invoke_create_dq_rules(
         prefer_existing_rule,
         skip_duplicate_function_on_object,
         description_custom_field_name,
+        description_term_name,
     )
     if "error" in payload:
         return payload

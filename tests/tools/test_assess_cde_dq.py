@@ -71,6 +71,18 @@ class TestAssessCdeDq:
         assert "search_catalog_assets" in desc
         assert "associate_dq_rule_objects" in desc
         assert "description_custom_field_name" in desc
+        assert "description_term_name" in desc
         assert "descriptionSource" in desc
+        assert "never used as automatic fallbacks" in desc or "no automatic glossary" in desc
         assert "Read-only" in desc
         assert MCP_PATH_ASSESS_CDE_DQ in desc
+
+    def test_build_payload_includes_description_term_name(self) -> None:
+        payload = dataquality_helpers.build_assess_cde_dq_payload(
+            False,
+            [{"objectId": 1, "objectType": "oecolumn"}],
+            10,
+            description_term_name=" Net Revenue ",
+        )
+        assert payload["descriptionTermName"] == "Net Revenue"
+        assert "descriptionCustomFieldName" not in payload

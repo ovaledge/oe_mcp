@@ -34,13 +34,9 @@ _DESC_ASSESS_CDE_DQ = classify_tool_desc(
     "associatedTermDescriptions, recommendedFunction (or Not Identified), "
     "recommendedRule (or Not Available), associatedToDqRule, objectRedirectUrl, "
     "and dqRuleRedirectUrl.\n\n"
-    "Description resolution order (server-side):\n"
-    "1. Object/catalog description when present.\n"
-    "2. Associated glossary term description(s) when object description is empty.\n"
-    "3. Named custom field only when the user explicitly requests it — pass "
-    "description_custom_field_name with the field label/key the user named.\n"
-    "4. When still unavailable, descriptionMessage explains object id/type, term "
-    "status, and lists availableCustomFields for the user to choose from.\n\n"
+    "Description routing (server): default object/catalog description; pass "
+    "description_term_name or description_custom_field_name only when the user names "
+    "a term or field (no automatic glossary/custom-field fallback).\n\n"
     "**Not** associate_dq_rule_objects or create_dq_rules — those write data quality rules; "
     "use this tool first for read-only recommendations, then writes only after user approval.\n\n"
     "Read-only. Returns validation errors when objects is empty and discover is false; "
@@ -81,7 +77,7 @@ _DESC_CREATE_DQ_RULES = classify_tool_desc(
     "**Not** associate_dq_rule_objects — use that when the data quality rule id "
     "is already known.\n\n"
     "**discover_cde_columns** / **objects** / **limit** / "
-    "**description_custom_field_name**: same as assess_cde_dq.\n\n"
+    "**description_term_name** / **description_custom_field_name**: same as assess_cde_dq.\n\n"
     "**prefer_existing_rule** (default true): associate when a recommended rule exists.\n\n"
     "**skip_duplicate_function_on_object** (default true): skip if object already has a "
     "rule for the same function type.\n\n"
@@ -154,6 +150,7 @@ def build_assess_cde_dq_payload(
     objects: list[dict[str, Any]] | None,
     limit: int,
     description_custom_field_name: str | None = None,
+    description_term_name: str | None = None,
 ) -> dict[str, Any]:
     capped = min(max(limit, 1), MCP_DQ_ASSESS_LIMIT_MAX)
     payload: dict[str, Any] = {
@@ -163,6 +160,9 @@ def build_assess_cde_dq_payload(
     field_name = strip_or_none_description_field(description_custom_field_name)
     if field_name is not None:
         payload["descriptionCustomFieldName"] = field_name
+    term_name = strip_or_none_description_field(description_term_name)
+    if term_name is not None:
+        payload["descriptionTermName"] = term_name
     if not objects:
         return payload
     api_objects: list[dict[str, Any]] = []
@@ -345,9 +345,14 @@ def build_create_dq_rules_payload(
     prefer_existing_rule: bool,
     skip_duplicate_function_on_object: bool,
     description_custom_field_name: str | None = None,
+    description_term_name: str | None = None,
 ) -> dict[str, Any]:
     built = build_assess_cde_dq_payload(
-        discover_cde_columns, objects, limit, description_custom_field_name
+        discover_cde_columns,
+        objects,
+        limit,
+        description_custom_field_name,
+        description_term_name,
     )
     if "error" in built:
         return built
@@ -359,6 +364,8 @@ def build_create_dq_rules_payload(
     }
     if built.get("descriptionCustomFieldName"):
         payload["descriptionCustomFieldName"] = built["descriptionCustomFieldName"]
+    if built.get("descriptionTermName"):
+        payload["descriptionTermName"] = built["descriptionTermName"]
     if built.get("objects"):
         payload["objects"] = built["objects"]
     return payload
