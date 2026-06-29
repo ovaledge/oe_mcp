@@ -246,10 +246,12 @@ Invoke by name from the MCP client when supported. Each prompt returns instructi
 | `create_governance_tag` | Guided `create_tag` (secure/open) with confirm gate |
 | `document_asset_descriptions` | Draft + user confirm → `update_asset_descriptions` |
 | `assign_governance_roles` | Resolve target → confirm → `update_governance_roles` |
+| `assess_cde_dq_coverage` | CDE assess → lookup → associate / create_dq_rules with confirm gate |
+| `create_custom_sql_dq_workflow` | Custom SQL path: generate → validate → create_sql_dq_rule (confirm gates) |
 
 ## Human confirmation before write (MCP-only)
 
-`create_glossary_term`, `create_tag`, `update_asset_descriptions`, `update_governance_roles`, `update_custom_field_value`, `update_cde_associations`, `associate_dq_rule_objects`, and `create_dq_rules` require **`write_confirmed_by_user=true`** on the call that performs the OvalEdge POST (unless `dry_run=true` on update tools). Earlier calls return **`confirm_create`** or **`confirm_update`** previews (`doNotCreate` / `doNotUpdate`) with `formattedResponse` and **`confirmationToken`** — the agent must show them and wait for explicit user approval.
+`create_glossary_term`, `create_tag`, `update_asset_descriptions`, `update_governance_roles`, `update_custom_field_value`, `update_cde_associations`, `associate_dq_rule_objects`, `create_dq_rules`, `validate_dq_queries`, and `create_sql_dq_rule` require **`write_confirmed_by_user=true`** on the call that performs the OvalEdge POST (unless `dry_run=true` on update tools). Earlier calls return **`confirm_create`** or **`confirm_update`** previews (`doNotCreate` / `doNotUpdate`) with `formattedResponse` and **`confirmationToken`** — the agent must show them and wait for explicit user approval.
 
 This gate is enforced in the MCP server only; **no OvalEdge backend change** is required.
 
@@ -264,7 +266,10 @@ See also: [glossary_guide](glossary_guide), [tags_guide](tags_guide), [data_stor
 | Resolve existing rule | `lookup_dq_rule` | DQ rules are not in catalog search |
 | Link to data quality rule | `associate_dq_rule_objects` | Requires `dqrule_id` from assessment or lookup; **confirm gate** (`write_confirmed_by_user`) |
 | Create + associate | `create_dq_rules` | Re-assesses internally; prefer existing rule or auto-create when criteria sufficient; **confirm gate** |
+| Generate custom SQL | `generate_dq_queries` | After `assess_cde_dq` when workflow is `custom_sql`; read-only POST |
+| Validate custom SQL | `validate_dq_queries` | Executes SELECT on connection; **confirm gate** (`write_confirmed_by_user`) |
+| Create custom SQL rule | `create_sql_dq_rule` | After validate when `canCreateRule`; **confirm gate** (`write_confirmed_by_user`) |
 
-**Workflow prompt:** `assess_cde_dq_coverage` (pass `scope` = user question or domain name).
+**Workflow prompts:** `assess_cde_dq_coverage` (pass `scope` = user question or domain name); `create_custom_sql_dq_workflow` for the full custom-SQL path.
 
 Read-only path: search → `assess_cde_dq` only. For writes, call without `write_confirmed_by_user` for a preview, then re-call with `write_confirmed_by_user=true` and `confirmation_token` after explicit user approval (same pattern as glossary/tag governed writes).

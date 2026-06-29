@@ -10,6 +10,18 @@ from unittest.mock import AsyncMock
 import pytest
 from fastmcp import FastMCP
 
+from server.constants import (
+    TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
+    TOOL_CREATE_DQ_RULES,
+    TOOL_CREATE_GLOSSARY_TERM,
+    TOOL_CREATE_SQL_DQ_RULE,
+    TOOL_CREATE_TAG,
+    TOOL_UPDATE_ASSET_DESCRIPTIONS,
+    TOOL_UPDATE_CDE_ASSOCIATIONS,
+    TOOL_UPDATE_CUSTOM_FIELD_VALUE,
+    TOOL_UPDATE_GOVERNANCE_ROLES,
+    TOOL_VALIDATE_DQ_QUERIES,
+)
 from server.tools import catalog, dataquality, governance
 from server.tools.common.confirm_gate import compute_confirmation_token
 from tests.helpers import get_tool_fn
@@ -41,7 +53,7 @@ async def _open_tag_preview_setup(mock_oe_client: AsyncMock) -> None:
 
 STALE_TOKEN_CASES: tuple[StaleTokenCase, ...] = (
     StaleTokenCase(
-        tool_name="update_asset_descriptions",
+        tool_name=TOOL_UPDATE_ASSET_DESCRIPTIONS,
         register=catalog.register,
         preview_kwargs={
             "object_id": 42,
@@ -52,7 +64,7 @@ STALE_TOKEN_CASES: tuple[StaleTokenCase, ...] = (
         tamper_kwargs={"description_text": "Tampered business text"},
     ),
     StaleTokenCase(
-        tool_name="update_cde_associations",
+        tool_name=TOOL_UPDATE_CDE_ASSOCIATIONS,
         register=catalog.register,
         preview_kwargs={
             "targets": [{"object_id": 3337, "object_type": "oeschema"}],
@@ -62,7 +74,7 @@ STALE_TOKEN_CASES: tuple[StaleTokenCase, ...] = (
         tamper_kwargs={"action": "No"},
     ),
     StaleTokenCase(
-        tool_name="create_glossary_term",
+        tool_name=TOOL_CREATE_GLOSSARY_TERM,
         register=governance.register,
         preview_kwargs={
             "term_name": "Revenue",
@@ -74,7 +86,7 @@ STALE_TOKEN_CASES: tuple[StaleTokenCase, ...] = (
         tamper_kwargs={"description": "Tampered definition"},
     ),
     StaleTokenCase(
-        tool_name="update_governance_roles",
+        tool_name=TOOL_UPDATE_GOVERNANCE_ROLES,
         register=governance.register,
         preview_kwargs={
             "object_id": 99,
@@ -84,7 +96,7 @@ STALE_TOKEN_CASES: tuple[StaleTokenCase, ...] = (
         tamper_kwargs={"role_updates": {"owner": "alice"}},
     ),
     StaleTokenCase(
-        tool_name="update_custom_field_value",
+        tool_name=TOOL_UPDATE_CUSTOM_FIELD_VALUE,
         register=governance.register,
         preview_kwargs={
             "object_id": 99,
@@ -96,7 +108,7 @@ STALE_TOKEN_CASES: tuple[StaleTokenCase, ...] = (
         },
     ),
     StaleTokenCase(
-        tool_name="associate_dq_rule_objects",
+        tool_name=TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
         register=dataquality.register,
         preview_kwargs={
             "dqrule_id": 42,
@@ -105,13 +117,13 @@ STALE_TOKEN_CASES: tuple[StaleTokenCase, ...] = (
         tamper_kwargs={"dqrule_id": 99},
     ),
     StaleTokenCase(
-        tool_name="create_dq_rules",
+        tool_name=TOOL_CREATE_DQ_RULES,
         register=dataquality.register,
         preview_kwargs={"discover_cde_columns": True},
         tamper_kwargs={"prefer_existing_rule": False},
     ),
     StaleTokenCase(
-        tool_name="validate_dq_queries",
+        tool_name=TOOL_VALIDATE_DQ_QUERIES,
         register=dataquality.register,
         preview_kwargs={
             "connection_id": 1,
@@ -123,7 +135,7 @@ STALE_TOKEN_CASES: tuple[StaleTokenCase, ...] = (
         tamper_kwargs={"rule_query": "SELECT 9"},
     ),
     StaleTokenCase(
-        tool_name="create_sql_dq_rule",
+        tool_name=TOOL_CREATE_SQL_DQ_RULE,
         register=dataquality.register,
         preview_kwargs={
             "objects": [{"objectId": 101, "objectType": "oecolumn"}],
@@ -152,7 +164,7 @@ class TestGovernedWriteStaleConfirmationToken:
 
         if case.setup is not None:
             await case.setup(mock_oe_client)
-            if case.tool_name == "create_tag":
+            if case.tool_name == TOOL_CREATE_TAG:
                 await fn(tag_name="Logistics")
 
         preview = await fn(**case.preview_kwargs)
@@ -186,7 +198,7 @@ class TestGovernedWriteStaleConfirmationToken:
 
         if case.setup is not None:
             await case.setup(mock_oe_client)
-            if case.tool_name == "create_tag":
+            if case.tool_name == TOOL_CREATE_TAG:
                 await fn(tag_name="Logistics")
 
         await fn(**case.preview_kwargs)
@@ -204,7 +216,7 @@ class TestCreateTagStaleConfirmationToken:
         await _open_tag_preview_setup(mock_oe_client)
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
-        fn = await get_tool_fn(mcp, "create_tag")
+        fn = await get_tool_fn(mcp, TOOL_CREATE_TAG)
         await fn(tag_name="Logistics")
         preview = await fn(
             tag_name="Logistics",
@@ -229,7 +241,7 @@ class TestCreateTagStaleConfirmationToken:
         await _open_tag_preview_setup(mock_oe_client)
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
-        fn = await get_tool_fn(mcp, "create_tag")
+        fn = await get_tool_fn(mcp, TOOL_CREATE_TAG)
         await fn(tag_name="Logistics")
         await fn(
             tag_name="Logistics",

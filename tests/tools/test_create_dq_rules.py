@@ -74,7 +74,8 @@ class TestCreateDqRules:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
         fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
-        await fn(
+        await invoke_write_confirmed(
+            fn,
             objects=[{"objectId": 42, "objectType": "oecolumn"}],
             supplemental_criteria_text="Success criteria: equal to 300",
         )
@@ -87,6 +88,27 @@ class TestCreateDqRules:
                 "limit": MCP_DQ_ASSESS_LIMIT_DEFAULT,
                 "objects": [{"objectId": 42, "objectType": "oecolumn"}],
                 "supplementalCriteriaText": "Success criteria: equal to 300",
+            },
+        )
+
+    async def test_description_term_name_forwarded(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.return_value = {"rows": []}
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
+        await invoke_write_confirmed(
+            fn,
+            discover_cde_columns=True,
+            description_term_name=" Net Revenue ",
+        )
+        mock_oe_client.post.assert_called_once_with(
+            MCP_PATH_CREATE_DQ_RULES,
+            {
+                "discoverCdeColumns": True,
+                "preferExistingRule": True,
+                "skipDuplicateFunctionOnObject": True,
+                "limit": MCP_DQ_ASSESS_LIMIT_DEFAULT,
+                "descriptionTermName": "Net Revenue",
             },
         )
 

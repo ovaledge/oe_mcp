@@ -287,7 +287,8 @@ def register(mcp: FastMCP) -> None:
                 description=(
                     "Final create gate: true only after the user explicitly approved "
                     "the confirm_create preview. Re-call with the same discover_cde_columns, "
-                    "objects, limit, flags, and optional description_custom_field_name."
+                    "objects, limit, flags, and optional description_term_name or "
+                    "description_custom_field_name."
                 ),
                 default=False,
             ),

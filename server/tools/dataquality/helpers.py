@@ -393,11 +393,14 @@ def format_create_dq_rules_confirmation_preview(body: dict[str, Any]) -> dict[st
     skip_dup = body.get("skipDuplicateFunctionOnObject")
     limit = body.get("limit")
     field_name = body.get("descriptionCustomFieldName")
+    term_name = body.get("descriptionTermName")
     object_lines = _summarize_dq_object_refs(body.get("objects"))
     objects_block = "\n".join(object_lines) if object_lines else "- (discover mode or empty)"
     field_line = ""
     if isinstance(field_name, str) and field_name.strip():
         field_line = f"\n- **description_custom_field_name:** {field_name.strip()}"
+    if isinstance(term_name, str) and term_name.strip():
+        field_line += f"\n- **description_term_name:** {term_name.strip()}"
     preview = {
         "ok": True,
         "awaitingUserConfirmation": True,
@@ -415,7 +418,7 @@ def format_create_dq_rules_confirmation_preview(body: dict[str, Any]) -> dict[st
             "Ask the user to confirm. After they approve, call again with "
             "`write_confirmed_by_user=true`, `confirmation_token` from this preview, "
             "and the same discover_cde_columns, objects, limit, flags, and optional "
-            "description_custom_field_name."
+            "description_term_name or description_custom_field_name."
         ),
         "agentInstruction": _DQ_CREATE_CONFIRM_INSTRUCTION,
         "pendingCreate": body,

@@ -918,6 +918,7 @@ def golden_dq_coverage_workflow() -> ConversationalTestCase:
                             "objects": [
                                 {"object_id": 10, "object_type": "oetable"},
                             ],
+                            "description_term_name": "Net Revenue",
                         },
                         result=tool_call_result(
                             {
