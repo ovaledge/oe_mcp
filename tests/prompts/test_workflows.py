@@ -210,7 +210,8 @@ class TestMcpServerInstructions:
         assert TOOL_GET_USER_OBJECT_ACCESS in instructions
         assert "write_confirmed_by_user" in instructions
         assert "never show ovaledge://" in instructions
-        assert "navlink" in instructions or "redirecturl" in instructions
+        navlink = "navlink" in instructions or "redirecturl" in instructions
+        assert navlink
         assert MCP_SERVER_INSTRUCTION_TOOL_NAMES <= MCP_TOOL_NAMES
 
     def test_instructions_platform_name_alone_does_not_skip_disambiguation(self) -> None:
@@ -222,6 +223,16 @@ class TestMcpServerInstructions:
         assert "snowflake" in instructions
         assert "redshift" in instructions
         assert "1" in instructions and "2" in instructions
+
+    def test_instructions_require_mcp_workflows_resource(self) -> None:
+        from server.app import create_mcp
+        from server.constants import DOCS_RESOURCE_URI_PREFIX
+
+        mcp = create_mcp()
+        instructions = (mcp.instructions or "").lower()
+        assert f"{DOCS_RESOURCE_URI_PREFIX}/mcp_workflows" in instructions
+        assert "session start" in instructions
+        assert "routing guide" in instructions
 
 
 class TestResolveObjectAccessPrompt:

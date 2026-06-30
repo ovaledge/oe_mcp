@@ -6,8 +6,9 @@ from fastmcp import FastMCP
 from fastmcp.client import Client
 
 from server.constants import DOCS_RESOURCE_URI_PREFIX
-from server.docs.loader import DOCS_DIR
+from server.docs.loader import DOCS_DIR, read_doc_markdown
 from server.docs.register import register as register_doc_resources
+from server.mcp_surface import MCP_TOOL_NAMES, MCP_WORKFLOW_PROMPT_NAMES
 
 
 class TestStaticDocResources:
@@ -50,3 +51,13 @@ class TestStaticDocResources:
         assert "Catalog object access" in text
         assert "Update asset descriptions" in text
         assert "dp_domain" in text
+
+    def test_mcp_workflows_documents_registered_surface(self) -> None:
+        """Routing guide must list every tool and workflow prompt from mcp_surface."""
+        text = read_doc_markdown("mcp_workflows")
+        missing_tools = sorted(name for name in MCP_TOOL_NAMES if f"`{name}`" not in text)
+        missing_prompts = sorted(
+            name for name in MCP_WORKFLOW_PROMPT_NAMES if f"`{name}`" not in text
+        )
+        assert not missing_tools, f"mcp_workflows.md missing tools: {missing_tools}"
+        assert not missing_prompts, f"mcp_workflows.md missing prompts: {missing_prompts}"

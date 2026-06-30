@@ -5,6 +5,7 @@ from fastmcp import FastMCP
 from server.branding import mcp_server_icons
 from server.config import settings
 from server.constants import (
+    DOCS_RESOURCE_URI_PREFIX,
     MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC,
     MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC,
     TOOL_GET_USER_OBJECT_ACCESS,
@@ -14,6 +15,8 @@ from server.constants import (
     TOOL_SOURCE_SYSTEM_ACCESS,
 )
 from server.mcp import register_all
+
+_MCP_WORKFLOWS_RESOURCE_URI = f"{DOCS_RESOURCE_URI_PREFIX}/mcp_workflows"
 
 # Tool names embedded in server instructions (tests assert ⊆ MCP_TOOL_NAMES).
 MCP_SERVER_INSTRUCTION_TOOL_NAMES: frozenset[str] = frozenset(
@@ -37,8 +40,10 @@ _MCP_SERVER_INSTRUCTIONS = (
     "Ambiguous who-has-access: invoke resolve_object_access, present the 1/2 choice, and "
     "call no access tools (including search_catalog_assets) until the user replies. "
     "Use MCP tools for catalog discovery, governance lookups, native source access (RDAM), "
-    "and governed writes. Read each tool's description before calling; for multi-step playbooks "
-    "use workflow prompts or the docs://ovaledge/mcp_workflows resource. "
+    "and governed writes. At session start and before multi-step workflows, governed writes, "
+    f"RDAM, catalog ACL, or DQ work, read MCP resource {_MCP_WORKFLOWS_RESOURCE_URI} "
+    "(agent routing guide). Read each tool's description before calling; for multi-step "
+    "playbooks use workflow prompts listed in that guide. "
     "Present formattedResponse from tools to the user when provided. "
     "Governed writes require write_confirmed_by_user=true only after the user approves "
     "a confirm_create or confirm_update preview. "

@@ -1,43 +1,84 @@
 # MCP workflows, tools, and resources
 
-This document describes how the OvalEdge MCP server exposes **tools**, **resources**, and **workflow prompts** to agents. It is served as a static doc resource at `docs://ovaledge/mcp_workflows` (alongside other files in `server/docs/`).
+This document is the **agent routing guide** for the OvalEdge MCP server. It is served as a static MCP resource at **`docs://ovaledge/mcp_workflows`** (alongside other files in `server/docs/`).
+
+**Agents must read this resource** at session start and before multi-step workflows, governed writes, native source access (RDAM), catalog ACL checks, or DQ operations. Server instructions (`server/app.py`) and tool descriptions link here; workflow prompts assume you have loaded this guide or an equivalent section.
+
+Canonical inventories (used by tests): **`server/mcp_surface.py`** — `MCP_TOOL_NAMES` (25 tools), `MCP_WORKFLOW_PROMPT_NAMES` (20 prompts), `MCP_OVALEDGE_RESOURCE_TEMPLATES` (5 object-detail templates).
 
 There is **no MCP protocol “tool priority” field**. Routing is guided by:
 
 1. **Server instructions** (`server/app.py`) — global behavior for every session  
-2. **Tool descriptions** — when to call each tool (budget enforced by `tests/tools/test_tool_description_budget.py`; classification via `classify_tool_desc()`)
-3. **Workflow prompts** (`server/prompts/workflows/`) — optional multi-step playbooks  
-4. **Client rules** (e.g. Cursor project rules) — host-specific, outside this repo  
+2. **This document** (`docs://ovaledge/mcp_workflows`) — full routing index and playbooks  
+3. **Tool descriptions** — per-tool when-to-call (budget: `tests/tools/test_tool_description_budget.py`)  
+4. **Workflow prompts** (`server/prompts/workflows/`) — optional multi-step playbooks  
+5. **Domain guides** — `docs://ovaledge/glossary_guide`, `tags_guide`, `rdam_source_access`, etc.  
+6. **Client rules** (e.g. Cursor project rules) — host-specific, outside this repo  
 
 ## Tool routing (quick reference)
 
 | User intent | Start with |
 |-------------|------------|
 | Find tables, files, reports, columns | `search_catalog_assets` → `catalog_asset_details` |
-| Org policies, playbooks, narrative knowledge in data stories | `lookup_datastory` (`content_query` = question) |
-| OvalEdge product how-to (UI, features) | `search_platform_docs` |
-| Business term definition | `lookup_glossary_term` |
-| Tag meaning or hierarchy | `lookup_tags` |
-| DQ rule lookup | `lookup_dq_rule` |
+| Rich metadata for one catalog object | `catalog_asset_details` (after search or when `object_id` known) |
+| Org policies, playbooks, narrative knowledge in data stories | `lookup_datastory` (`content_query` = question); prompt `organizational_knowledge` |
+| OvalEdge product how-to (UI, features) | `search_platform_docs`; prompt `platform_help` |
+| Business term definition | `lookup_glossary_term`; prompt `explain_business_term` |
+| Tag meaning or hierarchy | `lookup_tags`; prompt `explain_tag` |
+| DQ rule lookup | `lookup_dq_rule`; prompt `explain_dq_rule` |
 | CDE columns / DQ function & rule recommendations | `assess_cde_dq` (after `search_catalog_assets` or `discover_cde_columns=true`) |
 | Associate objects to data quality rule | `associate_dq_rule_objects` (after `assess_cde_dq` / `lookup_dq_rule`) |
 | Auto-create or associate DQ rules for CDE columns | `create_dq_rules` (assess + create/associate in one call) |
 | Generate custom SQL DQ queries | `generate_dq_queries` (after `assess_cde_dq` when workflow is custom_sql) |
 | Validate custom SQL DQ queries | `validate_dq_queries` (confirm gate; executes SELECT on connection) |
 | Create custom SQL DQ rule | `create_sql_dq_rule` (confirm gate; after validate when canCreateRule) |
-| CDE / custom SQL DQ workflow (prompt) | `create_custom_sql_dq_workflow` chains assess, associate, create_rules, generate, validate, create |
-| Metadata drift between crawls | `metadata_changes_between_crawls` |
-| Native Redshift/Snowflake/Tableau grants | `source_system_access` |
-| Lineage | `asset_lineage` |
+| CDE / custom SQL DQ workflow (prompt) | `create_custom_sql_dq_workflow` or `assess_cde_dq_coverage` |
+| Metadata drift between crawls | `metadata_changes_between_crawls`; prompt `metadata_drift` |
+| Native Redshift/Snowflake/Tableau grants | `source_system_access`; prompts `native_source_access`, `dam_object_browse` |
+| OvalEdge catalog ACL (user/role on catalog objects) | `get_user_object_access`; prompt `catalog_object_access` |
+| Lineage | `asset_lineage`; prompt `trace_data_lineage` |
 | Column stats | `column_profile_statistics` |
-| Table relationships | `table_entity_relationships` |
-| Create glossary term | `create_glossary_term` (guided; human confirms) |
-| Create tag | `create_tag` (guided; human confirms) |
-| Update descriptions | `update_asset_descriptions` |
-| Update governance roles | `update_governance_roles` |
-| Update custom / additional field | `search_catalog_assets` (if needed) → GET custom-fields → `update_custom_field_value` |
+| Table relationships | `table_entity_relationships`; prompt `find_related_assets` |
+| Trust / certification scorecard | prompt `trust_assessment` |
+| Domain overview (terms, tables, stories) | prompt `explore_data_domain` |
+| Create glossary term | `create_glossary_term` (guided; human confirms); prompt `create_business_glossary_term` |
+| Create tag | `create_tag` (guided; human confirms); prompt `create_governance_tag` |
+| Update descriptions | `update_asset_descriptions`; prompt `document_asset_descriptions` |
+| Update governance roles | `update_governance_roles`; prompt `assign_governance_roles` |
+| Update CDE flag on columns | `update_cde_associations` (confirm gate) |
+| Update custom / additional field | `search_catalog_assets` (if needed) → `update_custom_field_value` (confirm gate) |
 
 **Data stories vs platform docs:** `lookup_datastory` searches **your organization’s** onboarded stories (`oestory`). `search_platform_docs` searches **OvalEdge product** documentation. Do not use platform docs for internal policy questions.
+
+## Registered MCP tools (inventory)
+
+| Domain | Tool | Governed write |
+|--------|------|----------------|
+| Catalog | `search_catalog_assets` | — |
+| Catalog | `catalog_asset_details` | — |
+| Catalog | `column_profile_statistics` | — |
+| Catalog | `table_entity_relationships` | — |
+| Catalog | `asset_lineage` | — |
+| Catalog | `metadata_changes_between_crawls` | — |
+| Catalog | `update_asset_descriptions` | confirm gate |
+| Catalog | `update_cde_associations` | confirm gate |
+| Governance | `lookup_glossary_term` | — |
+| Governance | `create_glossary_term` | confirm gate |
+| Governance | `lookup_tags` | — |
+| Governance | `create_tag` | confirm gate |
+| Governance | `lookup_datastory` | — |
+| Governance | `update_governance_roles` | confirm gate |
+| Governance | `update_custom_field_value` | confirm gate |
+| Data quality | `lookup_dq_rule` | — |
+| Data quality | `assess_cde_dq` | — |
+| Data quality | `associate_dq_rule_objects` | confirm gate |
+| Data quality | `create_dq_rules` | confirm gate |
+| Data quality | `generate_dq_queries` | — |
+| Data quality | `validate_dq_queries` | confirm gate |
+| Data quality | `create_sql_dq_rule` | confirm gate |
+| Access | `get_user_object_access` | — |
+| RDAM | `source_system_access` | — |
+| Docs | `search_platform_docs` | — |
 
 ## Catalog search (`search_catalog_assets`)
 
@@ -195,11 +236,22 @@ Resources return JSON catalog documents from `GET /api/v1/mcp/object-details`. W
 | `ovaledge://governance/data-story/{object_id}` | `oestory` | `lookup_datastory` |
 | `ovaledge://governance/tag/{object_id}` | `oetag` | `lookup_tags` |
 
-Static platform markdown (this folder): `docs://ovaledge/{filename}` (e.g. `docs://ovaledge/glossary_guide`).
+Static platform markdown (this folder): `docs://ovaledge/{filename}`:
+
+| Resource URI | Topic |
+|--------------|--------|
+| `docs://ovaledge/mcp_workflows` | This routing guide (read first) |
+| `docs://ovaledge/overview` | OvalEdge product overview + MCP summary |
+| `docs://ovaledge/asset_types` | Catalog `object_type` allow-list |
+| `docs://ovaledge/glossary_guide` | Glossary create wizard |
+| `docs://ovaledge/tags_guide` | Tag create (OPEN/SECURE) wizard |
+| `docs://ovaledge/data_stories` | Data story lookup behavior |
+| `docs://ovaledge/governance_model` | Roles, DAA, governance concepts |
+| `docs://ovaledge/rdam_source_access` | Deep RDAM routing and disambiguation |
 
 ## Workflow prompts
 
-Invoke by name from the MCP client when supported. Each prompt returns instruction text that tells the agent which tools to call in order.
+Invoke by name from the MCP client when supported. Each prompt returns instruction text that tells the agent which tools to call in order. **20 prompts** registered (see `MCP_WORKFLOW_PROMPT_NAMES` in `server/mcp_surface.py`).
 
 ### Discovery
 
@@ -246,8 +298,16 @@ Invoke by name from the MCP client when supported. Each prompt returns instructi
 | `create_governance_tag` | Guided `create_tag` (secure/open) with confirm gate |
 | `document_asset_descriptions` | Draft + user confirm → `update_asset_descriptions` |
 | `assign_governance_roles` | Resolve target → confirm → `update_governance_roles` |
-| `assess_cde_dq_coverage` | CDE assess → lookup → associate / create_dq_rules with confirm gate |
-| `create_custom_sql_dq_workflow` | Custom SQL path: generate → validate → create_sql_dq_rule (confirm gates) |
+| `assess_cde_dq_coverage` | CDE assess → lookup → associate / `create_dq_rules` with confirm gate |
+| `create_custom_sql_dq_workflow` | Custom SQL path: `generate_dq_queries` → `validate_dq_queries` → `create_sql_dq_rule` |
+
+## Update CDE associations (`update_cde_associations`)
+
+Mark or unmark columns as Critical Data Elements on catalog objects. Resolve targets via `search_catalog_assets` first.
+
+**Confirm gate:** call without `write_confirmed_by_user` for `confirm_update` preview → user approval → re-call with `write_confirmed_by_user=true` and `confirmation_token` from the preview.
+
+Often used after `assess_cde_dq` when the user wants to change CDE coverage before running DQ workflows.
 
 ## Human confirmation before write (MCP-only)
 

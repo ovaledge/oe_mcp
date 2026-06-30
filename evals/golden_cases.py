@@ -22,6 +22,7 @@ from pydantic import AnyUrl
 from evals import golden_cases_coverage
 from evals.mcp_eval_helpers import ovaledge_eval_mcp_server, tool_call_result
 from server.constants import (
+    DOCS_RESOURCE_URI_PREFIX,
     TOOL_ASSET_LINEAGE,
     TOOL_CATALOG_ASSET_DETAILS,
     TOOL_GET_USER_OBJECT_ACCESS,
@@ -31,7 +32,10 @@ from server.constants import (
     TOOL_SOURCE_SYSTEM_ACCESS,
     TOOL_UPDATE_ASSET_DESCRIPTIONS,
 )
+from server.docs.loader import read_doc_markdown
 from server.tools.common.confirm_gate import compute_confirmation_token
+
+_MCP_WORKFLOWS_RESOURCE_URI = AnyUrl(f"{DOCS_RESOURCE_URI_PREFIX}/mcp_workflows")
 
 _DATA_DISCOVERY_PROMPT_TEXT = (
     "Help me find data for: 'churn metrics'\n\n"
@@ -437,6 +441,61 @@ def golden_mcp_use_native_source_access() -> LLMTestCase:
     )
 
 
+def golden_mcp_use_routing_guide_resource() -> LLMTestCase:
+    """Agent reads mcp_workflows resource before native source access (RDAM routing)."""
+    srv = ovaledge_eval_mcp_server(
+        tool_names=frozenset({TOOL_SOURCE_SYSTEM_ACCESS}),
+    )
+    workflows_text = read_doc_markdown("mcp_workflows")
+    resource_result = ReadResourceResult(
+        contents=[
+            TextResourceContents(
+                uri=_MCP_WORKFLOWS_RESOURCE_URI,
+                mimeType="text/markdown",
+                text=workflows_text,
+            )
+        ]
+    )
+    return LLMTestCase(
+        name="mcp_use_routing_guide_resource",
+        input="Who has native SELECT on prod_db.public.orders in Snowflake?",
+        actual_output=(
+            "I read docs://ovaledge/mcp_workflows first for RDAM routing, then called "
+            "source_system_access with query_direction=object_to_users, source_system=snowflake, "
+            "object_path=prod_db.public.orders, and object_type=table. I did not use "
+            "search_catalog_assets or get_user_object_access — native grants are RDAM-only."
+        ),
+        mcp_servers=[srv],
+        mcp_resources_called=[
+            MCPResourceCall(uri=_MCP_WORKFLOWS_RESOURCE_URI, result=resource_result),
+        ],
+        mcp_tools_called=[
+            MCPToolCall(
+                name=TOOL_SOURCE_SYSTEM_ACCESS,
+                args={
+                    "source_system": "snowflake",
+                    "query_direction": "object_to_users",
+                    "object_path": "prod_db.public.orders",
+                    "object_type": "table",
+                    "connection_id": 1000,
+                },
+                result=tool_call_result(
+                    {
+                        "grants": [
+                            {
+                                "objectPath": "prod_db.public.orders",
+                                "privileges": ["SELECT"],
+                                "grantMechanism": "role",
+                            }
+                        ],
+                        "summary": {"totalGrants": 1},
+                    }
+                ),
+            ),
+        ],
+    )
+
+
 def golden_mcp_use_platform_help() -> LLMTestCase:
     """Single-turn: platform_help prompt → search_platform_docs (not data stories)."""
     srv = ovaledge_eval_mcp_server(
@@ -705,6 +764,7 @@ def all_mcp_use_golden_fns() -> list[str]:
         "golden_mcp_use_datastory",
         "golden_mcp_use_organizational_knowledge_prompt",
         "golden_mcp_use_native_source_access",
+        "golden_mcp_use_routing_guide_resource",
         "golden_mcp_use_platform_help",
         "golden_mcp_use_catalog_object_access",
         *COVERAGE_MCP_USE_GOLDEN_FNS,
@@ -740,6 +800,7 @@ __all__ = [
     "golden_mcp_use_native_source_access",
     "golden_mcp_use_organizational_knowledge_prompt",
     "golden_mcp_use_platform_help",
+    "golden_mcp_use_routing_guide_resource",
     "golden_mcp_use_prompt_workflow",
     "golden_multi_turn_lineage_followup",
     "golden_task_completion_discovery",
