@@ -224,6 +224,16 @@ def register(mcp: FastMCP) -> None:
                 default=None,
             ),
         ] = None,
+        supplemental_criteria_text: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Success/input criteria from the user prompt when not in catalog metadata "
+                    "(e.g. 'Success criteria: equal to 300')."
+                ),
+                default=None,
+            ),
+        ] = None,
     ) -> dict[str, Any]:
         """Assess then create or associate DQ rules for CDE columns (see MCP tool description)."""
         return await _invoke_create_dq_rules(
@@ -234,6 +244,7 @@ def register(mcp: FastMCP) -> None:
             skip_duplicate_function_on_object,
             description_custom_field_name,
             description_term_name,
+            supplemental_criteria_text,
         )
 
 
@@ -323,6 +334,7 @@ async def _invoke_create_dq_rules(
     skip_duplicate_function_on_object: bool,
     description_custom_field_name: str | None = None,
     description_term_name: str | None = None,
+    supplemental_criteria_text: str | None = None,
 ) -> dict[str, Any]:
     err = validate_create_dq_rules_args(discover_cde_columns, objects)
     if err is not None:
@@ -335,6 +347,7 @@ async def _invoke_create_dq_rules(
         skip_duplicate_function_on_object,
         description_custom_field_name,
         description_term_name,
+        supplemental_criteria_text,
     )
     if "error" in payload:
         return payload
