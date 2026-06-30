@@ -69,6 +69,11 @@ _PROMPT_REQUIRED_TOOLS: dict[str, tuple[str, ...]] = {
         TOOL_SEARCH_DOCS,
     ),
     "native_source_access": (TOOL_SOURCE_SYSTEM_ACCESS,),
+    "resolve_object_access": (
+        TOOL_SOURCE_SYSTEM_ACCESS,
+        TOOL_SEARCH_CATALOG,
+        TOOL_GET_USER_OBJECT_ACCESS,
+    ),
     "dam_object_browse": (TOOL_SOURCE_SYSTEM_ACCESS,),
     "catalog_object_access": (TOOL_GET_USER_OBJECT_ACCESS, TOOL_SEARCH_CATALOG),
     "platform_help": (TOOL_SEARCH_DOCS,),

@@ -74,6 +74,7 @@ MCP_WORKFLOW_PROMPT_NAMES: frozenset[str] = frozenset(
         "organizational_knowledge",
         "platform_help",
         "metadata_drift",
+        "resolve_object_access",
         "native_source_access",
         "dam_object_browse",
         "catalog_object_access",

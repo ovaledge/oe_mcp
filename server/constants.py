@@ -344,6 +344,33 @@ MCP_CATALOG_OBJECT_ACCESS_OVERVIEW_DOC = (
     "name — they are not in catalog search. Data Domains, Data Products, glossary Domains, "
     "and Story Zones are resolved from the database when Elasticsearch has no document."
 )
+MCP_ACCESS_NATIVE_SIGNAL_KEYWORDS_DOC = (
+    "native, remote, source system access, source system, source, "
+    "data access management, DAM"
+)
+MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE = (
+    "OvalEdge has **two** different tools for “who has access” questions:\n\n"
+    "| Tool | What it answers |\n"
+    "|------|------------------|\n"
+    f"| **`{TOOL_SOURCE_SYSTEM_ACCESS}`** | **Native / remote** permissions crawled from "
+    "Redshift, Snowflake, or Tableau — what you see on the **DAM** (Data Access Management) "
+    "screen (e.g. SELECT, roles, groups). |\n"
+    f"| **`{TOOL_GET_USER_OBJECT_ACCESS}`** | **OvalEdge catalog ACL** on the **Security** "
+    "page — metadata read/write and data permission levels for OvalEdge users and roles. |\n\n"
+    "Your question does not mention native/remote/DAM/source-system access.\n\n"
+    "**Which do you want?**\n"
+    "1. **Native source access** — database/BI grants from Redshift, Snowflake, or Tableau\n"
+    "2. **OvalEdge catalog ACL** — permissions inside OvalEdge on a catalog asset\n\n"
+    "Reply with **1** or **2**, then I will call the matching tool."
+)
+MCP_ACCESS_DISAMBIGUATION_RULE_DOC = (
+    "For who-has-access / permission questions: if the user question includes none of these "
+    "signals (case-insensitive): "
+    + MCP_ACCESS_NATIVE_SIGNAL_KEYWORDS_DOC
+    + " — do **not** call source_system_access or get_user_object_access; show the "
+    "disambiguation message and wait for the user to pick **1** (native) or **2** (catalog ACL). "
+    "Workflow prompt: resolve_object_access."
+)
 MCP_CATALOG_OBJECT_ACCESS_DIRECTIONS = (
     "`user_to_object` — what access does user X have on object Y? "
     "`object_to_principals` — which users and roles have access on object Y?"
