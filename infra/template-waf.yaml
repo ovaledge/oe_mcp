@@ -1,0 +1,326 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: OvalEdge MCP Server — Remote MCP (container image + regional WAF IP allowlist)
+
+Parameters:
+  AuthMode:
+    Type: String
+    Default: remote
+    AllowedValues:
+      - remote
+      - remote_credentials
+    Description: >
+      remote = OAuth/OIDC Bearer per request; remote_credentials = X-OvalEdge-Credentials or Token + Secret headers.
+  OvalEdgeBaseUrl:
+    Type: String
+  OvalEdgeTokenExchangePath:
+    Type: String
+    Default: /api/user/token/generate
+  OvalEdgeMaxRetries:
+    Type: String
+    Default: "3"
+    AllowedPattern: "^[0-9]+$"
+    Description: Max retries for outbound OvalEdge HTTP (integer as string for SAM schema compatibility).
+  OAuthIssuer:
+    Type: String
+    Default: ""
+    Description: >
+      (AUTH_MODE=remote) Authorization Server issuer URL (must match JWT iss). Discovery loads
+      /.well-known/openid-configuration or oauth-authorization-server under this base.
+  OAuthAllowedIssuers:
+    Type: String
+    Default: ""
+    Description: >
+      Comma-separated additional trusted JWT iss values (e.g. Auth0 custom domain and *.auth0.com).
+  OAuthAudience:
+    Type: String
+    Default: ""
+    Description: (AUTH_MODE=remote) Resource identifier expected as access token aud claim
+  OvalEdgeForwardIdpToken:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >
+      If true, skip OvalEdge token/generate and forward the IdP access token to OvalEdge APIs.
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+  McpHttpStateless:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: >
+      Streamable HTTP stateless mode (default true for Lambda). Set false only if your MCP client
+      requires GET /mcp (SSE); adds session state in the worker.
+  LambdaArchitecture:
+    Type: String
+    Default: x86_64
+    AllowedValues:
+      - x86_64
+      - arm64
+    Description: >
+      Lambda CPU architecture. Default x86_64 matches most laptops and GitHub-hosted runners
+      (docker build / sam build --use-container). Use arm64 for Graviton cost savings; build with
+      docker buildx --platform linux/arm64 (or an arm64 host).
+  OvalEdgeHttpAuthScheme:
+    Type: String
+    Default: jwt
+    Description: >
+      Outbound OvalEdge API Authorization scheme (e.g. jwt, Bearer). Must match what
+      /api/v1/mcp/** expects after token exchange.
+  CredentialsCacheMaxEntries:
+    Type: String
+    Default: "10000"
+    AllowedPattern: "^[0-9]+$"
+    Description: >
+      AUTH_MODE=remote_credentials only — max distinct credential-key JWT entries per Lambda
+      instance (in-memory LRU).
+  LambdaMemorySize:
+    Type: Number
+    Default: 1024
+    MinValue: 512
+    MaxValue: 10240
+    Description: >
+      Lambda memory (MB). Higher values add CPU and help large tool responses (lineage, docs search).
+      HTTP API integration timeout remains 30s max.
+  LambdaTimeout:
+    Type: Number
+    Default: 30
+    MinValue: 10
+    MaxValue: 30
+    Description: >
+      Lambda timeout (seconds). API Gateway HTTP API caps integration at 30s; values above 30
+      have no effect on /mcp until a longer-timeout front end is used.
+  AllowedSourceCidrs:
+    Type: CommaDelimitedList
+    Description: >
+      IPv4 CIDR blocks allowed to reach the HTTP API. AWS WAF default action is block;
+      only these sources invoke Lambda. Comma-separated, e.g. 203.0.113.0/24,198.51.100.10/32
+
+Globals:
+  Function:
+    Timeout: !Ref LambdaTimeout
+    MemorySize: !Ref LambdaMemorySize
+    Architectures:
+      - !Ref LambdaArchitecture
+
+Resources:
+  OEMCPFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      DockerTag: oe-mcp
+      DockerContext: ..
+      Dockerfile: Dockerfile
+    Properties:
+      FunctionName: !Sub oe-mcp-${Environment}
+      PackageType: Image
+      Tags:
+        Application: oe-mcp
+        Component: mcp-server
+        ManagedBy: SAM
+      ImageConfig:
+        Command: ["entrypoints.lambda_handler.handler"]
+      Environment:
+        Variables:
+          AUTH_MODE: !Ref AuthMode
+          OVALEDGE_BASE_URL: !Ref OvalEdgeBaseUrl
+          OVALEDGE_TOKEN_EXCHANGE_PATH: !Ref OvalEdgeTokenExchangePath
+          # Lambda env values must be strings (SAM / CFN strict validation).
+          OVALEDGE_MAX_RETRIES: !Ref OvalEdgeMaxRetries
+          OAUTH_ISSUER: !Ref OAuthIssuer
+          OAUTH_ALLOWED_ISSUERS: !Ref OAuthAllowedIssuers
+          OAUTH_AUDIENCE: !Ref OAuthAudience
+          # Do not set MCP_PUBLIC_BASE_URL from !Ref MCPApi here — it creates a CloudFormation
+          # circular dependency (function → API → function). Leave unset; metadata uses
+          # Request.base_url (API Gateway / custom domain). Override via Lambda console if needed.
+          OVALEDGE_REMOTE_FORWARD_IDP_TOKEN: !Ref OvalEdgeForwardIdpToken
+          OVALEDGE_HTTP_AUTH_SCHEME: !Ref OvalEdgeHttpAuthScheme
+          CREDENTIALS_CACHE_MAX_ENTRIES: !Ref CredentialsCacheMaxEntries
+          MCP_HTTP_STATELESS: !Ref McpHttpStateless
+      Events:
+        MCPPost:
+          Type: HttpApi
+          Properties:
+            Path: /mcp
+            Method: POST
+            ApiId: !Ref MCPApi
+        MCPGet:
+          Type: HttpApi
+          Properties:
+            Path: /mcp
+            Method: GET
+            ApiId: !Ref MCPApi
+        OAuthDiscovery:
+          Type: HttpApi
+          Properties:
+            Path: /.well-known/oauth-authorization-server
+            Method: GET
+            ApiId: !Ref MCPApi
+        OIDCDiscovery:
+          Type: HttpApi
+          Properties:
+            Path: /.well-known/openid-configuration
+            Method: GET
+            ApiId: !Ref MCPApi
+        OAuthProtectedResource:
+          Type: HttpApi
+          Properties:
+            Path: /.well-known/oauth-protected-resource
+            Method: GET
+            ApiId: !Ref MCPApi
+        OAuthProtectedResourceMcp:
+          Type: HttpApi
+          Properties:
+            Path: /.well-known/oauth-protected-resource/mcp
+            Method: GET
+            ApiId: !Ref MCPApi
+        McpAuthDeclinedGet:
+          Type: HttpApi
+          Properties:
+            Path: /mcp-auth/declined
+            Method: GET
+            ApiId: !Ref MCPApi
+        McpAuthDeclinedPost:
+          Type: HttpApi
+          Properties:
+            Path: /mcp-auth/declined
+            Method: POST
+            ApiId: !Ref MCPApi
+        McpAuthDeclinedOptions:
+          Type: HttpApi
+          Properties:
+            Path: /mcp-auth/declined
+            Method: OPTIONS
+            ApiId: !Ref MCPApi
+        ClientRegistration:
+          Type: HttpApi
+          Properties:
+            Path: /register
+            Method: POST
+            ApiId: !Ref MCPApi
+        HealthCheck:
+          Type: HttpApi
+          Properties:
+            Path: /health
+            Method: GET
+            ApiId: !Ref MCPApi
+        BrandIcon:
+          Type: HttpApi
+          Properties:
+            Path: /brand/ovaledge-mcp-icon.png
+            Method: GET
+            ApiId: !Ref MCPApi
+
+  MCPApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Name: !Sub oe-mcp-api-${Environment}
+      StageName: $default
+      # Baseline abuse protection; tighten per route below as needed.
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 200
+        ThrottlingRateLimit: 100
+      CorsConfiguration:
+        AllowOrigins:
+          - "https://claude.ai"
+          - "https://cursor.sh"
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - X-OvalEdge-Credentials
+          - X-OvalEdge-Token
+          - X-OvalEdge-Secret
+      RouteSettings:
+        "POST /mcp":
+          ThrottlingBurstLimit: 100
+          ThrottlingRateLimit: 50
+        "POST /register":
+          ThrottlingBurstLimit: 10
+          ThrottlingRateLimit: 5
+
+  AllowedSourceIpSet:
+    Type: AWS::WAFv2::IPSet
+    Properties:
+      Name: !Sub ${AWS::StackName}-${Environment}-allowed-ipv4
+      Description: !Sub IPv4 allowlist for ${AWS::StackName} MCP HTTP API
+      Scope: REGIONAL
+      IPAddressVersion: IPV4
+      Addresses: !Ref AllowedSourceCidrs
+
+  MCPWebACL:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Sub ${AWS::StackName}-${Environment}-webacl
+      Description: !Sub IP allowlist Web ACL for ${AWS::StackName} MCP HTTP API
+      Scope: REGIONAL
+      DefaultAction:
+        Block: {}
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub ${AWS::StackName}-${Environment}-webacl
+      Rules:
+        - Name: AllowListedSourceIpv4
+          Priority: 0
+          Statement:
+            IPSetReferenceStatement:
+              Arn: !GetAtt AllowedSourceIpSet.Arn
+          Action:
+            Allow: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AllowListedSourceIpv4
+
+  MCPWebACLAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    DependsOn: MCPApi
+    Properties:
+      ResourceArn: !Join
+        - ""
+        - - "arn:aws:apigateway:"
+          - !Ref AWS::Region
+          - "::/apis/"
+          - !Ref MCPApi
+          - "/stages/$default"
+      WebACLArn: !GetAtt MCPWebACL.Arn
+
+Outputs:
+  MCPEndpointUrl:
+    Description: Remote MCP endpoint
+    Value: !Sub
+      - "https://${ApiId}.execute-api.${AWS::Region}.amazonaws.com/mcp"
+      - ApiId: !Ref MCPApi
+  OAuthDiscoveryUrl:
+    Description: OAuth discovery endpoint
+    Value: !Sub
+      - "https://${ApiId}.execute-api.${AWS::Region}.amazonaws.com/.well-known/oauth-authorization-server"
+      - ApiId: !Ref MCPApi
+  HealthUrl:
+    Description: Health check endpoint
+    Value: !Sub
+      - "https://${ApiId}.execute-api.${AWS::Region}.amazonaws.com/health"
+      - ApiId: !Ref MCPApi
+  MCPPublicBaseUrl:
+    Description: >-
+      Set as Lambda env MCP_PUBLIC_BASE_URL (no path suffix) so MCP initialize
+      advertises the branding icon URL. Not injected automatically (CFN circular dep).
+    Value: !Sub
+      - "https://${ApiId}.execute-api.${AWS::Region}.amazonaws.com"
+      - ApiId: !Ref MCPApi
+  MCPBrandIconUrl:
+    Description: Public MCP server icon (GET, no auth)
+    Value: !Sub
+      - "https://${ApiId}.execute-api.${AWS::Region}.amazonaws.com/brand/ovaledge-mcp-icon.png"
+      - ApiId: !Ref MCPApi
+  WAFWebAclArn:
+    Description: Regional WAF Web ACL attached to the HTTP API $default stage
+    Value: !GetAtt MCPWebACL.Arn
+  WAFAllowedSourceCidrs:
+    Description: IPv4 CIDR allowlist enforced by WAF (echo of AllowedSourceCidrs parameter)
+    Value: !Join [", ", !Ref AllowedSourceCidrs]

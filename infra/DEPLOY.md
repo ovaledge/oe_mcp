@@ -51,6 +51,49 @@ Updating the same stack from **image → ZIP** (or the reverse) is a CloudFormat
 
 **ZIP template physical names:** `infra/template-zip.yaml` names the Lambda and HTTP API as ``{StackName}-{Environment}-lambda`` and ``{StackName}-{Environment}-httpapi`` so a second stack (e.g. `oe-mcp-zip`) does not collide with the image stack’s fixed names (`oe-mcp-{Environment}`, `oe-mcp-api-{Environment}`).
 
+## WAF IP allowlist (optional templates)
+
+Use when the HTTP API must **not** be open to the public internet. These templates are identical to [template.yaml](template.yaml) / [template-zip.yaml](template-zip.yaml) plus a **regional AWS WAF Web ACL** on the HTTP API `$default` stage:
+
+| Template | Package | Deploy script |
+|----------|---------|---------------|
+| [template-waf.yaml](template-waf.yaml) | Container (ECR) | `./scripts/deploy-waf.sh` |
+| [template-zip-waf.yaml](template-zip-waf.yaml) | Lambda ZIP | `./scripts/deploy-zip-waf.sh` |
+
+**Behavior:** WAF **default action = block**. Only IPv4 CIDRs in parameter **`AllowedSourceCidrs`** reach Lambda (`/mcp`, `/health`, OAuth routes, etc.). All other clients get **403** from WAF before app auth runs.
+
+**Required env** (in addition to `OVALEDGE_BASE_URL`):
+
+```bash
+export ALLOWED_SOURCE_CIDRS=203.0.113.0/24,198.51.100.10/32
+```
+
+**ECR + WAF example:**
+
+```bash
+export OVALEDGE_BASE_URL=https://your-oval-edge-host.example.com
+export ALLOWED_SOURCE_CIDRS=203.0.113.0/24
+export STACK_NAME=oe-mcp-waf
+./scripts/deploy-waf.sh
+```
+
+**ZIP + WAF example:**
+
+```bash
+export OVALEDGE_BASE_URL=https://your-oval-edge-host.example.com
+export ALLOWED_SOURCE_CIDRS=203.0.113.0/24
+export STACK_NAME=oe-mcp-zip-waf
+./scripts/deploy-zip-waf.sh
+```
+
+Stack outputs add **`WAFWebAclArn`** and **`WAFAllowedSourceCidrs`**. To change allowlist CIDRs, update the stack parameter `AllowedSourceCidrs` and redeploy.
+
+**Caveats:**
+
+- Cursor, Claude, and other SaaS MCP clients often use **dynamic egress IPs** — WAF allowlists work best when all users route through a **fixed corporate egress** (proxy, ZTNA, VPN).
+- WAF is **regional** and billed separately from Lambda/API Gateway.
+- App-layer auth (`AuthMiddleware`) is still required for allowed IPs; WAF is network perimeter only.
+
 Help:
 
 ```bash
