@@ -103,6 +103,7 @@ class TestGetUserObjectAccess:
             query_direction="object_to_principals",
             object_name="looker connector",
             object_type="connection",
+            access_intent_confirmed="catalog_acl",
         )
         assert result["ok"] is True
         call_kwargs = mock_client.get.await_args.kwargs

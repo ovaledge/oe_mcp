@@ -4,11 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from server.constants import MCP_PATH_GET_USER_OBJECT_ACCESS
+from server.constants import (
+    MCP_ACCESS_DISAMBIGUATION_TOOL_LEAD_DOC,
+    MCP_PATH_GET_USER_OBJECT_ACCESS,
+)
 from server.tools.common.descriptions import classify_tool_desc
 
 _DESC_GET_USER_OBJECT_ACCESS = classify_tool_desc(
-    "Discover effective OvalEdge **catalog ACL** permissions (user and role grants). "
+    MCP_ACCESS_DISAMBIGUATION_TOOL_LEAD_DOC
+    + "Discover effective OvalEdge **catalog ACL** permissions (user and role grants). "
     "Not native Redshift/Snowflake/Tableau grants — use source_system_access for those.\n\n"
     f"Backend: GET {MCP_PATH_GET_USER_OBJECT_ACCESS}\n\n"
     "**Directions:** user_to_object | object_to_principals — username required for "
@@ -19,7 +23,6 @@ _DESC_GET_USER_OBJECT_ACCESS = classify_tool_desc(
     "JDBC-backed types, story-zone inheritance, and resolution workflow: "
     "docs://ovaledge/mcp_workflows (Catalog object access) and workflow prompt "
     "`catalog_object_access`.\n\n"
-    "Who-has-access: disambiguate first — prompt resolve_object_access.\n\n"
     "Present effectiveAccess or principals, grantSources, contributingRoles, inheritedFrom, "
     "redirectUrl."
 ,

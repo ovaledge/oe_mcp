@@ -188,6 +188,17 @@ class TestMcpServerInstructions:
         assert "navlink" in instructions or "redirecturl" in instructions
         assert "resolve_object_access" in instructions
         assert "snowflake" in instructions
+        assert instructions.index("resolve_object_access") < instructions.index(
+            "source_system_access"
+        )
+        assert "search_catalog_assets" in instructions
+        assert instructions.index("no tools") < instructions.index("source_system_access")
+
+    def test_search_description_guards_who_has_access(self) -> None:
+        from server.tools.catalog.helpers import _DESC_SEARCH
+
+        assert "who-has-access" in _DESC_SEARCH.lower()
+        assert "resolve_object_access" in _DESC_SEARCH
 
     async def test_resolve_object_access_prompt_uses_rule_doc(self) -> None:
         from server.constants import MCP_ACCESS_DISAMBIGUATION_RULE_DOC

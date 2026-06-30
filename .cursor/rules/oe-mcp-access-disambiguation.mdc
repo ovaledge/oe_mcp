@@ -1,0 +1,40 @@
+---
+description: Enforce who-has-access disambiguation before calling OvalEdge MCP access tools
+alwaysApply: true
+---
+
+# OvalEdge MCP — who-has-access routing (P9)
+
+For questions like **who has access**, **who can see**, or **who has permission** on a schema, table, or asset:
+
+## Mandatory first step (no tool calls)
+
+If the user question does **not** include native/DAM keywords — `native`, `remote`, `source system`, `source system access`, `source`, `data access management`, `DAM` — then:
+
+1. Invoke workflow prompt **`resolve_object_access`** (or follow the same steps manually).
+2. Present the **1 / 2** choice from `MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE` in `server/constants.py`.
+3. Call **no MCP tools** in that turn — especially **not** `search_catalog_assets`, `source_system_access`, or `get_user_object_access`.
+
+**Snowflake / Redshift / Tableau alone are NOT native signals.**  
+Example: *"Who has access to BUSINESS.BANKING in snowflake?"* → disambiguate first.
+
+## After the user picks
+
+| Choice | Tools |
+|--------|--------|
+| **1** (native / DAM / remote) | `source_system_access` + `access_intent_confirmed=native` |
+| **2** (OvalEdge catalog ACL) | `get_user_object_access` + `access_intent_confirmed=catalog_acl` |
+
+## Skip disambiguation only when native/DAM keywords are present
+
+Examples that may call `source_system_access` immediately:
+
+- *"Who has **native** access to BUSINESS.BANKING?"*
+- *"Show **DAM** grants for BUSINESS.BANKING"*
+- *"Who has **remote** access to prod_db.public.orders?"*
+
+## Never do this on ambiguous who-has-access
+
+- Call `search_catalog_assets` to "find" the object for access lookup
+- Call `source_system_access` because the user named Snowflake/Redshift/Tableau
+- Return grant tables before the user picks **1** or **2**

@@ -353,6 +353,20 @@ MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC = (
     "do not call access tools until user picks. "
     "Snowflake/Redshift/Tableau alone are not native signals."
 )
+MCP_ACCESS_DISAMBIGUATION_TOOL_LEAD_DOC = (
+    "**Who-has-access:** `resolve_object_access` then `access_intent_confirmed` "
+    "(native / catalog_acl).\n\n"
+)
+MCP_ACCESS_DISAMBIGUATION_SEARCH_GUARD_DOC = (
+    "**Not who-has-access or RDAM** — `resolve_object_access` first; RDAM via "
+    "`source_system_access` only.\n\n"
+)
+MCP_ACCESS_INTENT_NATIVE = "native"
+MCP_ACCESS_INTENT_CATALOG_ACL = "catalog_acl"
+MCP_ACCESS_INTENT_CONFIRMED_FIELD_DOC = (
+    "Who-has-access only: `native` after user picks **1**; `catalog_acl` after **2**. "
+    "Omit for user_to_objects / user_to_object / browse."
+)
 MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE = (
     "OvalEdge has **two** different tools for “who has access” questions:\n\n"
     "| Tool | What it answers |\n"

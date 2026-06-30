@@ -287,9 +287,10 @@ def register(mcp: FastMCP) -> None:
             f"{TOOL_SOURCE_SYSTEM_ACCESS}. Otherwise present this message verbatim and "
             f"wait for **1** or **2**:\n\n"
             f"{MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE}\n\n"
-            f"After **1**: native_source_access → {TOOL_SOURCE_SYSTEM_ACCESS}. "
+            f"After **1**: native_source_access → {TOOL_SOURCE_SYSTEM_ACCESS} with "
+            f"access_intent_confirmed=native. "
             f"After **2**: catalog_object_access → {TOOL_SEARCH_CATALOG} (if needed) → "
-            f"{TOOL_GET_USER_OBJECT_ACCESS}."
+            f"{TOOL_GET_USER_OBJECT_ACCESS} with access_intent_confirmed=catalog_acl."
         )
         return [Message(text)]
 
