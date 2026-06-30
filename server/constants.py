@@ -348,6 +348,11 @@ MCP_ACCESS_NATIVE_SIGNAL_KEYWORDS_DOC = (
     "native, remote, source system access, source system, source, "
     "data access management, DAM"
 )
+MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC = (
+    "Ambiguous who-has-access: disambiguate via resolve_object_access; "
+    "do not call access tools until user picks. "
+    "Snowflake/Redshift/Tableau alone are not native signals."
+)
 MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE = (
     "OvalEdge has **two** different tools for “who has access” questions:\n\n"
     "| Tool | What it answers |\n"
@@ -369,6 +374,7 @@ MCP_ACCESS_DISAMBIGUATION_RULE_DOC = (
     + MCP_ACCESS_NATIVE_SIGNAL_KEYWORDS_DOC
     + " — do **not** call source_system_access or get_user_object_access; show the "
     "disambiguation message and wait for the user to pick **1** (native) or **2** (catalog ACL). "
+    "Naming Snowflake/Redshift/Tableau alone is not a native signal — still disambiguate. "
     "Workflow prompt: resolve_object_access."
 )
 MCP_CATALOG_OBJECT_ACCESS_DIRECTIONS = (

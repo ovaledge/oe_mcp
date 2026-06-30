@@ -82,6 +82,7 @@ class TestGetSourceSystemAccess:
         assert "connection_id" in _DESC_SOURCE_SYSTEM_ACCESS
         assert "docs://ovaledge/mcp_workflows" in _DESC_SOURCE_SYSTEM_ACCESS
         assert "native_source_access" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "resolve_object_access" in _DESC_SOURCE_SYSTEM_ACCESS
         assert "disabled" in MCP_SOURCE_SYSTEM_ACCESS_JAVA_BACKEND_DOC.lower()
         assert "filteredToObjectLevel" not in _DESC_SOURCE_SYSTEM_ACCESS
 

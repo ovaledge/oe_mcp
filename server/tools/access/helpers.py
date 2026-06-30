@@ -19,6 +19,7 @@ _DESC_GET_USER_OBJECT_ACCESS = classify_tool_desc(
     "JDBC-backed types, story-zone inheritance, and resolution workflow: "
     "docs://ovaledge/mcp_workflows (Catalog object access) and workflow prompt "
     "`catalog_object_access`.\n\n"
+    "Who-has-access: disambiguate first — prompt resolve_object_access.\n\n"
     "Present effectiveAccess or principals, grantSources, contributingRoles, inheritedFrom, "
     "redirectUrl."
 ,

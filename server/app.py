@@ -4,6 +4,7 @@ from fastmcp import FastMCP
 
 from server.branding import mcp_server_icons
 from server.config import settings
+from server.constants import MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC
 from server.mcp import register_all
 
 # Routing detail lives in tool descriptions and docs://ovaledge/mcp_workflows — keep
@@ -20,8 +21,7 @@ _MCP_SERVER_INSTRUCTIONS = (
     "Physical datasets: search_catalog_assets; native DB/BI grants: source_system_access only — "
     "never fall back to catalog search for RDAM. "
     "Catalog ACL permissions (user/role grants on catalog objects): get_user_object_access. "
-    "Ambiguous who-has-access (no native/remote/DAM/source-system signals): disambiguate first — "
-    "workflow prompt resolve_object_access; do not call either access tool until the user picks. "
+    f"{MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC} "
     "User-facing links: navLink or redirectUrl from tool responses; never show ovaledge:// URIs. "
     "RBAC is enforced server-side; write tools need appropriate OvalEdge permissions."
 )

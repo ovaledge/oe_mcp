@@ -954,6 +954,7 @@ _DESC_SOURCE_SYSTEM_ACCESS = classify_tool_desc(
     "Full routing (path formats, grant models, agent rules, DAA): "
     "docs://ovaledge/mcp_workflows (Native source access) and workflow prompt "
     "`native_source_access`.\n\n"
+    "Who-has-access: disambiguate first — prompt resolve_object_access.\n\n"
     "Read-only. Instance/Connector **Data Access Admin** enforced server-side."
 ,
     confidential=True,

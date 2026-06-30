@@ -58,6 +58,10 @@ Extended parameter patterns (tool description keeps a short summary; use this se
 
 Omit empty list parameters; filter-only search is valid. Each hit includes `objectId`, `objectType`, `navLink`, `redirectUrl`. For `oestory` hits, follow with `lookup_datastory`.
 
+## Who has access? (disambiguate first)
+
+Use workflow prompt **`resolve_object_access`**. Native RDAM → `source_system_access`; OvalEdge catalog ACL → `get_user_object_access`. Snowflake/Redshift/Tableau alone do not skip disambiguation.
+
 ## Native source access (RDAM)
 
 Use **`source_system_access`** for **native** grants harvested from Redshift, Snowflake, or Tableau (RDAM SQL only — **no Elasticsearch**). This is **not** OvalEdge catalog ACL (`get_user_object_access`) and **not** catalog discovery.
@@ -224,6 +228,7 @@ Invoke by name from the MCP client when supported. Each prompt returns instructi
 
 | Prompt | Purpose |
 |--------|---------|
+| `resolve_object_access` | Disambiguate native RDAM vs catalog ACL before calling an access tool |
 | `native_source_access` | Redshift / Snowflake / Tableau native grants (not catalog ACLs) |
 | `catalog_object_access` | OvalEdge catalog ACL (`get_user_object_access`) |
 | `dam_object_browse` | DAM inventory browse via `source_system_access` |

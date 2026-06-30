@@ -4,7 +4,6 @@ from fastmcp.prompts import Message
 from server.constants import (
     MCP_ACCESS_DISAMBIGUATION_RULE_DOC,
     MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE,
-    MCP_ACCESS_NATIVE_SIGNAL_KEYWORDS_DOC,
     MCP_SOURCE_SYSTEMS_DOC,
     TOOL_ASSESS_CDE_DQ,
     TOOL_ASSET_LINEAGE,
@@ -283,17 +282,14 @@ def register(mcp: FastMCP) -> None:
         """
         text = (
             f"Answer access for: '{question}'\n\n"
-            f"Steps:\n"
-            f"1. If the question includes any native/DAM/source-system signal "
-            f"(case-insensitive: {MCP_ACCESS_NATIVE_SIGNAL_KEYWORDS_DOC}), follow "
-            f"native_source_access → {TOOL_SOURCE_SYSTEM_ACCESS}. Otherwise do **not** call "
-            f"either access tool yet — present this message verbatim and wait for the user "
-            f"to pick **1** or **2**:\n\n"
+            f"{MCP_ACCESS_DISAMBIGUATION_RULE_DOC}\n\n"
+            f"When native/DAM signals are present → native_source_access → "
+            f"{TOOL_SOURCE_SYSTEM_ACCESS}. Otherwise present this message verbatim and "
+            f"wait for **1** or **2**:\n\n"
             f"{MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE}\n\n"
-            f"2. After **1** (native): native_source_access playbook → "
-            f"{TOOL_SOURCE_SYSTEM_ACCESS}. After **2** (catalog ACL): catalog_object_access "
-            f"playbook → {TOOL_SEARCH_CATALOG} (if needed) → {TOOL_GET_USER_OBJECT_ACCESS}.\n"
-            f"3. {MCP_ACCESS_DISAMBIGUATION_RULE_DOC}"
+            f"After **1**: native_source_access → {TOOL_SOURCE_SYSTEM_ACCESS}. "
+            f"After **2**: catalog_object_access → {TOOL_SEARCH_CATALOG} (if needed) → "
+            f"{TOOL_GET_USER_OBJECT_ACCESS}."
         )
         return [Message(text)]
 

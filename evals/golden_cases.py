@@ -23,6 +23,7 @@ from evals.mcp_eval_helpers import ovaledge_eval_mcp_server, tool_call_result
 from server.constants import (
     TOOL_ASSET_LINEAGE,
     TOOL_CATALOG_ASSET_DETAILS,
+    TOOL_GET_USER_OBJECT_ACCESS,
     TOOL_LOOKUP_DATASTORY,
     TOOL_SEARCH_CATALOG,
     TOOL_SOURCE_SYSTEM_ACCESS,
@@ -393,6 +394,32 @@ def golden_mcp_use_native_source_access() -> LLMTestCase:
     )
 
 
+def golden_mcp_use_resolve_object_access_disambiguation() -> LLMTestCase:
+    """Single-turn: who-has-access without native/DAM signals — disambiguate, no tool call."""
+    srv = ovaledge_eval_mcp_server(
+        tool_names=frozenset({
+            TOOL_SOURCE_SYSTEM_ACCESS,
+            TOOL_GET_USER_OBJECT_ACCESS,
+            TOOL_SEARCH_CATALOG,
+        }),
+        prompt_names=frozenset({"resolve_object_access"}),
+    )
+    return LLMTestCase(
+        name="mcp_use_resolve_object_access_disambiguation",
+        input="Who has access to SUPERSTORE.SUPERSTORE in snowflake?",
+        actual_output=(
+            "This who-has-access question lacks native/DAM signals (native, remote, DAM, "
+            "source system, etc.). Naming Snowflake alone does not route to RDAM automatically. "
+            "I presented the disambiguation message asking the user to pick 1 (native "
+            "source_system_access) or 2 (OvalEdge catalog ACL via get_user_object_access). "
+            "I did not call source_system_access or get_user_object_access until the user "
+            "chooses. I did not use search_catalog_assets in this turn."
+        ),
+        mcp_servers=[srv],
+        mcp_tools_called=[],
+    )
+
+
 def all_mcp_use_golden_fns() -> list[str]:
     """Names of single-turn LLMTestCase goldens for MCPUseMetric."""
     return [
@@ -401,6 +428,7 @@ def all_mcp_use_golden_fns() -> list[str]:
         "golden_mcp_use_datastory",
         "golden_mcp_use_organizational_knowledge_prompt",
         "golden_mcp_use_native_source_access",
+        "golden_mcp_use_resolve_object_access_disambiguation",
     ]
 
 
@@ -411,6 +439,7 @@ __all__ = [
     "golden_mcp_use_native_source_access",
     "golden_mcp_use_organizational_knowledge_prompt",
     "golden_mcp_use_prompt_workflow",
+    "golden_mcp_use_resolve_object_access_disambiguation",
     "golden_multi_turn_lineage_followup",
     "golden_task_completion_discovery",
 ]

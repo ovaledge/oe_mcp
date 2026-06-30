@@ -186,3 +186,18 @@ class TestMcpServerInstructions:
         assert "search_platform_docs" in instructions
         assert "never show ovaledge://" in instructions
         assert "navlink" in instructions or "redirecturl" in instructions
+        assert "resolve_object_access" in instructions
+        assert "snowflake" in instructions
+
+    async def test_resolve_object_access_prompt_uses_rule_doc(self) -> None:
+        from server.constants import MCP_ACCESS_DISAMBIGUATION_RULE_DOC
+
+        mcp = FastMCP(name="test", version="0.0.1")
+        register_workflow_prompts(mcp)
+        prompt = await mcp.get_prompt("resolve_object_access")
+        assert prompt is not None
+        assert isinstance(prompt, FunctionPrompt)
+        text = prompt.fn("Who has access to ORDERS in snowflake?")[0].content.text
+        assert MCP_ACCESS_DISAMBIGUATION_RULE_DOC in text
+        assert "source_system_access" in text
+        assert "get_user_object_access" in text
