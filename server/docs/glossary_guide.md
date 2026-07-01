@@ -48,7 +48,7 @@ For agents creating terms via MCP, use **`create_glossary_term`** (or the **`cre
 3. If a category was chosen and subcategories exist → user picks **subcategory** or skips (`skip_subcategory=true` and `subcategory_skip_confirmed=true`)
 4. **Description is required** — the tool refuses create without it; never invent a description
 5. When placement and description are complete → call returns **`confirm_create`** preview; show `formattedResponse` and wait for user approval
-6. **POST** only after user confirms: re-call with **`create_confirmed_by_user=true`** and the same `term_name`, `domain_id`, placement, and `description`
+6. **POST** only after user confirms: re-call with **`write_confirmed_by_user=true`**, **`confirmation_token`** from the preview, and the same `term_name`, `domain_id`, placement, and `description`
 
 Resource for an existing term id: `ovaledge://governance/glossary-term/{object_id}`.
 

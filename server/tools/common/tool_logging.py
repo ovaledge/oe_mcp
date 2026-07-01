@@ -1,4 +1,4 @@
-"""Structured logging for MCP tool invocations (CloudWatch / stderr)."""
+"""Structured logging, error mapping, and response slimming for MCP tool invocations."""
 
 from __future__ import annotations
 
@@ -6,14 +6,13 @@ import logging
 import time
 from collections.abc import Awaitable, Callable
 from functools import wraps
-from typing import Any, ParamSpec, TypeVar
+from typing import Any
 
 from server.client import OvalEdgeError
+from server.mcp_response_slim import slim_tool_response
+from server.tools.common.errors import error_payload, map_ovaledge_error
 
 logger = logging.getLogger(__name__)
-
-P = ParamSpec("P")
-R = TypeVar("R")
 
 
 def _summarize_args(kwargs: dict[str, Any]) -> str:
@@ -36,11 +35,17 @@ def _summarize_args(kwargs: dict[str, Any]) -> str:
     return ", ".join(parts) if parts else "(no logged args)"
 
 
+def _finalize_tool_result[R](result: R) -> R | dict[str, Any]:
+    if isinstance(result, dict):
+        return slim_tool_response(result)
+    return result
+
+
 def logged_tool_invocation[**P, R](
     fn: Callable[P, Awaitable[R]],
-) -> Callable[P, Awaitable[R]]:
+) -> Callable[P, Awaitable[R | dict[str, Any]]]:
     """
-    Log tool name, duration, and outcome for each ``_invoke_*`` handler.
+    Log tool name, duration, and outcome; map OvalEdge errors; slim large dict responses.
 
     Never logs credential headers or full API payloads.
     """
@@ -48,7 +53,7 @@ def logged_tool_invocation[**P, R](
     tool_name = fn.__name__.removeprefix("_invoke_")
 
     @wraps(fn)
-    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R | dict[str, Any]:
         start = time.monotonic()
         arg_summary = _summarize_args(dict(kwargs))
         try:
@@ -62,7 +67,7 @@ def logged_tool_invocation[**P, R](
                 duration_ms,
                 arg_summary,
             )
-            raise
+            return map_ovaledge_error(exc)
         except Exception:
             duration_ms = (time.monotonic() - start) * 1000
             logger.exception(
@@ -71,7 +76,10 @@ def logged_tool_invocation[**P, R](
                 duration_ms,
                 arg_summary,
             )
-            raise
+            return error_payload(
+                "An unexpected error occurred while executing the tool.",
+                status_code=500,
+            )
         else:
             duration_ms = (time.monotonic() - start) * 1000
             level = logging.WARNING if duration_ms > 25_000 else logging.INFO
@@ -82,6 +90,6 @@ def logged_tool_invocation[**P, R](
                 duration_ms,
                 arg_summary,
             )
-            return result
+            return _finalize_tool_result(result)
 
     return wrapper

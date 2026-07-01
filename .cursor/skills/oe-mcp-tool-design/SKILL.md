@@ -159,7 +159,7 @@ This repo implements **Level 2** MCP contract governance (domain-scoped tool des
 | EA expectation | oe_mcp practice |
 |----------------|-----------------|
 | Complete tool contract (purpose, inputs, outputs, side effects) | `_DESC_*` + Pydantic `Field` + `mcp_workflows` / domain docs |
-| Human-in-the-loop for writes | `confirm_create` / `confirm_update` + `create_confirmed_by_user=true` |
+| Human-in-the-loop for writes | `confirm_create` / `confirm_update` + `write_confirmed_by_user=true` |
 | Context window budgeting | Description budget tests + `mcp_response_slim` on responses |
 | AuthZ on every data call | OvalEdge RBAC/DAA enforced server-side; document in `_DESC_*` |
 | Stable error contracts | `{"error", "status_code"}` via `error_payload` / `map_ovaledge_error`; optional `error_code` on validation errors |

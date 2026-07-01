@@ -16,32 +16,30 @@ from pathlib import Path
 
 import pytest
 
-os.environ.setdefault("DEEPEVAL_TELEMETRY_OPT_OUT", "YES")
+from evals.config import (
+    deepeval_threshold,
+    ensure_deepeval_telemetry_opt_out,
+    has_openai_key,
+    judge_model,
+)
+
+ensure_deepeval_telemetry_opt_out()
 
 pytest.importorskip("deepeval", reason="Install eval extras: poetry install --with eval")
 
-from deepeval.evaluate import assert_test
-from deepeval.metrics.base_metric import BaseConversationalMetric, BaseMetric
-from deepeval.test_case import ConversationalTestCase, LLMTestCase
+from deepeval.evaluate import assert_test  # noqa: E402
+from deepeval.metrics.base_metric import BaseConversationalMetric, BaseMetric  # noqa: E402
+from deepeval.test_case import ConversationalTestCase, LLMTestCase  # noqa: E402
 
-from evals.golden_cases import all_mcp_use_golden_fns
-
-
-def _has_openai_key() -> bool:
-    return bool(os.environ.get("OPENAI_API_KEY") or os.environ.get("DEEPEVAL_OPENAI_API_KEY"))
-
-
-def _judge_model() -> str:
-    return os.environ.get("DEEPEVAL_JUDGE_MODEL", "gpt-4o-mini")
-
-
-def _threshold() -> float:
-    return float(os.environ.get("DEEPEVAL_THRESHOLD", "0.5"))
+from evals.golden_cases import (  # noqa: E402
+    all_mcp_use_golden_fns,
+    all_multi_turn_mcp_use_golden_fns,
+)
 
 
 @pytest.fixture
 def _skip_without_openai_key() -> None:
-    if not _has_openai_key():
+    if not has_openai_key():
         pytest.skip("Set OPENAI_API_KEY or DEEPEVAL_OPENAI_API_KEY for DeepEval MCP metrics")
 
 
@@ -63,8 +61,8 @@ def test_mcp_use_metric(
     fn: Callable[[], LLMTestCase] = getattr(golden_cases, golden_fn)
     case = fn()
     metric: BaseMetric = MCPUseMetric(
-        threshold=_threshold(),
-        model=_judge_model(),
+        threshold=deepeval_threshold(),
+        model=judge_model(),
         verbose_mode=False,
     )
     assert_test(case, [metric], run_async=True)
@@ -87,8 +85,8 @@ def test_mcp_task_completion_metric(
     fn: Callable[[], ConversationalTestCase] = getattr(golden_cases, golden_fn)
     case = fn()
     metric: BaseConversationalMetric = MCPTaskCompletionMetric(
-        threshold=_threshold(),
-        model=_judge_model(),
+        threshold=deepeval_threshold(),
+        model=judge_model(),
         verbose_mode=False,
     )
     assert_test(case, [metric], run_async=True)
@@ -97,7 +95,8 @@ def test_mcp_task_completion_metric(
 @pytest.mark.parametrize(
     "golden_fn",
     [
-        pytest.param("golden_multi_turn_lineage_followup", id="multi_turn_lineage_followup"),
+        pytest.param(name, id=name.removeprefix("golden_"))
+        for name in all_multi_turn_mcp_use_golden_fns()
     ],
 )
 def test_multi_turn_mcp_use_metric(
@@ -111,8 +110,8 @@ def test_multi_turn_mcp_use_metric(
     fn: Callable[[], ConversationalTestCase] = getattr(golden_cases, golden_fn)
     case = fn()
     metric: BaseConversationalMetric = MultiTurnMCPUseMetric(
-        threshold=_threshold(),
-        model=_judge_model(),
+        threshold=deepeval_threshold(),
+        model=judge_model(),
         verbose_mode=False,
     )
     assert_test(case, [metric], run_async=True)
@@ -132,8 +131,8 @@ def test_mcp_use_metric_from_user_json_file(
     path = Path(path_str)
     for case in load_mcp_use_cases_from_json(path):
         metric: BaseMetric = MCPUseMetric(
-            threshold=_threshold(),
-            model=_judge_model(),
+            threshold=deepeval_threshold(),
+            model=judge_model(),
             verbose_mode=False,
         )
         assert_test(case, [metric], run_async=True)

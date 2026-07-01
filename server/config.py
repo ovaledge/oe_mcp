@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 from pathlib import Path
 from typing import Literal
@@ -61,6 +63,9 @@ class Settings(BaseSettings):
     # JWT validation uses the access token's ``iss`` for OIDC discovery (may differ on Auth0
     # custom domain vs canonical *.auth0.com).
     oauth_issuer: str = ""
+    # Comma-separated trusted JWT iss values (in addition to oauth_issuer). Include every
+    # issuer your IdP may emit — e.g. Auth0 custom domain and canonical *.auth0.com.
+    oauth_allowed_issuers: str = ""
     # Resource identifier expected as JWT ``aud`` (API audience).
     oauth_audience: str = ""
     mcp_public_base_url: str = ""
@@ -79,12 +84,24 @@ class Settings(BaseSettings):
 
     # ── MCP server identity ──────────────────────────────────────
     mcp_server_name: str = "OvalEdge MCP Server"
-    mcp_server_version: str = "0.1.0"
+    mcp_server_version: str = ""
 
     @field_validator("ovaledge_base_url")
     @classmethod
     def strip_trailing_slash(cls, v: str) -> str:
         return v.rstrip("/")
+
+    @field_validator("mcp_server_version", mode="before")
+    @classmethod
+    def default_mcp_server_version(cls, v: object) -> str:
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+        try:
+            from importlib.metadata import PackageNotFoundError, version
+
+            return version("oe-mcp")
+        except PackageNotFoundError:
+            return "0.0.0-dev"
 
     @field_validator("auth_mode", mode="before")
     @classmethod

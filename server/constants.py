@@ -26,6 +26,9 @@ TOOL_GET_USER_OBJECT_ACCESS = "get_user_object_access"
 TOOL_ASSESS_CDE_DQ = "assess_cde_dq"
 TOOL_ASSOCIATE_DQ_RULE_OBJECTS = "associate_dq_rule_objects"
 TOOL_CREATE_DQ_RULES = "create_dq_rules"
+TOOL_GENERATE_DQ_QUERIES = "generate_dq_queries"
+TOOL_VALIDATE_DQ_QUERIES = "validate_dq_queries"
+TOOL_CREATE_SQL_DQ_RULE = "create_sql_dq_rule"
 
 # MCP tool data classification (appended to every _DESC_* via classify_tool_desc).
 MCP_TOOL_CLASSIFICATION_INTERNAL = (
@@ -150,18 +153,6 @@ SELECTION_PHASE_MASTER_REQUIRED = "MASTER_REQUIRED"
 SELECTION_PHASE_PARENT_OPTIONAL = "PARENT_OPTIONAL"
 # create_tag guidance (not an error — tag not created yet).
 STATUS_AWAITING_USER_SELECTION = "awaiting_user_selection"
-
-MCP_DAA_SCOPE_DOC = (
-    "**Data Access Admin (DAA)** — enforced server-side on this endpoint (same as DAM UI):\n"
-"- **Instance Data Access Admin:** RDAM instance roles; "
-"access to connectors on that instance.\n"
-    "- **Connector Data Access Admin:** roles on one connection only.\n"
-    "The API returns RDAM no-access if the caller lacks Connector DAA on the connection "
-    "(or Instance DAA on its parent instance). No separate DAA check endpoint is required.\n"
-    "**DAM object scope:** grant rows are limited to databases/schemas/tables/columns visible in "
-    "DAM (active catalog objects with RDAM crawl — same as OETP RDAM browse). Harvested privileges "
-    "for objects not in DAM (e.g. uncrawled schemas) are excluded."
-)
 
 # Optional on glossary-terms and tags (Spring default 20).
 MCP_GLOSSARY_TAGS_LIMIT_DEFAULT = 25
@@ -504,22 +495,6 @@ MCP_SOURCE_SYSTEM_ACCESS_MULTI_OBJECT_TYPE_ERROR = (
     "Multiple object_type values are not supported in a single API request. "
     "Pass one RDAM object level (database, schema, table, column, project, or report)."
 )
-MCP_SOURCE_SYSTEM_ACCESS_REQUIRED_DOC = (
-    "**Mandatory API fields:** `source_system`, `query_direction` — infer `query_direction` "
-    "from the user's question.\n"
-    "**browse:** `connection_id` and `object_type` required; `object_path` is optional parent "
-    "scope.\n"
-    "**user_to_objects:** `username` required.\n"
-    "**user_to_objects (scope_mode=descendants):** `username`, `object_path`, and `object_type` "
-    "required; returns grants at the scope level and descendants (e.g. schema → tables/columns).\n"
-    "**object_to_users (exact):** `object_path` and `object_type` required.\n"
-    "**object_to_users (scope_mode=descendants):** `object_type` required; `object_path` or "
-    "`connection_id` (connector-wide rollup when path omitted).\n"
-    "**Whenever `object_path` is set:** `object_type` required (do not infer from dot segments).\n"
-    "**Single value only:** `source_system`, `object_type`, `connection_id`.\n"
-    "**Multiple values allowed:** `username` (user_to_objects), `object_path`.\n"
-    "Do not guess `connection_id`, `object_type`, or `object_path` — ask the user, then retry."
-)
 MCP_SOURCE_SYSTEM_USERNAME_REQUIRED_ERROR = (
     "Query parameter username is required for user_to_objects."
 )
@@ -533,141 +508,6 @@ MCP_SOURCE_SYSTEM_OBJECT_TYPE_REQUIRED_ERROR = (
 MCP_SOURCE_SYSTEM_DESCENDANTS_CONNECTION_REQUIRED_ERROR = (
     "Query parameter connectionId is required when objectPath is omitted with "
     "scope_mode=descendants."
-)
-MCP_SOURCE_SYSTEM_ACCESS_CONNECTION_ID_DOC = (
-    "**connection_id:** OvalEdge connector id from the user when they provide it. **Do not probe, "
-    "enumerate, or discover** connection ids (no scanning id ranges, no catalog search, no "
-    "inferring from defaults). Omit when unknown and ask the user for the connector id."
-)
-MCP_SOURCE_SYSTEM_ACCESS_USERNAME_MATCH_DOC = (
-    "**username matching (user_to_objects):** exact remote login only — **case-insensitive**, "
-    "not SQL `LIKE` / substring / fuzzy search. Pass the name the user gave (e.g. `SIRISHA`); "
-    "do not invent variants (`sirisha_rdam`, `sirisha_sb`, …), catalog-search the name, or "
-    "scan principals with partial matches."
-)
-MCP_SOURCE_SYSTEM_ACCESS_OBJECT_PATH_SCOPE_DOC = (
-    "**object_path scope (user_to_objects):** You may infer `object_type` when the user names a "
-    "level (e.g. \"tables\" → `table`, \"schemas\" → `schema`). **Never guess a specific table "
-    "path** from test data or prior calls.\n"
-    "- \"What **tables** can user X access?\" with `connection_id` → **all tables on that "
-    "connector**: `object_type=table`, **omit `object_path`**. Do not ask for a database/schema "
-    "unless the user narrows scope.\n"
-    "- Narrower table listing: `object_type=table`, `object_path=dbName.schema` when the user "
-    "names a schema; `object_path=dbName` when they name a database only.\n"
-    "- Single table: `object_type=table`, `object_path=dbName.schema.table` — only when the user "
-    "named that table (or confirmed schema after disambiguation).\n"
-    "- For non-table levels (`schema`, `database`, …), `object_path` is always required. Do not "
-    "report \"no access\" from a guessed table path when the user asked for all tables."
-)
-MCP_SOURCE_SYSTEM_ACCESS_TABLE_SCHEMA_DISAMBIGUATION_DOC = (
-    "**Table schema disambiguation (object_to_users + object_type=table):** When the user names "
-    "a table without a full `dbName.schema.table` path, pass only what they gave (table name, or "
-    "`dbName.table`) — **never invent a schema** (public, sakila, automation, …).\n"
-    "- If the response has `ambiguousMatch=true`, `requiresSchemaSelection=true`, or "
-    "`matchCandidates` with multiple entries, **stop and ask the user which schema** holds the "
-    "table. List schema names or full paths from `matchCandidates` / `advisoryMessage`, wait "
-    "for their choice, then retry with `object_path=dbName.schema.table`.\n"
-    "- Do not set `resolve_all_matches=true` unless the user explicitly wants combined access "
-    "across every match.\n"
-    "- Do not present schema/database parent grants as table access when the user did not "
-    "specify a schema and table-level grants are missing or ambiguous."
-)
-MCP_SOURCE_SYSTEM_ACCESS_OBJECT_NAME_DOC = (
-    "**object_name** (optional): bare table or report name when scope is in `object_path`. "
-    "Composed before the API call: `object_path=prod_db` + `object_name=orders` → "
-    "`prod_db.orders`; "
-    "`object_path=prod_db.public` + `object_name=orders` → `prod_db.public.orders`; "
-    "`object_name=transactions` alone → `transactions`. Use with `object_type=table`.\n"
-    "**Prompt parsing:** split database/schema scope from the table name — "
-    "\"orders table in prod_db\" → `object_path=prod_db`, `object_name=orders`; "
-    "\"who can access `BUSINESS.BANKING.ORDERS`\" → `object_path=BUSINESS.BANKING.ORDERS` "
-    "or `object_path=BUSINESS.BANKING`, `object_name=ORDERS`; "
-    "bare \"table ORDERS\" / \"ORDERS\" → `object_name=ORDERS` (or `object_path=ORDERS`) "
-    "with `object_type=table`. Quotes, backticks, and trailing punctuation are stripped. "
-    "When multiple schemas match, wait for the user to pick one before retrying with "
-    "`dbName.schema.table`."
-)
-MCP_SOURCE_SYSTEM_ACCESS_PRIVILEGES_FILTER_DOC = (
-    "**privileges** (optional): post-filter response grants to rows whose native privilege list "
-    "includes any value you pass (e.g. `INSERT`, `UPDATE` for write-access checks). "
-    "Case-insensitive; does not change the API query."
-)
-MCP_SOURCE_SYSTEM_ACCESS_MULTI_CONNECTION_DOC = (
-    "**Multiple connections:** when the response spans more than one `connectionId` and you did "
-    "not pass `connection_id`, tell the user and ask for `connection_id` plus a narrower "
-    "`object_path` / `object_name` for best results — do not probe or discover connection ids."
-)
-MCP_SOURCE_SYSTEM_ACCESS_SAMPLE_PROMPTS_DOC = (
-    "**Sample routing (infer `query_direction`; only `source_system` + `query_direction` are "
-    "mandatory):**\n"
-    "1. \"What Redshift **tables** can svc_analytics access, and how was that granted?\" → "
-    "`user_to_objects`, `username=svc_analytics`, `object_type=table`. Present table grants only; "
-    "explain `grant_mechanism`, `contributing_role`, `contributing_group`.\n"
-    "2. \"Who has access to the **orders** table in prod_db in Redshift?\" → `object_to_users`, "
-    "`object_type=table`, `object_path=prod_db`, `object_name=orders` "
-    "(or full `prod_db.schema.orders` "
-    "when schema is known).\n"
-    "3. \"What can john.doe query in Snowflake? Which **roles** give him access?\" → "
-    "`user_to_objects`, `username=john.doe`, `object_type=all` "
-    "(every database/schema/table level). "
-    "Group by `contributing_role`.\n"
-    "4. \"Does svc_etl have **write** access to the transactions table in Redshift?\" → "
-    "`user_to_objects`, `username=svc_etl`, `object_type=table`, `object_name=transactions`, "
-    "`privileges=[\"INSERT\",\"UPDATE\",\"DELETE\"]`; answer yes/no from filtered rows."
-)
-MCP_SOURCE_SYSTEM_ACCESS_AGENT_RULES_DOC = (
-    "**Agent routing rules:**\n"
-    "- \"What can **user X** access?\" / \"What permissions does **RACHEL** have?\" → "
-    "`user_to_objects` with `username` = that user only. Present **only that user's** grants "
-    "from the response — never call `object_to_users` and list all principals.\n"
-    "- \"Who has access to **object Y**?\" → `object_to_users` with `object_path` + "
-    "`object_type`.\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_CONNECTION_ID_DOC
-    + "\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_OBJECT_PATH_SCOPE_DOC
-    + "\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_USERNAME_MATCH_DOC
-    + "\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_TABLE_SCHEMA_DISAMBIGUATION_DOC
-    + "\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_OBJECT_NAME_DOC
-    + "\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_PRIVILEGES_FILTER_DOC
-    + "\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_MULTI_CONNECTION_DOC
-    + "\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_SAMPLE_PROMPTS_DOC
-    + "\n"
-    "- When the user gives `username` but not `connection_id`, `object_type`, or `object_path`, "
-    "call the tool with what you have — do not infer object level from path segment count or "
-    "discover connector ids; ask the user for missing context if the API response is insufficient."
-)
-MCP_SNOWFLAKE_BUILTIN_OBJECTS_DOC = (
-    "**Snowflake built-in objects:**\n"
-    "- Always set `object_type` with `object_path` — e.g. `SNOWFLAKE.ALERT` + "
-    "`object_type=schema` (built-in **schema** `ALERT` in database `SNOWFLAKE`).\n"
-    "- Without `object_type`, the API may infer level from `.` segment count only: "
-    "`ALERT` (one segment) → database; `SNOWFLAKE.ALERT` (two) → schema.\n"
-    "- Do not confuse schema `ALERT` with table `ALERTS` (`object_type=table`).\n"
-    "- Built-in `SNOWFLAKE.*` schemas may be missing from RDAM harvest; grants are often "
-    "via Snowflake database roles (e.g. `SNOWFLAKE.ALERT_VIEWER`) — not in catalog/RDAM. "
-    "If RDAM has no rows, say so; do not fall back to catalog search."
-)
-MCP_OBJECT_PATH_PARTIAL_DOC = (
-    "When `object_path` is partial, `object_type` still disambiguates the RDAM level "
-    "(e.g. `schemaName` + `object_type=schema`, `tableName` + `object_type=table`, "
-    "`columnName` + `object_type=column`). "
-    "For tables, a full path is `dbName.schema.table` (three dot segments). "
-    + MCP_SOURCE_SYSTEM_ACCESS_TABLE_SCHEMA_DISAMBIGUATION_DOC
-    + "\n"
-    "Tableau: `object_type=project` vs `report` (path uses `/` for reports). "
-    "Redshift/Snowflake segment-count hints when `object_type` omitted on the API: "
-    "`BUSINESS` = database, `SNOWFLAKE.ALERT` = schema, `BUSINESS.BANKING.ALERTS` = table.\n"
-    "**Database paths:** for `object_type=database` and a single-segment path (e.g. "
-    "`IBIS_UDFS`, `BUSINESS`), the backend must resolve from `rdam_dbprivilege` without "
-    "requiring a catalog hit. If resolution returns not-found but the database exists in "
-    "Snowflake, verify crawl/RDAM harvest — uncrawled databases are a backend resolution "
-    "bug when RDAM rows exist."
 )
 
 # search-catalog query params (GET /api/v1/mcp/search-catalog).
@@ -911,3 +751,6 @@ MCP_PATH_LOOKUP_DQ_RULES = "/api/v1/mcp/lookup-dq-rules"
 MCP_PATH_ASSESS_CDE_DQ = "/api/v1/mcp/dq-intelligence/assess-cde"
 MCP_PATH_ASSOCIATE_DQ_RULE_OBJECTS = "/api/v1/mcp/dq-intelligence/associate-rule-objects"
 MCP_PATH_CREATE_DQ_RULES = "/api/v1/mcp/dq-intelligence/create-rules"
+MCP_PATH_GENERATE_DQ_QUERIES = "/api/v1/mcp/dq-intelligence/generate-queries"
+MCP_PATH_VALIDATE_DQ_QUERIES = "/api/v1/mcp/dq-intelligence/validate-queries"
+MCP_PATH_CREATE_SQL_DQ_RULE = "/api/v1/mcp/dq-intelligence/create-sql-rule"

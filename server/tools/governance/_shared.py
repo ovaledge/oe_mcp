@@ -21,8 +21,9 @@ def _positive_int(value: object) -> int | None:
 
 _CREATE_CONFIRM_AGENT_INSTRUCTION = (
     "Show formattedResponse and wait for explicit user approval. "
-    "Do not set create_confirmed_by_user=true until the user confirms. "
-    "Then re-call with create_confirmed_by_user=true and the same parameters."
+    "Do not set write_confirmed_by_user=true until the user confirms. "
+    "Then re-call with write_confirmed_by_user=true, confirmation_token from the "
+    "preview, and the same parameters."
 )
 
 _ROLE_KEYS_CANONICAL: dict[str, str] = {

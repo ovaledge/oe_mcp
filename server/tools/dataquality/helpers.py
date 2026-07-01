@@ -9,10 +9,28 @@ from server.constants import (
     MCP_PATH_ASSESS_CDE_DQ,
     MCP_PATH_ASSOCIATE_DQ_RULE_OBJECTS,
     MCP_PATH_CREATE_DQ_RULES,
+    MCP_PATH_CREATE_SQL_DQ_RULE,
+    MCP_PATH_GENERATE_DQ_QUERIES,
     MCP_PATH_LOOKUP_DQ_RULES,
+    MCP_PATH_VALIDATE_DQ_QUERIES,
+    TOOL_ASSESS_CDE_DQ,
+    TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
+    TOOL_CREATE_DQ_RULES,
+    TOOL_CREATE_SQL_DQ_RULE,
+    TOOL_VALIDATE_DQ_QUERIES,
 )
+from server.tools.common.confirm_gate import attach_confirmation_token
 from server.tools.common.descriptions import classify_tool_desc
 from server.tools.common.errors import error_payload
+
+_DQ_ASSOCIATE_CONFIRM_INSTRUCTION = (
+    "Present formattedResponse and wait for explicit user approval before setting "
+    "write_confirmed_by_user=true."
+)
+_DQ_CREATE_CONFIRM_INSTRUCTION = (
+    "Present formattedResponse and wait for explicit user approval before setting "
+    "write_confirmed_by_user=true."
+)
 
 _DESC_ASSESS_CDE_DQ = classify_tool_desc(
     "Assess Critical Data Element (CDE) columns and DQ-applicable assets for coverage: "
@@ -60,11 +78,10 @@ _DESC_ASSOCIATE_DQ_RULE_OBJECTS = classify_tool_desc(
     f"**objectType**: {MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC} only.\n\n"
     "Published (ACTIVE) data quality rules are temporarily demoted to draft for association, "
     "then restored to published when complete. Rules already in draft proceed directly.\n\n"
-    "Response includes statusMessage (outcome summary), counts "
-    "(associatedCount, skippedCount, failedCount), and per-row status:\n"
-    "- associated: linked to the data quality rule (including already linked on idempotent retry)\n"
-    "- skipped: unsupported column data type / connector for the function\n"
-    "- failed: invalid object type, not found, or license error\n\n"
+    "Response: statusMessage, associatedCount/skippedCount/failedCount, per-row status "
+    "(associated, skipped, failed).\n\n"
+    "**Confirm gate:** preview without write_confirmed_by_user → user approval → "
+    "write_confirmed_by_user=true + confirmation_token from preview.\n\n"
     "Present formattedResponse to the user. Audit source OE-MCP."
 )
 
@@ -81,17 +98,13 @@ _DESC_CREATE_DQ_RULES = classify_tool_desc(
     "**prefer_existing_rule** (default true): associate when a recommended rule exists.\n\n"
     "**skip_duplicate_function_on_object** (default true): skip if object already has a "
     "rule for the same function type.\n\n"
-    "**supplemental_criteria_text** (optional): success/input criteria from the user prompt "
-    "(e.g. 'Success: equal to 300') when not already in catalog metadata.\n\n"
-    "Criteria priority: parsed metadata or supplemental_criteria_text, then function defaults.\n\n"
-    "Before creating a data quality rule, each object is validated against the "
-    "recommended function "
-    "(column/file-column data type, connector DQ support, addon license) using the same "
-    "checks as associate_dq_rule_objects. Unsupported objects return status skipped with "
-    "a clear message; no orphan data quality rule is created.\n\n"
-    "Row statuses: created, associated, skipped, criteria_missing, function_not_identified, "
-    "failed. New rules use creation type OE MCP. criteria_missing includes descriptionMessage "
-    "when metadata and function defaults are insufficient. Audit source OE-MCP."
+    "**supplemental_criteria_text** (optional): user prompt criteria when not in "
+    "catalog metadata.\n\n"
+    "Criteria priority: metadata or supplemental_criteria_text, then function defaults.\n\n"
+    "Object validation and row statuses: same as associate_dq_rule_objects.\n\n"
+    "**Confirm gate:** preview → user approval → write_confirmed_by_user=true + "
+    "confirmation_token from preview.\n\n"
+    "Routing: docs://ovaledge/mcp_workflows (CDE / DQ intelligence). Audit source OE-MCP."
 )
 
 _DESC_LOOKUP_DQ_RULE = classify_tool_desc(
@@ -129,6 +142,38 @@ def normalize_dq_object_type(object_type: str | None) -> str | None:
     return MCP_DQ_OBJECT_TYPE_ALIASES.get(key)
 
 
+def _normalize_dq_api_objects(
+    objects: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]] | None, dict[str, Any] | None]:
+    """Validate and normalize catalog object refs for DQ assess/create payloads."""
+    api_objects: list[dict[str, Any]] = []
+    for idx, raw in enumerate(objects):
+        if not isinstance(raw, dict):
+            return None, error_payload(
+                f"objects[{idx}] must be an object with objectId and objectType."
+            )
+        oid = raw.get("objectId", raw.get("object_id"))
+        otype_raw = raw.get("objectType", raw.get("object_type"))
+        if oid is None:
+            return None, error_payload(f"objects[{idx}] requires objectId (or object_id).")
+        try:
+            oid_int = int(oid)
+        except (TypeError, ValueError):
+            return None, error_payload(f"objects[{idx}].objectId must be a positive integer.")
+        if oid_int <= 0:
+            return None, error_payload(f"objects[{idx}].objectId must be a positive integer.")
+        otype = normalize_dq_object_type(
+            str(otype_raw) if otype_raw is not None else None
+        )
+        if otype is None:
+            return None, error_payload(
+                f"objects[{idx}].objectType must be one of {MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC}, "
+                f"got {otype_raw!r}.",
+            )
+        api_objects.append({"objectId": oid_int, "objectType": otype})
+    return api_objects, None
+
+
 def validate_assess_cde_dq_args(
     discover_cde_columns: bool,
     objects: list[dict[str, Any]] | None,
@@ -139,6 +184,10 @@ def validate_assess_cde_dq_args(
             "Provide objects from search_catalog_assets, or set discover_cde_columns=true "
             "to discover CDE columns.",
         )
+    if refs:
+        _, err = _normalize_dq_api_objects(refs)
+        if err is not None:
+            return err
     return None
 
 
@@ -162,29 +211,9 @@ def build_assess_cde_dq_payload(
         payload["descriptionTermName"] = term_name
     if not objects:
         return payload
-    api_objects: list[dict[str, Any]] = []
-    for idx, raw in enumerate(objects):
-        if not isinstance(raw, dict):
-            return error_payload(f"objects[{idx}] must be an object with objectId and objectType.")
-        oid = raw.get("objectId", raw.get("object_id"))
-        otype_raw = raw.get("objectType", raw.get("object_type"))
-        if oid is None:
-            return error_payload(f"objects[{idx}] requires objectId (or object_id).")
-        try:
-            oid_int = int(oid)
-        except (TypeError, ValueError):
-            return error_payload(f"objects[{idx}].objectId must be a positive integer.")
-        if oid_int <= 0:
-            return error_payload(f"objects[{idx}].objectId must be a positive integer.")
-        otype = normalize_dq_object_type(
-            str(otype_raw) if otype_raw is not None else None
-        )
-        if otype is None:
-            return error_payload(
-                f"objects[{idx}].objectType must be one of {MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC}, "
-                f"got {otype_raw!r}.",
-            )
-        api_objects.append({"objectId": oid_int, "objectType": otype})
+    api_objects, err = _normalize_dq_api_objects(objects)
+    if err is not None:
+        return err
     payload["objects"] = api_objects
     return payload
 
@@ -311,6 +340,84 @@ def format_create_dq_rules_response(body: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _summarize_dq_object_refs(objects: list[dict[str, Any]] | None) -> list[str]:
+    lines: list[str] = []
+    if not isinstance(objects, list):
+        return lines
+    for obj in objects:
+        if not isinstance(obj, dict):
+            continue
+        oid = obj.get("objectId", "?")
+        otype = obj.get("objectType", "?")
+        lines.append(f"- **{otype}** (id {oid})")
+    return lines
+
+
+def format_associate_dq_rule_confirmation_preview(body: dict[str, Any]) -> dict[str, Any]:
+    rule_id = body.get("dqruleId")
+    skip = body.get("skipAlreadyAssociated")
+    object_lines = _summarize_dq_object_refs(body.get("objects"))
+    objects_block = "\n".join(object_lines) if object_lines else "- (no objects)"
+    preview = {
+        "ok": True,
+        "awaitingUserConfirmation": True,
+        "workflowPhase": "confirm_update",
+        "doNotUpdate": True,
+        "writeConfirmedByUser": False,
+        "formattedResponse": (
+            "**Confirm DQ rule association**\n\n"
+            f"- **DQ rule id:** {rule_id}\n"
+            f"- **skip_already_associated:** {skip}\n"
+            f"**Objects:**\n{objects_block}\n\n"
+            "Ask the user to confirm. After they approve, call again with "
+            "`write_confirmed_by_user=true`, `confirmation_token` from this preview, "
+            "and the same dqrule_id, objects, and skip_already_associated."
+        ),
+        "agentInstruction": _DQ_ASSOCIATE_CONFIRM_INSTRUCTION,
+        "pendingUpdate": body,
+    }
+    return attach_confirmation_token(preview, body)
+
+
+def format_create_dq_rules_confirmation_preview(body: dict[str, Any]) -> dict[str, Any]:
+    discover = body.get("discoverCdeColumns")
+    prefer = body.get("preferExistingRule")
+    skip_dup = body.get("skipDuplicateFunctionOnObject")
+    limit = body.get("limit")
+    field_name = body.get("descriptionCustomFieldName")
+    term_name = body.get("descriptionTermName")
+    object_lines = _summarize_dq_object_refs(body.get("objects"))
+    objects_block = "\n".join(object_lines) if object_lines else "- (discover mode or empty)"
+    field_line = ""
+    if isinstance(field_name, str) and field_name.strip():
+        field_line = f"\n- **description_custom_field_name:** {field_name.strip()}"
+    if isinstance(term_name, str) and term_name.strip():
+        field_line += f"\n- **description_term_name:** {term_name.strip()}"
+    preview = {
+        "ok": True,
+        "awaitingUserConfirmation": True,
+        "workflowPhase": "confirm_create",
+        "doNotCreate": True,
+        "writeConfirmedByUser": False,
+        "formattedResponse": (
+            "**Confirm DQ rule create/associate**\n\n"
+            f"- **discover_cde_columns:** {discover}\n"
+            f"- **prefer_existing_rule:** {prefer}\n"
+            f"- **skip_duplicate_function_on_object:** {skip_dup}\n"
+            f"- **limit:** {limit}"
+            f"{field_line}\n"
+            f"**Objects:**\n{objects_block}\n\n"
+            "Ask the user to confirm. After they approve, call again with "
+            "`write_confirmed_by_user=true`, `confirmation_token` from this preview, "
+            "and the same discover_cde_columns, objects, limit, flags, and optional "
+            "description_term_name or description_custom_field_name."
+        ),
+        "agentInstruction": _DQ_CREATE_CONFIRM_INSTRUCTION,
+        "pendingCreate": body,
+    }
+    return attach_confirmation_token(preview, body)
+
+
 def build_associate_dq_rule_objects_payload(
     dqrule_id: int,
     objects: list[dict[str, Any]] | None,
@@ -370,3 +477,513 @@ def build_create_dq_rules_payload(
     if built.get("objects"):
         payload["objects"] = built["objects"]
     return payload
+
+
+def _unwrap_api_data(body: Any) -> Any:
+    if isinstance(body, dict) and "data" in body:
+        return body.get("data")
+    return body
+
+
+_DESC_GENERATE_DQ_QUERIES = classify_tool_desc(
+    "Generate rule/stats/failed-values SQL (custom_sql). "
+    f"POST {MCP_PATH_GENERATE_DQ_QUERIES}. Requires objects; after {TOOL_ASSESS_CDE_DQ}."
+)
+
+_DESC_VALIDATE_DQ_QUERIES = classify_tool_desc(
+    "Validate DQ SQL on connection. "
+    f"POST {MCP_PATH_VALIDATE_DQ_QUERIES}. connection_id, schema_id, three queries; confirm gate."
+)
+
+_DESC_CREATE_SQL_DQ_RULE = classify_tool_desc(
+    "Create draft oequery DQ rule and associate objects. "
+    f"POST {MCP_PATH_CREATE_SQL_DQ_RULE}. rule_name; queries or code_object_id; confirm gate."
+)
+
+_DQ_SQL_VALIDATE_CONFIRM_INSTRUCTION = (
+    "Present formattedResponse and wait for explicit user approval before setting "
+    "write_confirmed_by_user=true to execute SQL on the connection."
+)
+_DQ_SQL_CREATE_CONFIRM_INSTRUCTION = (
+    "Present formattedResponse and wait for explicit user approval before setting "
+    "write_confirmed_by_user=true."
+)
+
+_REUSE_ASSOCIATE_EXISTING_DQR = "associate_existing_dqr"
+_REUSE_CREATE_FROM_CODE = "create_from_code"
+_REUSE_ALREADY_ASSOCIATED = "already_associated"
+
+
+def _sql_context_ids(data: dict[str, Any]) -> tuple[int | None, int | None]:
+    context = data.get("context")
+    if not isinstance(context, dict):
+        return None, None
+    connection_id = context.get("connectionId")
+    schema_id = context.get("schemaId")
+    conn = int(connection_id) if connection_id is not None and connection_id > 0 else None
+    schema = int(schema_id) if schema_id is not None and schema_id > 0 else None
+    return conn, schema
+
+
+def _format_sql_context_lines(data: dict[str, Any]) -> list[str]:
+    connection_id, schema_id = _sql_context_ids(data)
+    if connection_id is None or schema_id is None:
+        return []
+    return [
+        f"- **connection_id:** {connection_id} (for {TOOL_VALIDATE_DQ_QUERIES})",
+        f"- **schema_id:** {schema_id} (for {TOOL_VALIDATE_DQ_QUERIES})",
+    ]
+
+
+def _validate_queries_context_hint(data: dict[str, Any]) -> str:
+    connection_id, schema_id = _sql_context_ids(data)
+    if connection_id is None or schema_id is None:
+        return (
+            f"Pass connection_id and schema_id from data.context when calling "
+            f"{TOOL_VALIDATE_DQ_QUERIES}."
+        )
+    return (
+        f"Call {TOOL_VALIDATE_DQ_QUERIES} with connection_id={connection_id}, "
+        f"schema_id={schema_id}, and all three queries."
+    )
+
+
+def _resolve_dqrule_id_from_code_match(data: dict[str, Any]) -> int | None:
+    rec_id = data.get("recommendedCodeObjectId")
+    matches = data.get("matchingCodeObjects")
+    if not isinstance(matches, list):
+        return None
+    for item in matches:
+        if not isinstance(item, dict):
+            continue
+        if rec_id is not None and item.get("codeObjectId") == rec_id:
+            dqrule_id = item.get("dqruleId")
+            return int(dqrule_id) if dqrule_id is not None and dqrule_id > 0 else None
+    first = matches[0] if matches else None
+    if isinstance(first, dict):
+        dqrule_id = first.get("dqruleId")
+        return int(dqrule_id) if dqrule_id is not None and dqrule_id > 0 else None
+    return None
+
+
+def _append_generate_query_preview_lines(lines: list[str], data: dict[str, Any]) -> None:
+    if data.get("ruleQuery"):
+        lines.append("**Rule query** (preview):")
+        lines.append(f"```sql\n{data['ruleQuery']}\n```")
+    if data.get("statsQuery"):
+        lines.append("**Stats query** (preview):")
+        lines.append(f"```sql\n{data['statsQuery']}\n```")
+    if data.get("failedValuesQuery"):
+        lines.append("**Failed-values query** (preview):")
+        lines.append(f"```sql\n{data['failedValuesQuery']}\n```")
+
+
+def _agent_instruction_for_code_found(data: dict[str, Any]) -> str:
+    action = str(data.get("recommendedReuseAction") or "")
+    code_id = data.get("recommendedCodeObjectId")
+    dqrule_id = _resolve_dqrule_id_from_code_match(data)
+    if action == _REUSE_ALREADY_ASSOCIATED:
+        return (
+            "Target is already associated to the matching DQ rule. "
+            f"Do not call {TOOL_VALIDATE_DQ_QUERIES} or {TOOL_CREATE_SQL_DQ_RULE}."
+        )
+    if action == _REUSE_ASSOCIATE_EXISTING_DQR:
+        rule_hint = f"dqrule_id={dqrule_id}" if dqrule_id else "dqrule_id from data"
+        return (
+            f"Call {TOOL_ASSOCIATE_DQ_RULE_OBJECTS} with {rule_hint} and the target "
+            f"object(s), confirm gate required. Do not call {TOOL_VALIDATE_DQ_QUERIES} "
+            f"or {TOOL_CREATE_SQL_DQ_RULE}."
+        )
+    if action == _REUSE_CREATE_FROM_CODE:
+        code_hint = f"code_object_id={code_id}" if code_id else "code_object_id from data"
+        conn, schema = _sql_context_ids(data)
+        ctx = ""
+        if conn is not None and schema is not None:
+            ctx = f", connection_id={conn}, schema_id={schema}"
+        return (
+            f"Call {TOOL_CREATE_SQL_DQ_RULE} with {code_hint}{ctx} and rule_name; "
+            "confirm gate required. Skip validate unless the user explicitly requests it."
+        )
+    return (
+        f"Review recommendedReuseAction in data. Prefer {TOOL_ASSOCIATE_DQ_RULE_OBJECTS} "
+        f"or {TOOL_CREATE_SQL_DQ_RULE} with code_object_id before generating new SQL."
+    )
+
+
+def validate_generate_dq_queries_args(
+    objects: list[dict[str, Any]] | None,
+) -> dict[str, Any] | None:
+    refs = objects or []
+    if not refs:
+        return error_payload(
+            "At least one object with objectId and objectType is required.",
+        )
+    _, err = _normalize_dq_api_objects(refs)
+    return err
+
+
+def build_generate_dq_queries_payload(
+    objects: list[dict[str, Any]] | None,
+    business_rule: str | None,
+    business_description: str | None,
+) -> dict[str, Any]:
+    built = build_assess_cde_dq_payload(False, objects, 1)
+    if "error" in built:
+        return built
+    api_objects = built.get("objects") or []
+    if not api_objects:
+        return error_payload(
+            "At least one object with objectId and objectType is required.",
+        )
+    target = api_objects[0]
+    payload: dict[str, Any] = {
+        "objectId": target["objectId"],
+        "objectType": target.get("objectType", "oecolumn"),
+    }
+    br = strip_or_none_description_field(business_rule)
+    bd = strip_or_none_description_field(business_description)
+    if br is not None:
+        payload["businessRule"] = br
+    if bd is not None:
+        payload["businessDescription"] = bd
+    return payload
+
+
+def format_generate_dq_queries_response(body: dict[str, Any]) -> dict[str, Any]:
+    data = _unwrap_api_data(body)
+    if not isinstance(data, dict):
+        return body if isinstance(body, dict) else {"ok": True, "data": body}
+    status = str(data.get("status", ""))
+    lines = [
+        f"**Generate SQL queries** — status: `{status}`",
+        "",
+    ]
+    if data.get("recommendedFunction"):
+        lines.append(f"- Recommended function: `{data.get('recommendedFunction')}`")
+    if data.get("recommendedWorkflow"):
+        lines.append(f"- Workflow: `{data.get('recommendedWorkflow')}`")
+    if status == "cross_schema_blocked":
+        message = data.get("message", "")
+        return {
+            "ok": True,
+            "workflowPhase": "generate_queries",
+            "formattedResponse": (
+                f"**Generate SQL queries** — status: `{status}`\n\n"
+                f"{message or 'Cross-schema dependent rules cannot be created.'}"
+            ),
+            "data": data,
+            "agentInstruction": (
+                f"Do not call {TOOL_VALIDATE_DQ_QUERIES} or {TOOL_CREATE_SQL_DQ_RULE}. "
+                "Cross-schema dependent rules are not supported for custom SQL."
+            ),
+        }
+    if status == "function_based":
+        lines.append(
+            f"This DQ function is not oequery-based. Use {TOOL_CREATE_DQ_RULES} "
+            f"(or {TOOL_ASSESS_CDE_DQ} → {TOOL_ASSOCIATE_DQ_RULE_OBJECTS}) instead."
+        )
+        return {
+            "ok": True,
+            "workflowPhase": "generate_queries",
+            "formattedResponse": "\n".join(lines),
+            "data": data,
+            "agentInstruction": (
+                f"Do not call {TOOL_VALIDATE_DQ_QUERIES} or {TOOL_CREATE_SQL_DQ_RULE}. "
+                f"Route to {TOOL_CREATE_DQ_RULES} or {TOOL_ASSOCIATE_DQ_RULE_OBJECTS}."
+            ),
+        }
+    if status == "function_not_identified":
+        lines.append(
+            f"No DQ function could be resolved. Run {TOOL_ASSESS_CDE_DQ} first or add "
+            "Function Name to business description."
+        )
+        return {
+            "ok": True,
+            "workflowPhase": "generate_queries",
+            "formattedResponse": "\n".join(lines),
+            "data": data,
+            "agentInstruction": "Ask the user to clarify the DQ function name before retrying.",
+        }
+    context_lines = _format_sql_context_lines(data)
+    if context_lines:
+        lines.extend(context_lines)
+    if status == "code_found":
+        action = data.get("recommendedReuseAction") or "reuse"
+        lines.append("")
+        lines.append(
+            f"Existing code object **{data.get('recommendedCodeObjectId')}** matched — "
+            f"recommended action: `{action}`."
+        )
+        _append_generate_query_preview_lines(lines, data)
+        out: dict[str, Any] = {
+            "ok": True,
+            "workflowPhase": "generate_queries",
+            "formattedResponse": "\n".join(lines),
+            "data": data,
+            "agentInstruction": _agent_instruction_for_code_found(data),
+        }
+        connection_id, schema_id = _sql_context_ids(data)
+        if connection_id is not None:
+            out["connectionId"] = connection_id
+        if schema_id is not None:
+            out["schemaId"] = schema_id
+        return out
+    lines.append("")
+    _append_generate_query_preview_lines(lines, data)
+    if data.get("reuseExistingCode"):
+        action = data.get("recommendedReuseAction") or "reuse"
+        lines.append(
+            f"Existing code object **{data.get('recommendedCodeObjectId')}** matched — "
+            f"recommended action: `{action}`."
+        )
+    elif data.get("matchingCodeObjects"):
+        lines.append("Matching code objects found — prefer reuse before create.")
+    validate_hint = _validate_queries_context_hint(data)
+    out = {
+        "ok": True,
+        "workflowPhase": "generate_queries",
+        "formattedResponse": "\n".join(lines),
+        "data": data,
+        "agentInstruction": (
+            f"{validate_hint} Confirm gate required. After canCreateRule is true, call "
+            f"{TOOL_CREATE_SQL_DQ_RULE} with user approval."
+        ),
+    }
+    connection_id, schema_id = _sql_context_ids(data)
+    if connection_id is not None:
+        out["connectionId"] = connection_id
+    if schema_id is not None:
+        out["schemaId"] = schema_id
+    return out
+
+
+def validate_validate_dq_queries_args(
+    connection_id: int | None,
+    schema_id: int | None,
+    rule_query: str | None,
+    stats_query: str | None,
+    failed_values_query: str | None,
+) -> dict[str, Any] | None:
+    if connection_id is None or connection_id <= 0 or schema_id is None or schema_id <= 0:
+        return error_payload("connection_id and schema_id are required.")
+    if not strip_or_none_description_field(rule_query):
+        return error_payload("rule_query is required.")
+    if not strip_or_none_description_field(stats_query):
+        return error_payload("stats_query is required.")
+    if not strip_or_none_description_field(failed_values_query):
+        return error_payload("failed_values_query is required.")
+    return None
+
+
+def build_validate_dq_queries_payload(
+    connection_id: int,
+    schema_id: int,
+    rule_query: str,
+    stats_query: str,
+    failed_values_query: str,
+) -> dict[str, Any]:
+    return {
+        "connectionId": int(connection_id),
+        "schemaId": int(schema_id),
+        "ruleQuery": rule_query.strip(),
+        "statsQuery": stats_query.strip(),
+        "failedValuesQuery": failed_values_query.strip(),
+    }
+
+
+def format_validate_dq_queries_confirmation_preview(
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    preview = {
+        "ok": True,
+        "awaitingUserConfirmation": True,
+        "workflowPhase": "confirm_create",
+        "doNotCreate": True,
+        "writeConfirmedByUser": False,
+        "formattedResponse": (
+            "**Confirm DQ SQL validation (executes on connection)**\n\n"
+            f"- **connection_id:** {payload.get('connectionId')}\n"
+            f"- **schema_id:** {payload.get('schemaId')}\n"
+            "- **Queries:** rule, stats, and failed-values SELECTs will be executed "
+            "(limit 1 row each).\n\n"
+            "Ask the user to confirm. After they approve, call again with "
+            "`write_confirmed_by_user=true`, `confirmation_token` from this preview, "
+            "and the same connection_id, schema_id, and three queries."
+        ),
+        "agentInstruction": _DQ_SQL_VALIDATE_CONFIRM_INSTRUCTION,
+        "pendingCreate": payload,
+    }
+    return attach_confirmation_token(preview, payload)
+
+
+def format_validate_dq_queries_response(body: dict[str, Any]) -> dict[str, Any]:
+    data = _unwrap_api_data(body)
+    if not isinstance(data, dict):
+        return body if isinstance(body, dict) else {"ok": True, "data": body}
+    can_create = bool(data.get("canCreateRule"))
+    lines = [
+        "**Validate SQL queries**",
+        f"- Rule query valid: {'Yes' if data.get('ruleQueryValid') else 'No'}",
+        f"- Can create rule: {'Yes' if can_create else 'No'}",
+    ]
+    results = data.get("results")
+    if isinstance(results, list):
+        for item in results:
+            if not isinstance(item, dict):
+                continue
+            qtype = item.get("queryType", "?")
+            valid = "valid" if item.get("valid") else "invalid"
+            msg = item.get("message", "")
+            lines.append(f"- {qtype}: {valid}" + (f" ({msg})" if msg else ""))
+    return {
+        "ok": True,
+        "workflowPhase": "validate_queries",
+        "canCreateRule": can_create,
+        "formattedResponse": "\n".join(lines),
+        "data": data,
+        "agentInstruction": (
+            f"Proceed to {TOOL_CREATE_SQL_DQ_RULE} only when canCreateRule is true "
+            "and the user confirms."
+        ),
+    }
+
+
+def validate_create_sql_dq_rule_args(
+    objects: list[dict[str, Any]] | None,
+    rule_name: str | None,
+    rule_query: str | None,
+    stats_query: str | None,
+    failed_values_query: str | None,
+    code_object_id: int | None,
+) -> dict[str, Any] | None:
+    refs = objects or []
+    if not refs:
+        return error_payload(
+            "At least one object with objectId and objectType is required.",
+        )
+    if not strip_or_none_description_field(rule_name):
+        return error_payload("rule_name is required.")
+    has_code = code_object_id is not None and code_object_id > 0
+    has_rule_query = bool(strip_or_none_description_field(rule_query))
+    if not has_code and not has_rule_query:
+        return error_payload("rule_query or code_object_id is required.")
+    if has_rule_query and not has_code:
+        if not strip_or_none_description_field(stats_query):
+            return error_payload("stats_query is required when rule_query is provided.")
+        if not strip_or_none_description_field(failed_values_query):
+            return error_payload(
+                "failed_values_query is required when rule_query is provided."
+            )
+    _, err = _normalize_dq_api_objects(refs)
+    return err
+
+
+def build_create_sql_dq_rule_payload(
+    objects: list[dict[str, Any]] | None,
+    rule_name: str,
+    rule_query: str | None,
+    stats_query: str | None,
+    failed_values_query: str | None,
+    connection_id: int | None,
+    schema_id: int | None,
+    purpose: str | None,
+    recommended_function: str | None,
+    code_object_id: int | None,
+) -> dict[str, Any]:
+    built = build_assess_cde_dq_payload(False, objects, 1)
+    if "error" in built:
+        return built
+    api_objects = built.get("objects") or []
+    if not api_objects:
+        return error_payload(
+            "At least one object with objectId and objectType is required.",
+        )
+    target = api_objects[0]
+    payload: dict[str, Any] = {
+        "objectId": target["objectId"],
+        "objectType": target.get("objectType", "oecolumn"),
+        "ruleName": rule_name.strip(),
+    }
+    rq = strip_or_none_description_field(rule_query)
+    sq = strip_or_none_description_field(stats_query)
+    fv = strip_or_none_description_field(failed_values_query)
+    if rq:
+        payload["ruleQuery"] = rq
+    if sq:
+        payload["statsQuery"] = sq
+    if fv:
+        payload["failedValuesQuery"] = fv
+    if code_object_id is not None and code_object_id > 0:
+        payload["codeObjectId"] = int(code_object_id)
+    if connection_id is not None and connection_id > 0:
+        payload["connectionId"] = int(connection_id)
+    if schema_id is not None and schema_id > 0:
+        payload["schemaId"] = int(schema_id)
+    p = strip_or_none_description_field(purpose)
+    if p:
+        payload["purpose"] = p
+    rf = strip_or_none_description_field(recommended_function)
+    if rf:
+        payload["recommendedFunction"] = rf
+    if len(api_objects) > 1:
+        payload["additionalObjects"] = api_objects[1:]
+    return payload
+
+
+def format_create_sql_dq_rule_confirmation_preview(
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    object_lines = _summarize_dq_object_refs(
+        [{"objectId": payload.get("objectId"), "objectType": payload.get("objectType")}]
+        + (payload.get("additionalObjects") or [])
+    )
+    objects_block = "\n".join(object_lines) if object_lines else "- (none)"
+    preview = {
+        "ok": True,
+        "awaitingUserConfirmation": True,
+        "workflowPhase": "confirm_create",
+        "doNotCreate": True,
+        "writeConfirmedByUser": False,
+        "formattedResponse": (
+            "**Confirm custom SQL DQ rule create**\n\n"
+            f"- **rule_name:** {payload.get('ruleName')}\n"
+            f"**Objects:**\n{objects_block}\n\n"
+            "Creates draft oequery DQ rule with rule/stats/failed-values code objects. "
+            "Ask the user to confirm. After they approve, call again with "
+            "`write_confirmed_by_user=true`, `confirmation_token` from this preview, "
+            "and the same parameters."
+        ),
+        "agentInstruction": _DQ_SQL_CREATE_CONFIRM_INSTRUCTION,
+        "pendingCreate": payload,
+    }
+    return attach_confirmation_token(preview, payload)
+
+
+def format_create_sql_dq_rule_response(body: dict[str, Any]) -> dict[str, Any]:
+    data = _unwrap_api_data(body)
+    if not isinstance(data, dict):
+        return body if isinstance(body, dict) else {"ok": True, "data": body}
+    status = data.get("status", "")
+    message = data.get("message", "")
+    if status == "cross_schema_blocked":
+        return {
+            "ok": True,
+            "workflowPhase": "create_sql_rule",
+            "formattedResponse": (
+                f"**Custom SQL DQ rule** — status: `{status}`\n\n"
+                f"{message or 'Cross-schema dependent rules cannot be created.'}"
+            ),
+            "data": data,
+            "agentInstruction": (
+                "Do not retry with manual SQL for cross-schema dependent rules."
+            ),
+        }
+    rule_name = data.get("ruleName") or data.get("dqruleId")
+    out = body if isinstance(body, dict) else {"ok": True, "data": data}
+    out = dict(out)
+    out["workflowPhase"] = "create_sql_rule"
+    out["formattedResponse"] = (
+        f"**Custom SQL DQ rule** — status: `{status}`\n\n"
+        f"Draft rule **{rule_name}** created. Review queries and associations in OvalEdge."
+    )
+    return out

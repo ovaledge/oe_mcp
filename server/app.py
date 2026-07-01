@@ -5,13 +5,34 @@ from fastmcp import FastMCP
 from server.branding import mcp_server_icons
 from server.config import settings
 from server.constants import (
+    DOCS_RESOURCE_URI_PREFIX,
     MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC,
     MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC,
+    TOOL_GET_USER_OBJECT_ACCESS,
+    TOOL_LOOKUP_DATASTORY,
+    TOOL_SEARCH_CATALOG,
+    TOOL_SEARCH_DOCS,
+    TOOL_SOURCE_SYSTEM_ACCESS,
 )
 from server.mcp import register_all
 
+_MCP_WORKFLOWS_RESOURCE_URI = f"{DOCS_RESOURCE_URI_PREFIX}/mcp_workflows"
+
+# Tool names embedded in server instructions (tests assert ⊆ MCP_TOOL_NAMES).
+MCP_SERVER_INSTRUCTION_TOOL_NAMES: frozenset[str] = frozenset(
+    {
+        TOOL_LOOKUP_DATASTORY,
+        TOOL_SEARCH_DOCS,
+        TOOL_SEARCH_CATALOG,
+        TOOL_SOURCE_SYSTEM_ACCESS,
+        TOOL_GET_USER_OBJECT_ACCESS,
+    }
+)
+
 # Routing detail lives in tool descriptions and docs://ovaledge/mcp_workflows — keep
-# server instructions short to limit always-on MCP context size.
+# server instructions short to limit always-on MCP context size. Cross-tool disambiguation
+# only; enforcement caveats (e.g. never fall back to catalog search for RDAM) live on
+# the owning tool descriptions.
 _MCP_SERVER_INSTRUCTIONS = (
     "You are connected to the OvalEdge data governance platform. "
     f"{MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC} "
@@ -19,16 +40,19 @@ _MCP_SERVER_INSTRUCTIONS = (
     "Ambiguous who-has-access: invoke resolve_object_access, present the 1/2 choice, and "
     "call no access tools (including search_catalog_assets) until the user replies. "
     "Use MCP tools for catalog discovery, governance lookups, native source access (RDAM), "
-    "and governed writes. Read each tool's description before calling; for multi-step playbooks "
-    "use workflow prompts or the docs://ovaledge/mcp_workflows resource. "
+    "and governed writes. At session start and before multi-step workflows, governed writes, "
+    f"RDAM, catalog ACL, or DQ work, read MCP resource {_MCP_WORKFLOWS_RESOURCE_URI} "
+    "(agent routing guide). Read each tool's description before calling; for multi-step "
+    "playbooks use workflow prompts listed in that guide. "
     "Present formattedResponse from tools to the user when provided. "
-    "Governed writes require create_confirmed_by_user=true only after the user approves "
+    "Governed writes require write_confirmed_by_user=true only after the user approves "
     "a confirm_create or confirm_update preview. "
-    "Org knowledge in data stories: lookup_datastory (not search_platform_docs). "
-    "Physical datasets: search_catalog_assets — not for who-has-access. "
-    "Who-has-access: source_system_access + access_intent_confirmed=native for native/DAM; "
-    "get_user_object_access + access_intent_confirmed=catalog_acl for OE security/ACL/catalog "
-    "access — never fall back to catalog search for RDAM. "
+    f"Org knowledge in data stories: {TOOL_LOOKUP_DATASTORY} (not {TOOL_SEARCH_DOCS}). "
+    f"Physical catalog discovery: {TOOL_SEARCH_CATALOG} — not for who-has-access. "
+    f"Native DB/BI grants (RDAM): {TOOL_SOURCE_SYSTEM_ACCESS} + access_intent_confirmed=native "
+    "— not catalog search or catalog ACL. "
+    f"OvalEdge catalog ACL (user/role grants on catalog objects): {TOOL_GET_USER_OBJECT_ACCESS} "
+    "+ access_intent_confirmed=catalog_acl — not native RDAM. "
     "User-facing links: navLink or redirectUrl from tool responses; never show ovaledge:// URIs. "
     "RBAC is enforced server-side; write tools need appropriate OvalEdge permissions."
 )
@@ -39,19 +63,18 @@ def create_mcp(lifespan: Any = None) -> FastMCP:
     Build the FastMCP application.
 
     Pass a lifespan only for local stdio (client_credentials JWT at startup).
-    Remote Lambda uses the default lifespan and sets JWT per request in middleware.
+    Remote HTTP entrypoints use a separate FastAPI app with AuthMiddleware.
     """
     mcp = FastMCP(
         name=settings.mcp_server_name,
         version=settings.mcp_server_version,
-        icons=mcp_server_icons(),
         instructions=_MCP_SERVER_INSTRUCTIONS,
         lifespan=lifespan,
+        icons=mcp_server_icons(),
     )
-
     register_all(mcp)
     return mcp
 
 
-# Shared instance for remote entrypoint and imports that expect a single app.
+# Default instance for stdio and tests.
 mcp = create_mcp()

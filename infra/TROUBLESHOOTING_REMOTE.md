@@ -16,7 +16,7 @@ export AUTH_MODE=remote_credentials
 export LAMBDA_MEMORY_SIZE=1024                                      # default in template; raise if OOM in logs
 export LAMBDA_TIMEOUT=30                                            # HTTP API max integration is 30s
 
-./scripts/deploy-zip.sh
+./scripts/deploy.sh --zip
 ```
 
 After deploy:

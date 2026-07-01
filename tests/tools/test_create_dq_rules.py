@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock
 
 from fastmcp import FastMCP
 
+from server.client import OvalEdgeError
 from server.constants import (
     MCP_DQ_ASSESS_LIMIT_DEFAULT,
     MCP_PATH_CREATE_DQ_RULES,
@@ -10,15 +11,27 @@ from server.constants import (
 from server.tools import dataquality
 from server.tools.dataquality.helpers import format_create_dq_rules_response
 from tests.helpers import get_tool_fn
+from tests.tools.confirm_test_helpers import invoke_write_confirmed
 
 
 class TestCreateDqRules:
+    async def test_preview_before_post(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
+        preview = await fn(discover_cde_columns=True)
+        assert preview["workflowPhase"] == "confirm_create"
+        assert preview["doNotCreate"] is True
+        assert preview.get("confirmationToken")
+        mock_oe_client.post.assert_not_called()
+
     async def test_discover_posts_payload(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.post.return_value = {"rows": []}
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
         fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
-        out = await fn(
+        out = await invoke_write_confirmed(
+            fn,
             discover_cde_columns=True,
             prefer_existing_rule=False,
             skip_duplicate_function_on_object=False,
@@ -39,7 +52,8 @@ class TestCreateDqRules:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
         fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
-        out = await fn(
+        out = await invoke_write_confirmed(
+            fn,
             objects=[{"objectId": 99, "objectType": "oetable"}],
             limit=10,
         )
@@ -60,7 +74,8 @@ class TestCreateDqRules:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
         fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
-        await fn(
+        await invoke_write_confirmed(
+            fn,
             objects=[{"objectId": 42, "objectType": "oecolumn"}],
             supplemental_criteria_text="Success criteria: equal to 300",
         )
@@ -76,6 +91,27 @@ class TestCreateDqRules:
             },
         )
 
+    async def test_description_term_name_forwarded(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.return_value = {"rows": []}
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
+        await invoke_write_confirmed(
+            fn,
+            discover_cde_columns=True,
+            description_term_name=" Net Revenue ",
+        )
+        mock_oe_client.post.assert_called_once_with(
+            MCP_PATH_CREATE_DQ_RULES,
+            {
+                "discoverCdeColumns": True,
+                "preferExistingRule": True,
+                "skipDuplicateFunctionOnObject": True,
+                "limit": MCP_DQ_ASSESS_LIMIT_DEFAULT,
+                "descriptionTermName": "Net Revenue",
+            },
+        )
+
     async def test_rejects_empty_without_discover(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
@@ -83,6 +119,14 @@ class TestCreateDqRules:
         out = await fn()
         assert out["status_code"] == 400
         mock_oe_client.post.assert_not_called()
+
+    async def test_oval_edge_error_returns_structured_dict(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.side_effect = OvalEdgeError(502, "Bad gateway")
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
+        out = await invoke_write_confirmed(fn, discover_cde_columns=True)
+        assert out["status_code"] == 502
 
 
 def test_format_create_dq_rules_created_with_object_linked():

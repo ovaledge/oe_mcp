@@ -16,7 +16,9 @@ from server.constants import (
     TOOL_COLUMN_PROFILE,
     TOOL_CREATE_DQ_RULES,
     TOOL_CREATE_GLOSSARY_TERM,
+    TOOL_CREATE_SQL_DQ_RULE,
     TOOL_CREATE_TAG,
+    TOOL_GENERATE_DQ_QUERIES,
     TOOL_GET_USER_OBJECT_ACCESS,
     TOOL_LOOKUP_DATASTORY,
     TOOL_LOOKUP_DQ_RULE,
@@ -29,6 +31,7 @@ from server.constants import (
     TOOL_TABLE_ENTITY_RELATIONSHIPS,
     TOOL_UPDATE_ASSET_DESCRIPTIONS,
     TOOL_UPDATE_GOVERNANCE_ROLES,
+    TOOL_VALIDATE_DQ_QUERIES,
 )
 from server.mcp_surface import MCP_WORKFLOW_PROMPT_NAMES
 from server.prompts.workflows import register as register_workflow_prompts
@@ -104,6 +107,16 @@ _PROMPT_REQUIRED_TOOLS: dict[str, tuple[str, ...]] = {
         TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
         TOOL_CREATE_DQ_RULES,
     ),
+    "create_custom_sql_dq_workflow": (
+        TOOL_SEARCH_CATALOG,
+        TOOL_ASSESS_CDE_DQ,
+        TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
+        TOOL_CREATE_DQ_RULES,
+        TOOL_GENERATE_DQ_QUERIES,
+        TOOL_VALIDATE_DQ_QUERIES,
+        TOOL_CREATE_SQL_DQ_RULE,
+        TOOL_LOOKUP_DQ_RULE,
+    ),
 }
 
 
@@ -178,14 +191,28 @@ class TestWorkflowPromptsOnFullApp:
 
 class TestMcpServerInstructions:
     def test_instructions_prioritize_data_stories_for_org_knowledge(self) -> None:
-        from server.app import create_mcp
+        from server.app import MCP_SERVER_INSTRUCTION_TOOL_NAMES, create_mcp
+        from server.constants import (
+            TOOL_GET_USER_OBJECT_ACCESS,
+            TOOL_LOOKUP_DATASTORY,
+            TOOL_SEARCH_CATALOG,
+            TOOL_SEARCH_DOCS,
+            TOOL_SOURCE_SYSTEM_ACCESS,
+        )
+        from server.mcp_surface import MCP_TOOL_NAMES
 
         mcp = create_mcp()
         instructions = (mcp.instructions or "").lower()
-        assert "lookup_datastory" in instructions
-        assert "search_platform_docs" in instructions
+        assert TOOL_LOOKUP_DATASTORY in instructions
+        assert TOOL_SEARCH_DOCS in instructions
+        assert TOOL_SEARCH_CATALOG in instructions
+        assert TOOL_SOURCE_SYSTEM_ACCESS in instructions
+        assert TOOL_GET_USER_OBJECT_ACCESS in instructions
+        assert "write_confirmed_by_user" in instructions
         assert "never show ovaledge://" in instructions
-        assert "navlink" in instructions or "redirecturl" in instructions
+        navlink = "navlink" in instructions or "redirecturl" in instructions
+        assert navlink
+        assert MCP_SERVER_INSTRUCTION_TOOL_NAMES <= MCP_TOOL_NAMES
 
     def test_instructions_platform_name_alone_does_not_skip_disambiguation(self) -> None:
         from server.app import create_mcp
@@ -196,6 +223,16 @@ class TestMcpServerInstructions:
         assert "snowflake" in instructions
         assert "redshift" in instructions
         assert "1" in instructions and "2" in instructions
+
+    def test_instructions_require_mcp_workflows_resource(self) -> None:
+        from server.app import create_mcp
+        from server.constants import DOCS_RESOURCE_URI_PREFIX
+
+        mcp = create_mcp()
+        instructions = (mcp.instructions or "").lower()
+        assert f"{DOCS_RESOURCE_URI_PREFIX}/mcp_workflows" in instructions
+        assert "session start" in instructions
+        assert "routing guide" in instructions
 
 
 class TestResolveObjectAccessPrompt:

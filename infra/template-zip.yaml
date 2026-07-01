@@ -27,6 +27,11 @@ Parameters:
     Description: >
       (AUTH_MODE=remote) Authorization Server issuer URL (must match JWT iss). Discovery loads
       /.well-known/openid-configuration or oauth-authorization-server under this base.
+  OAuthAllowedIssuers:
+    Type: String
+    Default: ""
+    Description: >
+      Comma-separated additional trusted JWT iss values (e.g. Auth0 custom domain and *.auth0.com).
   OAuthAudience:
     Type: String
     Default: ""
@@ -86,6 +91,20 @@ Parameters:
     Description: >
       Lambda timeout (seconds). API Gateway HTTP API caps integration at 30s; values above 30
       have no effect on /mcp until a longer-timeout front end is used.
+  EnableWaf:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >
+      Attach regional AWS WAF IP allowlist to the HTTP API stage (default action block).
+  AllowedSourceCidrs:
+    Type: CommaDelimitedList
+    Default: "127.0.0.1/32"
+    Description: >
+      IPv4 CIDR blocks allowed when EnableWaf=true. Ignored when WAF is disabled.
+
+Conditions:
+  CreateWaf: !Equals [!Ref EnableWaf, "true"]
 
 Globals:
   Function:
@@ -100,8 +119,8 @@ Resources:
     Metadata:
       BuildMethod: python3.12
       BuildProperties:
-        # Pip reads requirements.txt at CodeUri (repo root); that file includes infra/lambda-requirements.txt.
-        # false = native pip (no Docker). Use `sam build --use-container` if wheels must match Amazon Linux.
+        # Pip reads requirements.txt at CodeUri; deploy.sh stages a minimal tree for --zip.
+        # false = native pip (no Docker). Use SAM_USE_CONTAINER=true if wheels must match Amazon Linux.
         UseContainer: false
     Properties:
       # Physical name includes stack name so a ZIP stack (e.g. oe-mcp-zip) can coexist with the
@@ -122,6 +141,7 @@ Resources:
           OVALEDGE_TOKEN_EXCHANGE_PATH: !Ref OvalEdgeTokenExchangePath
           OVALEDGE_MAX_RETRIES: !Ref OvalEdgeMaxRetries
           OAUTH_ISSUER: !Ref OAuthIssuer
+          OAUTH_ALLOWED_ISSUERS: !Ref OAuthAllowedIssuers
           OAUTH_AUDIENCE: !Ref OAuthAudience
           OVALEDGE_REMOTE_FORWARD_IDP_TOKEN: !Ref OvalEdgeForwardIdpToken
           OVALEDGE_HTTP_AUTH_SCHEME: !Ref OvalEdgeHttpAuthScheme
@@ -231,6 +251,56 @@ Resources:
           ThrottlingBurstLimit: 10
           ThrottlingRateLimit: 5
 
+  AllowedSourceIpSet:
+    Type: AWS::WAFv2::IPSet
+    Condition: CreateWaf
+    Properties:
+      Name: !Sub ${AWS::StackName}-${Environment}-allowed-ipv4
+      Description: !Sub IPv4 allowlist for ${AWS::StackName} MCP HTTP API
+      Scope: REGIONAL
+      IPAddressVersion: IPV4
+      Addresses: !Ref AllowedSourceCidrs
+
+  MCPWebACL:
+    Type: AWS::WAFv2::WebACL
+    Condition: CreateWaf
+    Properties:
+      Name: !Sub ${AWS::StackName}-${Environment}-webacl
+      Description: !Sub IP allowlist Web ACL for ${AWS::StackName} MCP HTTP API
+      Scope: REGIONAL
+      DefaultAction:
+        Block: {}
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub ${AWS::StackName}-${Environment}-webacl
+      Rules:
+        - Name: AllowListedSourceIpv4
+          Priority: 0
+          Statement:
+            IPSetReferenceStatement:
+              Arn: !GetAtt AllowedSourceIpSet.Arn
+          Action:
+            Allow: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AllowListedSourceIpv4
+
+  MCPWebACLAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Condition: CreateWaf
+    DependsOn: MCPApi
+    Properties:
+      ResourceArn: !Join
+        - ""
+        - - "arn:aws:apigateway:"
+          - !Ref AWS::Region
+          - "::/apis/"
+          - !Ref MCPApi
+          - "/stages/$default"
+      WebACLArn: !GetAtt MCPWebACL.Arn
+
 Outputs:
   MCPEndpointUrl:
     Description: Remote MCP endpoint
@@ -259,3 +329,11 @@ Outputs:
     Value: !Sub
       - "https://${ApiId}.execute-api.${AWS::Region}.amazonaws.com/brand/ovaledge-mcp-icon.png"
       - ApiId: !Ref MCPApi
+  WAFWebAclArn:
+    Condition: CreateWaf
+    Description: Regional WAF Web ACL attached to the HTTP API $default stage
+    Value: !GetAtt MCPWebACL.Arn
+  WAFAllowedSourceCidrs:
+    Condition: CreateWaf
+    Description: IPv4 CIDR allowlist enforced by WAF
+    Value: !Join [", ", !Ref AllowedSourceCidrs]

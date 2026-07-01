@@ -11,6 +11,7 @@ from server.constants import (
     MCP_PATH_CUSTOM_FIELDS,
     MCP_PATH_UPDATE_CUSTOM_FIELD_VALUES,
 )
+from server.tools.common.confirm_gate import attach_confirmation_token
 from server.tools.common.descriptions import classify_tool_desc
 from server.tools.governance._shared import _CREATE_CONFIRM_AGENT_INSTRUCTION
 
@@ -22,17 +23,15 @@ _DESC_UPDATE_CUSTOM_FIELD_VALUE = classify_tool_desc(
     "When the user names a field label like 'Data Owner' that appears in Additional "
     "Information / custom fields, use this tool only if GET custom-fields lists it.\n\n"
     f"Backend: GET /api/v1/mcp/custom-fields, POST {MCP_PATH_UPDATE_CUSTOM_FIELD_VALUES}\n\n"
-    "**Human confirmation:** When ready to persist (and dry_run is not true), call without "
-    "create_confirmed_by_user to receive a confirm_update preview (doNotUpdate=true). "
-    "Show formattedResponse; wait for explicit user approval. Re-call with "
-    "create_confirmed_by_user=true and the same object_id, object_type, field_updates, "
-    "and clientContext — then POST.\n\n"
+    "**Confirm gate:** Unless dry_run, call without write_confirmed_by_user for "
+    "confirm_update (doNotUpdate=true); show formattedResponse. After approval, re-call with "
+    "write_confirmed_by_user=true, confirmation_token from preview, same object_id, "
+    "object_type, field_updates, clientContext.\n\n"
     "Workflow:\n"
     "1. Parse field name(s) and value(s); search_catalog_assets when the asset name is known.\n"
-    "2. Code fields: GET custom-fields; validate option names against configured "
-    "options; single-select → one option; multi-select → code_update_mode "
-    "(replace_all|add|remove).\n"
-    "3. Confirm, then POST with create_confirmed_by_user=true.\n\n"
+    "2. Code fields: GET custom-fields; validate options; single-select → one option; "
+    "multi-select → code_update_mode (replace_all|add|remove).\n"
+    "3. User approves preview → POST per Confirm gate.\n\n"
     f"Supported object_type values: {MCP_CUSTOM_FIELD_OBJECT_TYPES_DOC}."
 )
 
@@ -460,12 +459,12 @@ def _format_update_custom_field_value_confirmation_preview(
         dry_note = "\n- **Note:** dry_run=true — validate only on confirm.\n"
     tz = body.get("timeZone")
     tz_line = f"\n- **Time zone:** {tz}" if isinstance(tz, str) and tz.strip() else ""
-    return {
+    preview = {
         "ok": True,
         "awaitingUserConfirmation": True,
         "workflowPhase": "confirm_update",
         "doNotUpdate": True,
-        "createConfirmedByUser": False,
+        "writeConfirmedByUser": False,
         "formattedResponse": (
             "**Confirm custom field update**\n\n"
             f"- **Target:** {otype} (id {oid})\n"
@@ -473,8 +472,9 @@ def _format_update_custom_field_value_confirmation_preview(
             f"{tz_line}"
             f"{dry_note}\n"
             "Ask the user to confirm. After they approve, call again with "
-            "`create_confirmed_by_user=true` and the same object_id, object_type, "
-            "field_updates, time_zone, and clientContext."
+            "`write_confirmed_by_user=true`, `confirmation_token` from this preview, "
+            "and the same object_id, object_type, field_updates, time_zone, "
+            "and clientContext."
         ),
         "agentInstruction": _CREATE_CONFIRM_AGENT_INSTRUCTION,
         "pendingUpdate": {
@@ -483,6 +483,7 @@ def _format_update_custom_field_value_confirmation_preview(
             "timeZone": tz if isinstance(tz, str) else None,
         },
     }
+    return attach_confirmation_token(preview, body)
 
 
 # In-memory proof that step 1 (parent picker) ran for a tag name — not exposed to clients.

@@ -44,10 +44,8 @@ def _require_local_credentials() -> None:
     ]
     if missing:
         print(
-            "Missing required env for local HTTP MCP: "
-            + ", ".join(missing)
-            + ".\n"
-            "Set them in repo .env or export before starting oe-mcp-http "
+            "Missing required local HTTP MCP credentials/configuration.\n"
+            "Set required values in repo .env or export before starting oe-mcp-http "
             "(same values as ovaledge-local stdio).",
             file=sys.stderr,
         )

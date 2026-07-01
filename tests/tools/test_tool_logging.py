@@ -38,8 +38,9 @@ async def test_logged_tool_invocation_ovaledge_error(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     caplog.set_level(logging.WARNING)
-    with pytest.raises(OvalEdgeError):
-        await _invoke_sample_oe_error()
+    result = await _invoke_sample_oe_error()
+    assert isinstance(result, dict)
+    assert result.get("error") is not None
     assert any(
         "outcome=ovaledge_error" in r.message and "status=503" in r.message
         for r in caplog.records
@@ -51,6 +52,7 @@ async def test_logged_tool_invocation_unhandled(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     caplog.set_level(logging.ERROR)
-    with pytest.raises(RuntimeError, match="boom"):
-        await _invoke_sample_crash()
+    result = await _invoke_sample_crash()
+    assert isinstance(result, dict)
+    assert result.get("error") is not None
     assert any("outcome=error" in r.message for r in caplog.records)

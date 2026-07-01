@@ -39,6 +39,7 @@ Setup scripts (`scripts/setup_local_mcp.sh`, `scripts/setup_local_mcp.ps1`) crea
 - CDE / column DQ assessment — read-only (`assess_cde_dq`)
 - Associate objects to data quality rules (`associate_dq_rule_objects`)
 - Auto-create or associate data quality rules for CDE columns (`create_dq_rules`)
+- Custom SQL DQ: `generate_dq_queries`, `validate_dq_queries`, `create_sql_dq_rule` (workflow prompt: `create_custom_sql_dq_workflow`)
 - Asset description, CDE, governance role, and custom field updates (`update_asset_descriptions`, `update_cde_associations`, `update_governance_roles`, `update_custom_field_value`)
 - Resource URIs (`ovaledge://catalog/...`, `ovaledge://governance/...`) and static guides (`docs://ovaledge/...`)
 - Nineteen workflow prompts under `server/prompts/workflows/` (see below; canonical list in `server/mcp_surface.py`)
@@ -57,13 +58,13 @@ These rules apply to every MCP session (also exposed to clients as server **inst
 | **Native DB/BI access** | Use **`source_system_access`** only (RDAM SQL). Never fall back to **`search_catalog_assets`** when RDAM is empty or errors. |
 | **Catalog ACL** | Use **`get_user_object_access`** for OvalEdge user/role grants on catalog objects — not **`source_system_access`**. |
 | **Deep links** | Use **`ovaledge://...` resources** when you already have object ids; prefer lookup tools for rich formatted output. |
-| **Governed writes** | **`create_glossary_term`**, **`create_tag`**, **`update_asset_descriptions`**, **`update_governance_roles`**, **`update_cde_associations`**, **`update_custom_field_value`**: show **`confirm_create`** / **`confirm_update`** preview, then POST only with **`create_confirmed_by_user=true`** (`dry_run` skips confirm on updates). |
+| **Governed writes** | **`create_glossary_term`**, **`create_tag`**, **`update_asset_descriptions`**, **`update_governance_roles`**, **`update_cde_associations`**, **`update_custom_field_value`**, **`associate_dq_rule_objects`**, **`create_dq_rules`**, **`validate_dq_queries`**, **`create_sql_dq_rule`**: show **`confirm_create`** / **`confirm_update`** preview, then POST only with **`write_confirmed_by_user=true`** (`dry_run` skips confirm on updates). |
 | **Glossary placement** | Domain → category (when categories exist) → subcategory; never invent **`description`**; pass **`domain_name`** on first call when the user names a domain in natural language. |
 | **Workflows** | Optional MCP **prompts** (discovery, lineage, stories, tags, drift, native access, creates, DQ, roles) — see [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md). |
 
 ## Tools, resources, and prompts
 
-### Tools (`server/tools/`) — 22 tools
+### Tools (`server/tools/`) — 25 tools
 
 Canonical inventory: `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 
@@ -85,17 +86,19 @@ Canonical inventory: `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 
 **Data quality**
 
-- `lookup_dq_rule`, `assess_cde_dq`, `associate_dq_rule_objects`, `create_dq_rules`
+- `lookup_dq_rule`, `assess_cde_dq`, `associate_dq_rule_objects`, `create_dq_rules`, `generate_dq_queries`, `validate_dq_queries`, `create_sql_dq_rule`
 
 **Platform docs**
 
 - `search_platform_docs`
 
-**`create_glossary_term` workflow:** (1) `term_name` → domain picker; (2) `term_name` + `domain_id` → category picker when categories exist (skip only after user says skip: `skip_category=true` + `category_skip_confirmed=true`); (3) subcategory picker when applicable; (4) non-blank `description` required; (5) `confirm_create` preview; (6) POST with `create_confirmed_by_user=true`. Manual pickers: `search_on=oeglobaldomain|category|subcategory`.
+**`create_glossary_term` workflow:** (1) `term_name` → domain picker; (2) `term_name` + `domain_id` → category picker when categories exist (skip only after user says skip: `skip_category=true` + `category_skip_confirmed=true`); (3) subcategory picker when applicable; (4) non-blank `description` required; (5) `confirm_create` preview; (6) POST with `write_confirmed_by_user=true`. Manual pickers: `search_on=oeglobaldomain|category|subcategory`.
 
-**`create_tag` workflow:** OPEN or SECURE mode from create-options; master/parent pickers with user confirmation flags; `confirm_create` preview; POST with `create_confirmed_by_user=true`. See [server/docs/tags_guide.md](server/docs/tags_guide.md).
+**`create_tag` workflow:** OPEN or SECURE mode from create-options; master/parent pickers with user confirmation flags; `confirm_create` preview; POST with `write_confirmed_by_user=true`. See [server/docs/tags_guide.md](server/docs/tags_guide.md).
 
-**`update_asset_descriptions` / `update_governance_roles` / `update_cde_associations` / `update_custom_field_value`:** Same confirm gate (`confirm_update`, `create_confirmed_by_user=true`) before POST; `dry_run=true` validates without confirm.
+**`update_asset_descriptions` / `update_governance_roles` / `update_cde_associations` / `update_custom_field_value`:** Same confirm gate (`confirm_update`, `write_confirmed_by_user=true`) before POST; `dry_run=true` validates without confirm.
+
+**DQ governed writes (`associate_dq_rule_objects`, `create_dq_rules`, `validate_dq_queries`, `create_sql_dq_rule`):** Same confirm gate before POST. `generate_dq_queries` is read-only (no confirm). Workflow prompts: `assess_cde_dq_coverage`, `create_custom_sql_dq_workflow`.
 
 **Data stories:** Prefer `lookup_datastory` (`content_query`) for organizational knowledge; use `organizational_knowledge` prompt. Not `search_platform_docs`. See [server/docs/data_stories.md](server/docs/data_stories.md).
 
@@ -111,7 +114,7 @@ Canonical inventory: `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 
 Static product docs: `docs://ovaledge/...` (all `server/docs/*.md`, including `mcp_workflows`, `data_stories`, `tags_guide`).
 
-### Prompts (`server/prompts/workflows/`) — 19 prompts
+### Prompts (`server/prompts/workflows/`) — 20 prompts
 
 Full list: [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md#workflow-prompts). Inventory: `server/mcp_surface.py` (`MCP_WORKFLOW_PROMPT_NAMES`).
 
@@ -145,6 +148,8 @@ chmod +x scripts/setup_git_hooks.sh   # once, if needed
 See `.pre-commit-config.yaml` for hook definitions.
 
 Optional LLM-level MCP checks: `poetry install --with eval`, then see [evals/README.md](evals/README.md).
+
+**Contributors (Cursor):** optional [CodeGraph](docs/contributing/CODEGRAPH.md) index for faster structural navigation (`codegraph init -i` from repo root).
 
 ## Security (summary)
 

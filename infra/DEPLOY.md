@@ -1,87 +1,133 @@
 # Deploy to AWS (Lambda + HTTP API)
 
-Prerequisites: [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html), [SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html), Docker running, IAM permission to create/update the stack, ECR, and Lambda.
+Guide for deploying **oe_mcp** to AWS Lambda behind API Gateway HTTP API.
 
-**Credentials:** The deploy script does **not** run login or prompt for keys. Configure the AWS CLI first, for example `aws configure` (access key ID + secret access key in `~/.aws/credentials`) or `aws sso login` and `export AWS_PROFILE=your-profile`. The same identity is used for ECR, CloudFormation, and S3 (`--resolve-s3`).
+**Two SAM templates, one script:**
+
+| Artifact | Purpose |
+|----------|---------|
+| [template.yaml](template.yaml) | Lambda **container image** (ECR + Dockerfile) — default |
+| [template-zip.yaml](template-zip.yaml) | Lambda **ZIP** (no Docker/ECR at deploy time) |
+| [../scripts/deploy.sh](../scripts/deploy.sh) | Unified build + deploy with optional `--zip`, `--waf` |
+
+Related docs: [TROUBLESHOOTING_REMOTE.md](TROUBLESHOOTING_REMOTE.md).
+
+## Prerequisites
+
+- [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) configured (`aws configure`, SSO, or `AWS_PROFILE`)
+- [SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html)
+- **Container deploy (default):** Docker running
+- IAM permissions for CloudFormation, Lambda, API Gateway, S3 (`--resolve-s3`), and ECR
+- **`OVALEDGE_BASE_URL`** — your OvalEdge tenant origin (no trailing slash)
+
+The deploy script does not prompt for credentials; configure AWS CLI before running.
 
 **Mangum + Streamable HTTP:** The Lambda entrypoint uses `Mangum(..., lifespan="off")` and pins FastMCP’s `mcp_http` lifespan on a background task. Default Mangum `lifespan=auto` runs full ASGI startup/shutdown **every** invocation, which exits `StreamableHTTPSessionManager.run()` and causes `RuntimeError: ... can only be called once per instance` on the next request (500 from API Gateway). See `entrypoints/lambda_handler.py`.
 
-**GitHub Actions deploy (`.github/workflows/ci.yml`):** Configure repository secret **`OVALEDGE_BASE_URL`** (required). Optional repo variables: **`SAM_AUTH_MODE`** (default `remote_credentials`), **`SAM_ENVIRONMENT`** (default `prod`).
+**GitHub Actions deploy (`.github/workflows/ci.yml`):** Configure repository secret **`OVALEDGE_BASE_URL`**. Optional repo variables: **`SAM_AUTH_MODE`**, **`SAM_ENVIRONMENT`**.
 
 **CloudWatch log retention:** The SAM template does not declare a `LogGroup` (avoids conflicts with log groups Lambda already created). Set retention in the console or extend the template once per environment.
 
-## One-shot (recommended)
+## Quick start (container image)
 
-From the **repository root**:
+From the repository root:
 
 ```bash
 export OVALEDGE_BASE_URL=https://your-oval-edge-host.example.com
 ./scripts/deploy.sh
 ```
 
-Optional tuning (same shell, before `./scripts/deploy.sh`):
+First run creates ECR repository `oe-mcp` (override with `ECR_REPO`) if missing. The script prints CloudFormation outputs including **`MCPEndpointUrl`**.
+
+### Common environment variables
 
 ```bash
 export STACK_NAME=oe-mcp-prod
 export AWS_REGION=ap-south-1
-export AUTH_MODE=remote_credentials   # or remote
+export AUTH_MODE=remote_credentials   # or remote (OAuth WIP)
 export ENVIRONMENT=prod
-export MCP_HTTP_STATELESS=true        # false if your MCP client needs GET/SSE
+export MCP_HTTP_STATELESS=true        # false if your MCP client needs GET/SSE on /mcp
 ```
 
-First run creates the **ECR** repository `oe-mcp` (override with `ECR_REPO`) if it does not exist. The script runs `sam build` then `sam deploy` with `--resolve-s3` and prints **CloudFormation outputs** (including `MCPEndpointUrl`).
+CLI equivalents: `./scripts/deploy.sh --help`
 
-## Lambda ZIP (no container image / no ECR)
+## Deploy flag matrix
 
-Same HTTP API, routes, env vars, and handler as the image stack, but the function is packaged as a **Python 3.12 ZIP** built by SAM (`BuildMethod: python3.12`). Use this when you do not want ECR or a Dockerfile build.
+| Goal | Command |
+|------|---------|
+| Container image (default) | `./scripts/deploy.sh` |
+| Lambda ZIP (no ECR) | `./scripts/deploy.sh --zip` |
+| WAF IP allowlist | `./scripts/deploy.sh --waf --allowed-cidrs 203.0.113.0/24` |
+| ZIP + WAF | `./scripts/deploy.sh --zip --waf --allowed-cidrs 10.0.0.0/8` |
 
-From the repository root:
+WAF CIDRs can also be set via env: `export ALLOWED_SOURCE_CIDRS=203.0.113.0/24`
+
+## Lambda ZIP (`--zip`)
+
+Same HTTP API routes, handler, and auth as the image stack. SAM packages Python 3.12 dependencies into a ZIP artifact.
 
 ```bash
 export OVALEDGE_BASE_URL=https://your-oval-edge-host.example.com
-./scripts/deploy-zip.sh
+./scripts/deploy.sh --zip
 ```
 
-Template: [template-zip.yaml](template-zip.yaml). Runtime dependencies are listed in [lambda-requirements.txt](lambda-requirements.txt); the repo root [requirements.txt](../requirements.txt) includes that file for SAM’s default pip manifest.
+- **Native build (default):** `sam build --no-use-container` — no Docker required; good for Linux CI.
+- **Containerized pip:** `SAM_USE_CONTAINER=true ./scripts/deploy.sh --zip` — wheels match Amazon Linux (useful on macOS).
+- **`deploy.sh` stages** `server/`, `entrypoints/`, and `requirements.txt` into a temp directory before `sam build` so `CodeUri` resolves correctly and dev artifacts (e.g. `.codegraph/`) are not packaged.
 
-- **Native build (default):** `sam build --no-use-container` — no Docker required; suitable on many Linux CI hosts.
-- **Containerized pip (optional):** `SAM_USE_CONTAINER=true ./scripts/deploy-zip.sh` — uses Docker so wheels match Amazon Linux (useful on macOS if native install fails).
+Runtime dependencies: [lambda-requirements.txt](lambda-requirements.txt) (also referenced from repo [requirements.txt](../requirements.txt)).
 
-Updating the same stack from **image → ZIP** (or the reverse) is a CloudFormation change to `PackageType`; prefer a new `STACK_NAME` or plan a one-time stack update.
+**Stack naming:** `template-zip.yaml` uses `{StackName}-{Environment}-lambda` and `{StackName}-{Environment}-httpapi` so a second stack (e.g. `oe-mcp-zip`) does not collide with the image stack.
 
-**ZIP template physical names:** `infra/template-zip.yaml` names the Lambda and HTTP API as ``{StackName}-{Environment}-lambda`` and ``{StackName}-{Environment}-httpapi`` so a second stack (e.g. `oe-mcp-zip`) does not collide with the image stack’s fixed names (`oe-mcp-{Environment}`, `oe-mcp-api-{Environment}`).
+Switching **image ↔ ZIP** on the same stack changes Lambda `PackageType`; prefer a new `STACK_NAME` or plan a deliberate stack update.
 
-Help:
+## WAF IP allowlist (`--waf`)
+
+Both templates support optional **regional AWS WAF** via CloudFormation parameters `EnableWaf` and `AllowedSourceCidrs`.
+
+**Behavior:**
+
+- WAF **default action = block**
+- Only IPv4 CIDRs in the allowlist reach Lambda (`/mcp`, `/health`, OAuth routes, etc.)
+- Other clients receive **403** from WAF before application auth
 
 ```bash
-./scripts/deploy.sh --help
+export OVALEDGE_BASE_URL=https://your-oval-edge-host.example.com
+export STACK_NAME=oe-mcp-waf
+./scripts/deploy.sh --waf --allowed-cidrs 203.0.113.0/24,198.51.100.10/32
 ```
 
-## Uninstall (stack + optional ECR)
+Stack outputs (when WAF enabled): **`WAFWebAclArn`**, **`WAFAllowedSourceCidrs`**.
 
-From repo root:
+**Caveats:**
 
-```bash
-./scripts/uninstall.sh
-```
+- SaaS MCP clients (Cursor, Claude) often use **dynamic egress IPs** — WAF works best with a **fixed corporate egress** (proxy, ZTNA, VPN).
+- WAF is regional and billed separately from Lambda/API Gateway.
+- App-layer auth is still required for allowed IPs.
 
-Useful options:
+## SAM template parameters
 
-```bash
-./scripts/uninstall.sh --yes          # non-interactive
-./scripts/uninstall.sh --keep-ecr     # remove stack only, keep container images
-```
+Key parameters (full list in [template.yaml](template.yaml)):
 
-## Manual SAM (same result)
+| Parameter | Default | Notes |
+|-----------|---------|-------|
+| `AuthMode` | `remote_credentials` | `remote` for OAuth (WIP) |
+| `OvalEdgeBaseUrl` | *(required)* | From `OVALEDGE_BASE_URL` |
+| `Environment` | `dev` | Suffixes resource names |
+| `McpHttpStateless` | `true` | Set `false` for GET/SSE clients |
+| `LambdaArchitecture` | `x86_64` | `arm64` for Graviton |
+| `EnableWaf` | `false` | Set via `--waf` |
+| `AllowedSourceCidrs` | `127.0.0.1/32` | Ignored when WAF disabled |
+
+## Manual SAM (equivalent to default container deploy)
 
 ```bash
 export AWS_REGION=us-east-1
 export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 export IMAGE_REPOSITORY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/oe-mcp"
-# create repo once if needed:
-# aws ecr create-repository --repository-name oe-mcp --region "$AWS_REGION"
 
-aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+aws ecr get-login-password --region "$AWS_REGION" | \
+  docker login --username AWS --password-stdin "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
 sam build -t infra/template.yaml --use-container
 sam deploy -t .aws-sam/build/template.yaml \
@@ -93,19 +139,22 @@ sam deploy -t .aws-sam/build/template.yaml \
   --parameter-overrides AuthMode=remote_credentials OvalEdgeBaseUrl="$OVALEDGE_BASE_URL" Environment=dev
 ```
 
-Template parameters are defined in [template.yaml](template.yaml).
+## GitHub Actions
+
+Workflow [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) deploys on push to `main` using `infra/template.yaml`. Configure secret **`OVALEDGE_BASE_URL`**. Optional variables: **`SAM_AUTH_MODE`**, **`SAM_ENVIRONMENT`**.
 
 ## Lambda architecture (`x86_64` vs `arm64`)
 
 SAM’s Docker build targets the **same architecture** as the Lambda resource. The template defaults to **`x86_64`** so typical laptops and **GitHub Actions `ubuntu-latest`** (amd64) match without `docker buildx`.
 
-For **Graviton (`arm64`)** images, deploy with:
+For **Graviton (`arm64`)** images:
 
 ```bash
 export LAMBDA_ARCHITECTURE=arm64
+./scripts/deploy.sh
 ```
 
-and build on an **arm64** machine or use **buildx** with `--platform linux/arm64` (see AWS docs for cross-arch Lambda images).
+Build on an **arm64** machine or use **buildx** with `--platform linux/arm64`.
 
 ## Docker build: `digest … not found` / `failed to read config content`
 
@@ -120,7 +169,7 @@ export SAM_BUILD_NO_CACHED=true
 ./scripts/deploy.sh
 ```
 
-If it still fails, build **without** the SAM container sandbox (works on many Linux hosts; matches Lambda glibc closely enough for pure-Python wheels):
+If it still fails, build **without** the SAM container sandbox:
 
 ```bash
 export SAM_USE_CONTAINER=false
@@ -128,13 +177,15 @@ export SAM_BUILD_NO_CACHED=true
 ./scripts/deploy.sh
 ```
 
-Last resort: `docker builder prune -af` (removes **all** build cache on the machine) then rerun `./scripts/deploy.sh`.
+Last resort: `docker builder prune -af` then rerun `./scripts/deploy.sh`.
 
 ## After deploy
 
-- Use output **`MCPEndpointUrl`** as the MCP HTTP base (ends with `/mcp`).
-- HTTP API has **no gateway authorizer** in this template; **`AuthMiddleware`** enforces credentials or Bearer tokens on the function.
-- For production hardening, consider WAF, throttling, or an HTTP API JWT authorizer in addition to app auth.
+1. Use **`MCPEndpointUrl`** as the MCP HTTP base (ends with `/mcp`).
+2. Set Lambda env **`MCP_PUBLIC_BASE_URL`** to output **`MCPPublicBaseUrl`** (host only, no `/mcp`) for MCP metadata icons.
+3. Verify **`MCPBrandIconUrl`** returns 200 (`image/png`).
+4. HTTP API has **no gateway authorizer**; **`AuthMiddleware`** enforces credentials or Bearer tokens on the function.
+5. For production hardening, use `./scripts/deploy.sh --waf` or add throttling / JWT authorizer.
 
 ## MCP branding icon (`/brand/ovaledge-mcp-icon.png`)
 
@@ -156,8 +207,7 @@ Stack outputs:
 The SAM template **does not** set `MCP_PUBLIC_BASE_URL` automatically (CloudFormation circular dependency with the HTTP API). After deploy:
 
 1. AWS Console → **Lambda** → your function → **Configuration** → **Environment variables**
-2. Add **`MCP_PUBLIC_BASE_URL`** = stack output **`MCPPublicBaseUrl`**  
-   Example: `https://ajh08u6ci3.execute-api.ap-south-1.amazonaws.com`
+2. Add **`MCP_PUBLIC_BASE_URL`** = stack output **`MCPPublicBaseUrl`**
 3. Save (Lambda cold-starts with the new value)
 
 MCP `initialize` will then advertise `serverInfo.icons` with that HTTPS URL. Toggle the MCP server off/on in Cursor after changing env vars.
@@ -230,12 +280,39 @@ curl -sS https://mcp.example.com/health
 export OVALEDGE_BASE_URL=https://your-pod.ovaledge.cloud/ovaledge
 export STACK_NAME=oe-mcp-zip
 export AWS_REGION=ap-south-1
-./scripts/deploy-zip.sh
+./scripts/deploy.sh --zip
 ```
 
 Then set **`MCP_PUBLIC_BASE_URL`** from output **`MCPPublicBaseUrl`**, or your custom domain after step 4.
 
+## Uninstall (stack + optional ECR)
+
+[`scripts/uninstall.sh`](../scripts/uninstall.sh) deletes the CloudFormation stack. It works the same for every deploy mode (`deploy.sh`, `--zip`, `--waf`) — set **`STACK_NAME`** to the stack you created.
+
+| Deploy command | Typical `STACK_NAME` | ECR cleanup |
+|----------------|----------------------|-------------|
+| `./scripts/deploy.sh` | `oe-mcp` (default) | Yes — deletes `oe-mcp` ECR repo by default |
+| `./scripts/deploy.sh --zip` | `oe-mcp` or `oe-mcp-zip` | No — ZIP deploys do not use ECR |
+| `./scripts/deploy.sh --waf …` | `oe-mcp-waf` | Yes (container image) |
+
+From repo root:
+
+```bash
+# Default container stack
+./scripts/uninstall.sh --yes
+
+# Keep ECR images for a later redeploy
+./scripts/uninstall.sh --yes --keep-ecr
+
+# ZIP stack — skip ECR (or use --keep-ecr; same effect)
+STACK_NAME=oe-mcp-zip ./scripts/uninstall.sh --zip --yes
+
+# Custom stack name from deploy
+STACK_NAME=oe-mcp-waf ./scripts/uninstall.sh --yes
+```
+
+If ECR cleanup runs but no repository exists (common after `--zip`), the script skips it and continues.
+
 ## Troubleshooting remote MCP
 
 502/500 on `POST /mcp`, stale API URLs, CloudWatch queries, and a **redeploy checklist**: [TROUBLESHOOTING_REMOTE.md](TROUBLESHOOTING_REMOTE.md).
-

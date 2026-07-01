@@ -103,7 +103,7 @@ With the server connected, Cursor can list **MCP prompts**, **resources**, and *
 | ---- | ---------- |
 | Internal policy / playbook / narrative | Prompt `organizational_knowledge` or tool `lookup_datastory` |
 | Find tables, files, reports | Prompt `data_discovery` or `search_catalog_assets` |
-| Create tag or glossary term | Prompt `create_governance_tag` / `create_business_glossary_term` (confirm preview, then `create_confirmed_by_user=true`) |
+| Create tag or glossary term | Prompt `create_governance_tag` / `create_business_glossary_term` (confirm preview, then `write_confirmed_by_user=true`) |
 | OvalEdge product how-to | Prompt `platform_help` or `search_platform_docs` |
 | Native Redshift / Snowflake / Tableau grants | Prompt `native_source_access` or tool `source_system_access` |
 | Deep link by id | `ovaledge://catalog/table/{id}`, `ovaledge://governance/data-story/{id}`, … |

@@ -25,8 +25,15 @@ def minimal_remote_app(monkeypatch: pytest.MonkeyPatch) -> FastAPI:
 
 def test_health_style_route_not_in_unprotected_returns_401(minimal_remote_app: FastAPI) -> None:
     with TestClient(minimal_remote_app) as client:
-        r = client.post("/mcp")
+        r = client.post("/mcp", headers={"x-forwarded-proto": "https"})
     assert r.status_code == 401
+
+
+def test_mcp_http_requires_tls_for_bearer(minimal_remote_app: FastAPI) -> None:
+    with TestClient(minimal_remote_app, base_url="http://testserver") as client:
+        r = client.post("/mcp", headers={"Authorization": "Bearer token"})
+    assert r.status_code == 400
+    assert r.json()["error"] == "tls_required"
 
 
 def test_mcp_with_bearer_calls_verify_and_exchange(minimal_remote_app: FastAPI) -> None:
@@ -41,7 +48,13 @@ def test_mcp_with_bearer_calls_verify_and_exchange(minimal_remote_app: FastAPI) 
                 new=AsyncMock(return_value="oe-jwt"),
             ),
         ):
-            r = client.post("/mcp", headers={"Authorization": "Bearer okta-token"})
+            r = client.post(
+                "/mcp",
+                headers={
+                    "Authorization": "Bearer okta-token",
+                    "x-forwarded-proto": "https",
+                },
+            )
     assert r.status_code == 200
     assert r.json() == {"ok": True}
 
@@ -59,7 +72,13 @@ def test_mcp_forward_idp_skips_exchange(
             ),
             patch("server.auth.middleware.exchange_oauth_access_token", exchange),
         ):
-            r = client.post("/mcp", headers={"Authorization": "Bearer idp-token"})
+            r = client.post(
+                "/mcp",
+                headers={
+                    "Authorization": "Bearer idp-token",
+                    "x-forwarded-proto": "https",
+                },
+            )
     assert r.status_code == 200
     exchange.assert_not_called()
 

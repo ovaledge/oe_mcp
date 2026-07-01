@@ -1,0 +1,25 @@
+# Excluded from Lambda ZIP CopySource (sam build with template-zip.yaml).
+# Runtime needs server/, entrypoints/, and pip deps from requirements.txt only.
+
+.git/
+.github/
+.aws-sam/
+.codegraph/
+.cursor/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+tests/
+evals/
+testdata/
+docs/
+infra/
+scripts/
+*.md
+Dockerfile*
+pyproject.toml
+poetry.lock
+.env
+.env.*

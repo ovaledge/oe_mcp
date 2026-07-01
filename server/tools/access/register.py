@@ -20,8 +20,10 @@ from server.tools.access.helpers import (
     validate_get_user_object_access_args,
 )
 from server.tools.common import drop_none, map_ovaledge_error, ovaledge_client
+from server.tools.common.tool_logging import logged_tool_invocation
 
 
+@logged_tool_invocation
 async def _invoke_get_user_object_access(
     query_direction: str,
     username: str | None,
@@ -121,12 +123,12 @@ def register(mcp: FastMCP) -> None:
         ] = None,
     ) -> dict[str, Any]:
         return await _invoke_get_user_object_access(
-            query_direction,
-            username,
-            object_id,
-            object_type,
-            fully_qualified_name,
-            object_name,
-            resolve_all_matches,
-            access_intent_confirmed,
+            query_direction=query_direction,
+            username=username,
+            object_id=object_id,
+            object_type=object_type,
+            fully_qualified_name=fully_qualified_name,
+            object_name=object_name,
+            resolve_all_matches=resolve_all_matches,
+            access_intent_confirmed=access_intent_confirmed,
         )

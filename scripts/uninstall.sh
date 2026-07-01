@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # One-shot uninstall: delete CloudFormation stack and optional ECR repository.
 #
+# Works for any deploy from ./scripts/deploy.sh (container, --zip, --waf).
+# Uninstall is stack-based: set STACK_NAME to the stack you deployed.
+#
 # Optional env:
 #   STACK_NAME   CloudFormation stack name (default: oe-mcp)
 #   AWS_REGION   (default: AWS_DEFAULT_REGION or us-east-1)
-#   ECR_REPO     ECR repository name (default: oe-mcp)
+#   ECR_REPO     ECR repository name (default: oe-mcp; container deploys only)
 #
 # CLI:
-#   --keep-ecr      Keep ECR repository and images
+#   --keep-ecr      Keep ECR repository and images (also implied by --zip)
+#   --zip           Skip ECR cleanup (ZIP deploys do not use ECR)
 #   --yes           Skip interactive confirmation
 #   -h|--help       Show help
 #
@@ -15,6 +19,7 @@
 #   ./scripts/uninstall.sh
 #   ./scripts/uninstall.sh --yes
 #   ./scripts/uninstall.sh --keep-ecr --yes
+#   STACK_NAME=oe-mcp-zip ./scripts/uninstall.sh --zip --yes
 
 set -euo pipefail
 
@@ -22,18 +27,32 @@ usage() {
   cat <<'EOF'
 One-shot uninstall (CloudFormation + optional ECR cleanup).
 
+Works for any stack created by ./scripts/deploy.sh (default, --zip, --waf).
+Set STACK_NAME to match the stack you deployed.
+
 Optional env:
-  STACK_NAME, AWS_REGION, ECR_REPO
+  STACK_NAME   default: oe-mcp
+  AWS_REGION   default: us-east-1 (or AWS_DEFAULT_REGION)
+  ECR_REPO     default: oe-mcp (container deploys only)
 
 Optional flags:
   --keep-ecr      Keep ECR repository and images
+  --zip           Skip ECR cleanup (ZIP deploys never push to ECR)
   --yes           Skip confirmation prompt
   -h, --help      Show this help
 
 Examples:
-  ./scripts/uninstall.sh
+  # Default container stack
   ./scripts/uninstall.sh --yes
+
+  # Keep images for redeploy
   ./scripts/uninstall.sh --keep-ecr --yes
+
+  # ZIP stack (no ECR)
+  STACK_NAME=oe-mcp-zip ./scripts/uninstall.sh --zip --yes
+
+  # WAF stack (same as container unless you used a custom STACK_NAME)
+  STACK_NAME=oe-mcp-waf ./scripts/uninstall.sh --yes
 EOF
 }
 
@@ -43,6 +62,10 @@ ASSUME_YES=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --keep-ecr)
+      DELETE_ECR=false
+      shift
+      ;;
+    --zip)
       DELETE_ECR=false
       shift
       ;;
@@ -73,9 +96,9 @@ if [[ "$ASSUME_YES" != "true" ]]; then
   echo "This will uninstall AWS resources:"
   echo "  - CloudFormation stack: $STACK_NAME (region: $AWS_REGION)"
   if [[ "$DELETE_ECR" == "true" ]]; then
-    echo "  - ECR repository: $ECR_REPO (including all images)"
+    echo "  - ECR repository: $ECR_REPO (including all images, if present)"
   else
-    echo "  - ECR repository: kept"
+    echo "  - ECR repository: skipped"
   fi
   echo ""
   read -r -p "Continue? [y/N] " confirm
@@ -105,7 +128,7 @@ if [[ "$DELETE_ECR" == "true" ]]; then
       >/dev/null
     echo "==> ECR repository deleted."
   else
-    echo "==> ECR repository not found, skipping: $ECR_REPO"
+    echo "==> ECR repository not found, skipping: $ECR_REPO (expected for --zip stacks)"
   fi
 fi
 
