@@ -55,6 +55,27 @@ class TestCreateDqRules:
         )
         assert "formattedResponse" in out
 
+    async def test_supplemental_criteria_text_forwarded(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.return_value = {"rows": []}
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
+        await fn(
+            objects=[{"objectId": 42, "objectType": "oecolumn"}],
+            supplemental_criteria_text="Success criteria: equal to 300",
+        )
+        mock_oe_client.post.assert_called_once_with(
+            MCP_PATH_CREATE_DQ_RULES,
+            {
+                "discoverCdeColumns": False,
+                "preferExistingRule": True,
+                "skipDuplicateFunctionOnObject": True,
+                "limit": MCP_DQ_ASSESS_LIMIT_DEFAULT,
+                "objects": [{"objectId": 42, "objectType": "oecolumn"}],
+                "supplementalCriteriaText": "Success criteria: equal to 300",
+            },
+        )
+
     async def test_rejects_empty_without_discover(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
