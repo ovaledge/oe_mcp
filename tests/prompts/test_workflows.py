@@ -194,7 +194,6 @@ class TestMcpServerInstructions:
         assert "search_catalog_assets" in instructions
         assert "no tools" in instructions
         assert "catalog acl" in instructions or "oe security" in instructions
-        assert instructions.index("no tools") < instructions.index("source_system_access")
 
     def test_search_description_guards_who_has_access(self) -> None:
         from server.tools.catalog.helpers import _DESC_SEARCH

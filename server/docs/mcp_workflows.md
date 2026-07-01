@@ -60,7 +60,7 @@ Omit empty list parameters; filter-only search is valid. Each hit includes `obje
 
 ## Who has access? (disambiguate first)
 
-Use workflow prompt **`resolve_object_access`**. Native RDAM → `source_system_access` with `access_intent_confirmed=native`; OvalEdge catalog ACL → `get_user_object_access` with `access_intent_confirmed=catalog_acl`. Skip disambiguation when the question includes native/DAM signals (native, remote, DAM, source system, …) or catalog ACL signals (OE security, ACL, catalog access, …). Snowflake/Redshift/Tableau alone do not skip disambiguation. Pass `user_question` or `access_intent_confirmed` on who-has-access calls; server returns `ACCESS_INTENT_REQUIRED` when neither is sufficient.
+Use workflow prompt **`resolve_object_access`**. Native RDAM → `source_system_access` with `access_intent_confirmed=native`; OvalEdge catalog ACL → `get_user_object_access` with `access_intent_confirmed=catalog_acl`. Skip disambiguation when the question includes native/DAM signals (native, remote, DAM, source system, …) or catalog ACL signals (OE security, ACL, catalog access, …). Snowflake/Redshift/Tableau alone do not skip disambiguation. Server returns `ACCESS_INTENT_REQUIRED` when who-has-access directions omit `access_intent_confirmed`.
 
 ## Native source access (RDAM)
 

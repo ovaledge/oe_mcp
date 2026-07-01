@@ -11,7 +11,6 @@ from server.client import OvalEdgeError
 from server.constants import (
     MCP_ACCESS_INTENT_CATALOG_ACL,
     MCP_ACCESS_INTENT_CONFIRMED_FIELD_DOC,
-    MCP_ACCESS_USER_QUESTION_FIELD_DOC,
     MCP_PATH_GET_USER_OBJECT_ACCESS,
 )
 from server.tools.access.disambiguation import validate_access_intent_confirmed
@@ -32,13 +31,11 @@ async def _invoke_get_user_object_access(
     object_name: str | None,
     resolve_all_matches: bool,
     access_intent_confirmed: str | None = None,
-    user_question: str | None = None,
 ) -> dict[str, Any]:
     intent_err = validate_access_intent_confirmed(
         access_intent_confirmed,
         query_direction=query_direction,
         expected_intent=MCP_ACCESS_INTENT_CATALOG_ACL,
-        user_question=user_question,
     )
     if intent_err is not None:
         return intent_err
@@ -122,13 +119,6 @@ def register(mcp: FastMCP) -> None:
                 description=MCP_ACCESS_INTENT_CONFIRMED_FIELD_DOC,
             ),
         ] = None,
-        user_question: Annotated[
-            str | None,
-            Field(
-                default=None,
-                description=MCP_ACCESS_USER_QUESTION_FIELD_DOC,
-            ),
-        ] = None,
     ) -> dict[str, Any]:
         return await _invoke_get_user_object_access(
             query_direction,
@@ -139,5 +129,4 @@ def register(mcp: FastMCP) -> None:
             object_name,
             resolve_all_matches,
             access_intent_confirmed,
-            user_question,
         )
