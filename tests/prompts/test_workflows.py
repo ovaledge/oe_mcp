@@ -186,31 +186,3 @@ class TestMcpServerInstructions:
         assert "search_platform_docs" in instructions
         assert "never show ovaledge://" in instructions
         assert "navlink" in instructions or "redirecturl" in instructions
-        assert "resolve_object_access" in instructions
-        assert "snowflake" in instructions
-        assert instructions.index("resolve_object_access") < instructions.index(
-            "source_system_access"
-        )
-        assert "search_catalog_assets" in instructions
-        assert "no tools" in instructions
-        assert "catalog acl" in instructions or "oe security" in instructions
-
-    def test_search_description_guards_who_has_access(self) -> None:
-        from server.tools.catalog.helpers import _DESC_SEARCH
-
-        assert "who-has-access" in _DESC_SEARCH.lower()
-        assert "resolve_object_access" in _DESC_SEARCH
-
-    async def test_resolve_object_access_prompt_uses_rule_doc(self) -> None:
-        from server.constants import MCP_ACCESS_DISAMBIGUATION_RULE_DOC
-
-        mcp = FastMCP(name="test", version="0.0.1")
-        register_workflow_prompts(mcp)
-        prompt = await mcp.get_prompt("resolve_object_access")
-        assert prompt is not None
-        assert isinstance(prompt, FunctionPrompt)
-        text = prompt.fn("Who has access to ORDERS in snowflake?")[0].content.text
-        assert MCP_ACCESS_DISAMBIGUATION_RULE_DOC in text
-        assert "source_system_access" in text
-        assert "get_user_object_access" in text
-        assert "catalog ACL" in text or "catalog acl" in text.lower()

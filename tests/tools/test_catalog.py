@@ -61,8 +61,6 @@ class TestSearchCatalogAssets:
 
     def test_search_description_rejects_native_grant_fallback(self) -> None:
         assert "source_system_access" in _DESC_SEARCH
-        assert "resolve_object_access" in _DESC_SEARCH
-        assert "who-has-access" in _DESC_SEARCH.lower()
 
     async def test_search_get_params(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE

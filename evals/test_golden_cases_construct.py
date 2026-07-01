@@ -14,7 +14,7 @@ def test_all_golden_cases_construct() -> None:
     for fn_name in golden_cases.all_mcp_use_golden_fns():
         case = getattr(golden_cases, fn_name)()
         assert (case.input or "").strip()
-        assert case.mcp_tools_called is not None
+        assert case.mcp_tools_called
 
     tc = golden_cases.golden_task_completion_discovery()
     assert tc.turns
