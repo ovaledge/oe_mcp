@@ -98,21 +98,13 @@ _DESC_CREATE_DQ_RULES = classify_tool_desc(
     "**prefer_existing_rule** (default true): associate when a recommended rule exists.\n\n"
     "**skip_duplicate_function_on_object** (default true): skip if object already has a "
     "rule for the same function type.\n\n"
-    "**supplemental_criteria_text** (optional): success/input criteria from the user prompt "
-    "(e.g. 'Success: equal to 300') when not already in catalog metadata.\n\n"
-    "Criteria priority: parsed metadata or supplemental_criteria_text, then function defaults.\n\n"
-    "Before creating a data quality rule, each object is validated against the "
-    "recommended function "
-    "(column/file-column data type, connector DQ support, addon license) using the same "
-    "checks as associate_dq_rule_objects. Unsupported objects return status skipped with "
-    "a clear message; no orphan data quality rule is created.\n\n"
-    "Row statuses: created, associated, skipped, criteria_missing, function_not_identified, "
-    "failed. New rules use creation type OE MCP. criteria_missing includes descriptionMessage "
-    "when metadata and function defaults are insufficient.\n\n"
-    "Extended routing: docs://ovaledge/mcp_workflows (CDE / DQ intelligence).\n\n"
-    "**Confirm gate:** preview without write_confirmed_by_user → user approval → "
-    "write_confirmed_by_user=true + confirmation_token from preview.\n\n"
-    "Audit source OE-MCP."
+    "**supplemental_criteria_text** (optional): user prompt criteria when not in "
+    "catalog metadata.\n\n"
+    "Criteria priority: metadata or supplemental_criteria_text, then function defaults.\n\n"
+    "Object validation and row statuses: same as associate_dq_rule_objects.\n\n"
+    "**Confirm gate:** preview → user approval → write_confirmed_by_user=true + "
+    "confirmation_token from preview.\n\n"
+    "Routing: docs://ovaledge/mcp_workflows (CDE / DQ intelligence). Audit source OE-MCP."
 )
 
 _DESC_LOOKUP_DQ_RULE = classify_tool_desc(
@@ -494,21 +486,18 @@ def _unwrap_api_data(body: Any) -> Any:
 
 
 _DESC_GENERATE_DQ_QUERIES = classify_tool_desc(
-    "Generate rule/stats/failed-values SQL for one object (custom_sql).\n\n"
-    f"POST {MCP_PATH_GENERATE_DQ_QUERIES}. After {TOOL_ASSESS_CDE_DQ}; "
-    f"function_based → {TOOL_CREATE_DQ_RULES}. objects required."
+    "Generate rule/stats/failed-values SQL (custom_sql). "
+    f"POST {MCP_PATH_GENERATE_DQ_QUERIES}. Requires objects; after {TOOL_ASSESS_CDE_DQ}."
 )
 
 _DESC_VALIDATE_DQ_QUERIES = classify_tool_desc(
-    "Validate DQ SQL on connection (Query Sheet). "
-    f"POST {MCP_PATH_VALIDATE_DQ_QUERIES}. "
-    "connection_id, schema_id, three queries. Confirm gate + token."
+    "Validate DQ SQL on connection. "
+    f"POST {MCP_PATH_VALIDATE_DQ_QUERIES}. connection_id, schema_id, three queries; confirm gate."
 )
 
 _DESC_CREATE_SQL_DQ_RULE = classify_tool_desc(
-    "Create draft oequery DQ rule; associate objects. "
-    f"POST {MCP_PATH_CREATE_SQL_DQ_RULE}. "
-    "objects, rule_name; queries or code_object_id. Confirm gate + token."
+    "Create draft oequery DQ rule and associate objects. "
+    f"POST {MCP_PATH_CREATE_SQL_DQ_RULE}. rule_name; queries or code_object_id; confirm gate."
 )
 
 _DQ_SQL_VALIDATE_CONFIRM_INSTRUCTION = (
