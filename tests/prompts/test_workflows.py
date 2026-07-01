@@ -69,6 +69,11 @@ _PROMPT_REQUIRED_TOOLS: dict[str, tuple[str, ...]] = {
         TOOL_SEARCH_DOCS,
     ),
     "native_source_access": (TOOL_SOURCE_SYSTEM_ACCESS,),
+    "resolve_object_access": (
+        TOOL_SOURCE_SYSTEM_ACCESS,
+        TOOL_SEARCH_CATALOG,
+        TOOL_GET_USER_OBJECT_ACCESS,
+    ),
     "dam_object_browse": (TOOL_SOURCE_SYSTEM_ACCESS,),
     "catalog_object_access": (TOOL_GET_USER_OBJECT_ACCESS, TOOL_SEARCH_CATALOG),
     "platform_help": (TOOL_SEARCH_DOCS,),
@@ -181,3 +186,28 @@ class TestMcpServerInstructions:
         assert "search_platform_docs" in instructions
         assert "never show ovaledge://" in instructions
         assert "navlink" in instructions or "redirecturl" in instructions
+
+    def test_instructions_platform_name_alone_does_not_skip_disambiguation(self) -> None:
+        from server.app import create_mcp
+
+        mcp = create_mcp()
+        instructions = (mcp.instructions or "").lower()
+        assert "business.banking" in instructions
+        assert "snowflake" in instructions
+        assert "redshift" in instructions
+        assert "1" in instructions and "2" in instructions
+
+
+class TestResolveObjectAccessPrompt:
+    async def test_prompt_includes_platform_not_signal_examples(self) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        register_workflow_prompts(mcp)
+        prompt = await mcp.get_prompt("resolve_object_access")
+        assert prompt is not None
+        assert isinstance(prompt, FunctionPrompt)
+        messages = prompt.fn("Who has access to BUSINESS.BANKING in Snowflake?")
+        text = messages[0].content.text.lower()
+        assert "business.banking" in text
+        assert "snowflake" in text
+        assert "customer1" in text
+        assert "access_intent_confirmed" in text

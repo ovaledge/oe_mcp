@@ -247,6 +247,7 @@ class TestGetSourceSystemAccess:
         await fn(
             source_system="redshift",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             object_path=_REQ["object_path"],
             object_type=_REQ["object_type"],
             connection_id=_REQ["connection_id"],
@@ -296,6 +297,7 @@ class TestGetSourceSystemAccess:
         out = await fn(
             source_system="snowflake",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             object_path="SNOWFLAKE.ALERT",
             object_type="schema",
             connection_id=_REQ["connection_id"],
@@ -337,6 +339,7 @@ class TestGetSourceSystemAccess:
         out = await fn(
             source_system="snowflake",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             username=_REQ["username"],
             object_path="BUSINESS.BANKING.ACCOUNTSCHEDULE",
             object_type="column",
@@ -354,6 +357,7 @@ class TestGetSourceSystemAccess:
         await fn(
             source_system="snowflake",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             username=_REQ["username"],
             object_path="SNOWFLAKE.ALERT",
             object_type="oeschema",
@@ -408,6 +412,7 @@ class TestGetSourceSystemAccess:
         await fn(
             source_system="redshift",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             object_path="ovaledgedb.ovaledge.customer_vw",
             object_type="table",
             username=_REQ["username"],
@@ -435,6 +440,7 @@ class TestGetSourceSystemAccess:
         out = await fn(
             source_system="redshift",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             object_path="ovaledgedb.ovaledge.customer_vw",
             object_type="table",
             username=_REQ["username"],
@@ -482,6 +488,7 @@ class TestGetSourceSystemAccess:
         out = await fn(
             source_system="redshift",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             object_path="ovaledgedb.automation.customers",
             object_type="table",
             username=_REQ["username"],
@@ -524,6 +531,7 @@ class TestGetSourceSystemAccess:
         out = await fn(
             source_system="tableau",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             object_path="Executive/Revenue Dashboard",
             object_type="report",
             username="svc_bi",
@@ -586,6 +594,7 @@ class TestGetSourceSystemAccess:
         await fn(
             source_system="snowflake",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             object_path="snowflake.BUSINESS",
             object_type="database",
             username=_REQ["username"],
@@ -611,6 +620,7 @@ class TestGetSourceSystemAccess:
         await fn(
             source_system="redshift",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             object_path="accountbalance",
             object_type="table",
             username=_REQ["username"],
@@ -741,6 +751,7 @@ class TestGetSourceSystemAccess:
         out = await fn(
             source_system="redshift",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             object_path="ovaledgedb.automation.customers",
             object_type="table",
             connection_id=1000,
@@ -800,6 +811,7 @@ class TestGetSourceSystemAccess:
         await fn(
             source_system="redshift",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             object_path=[
                 "ovaledgedb.automation.customers",
                 "ovaledgedb.automation.orders",
@@ -1007,6 +1019,7 @@ class TestShapeObjectToUsersDisambiguation:
         out = await fn(
             source_system="redshift",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             object_path="actor",
             object_type="table",
             connection_id=1000,
@@ -1063,6 +1076,7 @@ class TestSourceSystemAccessHelpers:
         await fn(
             source_system="redshift",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             object_path="prod_db",
             object_name="orders",
             object_type="table",

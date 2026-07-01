@@ -7,6 +7,7 @@ import re
 from typing import Any
 
 from server.constants import (
+    MCP_ACCESS_DISAMBIGUATION_SEARCH_GUARD_DOC,
     MCP_CATALOG_OBJECT_TYPES_DOC,
     MCP_PATH_COLUMN_PROFILE,
     MCP_PATH_ENTITY_RELATIONSHIPS,
@@ -34,11 +35,10 @@ from server.tools.common.descriptions import classify_tool_desc
 _TABLE_FILE_TYPES = frozenset({"oetable", "oefile"})
 
 _DESC_SEARCH = classify_tool_desc(
-    "Search the OvalEdge catalog (Elasticsearch hybrid / keyword search plus optional "
+    MCP_ACCESS_DISAMBIGUATION_SEARCH_GUARD_DOC
+    + "Search the OvalEdge catalog (Elasticsearch hybrid / keyword search plus optional "
     "server-side vector context). Use for discovery: schemas, tables, columns, files, charts, "
     "APIs, queries, data products, glossary, tags, and stories.\n\n"
-    "**Not for native DB/BI grants** — use `source_system_access` (RDAM) only; never fall back "
-    "to this tool when RDAM is empty or errors.\n\n"
     f"Backend: GET {MCP_PATH_SEARCH_CATALOG}\n\n"
     "**Parameters:** Lexical lists (wire as JSON array strings): "
     f"{MCP_SEARCH_TERMS_PARAM}, {MCP_SEARCH_TAGS_PARAM}, {MCP_SEARCH_GLOSSARY_TERMS_PARAM}, "

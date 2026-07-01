@@ -13,6 +13,7 @@ from typing import Any
 
 from server.client import OvalEdgeError
 from server.constants import (
+    MCP_ACCESS_DISAMBIGUATION_TOOL_LEAD_DOC,
     MCP_PATH_SOURCE_SYSTEM_ACCESS,
     MCP_QUERY_DIRECTIONS,
     MCP_QUERY_DIRECTIONS_DOC,
@@ -926,7 +927,8 @@ def filter_grants_by_object_level(
 
 
 _DESC_SOURCE_SYSTEM_ACCESS = classify_tool_desc(
-    "Resolve **native** access grants harvested from Redshift, Snowflake, or Tableau (RDAM) — "
+    MCP_ACCESS_DISAMBIGUATION_TOOL_LEAD_DOC
+    + "Resolve **native** access grants harvested from Redshift, Snowflake, or Tableau (RDAM) — "
     "independent of OvalEdge catalog ACLs.\n\n"
     f"Backend: GET {MCP_PATH_SOURCE_SYSTEM_ACCESS}\n\n"
     "**Not** `get_user_object_access` or `search_catalog_assets`. Never fall back to "

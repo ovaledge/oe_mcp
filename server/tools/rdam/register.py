@@ -9,6 +9,8 @@ from pydantic import Field
 
 from server.client import OvalEdgeError
 from server.constants import (
+    MCP_ACCESS_INTENT_CONFIRMED_FIELD_DOC,
+    MCP_ACCESS_INTENT_NATIVE,
     MCP_PATH_SOURCE_SYSTEM_ACCESS,
     MCP_QUERY_DIRECTIONS_DOC,
     MCP_RDAM_OBJECT_TYPE_ALL,
@@ -18,6 +20,7 @@ from server.constants import (
     MCP_RDAM_SCOPE_MODES_DOC,
     MCP_SOURCE_SYSTEMS_DOC,
 )
+from server.tools.access.disambiguation import validate_access_intent_confirmed
 from server.tools.common import drop_none, map_ovaledge_error, ovaledge_client
 from server.tools.rdam.helpers import (
     _DESC_SOURCE_SYSTEM_ACCESS,
@@ -51,7 +54,15 @@ async def _invoke_source_system_access(
     resolve_all_matches: bool,
     scope_mode: str = MCP_RDAM_SCOPE_MODE_EXACT,
     fully_qualified_name: str | None = None,
+    access_intent_confirmed: str | None = None,
 ) -> dict[str, Any]:
+    intent_err = validate_access_intent_confirmed(
+        access_intent_confirmed,
+        query_direction=query_direction,
+        expected_intent=MCP_ACCESS_INTENT_NATIVE,
+    )
+    if intent_err is not None:
+        return intent_err
     err = validate_source_system_access_args(
         source_system,
         query_direction,
@@ -291,6 +302,13 @@ def register(mcp: FastMCP) -> None:
                 default="exact",
             ),
         ] = "exact",
+        access_intent_confirmed: Annotated[
+            Literal["native", "catalog_acl"] | None,
+            Field(
+                default=None,
+                description=MCP_ACCESS_INTENT_CONFIRMED_FIELD_DOC,
+            ),
+        ] = None,
     ) -> dict[str, Any]:
         """Native source-system access and DAM browse (see MCP tool description)."""
         return await _invoke_source_system_access(
@@ -306,4 +324,5 @@ def register(mcp: FastMCP) -> None:
             resolve_all_matches,
             scope_mode,
             fully_qualified_name,
+            access_intent_confirmed,
         )

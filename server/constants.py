@@ -344,6 +344,86 @@ MCP_CATALOG_OBJECT_ACCESS_OVERVIEW_DOC = (
     "name — they are not in catalog search. Data Domains, Data Products, glossary Domains, "
     "and Story Zones are resolved from the database when Elasticsearch has no document."
 )
+# Longest phrases first — used by detect_access_intent_from_question (disambiguation.py).
+MCP_ACCESS_CATALOG_ACL_SIGNAL_KEYWORDS = (
+    "catalog permissions",
+    "catalog access",
+    "catalog acl",
+    "ovaledge security",
+    "oe security",
+    "acl",
+)
+MCP_ACCESS_NATIVE_SIGNAL_KEYWORDS = (
+    "source system access",
+    "data access management",
+    "source system",
+    "native",
+    "remote",
+    "dam",
+    "source",
+)
+MCP_ACCESS_PLATFORM_NAME_KEYWORDS = frozenset({"snowflake", "redshift", "tableau"})
+MCP_ACCESS_NATIVE_SIGNAL_KEYWORDS_DOC = ", ".join(MCP_ACCESS_NATIVE_SIGNAL_KEYWORDS)
+MCP_ACCESS_CATALOG_ACL_SIGNAL_KEYWORDS_DOC = ", ".join(MCP_ACCESS_CATALOG_ACL_SIGNAL_KEYWORDS)
+MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC = (
+    "Naming Snowflake, Redshift, or Tableau (e.g. \"in Snowflake\", \"on Redshift\") "
+    "does **not** skip disambiguation — it only helps pick source_system **after** "
+    "intent is confirmed. Examples that still need **1** or **2**: "
+    "\"Who has access to BUSINESS.BANKING in Snowflake?\"; "
+    "\"Who has access to customer1 in redshift1 in Redshift?\"."
+)
+MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC = (
+    "Ambiguous who-has-access: disambiguate via resolve_object_access; "
+    "do not call access tools until user picks. "
+    "Skip disambiguation only when native/DAM or catalog ACL/OE security signals "
+    "are present. "
+    + MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC
+)
+MCP_ACCESS_DISAMBIGUATION_TOOL_LEAD_DOC = (
+    "**Who-has-access:** `resolve_object_access` then `access_intent_confirmed` "
+    "(native / catalog_acl). Snowflake/Redshift/Tableau alone do not skip "
+    "disambiguation.\n\n"
+)
+MCP_ACCESS_DISAMBIGUATION_SEARCH_GUARD_DOC = (
+    "**Not who-has-access or RDAM** — `resolve_object_access` first; RDAM via "
+    "`source_system_access` only.\n\n"
+)
+MCP_ACCESS_INTENT_NATIVE = "native"
+MCP_ACCESS_INTENT_CATALOG_ACL = "catalog_acl"
+MCP_ACCESS_INTENT_CONFIRMED_FIELD_DOC = (
+    "Who-has-access only: `native` after user picks **1** or when the question names "
+    "native/DAM signals (not Snowflake/Redshift/Tableau alone); `catalog_acl` after **2** "
+    "or when the question names OE security / ACL / catalog-access signals. "
+    "Omit for user_to_objects / user_to_object / browse."
+)
+MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE = (
+    "OvalEdge has **two** different tools for “who has access” questions:\n\n"
+    "| Tool | What it answers |\n"
+    "|------|------------------|\n"
+    f"| **`{TOOL_SOURCE_SYSTEM_ACCESS}`** | **Native / remote** permissions crawled from "
+    "Redshift, Snowflake, or Tableau — what you see on the **DAM** (Data Access Management) "
+    "screen (e.g. SELECT, roles, groups). |\n"
+    f"| **`{TOOL_GET_USER_OBJECT_ACCESS}`** | **OvalEdge catalog ACL** on the **Security** "
+    "page — metadata read/write and data permission levels for OvalEdge users and roles. |\n\n"
+    "Your question does not mention native/remote/DAM/source-system access or OvalEdge "
+    "catalog ACL / OE security signals.\n\n"
+    "**Which do you want?**\n"
+    "1. **Native source access** — database/BI grants from Redshift, Snowflake, or Tableau\n"
+    "2. **OvalEdge catalog ACL** — permissions inside OvalEdge on a catalog asset\n\n"
+    "Reply with **1** or **2**, then I will call the matching tool."
+)
+MCP_ACCESS_DISAMBIGUATION_RULE_DOC = (
+    "For who-has-access / permission questions (case-insensitive signals): "
+    "native/DAM keywords ("
+    + MCP_ACCESS_NATIVE_SIGNAL_KEYWORDS_DOC
+    + ") → source_system_access with access_intent_confirmed=native. Catalog ACL keywords ("
+    + MCP_ACCESS_CATALOG_ACL_SIGNAL_KEYWORDS_DOC
+    + ") → get_user_object_access with access_intent_confirmed=catalog_acl. When **neither** "
+    "signal set is present — do **not** call source_system_access or get_user_object_access; "
+    "show the disambiguation message and wait for **1** (native) or **2** (catalog ACL). "
+    + MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC
+    + " Workflow prompt: resolve_object_access."
+)
 MCP_CATALOG_OBJECT_ACCESS_DIRECTIONS = (
     "`user_to_object` — what access does user X have on object Y? "
     "`object_to_principals` — which users and roles have access on object Y?"
