@@ -141,6 +141,7 @@ fi
 
 ZIP_STAGE_DIR=""
 SAM_TEMPLATE_IS_TEMP=false
+SAM_BUILD_DIR="${SAM_BUILD_DIR:-$ROOT/.aws-sam/build}"
 
 cleanup_deploy_artifacts() {
   [[ -n "$ZIP_STAGE_DIR" ]] && rm -rf "$ZIP_STAGE_DIR"
@@ -234,7 +235,13 @@ if [[ "${SAM_BUILD_NO_CACHED:-false}" == "true" ]]; then
 fi
 
 echo "==> sam build ($DEPLOY_MODE) ${BUILD_ARGS[*]}"
-sam build "${BUILD_ARGS[@]}"
+sam build "${BUILD_ARGS[@]}" --build-dir "$SAM_BUILD_DIR"
+
+BUILT_TEMPLATE="$SAM_BUILD_DIR/template.yaml"
+if [[ ! -f "$BUILT_TEMPLATE" ]]; then
+  echo "error: SAM build did not produce template: $BUILT_TEMPLATE" >&2
+  exit 1
+fi
 
 OVERRIDES=(
   "AuthMode=${AUTH_MODE}"
@@ -260,7 +267,7 @@ if [[ -n "${SAM_OAUTH_AUDIENCE:-}" ]]; then
 fi
 
 DEPLOY_ARGS=(
-  -t .aws-sam/build/template.yaml
+  -t "$BUILT_TEMPLATE"
   --stack-name "$STACK_NAME"
   --region "$AWS_REGION"
   --capabilities CAPABILITY_IAM
