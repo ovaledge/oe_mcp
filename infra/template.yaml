@@ -77,21 +77,19 @@ Parameters:
       AUTH_MODE=remote_credentials only — max distinct credential-key JWT entries per Lambda
       instance (in-memory LRU).
   LambdaMemorySize:
-    Type: Number
-    Default: 1024
-    MinValue: 512
-    MaxValue: 10240
+    Type: String
+    Default: "1024"
+    AllowedPattern: "^[0-9]+$"
     Description: >
-      Lambda memory (MB). Higher values add CPU and help large tool responses (lineage, docs search).
-      HTTP API integration timeout remains 30s max.
+      Lambda memory (MB), 512–10240. Higher values add CPU and help large tool responses
+      (lineage, docs search). HTTP API integration timeout remains 30s max.
   LambdaTimeout:
-    Type: Number
-    Default: 30
-    MinValue: 10
-    MaxValue: 30
+    Type: String
+    Default: "30"
+    AllowedPattern: "^[0-9]+$"
     Description: >
-      Lambda timeout (seconds). API Gateway HTTP API caps integration at 30s; values above 30
-      have no effect on /mcp until a longer-timeout front end is used.
+      Lambda timeout (seconds), 10–30. API Gateway HTTP API caps integration at 30s; values
+      above 30 have no effect on /mcp until a longer-timeout front end is used.
   EnableWaf:
     Type: String
     Default: "false"
@@ -99,14 +97,17 @@ Parameters:
     Description: >
       Attach regional AWS WAF IP allowlist to the HTTP API stage (default action block).
   AllowedSourceCidrs:
-    Type: CommaDelimitedList
+    Type: String
     Default: "127.0.0.1/32"
     Description: >
-      IPv4 CIDR blocks allowed when EnableWaf=true. Ignored when WAF is disabled.
+      Comma-separated IPv4 CIDR blocks allowed when EnableWaf=true. Ignored when WAF is disabled.
       Example: 203.0.113.0/24,198.51.100.10/32
 
 Conditions:
-  CreateWaf: !Equals [!Ref EnableWaf, "true"]
+  CreateWaf:
+    Fn::Equals:
+      - !Ref EnableWaf
+      - "true"
 
 Globals:
   Function:
@@ -261,7 +262,7 @@ Resources:
       Description: !Sub IPv4 allowlist for ${AWS::StackName} MCP HTTP API
       Scope: REGIONAL
       IPAddressVersion: IPV4
-      Addresses: !Ref AllowedSourceCidrs
+      Addresses: !Split [",", !Ref AllowedSourceCidrs]
 
   MCPWebACL:
     Type: AWS::WAFv2::WebACL
@@ -292,15 +293,8 @@ Resources:
   MCPWebACLAssociation:
     Type: AWS::WAFv2::WebACLAssociation
     Condition: CreateWaf
-    DependsOn: MCPApi
     Properties:
-      ResourceArn: !Join
-        - ""
-        - - "arn:aws:apigateway:"
-          - !Ref AWS::Region
-          - "::/apis/"
-          - !Ref MCPApi
-          - "/stages/$default"
+      ResourceArn: !Sub "arn:aws:apigateway:${AWS::Region}::/apis/${MCPApi}/stages/$default"
       WebACLArn: !GetAtt MCPWebACL.Arn
 
 Outputs:
@@ -338,4 +332,4 @@ Outputs:
   WAFAllowedSourceCidrs:
     Condition: CreateWaf
     Description: IPv4 CIDR allowlist enforced by WAF
-    Value: !Join [", ", !Ref AllowedSourceCidrs]
+    Value: !Ref AllowedSourceCidrs
