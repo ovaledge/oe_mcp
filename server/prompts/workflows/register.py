@@ -4,6 +4,7 @@ from fastmcp.prompts import Message
 from server.constants import (
     MCP_ACCESS_DISAMBIGUATION_RULE_DOC,
     MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE,
+    MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC,
     MCP_SOURCE_SYSTEMS_DOC,
     TOOL_ASSESS_CDE_DQ,
     TOOL_ASSET_LINEAGE,
@@ -278,16 +279,19 @@ def register(mcp: FastMCP) -> None:
         P9 — Disambiguate who-has-access when native/DAM/source-system signals are absent.
 
         Trigger: "Who has access to ORDERS?"
+                 "Who has access to BUSINESS.BANKING in Snowflake?"
                  "Who can see this table?"
         """
         text = (
             f"Answer access for: '{question}'\n\n"
             f"{MCP_ACCESS_DISAMBIGUATION_RULE_DOC}\n\n"
+            f"{MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC}\n\n"
             f"When native/DAM signals are present → native_source_access → "
-            f"{TOOL_SOURCE_SYSTEM_ACCESS}. When catalog ACL / OE security signals are present → "
-            f"catalog_object_access → {TOOL_GET_USER_OBJECT_ACCESS} with "
-            f"access_intent_confirmed=catalog_acl. Otherwise present this message verbatim "
-            f"and wait for **1** or **2**:\n\n"
+            f"{TOOL_SOURCE_SYSTEM_ACCESS} with access_intent_confirmed=native. "
+            f"When catalog ACL / OE security signals are present → catalog_object_access → "
+            f"{TOOL_GET_USER_OBJECT_ACCESS} with access_intent_confirmed=catalog_acl. "
+            f"When **neither** signal set is present — do **not** call any access tool; "
+            f"present this message verbatim and wait for **1** or **2**:\n\n"
             f"{MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE}\n\n"
             f"After **1**: native_source_access → {TOOL_SOURCE_SYSTEM_ACCESS} with "
             f"access_intent_confirmed=native. "
@@ -304,12 +308,15 @@ def register(mcp: FastMCP) -> None:
         """
         P10 — Native Redshift/Snowflake/Tableau grants (harvested RDAM), not catalog ACLs.
 
-        Trigger: "What can svc_analytics SELECT in Redshift?"
-                 "Who has access to prod_db.public.orders?"
-                 "Which users can view the Revenue Dashboard in Tableau?"
+        Trigger: "What native privileges does svc_analytics have in Redshift?"
+                 "Who has DAM access to prod_db.public.orders?"
+                 "Which users have source-system SELECT on the Revenue Dashboard?"
         """
         text = (
             f"Answer native access for {source_system}: '{question}'\n\n"
+            f"Prerequisite: user picked **1** (native) or the question includes native/DAM "
+            f"keywords — not Snowflake/Redshift/Tableau alone. If ambiguous, use "
+            f"resolve_object_access first.\n\n"
             f"Steps:\n"
             f"1. Infer query_direction from the question (do not ask the user): user_to_objects "
             f"when asking what a specific user can access; object_to_users when asking who has "
@@ -317,7 +324,8 @@ def register(mcp: FastMCP) -> None:
             f"only that user's grants — never object_to_users.\n"
             f"2. Call {TOOL_SOURCE_SYSTEM_ACCESS} with source_system='{source_system}' "
             f"({MCP_SOURCE_SYSTEMS_DOC}) and query_direction inferred from the question. "
-            f"Only those two fields are mandatory; add username, object_path, object_name, "
+            f"For object_to_users who-has-access, set access_intent_confirmed=native. "
+            f"Only source_system and query_direction are mandatory otherwise; add username, "
             f"fully_qualified_name, object_type, connection_id, or privileges when the question "
             f"supplies them. Always set object_type explicitly with object_path — Java uses "
             f"objectType for resolution, not dot segment count alone. Path matrix: "
@@ -388,12 +396,15 @@ def register(mcp: FastMCP) -> None:
         """
         P10b — OvalEdge catalog ACL permissions (user/role grants), not native RDAM.
 
-        Trigger: "What access does john.doe have on CUSTOMER_MASTER?"
-                 "Who has access to the Finance schema?"
-                 "Which roles provide access to this report?"
+        Trigger: "What OvalEdge catalog ACL does john.doe have on CUSTOMER_MASTER?"
+                 "Who has catalog access to the Finance schema?"
+                 "Which OE security roles provide access to this report?"
         """
         text = (
             f"Answer OvalEdge catalog access: '{question}'\n\n"
+            f"Prerequisite: user picked **2** (catalog ACL) or the question includes OE "
+            f"security / catalog-access keywords — not Snowflake/Redshift/Tableau alone. "
+            f"If ambiguous, use resolve_object_access first.\n\n"
             f"Steps:\n"
             f"1. Infer query_direction: user_to_object when asking what a specific user can do; "
             f"object_to_principals when asking who has access on an asset.\n"
@@ -401,7 +412,8 @@ def register(mcp: FastMCP) -> None:
             f"object_id and object_type from the chosen hit. If multiple matches, ask the user "
             f"to pick or use matchCandidates from get_user_object_access.\n"
             f"3. Call {TOOL_GET_USER_OBJECT_ACCESS} with query_direction, username (for "
-            f"user_to_object), and resolved object_id+object_type.\n"
+            f"user_to_object), resolved object_id+object_type, and for object_to_principals "
+            f"who-has-access set access_intent_confirmed=catalog_acl.\n"
             f"4. Present metadataPermission, dataPermission, grantSources, contributingRoles, "
             f"inheritedFrom when columns/terms inherit parent ACLs, and redirectUrl.\n"
             f"5. Catalog ACL only — not native DB grants. Use {TOOL_SOURCE_SYSTEM_ACCESS} for "

@@ -4,7 +4,10 @@ from fastmcp import FastMCP
 
 from server.branding import mcp_server_icons
 from server.config import settings
-from server.constants import MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC
+from server.constants import (
+    MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC,
+    MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC,
+)
 from server.mcp import register_all
 
 # Routing detail lives in tool descriptions and docs://ovaledge/mcp_workflows — keep
@@ -12,8 +15,9 @@ from server.mcp import register_all
 _MCP_SERVER_INSTRUCTIONS = (
     "You are connected to the OvalEdge data governance platform. "
     f"{MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC} "
+    f"{MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC} "
     "Ambiguous who-has-access: invoke resolve_object_access, present the 1/2 choice, and "
-    "call no tools (including search_catalog_assets) until the user replies. "
+    "call no access tools (including search_catalog_assets) until the user replies. "
     "Use MCP tools for catalog discovery, governance lookups, native source access (RDAM), "
     "and governed writes. Read each tool's description before calling; for multi-step playbooks "
     "use workflow prompts or the docs://ovaledge/mcp_workflows resource. "
