@@ -40,7 +40,7 @@ Optional env:
   STACK_NAME, AWS_REGION, AUTH_MODE, ENVIRONMENT, ECR_REPO, MCP_HTTP_STATELESS,
   OVALEDGE_HTTP_AUTH_SCHEME, CREDENTIALS_CACHE_MAX_ENTRIES,
   SAM_USE_CONTAINER, SAM_BUILD_NO_CACHED, SAM_SKIP_DOCKER_PULL_BASE,
-  IMAGE_REPOSITORY, SAM_OAUTH_ISSUER, SAM_OAUTH_AUDIENCE, ALLOWED_SOURCE_CIDRS,
+  OE_MCP_SAM_BUILD_DIR, IMAGE_REPOSITORY, SAM_OAUTH_ISSUER, SAM_OAUTH_AUDIENCE, ALLOWED_SOURCE_CIDRS,
   LAMBDA_ARCHITECTURE, LAMBDA_MEMORY_SIZE, LAMBDA_TIMEOUT
 
 Optional CLI flags (override env for this invocation):
@@ -141,17 +141,21 @@ fi
 
 ZIP_STAGE_DIR=""
 SAM_TEMPLATE_IS_TEMP=false
-SAM_BUILD_DIR="${SAM_BUILD_DIR:-$ROOT/.aws-sam/build}"
+SAM_WORK_DIR="$ROOT/.aws-sam"
+ZIP_STAGE_DIR="$SAM_WORK_DIR/zip-stage"
+OE_MCP_SAM_BUILD_DIR="${OE_MCP_SAM_BUILD_DIR:-$SAM_WORK_DIR/build}"
 
 cleanup_deploy_artifacts() {
-  [[ -n "$ZIP_STAGE_DIR" ]] && rm -rf "$ZIP_STAGE_DIR"
+  if [[ "$DEPLOY_ZIP" == true ]]; then
+    rm -rf "$ZIP_STAGE_DIR"
+  fi
   if [[ "$SAM_TEMPLATE_IS_TEMP" == true ]]; then
     rm -f "$SAM_TEMPLATE"
   fi
 }
 
 prepare_zip_stage() {
-  ZIP_STAGE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/oe-mcp-zip.XXXXXX")"
+  rm -rf "$ZIP_STAGE_DIR"
   mkdir -p "$ZIP_STAGE_DIR/infra"
   cp -r server entrypoints "$ZIP_STAGE_DIR/"
   cp requirements.txt "$ZIP_STAGE_DIR/"
@@ -162,18 +166,32 @@ prepare_zip_stage() {
 prepare_sam_template() {
   local src="$1"
   if [[ "$DEPLOY_ZIP" != true ]]; then
-    echo "$src"
+    echo "$ROOT/$src"
     return
   fi
   prepare_zip_stage
-  local out
-  out="$(mktemp "${TMPDIR:-/tmp}/oe-mcp-sam.XXXXXX.yaml")"
-  cp "$src" "$out"
+  local out="$SAM_WORK_DIR/template-zip.deploy.yaml"
+  mkdir -p "$SAM_WORK_DIR"
+  cp "$ROOT/$src" "$out"
   # CodeUri: ../ is relative to infra/; point at the clean staging tree (avoids /tmp
   # template resolving ../ to filesystem root, and skips dev artifacts like .codegraph).
   sed -i "s|CodeUri: \\.\\./|CodeUri: ${ZIP_STAGE_DIR}/|" "$out"
   SAM_TEMPLATE_IS_TEMP=true
   echo "$out"
+}
+
+resolve_built_template() {
+  local candidate
+  for candidate in \
+    "$OE_MCP_SAM_BUILD_DIR/template.yaml" \
+    "$SAM_WORK_DIR/build/template.yaml" \
+    "$ROOT/.aws-sam/build/template.yaml"; do
+    if [[ -f "$candidate" ]]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  return 1
 }
 
 SAM_TEMPLATE="$(prepare_sam_template "$BASE_TEMPLATE")"
@@ -235,13 +253,19 @@ if [[ "${SAM_BUILD_NO_CACHED:-false}" == "true" ]]; then
 fi
 
 echo "==> sam build ($DEPLOY_MODE) ${BUILD_ARGS[*]}"
-sam build "${BUILD_ARGS[@]}" --build-dir "$SAM_BUILD_DIR"
+mkdir -p "$OE_MCP_SAM_BUILD_DIR"
+sam build "${BUILD_ARGS[@]}" --build-dir "$OE_MCP_SAM_BUILD_DIR"
 
-BUILT_TEMPLATE="$SAM_BUILD_DIR/template.yaml"
-if [[ ! -f "$BUILT_TEMPLATE" ]]; then
-  echo "error: SAM build did not produce template: $BUILT_TEMPLATE" >&2
+BUILT_TEMPLATE="$(resolve_built_template || true)"
+if [[ -z "$BUILT_TEMPLATE" ]]; then
+  echo "error: SAM build did not produce template.yaml" >&2
+  echo "  expected one of:" >&2
+  echo "    $OE_MCP_SAM_BUILD_DIR/template.yaml" >&2
+  echo "    $SAM_WORK_DIR/build/template.yaml" >&2
+  echo "    $ROOT/.aws-sam/build/template.yaml" >&2
   exit 1
 fi
+echo "==> Using built template: $BUILT_TEMPLATE" >&2
 
 OVERRIDES=(
   "AuthMode=${AUTH_MODE}"
