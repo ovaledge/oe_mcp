@@ -344,14 +344,35 @@ MCP_CATALOG_OBJECT_ACCESS_OVERVIEW_DOC = (
     "name — they are not in catalog search. Data Domains, Data Products, glossary Domains, "
     "and Story Zones are resolved from the database when Elasticsearch has no document."
 )
+MCP_ACCESS_NATIVE_SIGNAL_KEYWORDS: tuple[str, ...] = (
+    "data access management",
+    "source system access",
+    "source system",
+    "native",
+    "remote",
+    "dam",
+    "source",
+)
 MCP_ACCESS_NATIVE_SIGNAL_KEYWORDS_DOC = (
     "native, remote, source system access, source system, source, "
     "data access management, DAM"
 )
+MCP_ACCESS_CATALOG_ACL_SIGNAL_KEYWORDS: tuple[str, ...] = (
+    "ovaledge security",
+    "catalog permissions",
+    "catalog access",
+    "catalog acl",
+    "oe security",
+    "acl",
+)
+MCP_ACCESS_CATALOG_ACL_SIGNAL_KEYWORDS_DOC = (
+    "oe security, OvalEdge security, acl, catalog access, catalog acl, catalog permissions"
+)
 MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC = (
     "Ambiguous who-has-access: disambiguate via resolve_object_access; "
     "do not call access tools until user picks. "
-    "Snowflake/Redshift/Tableau alone are not native signals."
+    "Skip disambiguation only when native/DAM or catalog ACL/OE security signals "
+    "are present. Snowflake/Redshift/Tableau alone are not native signals."
 )
 MCP_ACCESS_DISAMBIGUATION_TOOL_LEAD_DOC = (
     "**Who-has-access:** `resolve_object_access` then `access_intent_confirmed` "
@@ -364,8 +385,13 @@ MCP_ACCESS_DISAMBIGUATION_SEARCH_GUARD_DOC = (
 MCP_ACCESS_INTENT_NATIVE = "native"
 MCP_ACCESS_INTENT_CATALOG_ACL = "catalog_acl"
 MCP_ACCESS_INTENT_CONFIRMED_FIELD_DOC = (
-    "Who-has-access only: `native` after user picks **1**; `catalog_acl` after **2**. "
-    "Omit for user_to_objects / user_to_object / browse."
+    "Who-has-access only: `native` after user picks **1** or when the question has "
+    "native/DAM signals; `catalog_acl` after **2** or when the question has OE security / "
+    "ACL / catalog-access signals. Omit for user_to_objects / user_to_object / browse."
+)
+MCP_ACCESS_USER_QUESTION_FIELD_DOC = (
+    "Original user question for who-has-access routing. When access_intent_confirmed is "
+    "omitted, native/DAM or catalog ACL signals in this text satisfy the disambiguation gate."
 )
 MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE = (
     "OvalEdge has **two** different tools for “who has access” questions:\n\n"
@@ -376,19 +402,25 @@ MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE = (
     "screen (e.g. SELECT, roles, groups). |\n"
     f"| **`{TOOL_GET_USER_OBJECT_ACCESS}`** | **OvalEdge catalog ACL** on the **Security** "
     "page — metadata read/write and data permission levels for OvalEdge users and roles. |\n\n"
-    "Your question does not mention native/remote/DAM/source-system access.\n\n"
+    "Your question does not mention native/remote/DAM/source-system access or OvalEdge "
+    "catalog ACL / OE security signals.\n\n"
     "**Which do you want?**\n"
     "1. **Native source access** — database/BI grants from Redshift, Snowflake, or Tableau\n"
     "2. **OvalEdge catalog ACL** — permissions inside OvalEdge on a catalog asset\n\n"
     "Reply with **1** or **2**, then I will call the matching tool."
 )
 MCP_ACCESS_DISAMBIGUATION_RULE_DOC = (
-    "For who-has-access / permission questions: if the user question includes none of these "
-    "signals (case-insensitive): "
+    "For who-has-access / permission questions (case-insensitive signals): "
+    "native/DAM keywords ("
     + MCP_ACCESS_NATIVE_SIGNAL_KEYWORDS_DOC
-    + " — do **not** call source_system_access or get_user_object_access; show the "
-    "disambiguation message and wait for the user to pick **1** (native) or **2** (catalog ACL). "
-    "Naming Snowflake/Redshift/Tableau alone is not a native signal — still disambiguate. "
+    + ") → call source_system_access with access_intent_confirmed=native (or pass "
+    "user_question with those signals). Catalog ACL keywords ("
+    + MCP_ACCESS_CATALOG_ACL_SIGNAL_KEYWORDS_DOC
+    + ") → call get_user_object_access with access_intent_confirmed=catalog_acl (or pass "
+    "user_question with those signals). When **neither** signal set is present — do **not** "
+    "call source_system_access or get_user_object_access; show the disambiguation message "
+    "and wait for **1** (native) or **2** (catalog ACL). Naming Snowflake/Redshift/Tableau "
+    "alone is not a native or catalog ACL signal — still disambiguate. "
     "Workflow prompt: resolve_object_access."
 )
 MCP_CATALOG_OBJECT_ACCESS_DIRECTIONS = (

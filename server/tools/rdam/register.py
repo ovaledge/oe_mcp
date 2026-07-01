@@ -11,6 +11,7 @@ from server.client import OvalEdgeError
 from server.constants import (
     MCP_ACCESS_INTENT_CONFIRMED_FIELD_DOC,
     MCP_ACCESS_INTENT_NATIVE,
+    MCP_ACCESS_USER_QUESTION_FIELD_DOC,
     MCP_PATH_SOURCE_SYSTEM_ACCESS,
     MCP_QUERY_DIRECTIONS_DOC,
     MCP_RDAM_OBJECT_TYPE_ALL,
@@ -55,11 +56,13 @@ async def _invoke_source_system_access(
     scope_mode: str = MCP_RDAM_SCOPE_MODE_EXACT,
     fully_qualified_name: str | None = None,
     access_intent_confirmed: str | None = None,
+    user_question: str | None = None,
 ) -> dict[str, Any]:
     intent_err = validate_access_intent_confirmed(
         access_intent_confirmed,
         query_direction=query_direction,
         expected_intent=MCP_ACCESS_INTENT_NATIVE,
+        user_question=user_question,
     )
     if intent_err is not None:
         return intent_err
@@ -309,6 +312,13 @@ def register(mcp: FastMCP) -> None:
                 description=MCP_ACCESS_INTENT_CONFIRMED_FIELD_DOC,
             ),
         ] = None,
+        user_question: Annotated[
+            str | None,
+            Field(
+                default=None,
+                description=MCP_ACCESS_USER_QUESTION_FIELD_DOC,
+            ),
+        ] = None,
     ) -> dict[str, Any]:
         """Native source-system access and DAM browse (see MCP tool description)."""
         return await _invoke_source_system_access(
@@ -325,4 +335,5 @@ def register(mcp: FastMCP) -> None:
             scope_mode,
             fully_qualified_name,
             access_intent_confirmed,
+            user_question,
         )

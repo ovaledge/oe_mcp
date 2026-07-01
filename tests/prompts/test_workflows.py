@@ -192,6 +192,8 @@ class TestMcpServerInstructions:
             "source_system_access"
         )
         assert "search_catalog_assets" in instructions
+        assert "no tools" in instructions
+        assert "catalog acl" in instructions or "oe security" in instructions
         assert instructions.index("no tools") < instructions.index("source_system_access")
 
     def test_search_description_guards_who_has_access(self) -> None:
@@ -212,3 +214,4 @@ class TestMcpServerInstructions:
         assert MCP_ACCESS_DISAMBIGUATION_RULE_DOC in text
         assert "source_system_access" in text
         assert "get_user_object_access" in text
+        assert "catalog ACL" in text or "catalog acl" in text.lower()
