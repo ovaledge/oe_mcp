@@ -81,20 +81,17 @@ _DESC_CREATE_DQ_RULES = classify_tool_desc(
     "**prefer_existing_rule** (default true): associate when a recommended rule exists.\n\n"
     "**skip_duplicate_function_on_object** (default true): skip if object already has a "
     "rule for the same function type.\n\n"
-    "Auto-create derives input/success operators and values from business metadata when "
-    "present; otherwise uses default operators/values from the DQ function definition "
-    "(dqfunctiondef_operator_map), matching the UI single-object rule flow.\n\n"
+    "**supplemental_criteria_text** (optional): success/input criteria from the user prompt "
+    "(e.g. 'Success: equal to 300') when not already in catalog metadata.\n\n"
+    "Criteria priority: parsed metadata or supplemental_criteria_text, then function defaults.\n\n"
     "Before creating a data quality rule, each object is validated against the "
     "recommended function "
     "(column/file-column data type, connector DQ support, addon license) using the same "
     "checks as associate_dq_rule_objects. Unsupported objects return status skipped with "
     "a clear message; no orphan data quality rule is created.\n\n"
     "Row statuses: created, associated, skipped, criteria_missing, function_not_identified, "
-    "failed. New rules use creation type OE MCP (manual-like behavior). When business metadata "
-    "has no parseable input/success bounds, the server falls back to default operators and "
-    "values from the recommended DQ function definition. criteria_missing includes "
-    "descriptionMessage when neither metadata nor function defaults are available. "
-    "Audit source OE-MCP."
+    "failed. New rules use creation type OE MCP. criteria_missing includes descriptionMessage "
+    "when metadata and function defaults are insufficient. Audit source OE-MCP."
 )
 
 _DESC_LOOKUP_DQ_RULE = classify_tool_desc(
@@ -346,6 +343,7 @@ def build_create_dq_rules_payload(
     skip_duplicate_function_on_object: bool,
     description_custom_field_name: str | None = None,
     description_term_name: str | None = None,
+    supplemental_criteria_text: str | None = None,
 ) -> dict[str, Any]:
     built = build_assess_cde_dq_payload(
         discover_cde_columns,
@@ -366,6 +364,9 @@ def build_create_dq_rules_payload(
         payload["descriptionCustomFieldName"] = built["descriptionCustomFieldName"]
     if built.get("descriptionTermName"):
         payload["descriptionTermName"] = built["descriptionTermName"]
+    supplemental = strip_or_none_description_field(supplemental_criteria_text)
+    if supplemental is not None:
+        payload["supplementalCriteriaText"] = supplemental
     if built.get("objects"):
         payload["objects"] = built["objects"]
     return payload
