@@ -1,52 +1,47 @@
 #!/usr/bin/env bash
-# One-shot: build container image with SAM, push to ECR, deploy CloudFormation stack.
+# One-shot SAM build + CloudFormation deploy for OvalEdge MCP.
+#
+# Templates (infra/):
+#   template.yaml      — Lambda container image (ECR) — default
+#   template-zip.yaml  — Lambda ZIP (no ECR) — use --zip
+#
+# Optional flags on the same templates (WAF is a CloudFormation parameter):
+#   --zip              ZIP package instead of container image
+#   --waf              Enable regional AWS WAF IP allowlist on the HTTP API
+#   --allowed-cidrs    Comma-separated IPv4 CIDRs (required with --waf)
 #
 # Required:
-#   OVALEDGE_BASE_URL   OvalEdge tenant base URL (no trailing slash), e.g. https://app.example.com
+#   OVALEDGE_BASE_URL   OvalEdge tenant base URL (no trailing slash)
 #
-# Common optional env:
-#   STACK_NAME          CloudFormation stack name (default: oe-mcp)
-#   AWS_REGION          (default: AWS_DEFAULT_REGION or us-east-1)
-#   AUTH_MODE           remote_credentials | remote (default: remote_credentials)
-#   ENVIRONMENT         dev | staging | prod — suffixes Lambda name (default: dev)
-#   ECR_REPO            ECR repository name (default: oe-mcp); created if missing
-#   MCP_HTTP_STATELESS  true | false (default: true) — see README_REMOTE_MCP.md
-#   SAM_USE_CONTAINER   if "false", omit --use-container (native build; often fixes digest/cache errors on Linux)
-#   SAM_BUILD_NO_CACHED if "true", pass sam build --no-cached (clear bad layer cache)
-#   SAM_SKIP_DOCKER_PULL_BASE  if "true", skip docker pull of the Lambda base image
-#   LAMBDA_ARCHITECTURE  x86_64 | arm64 (default: x86_64) — must match docker build host for sam build
-#   OVALEDGE_HTTP_AUTH_SCHEME   jwt | Bearer | … (default: jwt) → Lambda OVALEDGE_HTTP_AUTH_SCHEME
-#   CREDENTIALS_CACHE_MAX_ENTRIES  integer (default: 10000) → remote_credentials LRU cap per instance
-#
-# OAuth remote mode extras (only when AUTH_MODE=remote):
-#   SAM_OAUTH_ISSUER      maps to template OAuthIssuer
-#   SAM_OAUTH_AUDIENCE  maps to template OAuthAudience
-#
-# CLI (optional; overrides env for that run):
-#   ./scripts/deploy.sh --oval-edge-auth-scheme jwt \\
-#       --credentials-cache-max-entries 5000 \\
-#       --mcp-http-stateless false \\
-#       --environment prod \\
-#       --auth-mode remote_credentials
-#
-# Usage:
-#   export OVALEDGE_BASE_URL=https://your-tenant.example.com
-#   ./scripts/deploy.sh
+# See infra/DEPLOY.md for full guide.
 #
 set -euo pipefail
 
+DEPLOY_ZIP=false
+ENABLE_WAF=false
+ALLOWED_SOURCE_CIDRS="${ALLOWED_SOURCE_CIDRS:-}"
+
 usage() {
   cat <<'EOF'
-One-shot Lambda deploy (SAM build + ECR + CloudFormation).
+One-shot Lambda deploy (SAM build + CloudFormation).
 
 Required env:
   OVALEDGE_BASE_URL   e.g. https://tenant.example.com (no trailing slash)
 
+Deploy mode (pick one package type):
+  (default)           Container image → ECR (infra/template.yaml)
+  --zip               Lambda ZIP, no ECR (infra/template-zip.yaml)
+
+Optional hardening:
+  --waf               Attach regional WAF IP allowlist (default action: block)
+  --allowed-cidrs <list>  IPv4 CIDRs for WAF (required with --waf), e.g. 203.0.113.0/24,10.0.0.0/8
+
 Optional env:
   STACK_NAME, AWS_REGION, AUTH_MODE, ENVIRONMENT, ECR_REPO, MCP_HTTP_STATELESS,
   OVALEDGE_HTTP_AUTH_SCHEME, CREDENTIALS_CACHE_MAX_ENTRIES,
-  SAM_USE_CONTAINER, SAM_BUILD_NO_CACHED,
-  IMAGE_REPOSITORY, SAM_OAUTH_ISSUER, SAM_OAUTH_AUDIENCE
+  SAM_USE_CONTAINER, SAM_BUILD_NO_CACHED, SAM_SKIP_DOCKER_PULL_BASE,
+  IMAGE_REPOSITORY, SAM_OAUTH_ISSUER, SAM_OAUTH_AUDIENCE, ALLOWED_SOURCE_CIDRS,
+  LAMBDA_ARCHITECTURE, LAMBDA_MEMORY_SIZE, LAMBDA_TIMEOUT
 
 Optional CLI flags (override env for this invocation):
   --oval-edge-auth-scheme <scheme>
@@ -55,16 +50,13 @@ Optional CLI flags (override env for this invocation):
   --environment <dev|staging|prod>
   --auth-mode <remote|remote_credentials>
 
-Example:
+Examples:
   export OVALEDGE_BASE_URL=https://app.example.com
   ./scripts/deploy.sh
 
-  # Claude / clients that need GET (SSE-style) on /mcp — set before deploy:
-  export MCP_HTTP_STATELESS=false
-  ./scripts/deploy.sh
-
-  # Same flags on the command line:
-  ./scripts/deploy.sh --mcp-http-stateless false --oval-edge-auth-scheme jwt
+  ./scripts/deploy.sh --zip
+  ./scripts/deploy.sh --waf --allowed-cidrs 203.0.113.0/24
+  ./scripts/deploy.sh --zip --waf --allowed-cidrs 10.0.0.0/8
 EOF
 }
 
@@ -73,6 +65,18 @@ while [[ $# -gt 0 ]]; do
     -h | --help)
       usage
       exit 0
+      ;;
+    --zip)
+      DEPLOY_ZIP=true
+      shift
+      ;;
+    --waf)
+      ENABLE_WAF=true
+      shift
+      ;;
+    --allowed-cidrs)
+      ALLOWED_SOURCE_CIDRS="${2:-}"
+      shift 2
       ;;
     --oval-edge-auth-scheme)
       OVALEDGE_HTTP_AUTH_SCHEME="${2:-}"
@@ -106,6 +110,11 @@ if [[ -z "${OVALEDGE_BASE_URL:-}" ]]; then
   exit 1
 fi
 
+if [[ "$ENABLE_WAF" == true && -z "$ALLOWED_SOURCE_CIDRS" ]]; then
+  echo "error: --waf requires --allowed-cidrs or ALLOWED_SOURCE_CIDRS env" >&2
+  exit 1
+fi
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
@@ -122,46 +131,109 @@ LAMBDA_ARCHITECTURE="${LAMBDA_ARCHITECTURE:-x86_64}"
 LAMBDA_MEMORY_SIZE="${LAMBDA_MEMORY_SIZE:-1024}"
 LAMBDA_TIMEOUT="${LAMBDA_TIMEOUT:-30}"
 
-ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
-IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}}"
+if [[ "$DEPLOY_ZIP" == true ]]; then
+  BASE_TEMPLATE="infra/template-zip.yaml"
+  DEPLOY_MODE="ZIP"
+else
+  BASE_TEMPLATE="infra/template.yaml"
+  DEPLOY_MODE="container"
+fi
+
+ZIP_STAGE_DIR=""
+SAM_TEMPLATE_IS_TEMP=false
+
+cleanup_deploy_artifacts() {
+  [[ -n "$ZIP_STAGE_DIR" ]] && rm -rf "$ZIP_STAGE_DIR"
+  if [[ "$SAM_TEMPLATE_IS_TEMP" == true ]]; then
+    rm -f "$SAM_TEMPLATE"
+  fi
+}
+
+prepare_zip_stage() {
+  ZIP_STAGE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/oe-mcp-zip.XXXXXX")"
+  mkdir -p "$ZIP_STAGE_DIR/infra"
+  cp -r server entrypoints "$ZIP_STAGE_DIR/"
+  cp requirements.txt "$ZIP_STAGE_DIR/"
+  cp infra/lambda-requirements.txt "$ZIP_STAGE_DIR/infra/"
+  echo "==> Staged ZIP source at $ZIP_STAGE_DIR" >&2
+}
+
+prepare_sam_template() {
+  local src="$1"
+  if [[ "$DEPLOY_ZIP" != true ]]; then
+    echo "$src"
+    return
+  fi
+  prepare_zip_stage
+  local out
+  out="$(mktemp "${TMPDIR:-/tmp}/oe-mcp-sam.XXXXXX.yaml")"
+  cp "$src" "$out"
+  # CodeUri: ../ is relative to infra/; point at the clean staging tree (avoids /tmp
+  # template resolving ../ to filesystem root, and skips dev artifacts like .codegraph).
+  sed -i "s|CodeUri: \\.\\./|CodeUri: ${ZIP_STAGE_DIR}/|" "$out"
+  SAM_TEMPLATE_IS_TEMP=true
+  echo "$out"
+}
+
+SAM_TEMPLATE="$(prepare_sam_template "$BASE_TEMPLATE")"
+trap cleanup_deploy_artifacts EXIT
 
 command -v sam >/dev/null 2>&1 || {
   echo "error: AWS SAM CLI ('sam') not found. Install: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html" >&2
   exit 1
 }
-command -v docker >/dev/null 2>&1 || {
-  echo "error: docker not found (required for sam build --use-container)" >&2
-  exit 1
-}
 
-if ! aws ecr describe-repositories --repository-names "$ECR_REPO" --region "$AWS_REGION" &>/dev/null; then
-  echo "==> Creating ECR repository: $ECR_REPO"
-  aws ecr create-repository \
-    --repository-name "$ECR_REPO" \
-    --region "$AWS_REGION" \
-    --image-scanning-configuration scanOnPush=true \
-    --encryption-configuration encryptionType=AES256 \
-    >/dev/null
+IMAGE_REPOSITORY=""
+if [[ "$DEPLOY_ZIP" == false ]]; then
+  command -v docker >/dev/null 2>&1 || {
+    echo "error: docker not found (required for container sam build)" >&2
+    exit 1
+  }
+
+  ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+  IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}}"
+
+  if ! aws ecr describe-repositories --repository-names "$ECR_REPO" --region "$AWS_REGION" &>/dev/null; then
+    echo "==> Creating ECR repository: $ECR_REPO"
+    aws ecr create-repository \
+      --repository-name "$ECR_REPO" \
+      --region "$AWS_REGION" \
+      --image-scanning-configuration scanOnPush=true \
+      --encryption-configuration encryptionType=AES256 \
+      >/dev/null
+  fi
+
+  echo "==> Docker login to ECR ($AWS_REGION)"
+  aws ecr get-login-password --region "$AWS_REGION" |
+    docker login --username AWS --password-stdin "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+  if [[ "${SAM_SKIP_DOCKER_PULL_BASE:-false}" != "true" ]]; then
+    echo "==> Refresh Lambda base image (avoids stale digest NotFound from cache)"
+    docker pull public.ecr.aws/lambda/python:3.12
+  fi
 fi
 
-echo "==> Docker login to ECR ($AWS_REGION)"
-aws ecr get-login-password --region "$AWS_REGION" |
-  docker login --username AWS --password-stdin "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-
-if [[ "${SAM_SKIP_DOCKER_PULL_BASE:-false}" != "true" ]]; then
-  echo "==> Refresh Lambda base image (avoids stale digest NotFound from cache)"
-  docker pull public.ecr.aws/lambda/python:3.12
-fi
-
-BUILD_ARGS=( -t infra/template.yaml )
-if [[ "${SAM_USE_CONTAINER:-true}" != "false" ]]; then
-  BUILD_ARGS+=( --use-container )
+BUILD_ARGS=( -t "$SAM_TEMPLATE" )
+if [[ "$DEPLOY_ZIP" == true ]]; then
+  if [[ "${SAM_USE_CONTAINER:-false}" == "true" ]]; then
+    if ! command -v docker >/dev/null 2>&1; then
+      echo "error: SAM_USE_CONTAINER=true requires Docker" >&2
+      exit 1
+    fi
+    BUILD_ARGS+=( --use-container )
+  else
+    BUILD_ARGS+=( --no-use-container )
+  fi
+else
+  if [[ "${SAM_USE_CONTAINER:-true}" != "false" ]]; then
+    BUILD_ARGS+=( --use-container )
+  fi
 fi
 if [[ "${SAM_BUILD_NO_CACHED:-false}" == "true" ]]; then
   BUILD_ARGS+=( --no-cached )
 fi
 
-echo "==> sam build (Dockerfile) ${BUILD_ARGS[*]}"
+echo "==> sam build ($DEPLOY_MODE) ${BUILD_ARGS[*]}"
 sam build "${BUILD_ARGS[@]}"
 
 OVERRIDES=(
@@ -175,6 +247,11 @@ OVERRIDES=(
   "LambdaMemorySize=${LAMBDA_MEMORY_SIZE}"
   "LambdaTimeout=${LAMBDA_TIMEOUT}"
 )
+if [[ "$ENABLE_WAF" == true ]]; then
+  OVERRIDES+=("EnableWaf=true" "AllowedSourceCidrs=${ALLOWED_SOURCE_CIDRS}")
+else
+  OVERRIDES+=("EnableWaf=false")
+fi
 if [[ -n "${SAM_OAUTH_ISSUER:-}" ]]; then
   OVERRIDES+=("OAuthIssuer=${SAM_OAUTH_ISSUER}")
 fi
@@ -182,17 +259,22 @@ if [[ -n "${SAM_OAUTH_AUDIENCE:-}" ]]; then
   OVERRIDES+=("OAuthAudience=${SAM_OAUTH_AUDIENCE}")
 fi
 
-echo "==> sam deploy (stack=$STACK_NAME region=$AWS_REGION image=$IMAGE_REPOSITORY)"
-sam deploy \
-  -t .aws-sam/build/template.yaml \
-  --stack-name "$STACK_NAME" \
-  --region "$AWS_REGION" \
-  --capabilities CAPABILITY_IAM \
-  --resolve-s3 \
-  --no-confirm-changeset \
-  --no-fail-on-empty-changeset \
-  --image-repository "$IMAGE_REPOSITORY" \
+DEPLOY_ARGS=(
+  -t .aws-sam/build/template.yaml
+  --stack-name "$STACK_NAME"
+  --region "$AWS_REGION"
+  --capabilities CAPABILITY_IAM
+  --resolve-s3
+  --no-confirm-changeset
+  --no-fail-on-empty-changeset
   --parameter-overrides "${OVERRIDES[@]}"
+)
+if [[ "$DEPLOY_ZIP" == false ]]; then
+  DEPLOY_ARGS+=( --image-repository "$IMAGE_REPOSITORY" )
+fi
+
+echo "==> sam deploy (stack=$STACK_NAME region=$AWS_REGION mode=$DEPLOY_MODE waf=$ENABLE_WAF)"
+sam deploy "${DEPLOY_ARGS[@]}"
 
 echo ""
 echo "==> Stack outputs"
@@ -203,9 +285,10 @@ aws cloudformation describe-stacks \
   --output table
 
 echo ""
-echo "Tip: point Cursor MCP 'url' at MCPEndpointUrl (https). For remote_credentials, send the same"
-echo "     X-OvalEdge-* headers as locally. API Gateway has no authorizer; auth is in the app."
-echo ""
+echo "Tip: point MCP clients at MCPEndpointUrl (https). API Gateway has no authorizer; auth is in the app."
 echo "Branding: set Lambda env MCP_PUBLIC_BASE_URL to output MCPPublicBaseUrl (no /mcp suffix)."
-echo "          Verify MCPBrandIconUrl returns 200. Cursor may still show AWS badge on execute-api"
-echo "          hostnames — use a custom domain (see infra/DEPLOY.md#custom-domain-recommended-for-cursor-branding)."
+echo "Guide: infra/DEPLOY.md"
+if [[ "$ENABLE_WAF" == true ]]; then
+  echo ""
+  echo "WAF: only allowlisted CIDRs reach the API; others receive 403. App auth is still required."
+fi

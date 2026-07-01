@@ -38,9 +38,9 @@ Until stable, prefer **`remote_credentials`** or local stdio (**`AUTH_MODE=local
 
 - **App:** `entrypoints/lambda_handler.py` — `app` is shared; full OAuth routers ( **`remote` only — WIP** ) are included **only** when `settings.auth_mode == "remote"`. `remote_credentials` adds `server/auth/remote_credentials_discovery.py` only.
 - **`MCP_HTTP_STATELESS`:** default **true** (good for Lambda). For **Cursor** (and similar) over plain HTTP, set **`MCP_HTTP_STATELESS=false`** so the MCP stack registers **GET** on `/mcp` for SSE fallback after Streamable HTTP negotiation. Without this, clients may get wrong `Content-Type` on GET.
-- **Lambda / SAM:** [infra/template.yaml](infra/template.yaml) — `AuthMode` parameter (`remote` **(OAuth WIP)** | `remote_credentials`), CORS allows the OvalEdge header names, optional empty defaults for `OAuthIssuer` / `OAuthAudience` when using credentials-only stacks. ZIP deploy: [infra/template-zip.yaml](infra/template-zip.yaml) via [`scripts/deploy-zip.sh`](scripts/deploy-zip.sh).
+- **Lambda / SAM:** [infra/template.yaml](infra/template.yaml) — `AuthMode` parameter (`remote` **(OAuth WIP)** | `remote_credentials`), CORS allows the OvalEdge header names, optional empty defaults for `OAuthIssuer` / `OAuthAudience` when using credentials-only stacks. ZIP deploy: [infra/template-zip.yaml](infra/template-zip.yaml) via [`scripts/deploy.sh --zip`](scripts/deploy.sh). See [infra/DEPLOY.md](infra/DEPLOY.md).
 - **Troubleshooting (502/500, CloudWatch, redeploy):** [infra/TROUBLESHOOTING_REMOTE.md](infra/TROUBLESHOOTING_REMOTE.md).
-- **One-shot deploy:** from repo root, set `OVALEDGE_BASE_URL` and run [`scripts/deploy.sh`](scripts/deploy.sh) (`./scripts/deploy.sh --help` for env vars). Step-by-step copy-paste: [infra/DEPLOY.md](infra/DEPLOY.md).
+- **One-shot deploy:** from repo root, set `OVALEDGE_BASE_URL` and run [`scripts/deploy.sh`](scripts/deploy.sh) (`./scripts/deploy.sh --help` for flags). Guide: [infra/DEPLOY.md](infra/DEPLOY.md).
 - **Local HTTP (uvicorn):**
 
   ```bash
