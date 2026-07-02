@@ -1194,7 +1194,7 @@ def golden_custom_sql_dq_workflow() -> ConversationalTestCase:
                     ),
                 ],
             ),
-            Turn(role="user", content="Approved — create the draft rule."),
+            Turn(role="user", content="Approved — create the data quality rule."),
             Turn(
                 role="assistant",
                 content="POSTing create_sql_dq_rule with preview token.",

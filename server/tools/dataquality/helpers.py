@@ -86,8 +86,8 @@ _DESC_ASSOCIATE_DQ_RULE_OBJECTS = classify_tool_desc(
 )
 
 _DESC_CREATE_DQ_RULES = classify_tool_desc(
-    "Assess CDE/DQ objects then associate to a recommended existing rule or auto-create "
-    "data quality rules when function and business criteria are sufficient.\n\n"
+    "Assess CDE/DQ objects then associate or auto-create data quality rules when "
+    "function and business criteria are sufficient.\n\n"
     f"Backend: POST {MCP_PATH_CREATE_DQ_RULES}\n\n"
     "**Not** assess_cde_dq — read-only only; use create_dq_rules when the user wants "
     "data quality rules created or associated in one step.\n\n"
@@ -95,9 +95,9 @@ _DESC_CREATE_DQ_RULES = classify_tool_desc(
     "is already known.\n\n"
     "**discover_cde_columns** / **objects** / **limit** / "
     "**description_term_name** / **description_custom_field_name**: same as assess_cde_dq.\n\n"
-    "**prefer_existing_rule** (default true): associate when a recommended rule exists.\n\n"
-    "**skip_duplicate_function_on_object** (default true): skip if object already has a "
-    "rule for the same function type.\n\n"
+    "**prefer_existing_rule** (default true): associate when recommended rule exists; "
+    "false creates new rule even if linked.\n\n"
+    "**skip_duplicate_function_on_object** (default true): skip duplicate function on object.\n\n"
     "**supplemental_criteria_text** (optional): user prompt criteria when not in "
     "catalog metadata.\n\n"
     "Criteria priority: metadata or supplemental_criteria_text, then function defaults.\n\n"
@@ -496,7 +496,7 @@ _DESC_VALIDATE_DQ_QUERIES = classify_tool_desc(
 )
 
 _DESC_CREATE_SQL_DQ_RULE = classify_tool_desc(
-    "Create draft oequery DQ rule and associate objects. "
+    "Create custom SQL DQ rule and associate objects. "
     f"POST {MCP_PATH_CREATE_SQL_DQ_RULE}. rule_name; queries or code_object_id; confirm gate."
 )
 
@@ -948,7 +948,7 @@ def format_create_sql_dq_rule_confirmation_preview(
             "**Confirm custom SQL DQ rule create**\n\n"
             f"- **rule_name:** {payload.get('ruleName')}\n"
             f"**Objects:**\n{objects_block}\n\n"
-            "Creates draft oequery DQ rule with rule/stats/failed-values code objects. "
+            "Creates custom SQL data quality rule with rule/stats/failed-values code objects. "
             "Ask the user to confirm. After they approve, call again with "
             "`write_confirmed_by_user=true`, `confirmation_token` from this preview, "
             "and the same parameters."
@@ -984,6 +984,6 @@ def format_create_sql_dq_rule_response(body: dict[str, Any]) -> dict[str, Any]:
     out["workflowPhase"] = "create_sql_rule"
     out["formattedResponse"] = (
         f"**Custom SQL DQ rule** — status: `{status}`\n\n"
-        f"Draft rule **{rule_name}** created. Review queries and associations in OvalEdge."
+        f"DQ rule **{rule_name}** created. Review queries and associations in OvalEdge."
     )
     return out
