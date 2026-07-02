@@ -17,9 +17,27 @@ TOOL_CREATE_TAG = "create_tag"
 TOOL_LOOKUP_DATASTORY = "lookup_datastory"
 TOOL_SEARCH_DOCS = "search_platform_docs"
 TOOL_UPDATE_ASSET_DESCRIPTIONS = "update_asset_descriptions"
+TOOL_UPDATE_CDE_ASSOCIATIONS = "update_cde_associations"
 TOOL_UPDATE_GOVERNANCE_ROLES = "update_governance_roles"
+TOOL_UPDATE_CUSTOM_FIELD_VALUE = "update_custom_field_value"
 TOOL_LOOKUP_DQ_RULE = "lookup_dq_rule"
 TOOL_SOURCE_SYSTEM_ACCESS = "source_system_access"
+TOOL_GET_USER_OBJECT_ACCESS = "get_user_object_access"
+TOOL_ASSESS_CDE_DQ = "assess_cde_dq"
+TOOL_ASSOCIATE_DQ_RULE_OBJECTS = "associate_dq_rule_objects"
+TOOL_CREATE_DQ_RULES = "create_dq_rules"
+TOOL_GENERATE_DQ_QUERIES = "generate_dq_queries"
+TOOL_VALIDATE_DQ_QUERIES = "validate_dq_queries"
+TOOL_CREATE_SQL_DQ_RULE = "create_sql_dq_rule"
+
+# MCP tool data classification (appended to every _DESC_* via classify_tool_desc).
+MCP_TOOL_CLASSIFICATION_INTERNAL = (
+    "Data classification: INTERNAL (OvalEdge governance metadata; RBAC enforced server-side)."
+)
+MCP_TOOL_CLASSIFICATION_CONFIDENTIAL = (
+    "Data classification: CONFIDENTIAL (access grants, principals, or native privileges; "
+    "RBAC/DAA enforced server-side)."
+)
 
 # Lowercase objectType for MCP search-catalog and object-details (matches OvalEdge API).
 MCP_CATALOG_OBJECT_TYPES = frozenset(
@@ -43,7 +61,9 @@ MCP_CATALOG_OBJECT_TYPES = frozenset(
         "oetag",
         "mastertag",
         "oeglobaldomain",
+        "storyzone",
         "dp_domain",
+        "oedomain",
         "oestory",
     }
 )
@@ -78,6 +98,31 @@ MCP_UPDATE_ASSET_DESCRIPTION_OBJECT_TYPES_DOC = ", ".join(
     sorted(MCP_UPDATE_ASSET_DESCRIPTION_OBJECT_TYPES)
 )
 
+# CDE write tool: catalog assets with criticaldataelement columns (v7.2 schema).
+MCP_UPDATE_CDE_OBJECT_TYPES = frozenset(
+    {
+        "oeschema",
+        "oetable",
+        "oecolumn",
+        "oefile",
+        "oefilecolumn",
+        "oechart",
+        "chartchild",
+        "oeapi",
+        "oeapicolumn",
+        "oequery",
+        "apiobject",
+        "apicolumn",
+        "filecolumn",
+        "code",
+    }
+)
+MCP_CDE_ACTIONS = frozenset({"Yes", "No", "None"})
+_CDE_OBJECT_TYPE_ALIASES = frozenset({"apiobject", "apicolumn", "filecolumn", "code"})
+MCP_UPDATE_CDE_OBJECT_TYPES_DOC = ", ".join(
+    sorted(t for t in MCP_UPDATE_CDE_OBJECT_TYPES if t not in _CDE_OBJECT_TYPE_ALIASES)
+)
+
 # ── OvalEdge MCP HTTP paths (appended to OVALEDGE_BASE_URL) ──────
 MCP_PATH_SEARCH_CATALOG = "/api/v1/mcp/search-catalog"
 MCP_PATH_OBJECT_DETAILS = "/api/v1/mcp/object-details"
@@ -100,6 +145,7 @@ MCP_PATH_TAGS_CREATE_OPTIONS = "/api/v1/mcp/tags/create-options"
 MCP_PATH_TAGS_PARENT_OPTIONS = "/api/v1/mcp/tags/parent-options"
 MCP_PATH_SEARCH_PLATFORM_DOCS = "/api/v1/mcp/search-platform-docs"
 MCP_PATH_SOURCE_SYSTEM_ACCESS = "/api/v1/mcp/source-system-access"
+MCP_PATH_GET_USER_OBJECT_ACCESS = "/api/v1/mcp/get-user-object-access"
 MCP_PATH_LOOKUP_DATASTORY = "/api/v1/mcp/lookup-datastory"
 
 # Secure-mode create_tag wizard phases (matches OvalEdge UI).
@@ -108,24 +154,36 @@ SELECTION_PHASE_PARENT_OPTIONAL = "PARENT_OPTIONAL"
 # create_tag guidance (not an error — tag not created yet).
 STATUS_AWAITING_USER_SELECTION = "awaiting_user_selection"
 
-MCP_DAA_SCOPE_DOC = (
-    "**Data Access Admin (DAA)** — enforced server-side on this endpoint (same as DAM UI):\n"
-"- **Instance Data Access Admin:** RDAM instance roles; "
-"access to connectors on that instance.\n"
-    "- **Connector Data Access Admin:** roles on one connection only.\n"
-    "The API returns RDAM no-access if the caller lacks Connector DAA on the connection "
-    "(or Instance DAA on its parent instance). No separate DAA check endpoint is required.\n"
-    "**DAM object scope:** grant rows are limited to databases/schemas/tables/columns visible in "
-    "DAM (active catalog objects with RDAM crawl — same as OETP RDAM browse). Harvested privileges "
-    "for objects not in DAM (e.g. uncrawled schemas) are excluded."
-)
-
 # Optional on glossary-terms and tags (Spring default 20).
-MCP_GLOSSARY_TAGS_LIMIT_DEFAULT = 20
+MCP_GLOSSARY_TAGS_LIMIT_DEFAULT = 25
 MCP_GLOSSARY_TAGS_LIMIT_MAX = 100
 MCP_PATH_UPDATE_ASSET_DESCRIPTIONS = "/api/v1/mcp/update-asset-descriptions"
+MCP_PATH_UPDATE_CDE_ASSOCIATIONS = "/api/v1/mcp/update-cde-associations"
 MCP_PATH_UPDATE_GOVERNANCE_ROLES = "/api/v1/mcp/update-governance-roles"
-MCP_PATH_LOOKUP_DQ_RULES = "/api/v1/mcp/lookup-dq-rules"
+MCP_PATH_CUSTOM_FIELDS = "/api/v1/mcp/custom-fields"
+MCP_PATH_UPDATE_CUSTOM_FIELD_VALUES = "/api/v1/mcp/update-custom-field-values"
+
+# Custom field read/write (matches McpCustomFieldObjectTypes in oe-next-gen-commons).
+MCP_CUSTOM_FIELD_OBJECT_TYPES = frozenset(
+    {
+        "oeschema",
+        "oetable",
+        "oecolumn",
+        "oefile",
+        "oefilecolumn",
+        "oechart",
+        "chartchild",
+        "apiobject",
+        "apicolumn",
+        "oequery",
+        "glossary",
+        "oetag",
+        "dqrule",
+        "dp_product",
+        "code",
+    }
+)
+MCP_CUSTOM_FIELD_OBJECT_TYPES_DOC = ", ".join(sorted(MCP_CUSTOM_FIELD_OBJECT_TYPES))
 
 # objectType values for update_governance_roles that are NOT in search_catalog_assets.
 MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES = frozenset(
@@ -151,8 +209,8 @@ MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES_DOC = ", ".join(
 # Must match backend McpSourceSystemAccessReadService.
 MCP_SOURCE_SYSTEMS = frozenset({"redshift", "snowflake", "tableau"})
 MCP_SOURCE_SYSTEMS_DOC = ", ".join(sorted(MCP_SOURCE_SYSTEMS))
-MCP_QUERY_DIRECTIONS = frozenset({"user_to_objects", "object_to_users"})
-MCP_QUERY_DIRECTIONS_DOC = "user_to_objects | object_to_users"
+MCP_QUERY_DIRECTIONS = frozenset({"user_to_objects", "object_to_users", "browse"})
+MCP_QUERY_DIRECTIONS_DOC = "user_to_objects | object_to_users | browse"
 
 # RDAM native object levels for source_system_access (wire: objectType).
 # Must match backend McpSourceSystemAccessReadService.
@@ -161,11 +219,25 @@ MCP_RDAM_OBJECT_TYPES = frozenset(
 )
 # MCP-only: omit API objectType filter and return every harvested object level.
 MCP_RDAM_OBJECT_TYPE_ALL = "all"
+MCP_RDAM_SCOPE_MODE_EXACT = "exact"
+MCP_RDAM_SCOPE_MODE_DESCENDANTS = "descendants"
+MCP_RDAM_SCOPE_MODES_DOC = f"{MCP_RDAM_SCOPE_MODE_EXACT} | {MCP_RDAM_SCOPE_MODE_DESCENDANTS}"
 MCP_RDAM_OBJECT_TYPES_DOC = (
     ", ".join(sorted(MCP_RDAM_OBJECT_TYPES)) + f", {MCP_RDAM_OBJECT_TYPE_ALL}"
 )
 # Max schema probes when discovering table locations for incomplete object_path.
 MCP_TABLE_SCHEMA_DISCOVERY_MAX_PROBES = 30
+# Parallel OvalEdge calls per discovery batch (keeps Lambda under ~30s timeout).
+MCP_TABLE_SCHEMA_DISCOVERY_PROBE_CONCURRENCY = 8
+# Stop probing once this many table-level matches are found (disambiguation).
+MCP_TABLE_SCHEMA_DISCOVERY_EARLY_EXIT_CANDIDATES = 2
+
+MCP_SOURCE_SYSTEM_ACCESS_JAVA_BACKEND_DOC = (
+    "**Java backend (McpSourceSystemAccessReadService):** reads all harvested native grants "
+    "from RDAM MySQL metadata tables (`rdam_*privilege`) — includes disabled rows and all "
+    "roles (custom and built-in) without system/remote filtering. MCP returns the Java "
+    "response as-is."
+)
 
 # RDAM SQL metadata tables queried by McpSourceSystemAccessReadService (per object_type).
 # "metadata table" = OvalEdge DB table storing harvested grants — not a Tableau/Snowflake object.
@@ -198,6 +270,29 @@ MCP_RDAM_NO_CATALOG_FALLBACK_DOC = (
     "object_type, or native SQL (e.g. Snowflake `SHOW GRANTS`) — do not invoke catalog search."
 )
 
+# RDAM/DAM path + objectType matrix — must match Java McpSourceSystemAccessReadService /
+# source-system-access browse path resolution (objectType disambiguates;
+# do not infer from segment count alone).
+MCP_DAM_OBJECT_PATH_MATRIX_DOC = (
+    "**RDAM path + object_type matrix** (Redshift/Snowflake). Scope with **`connection_id`** "
+    "(preferred) or optional `connectionName.` prefix on `object_path` when names collide. "
+    "Wire to Java as `objectPath` + `objectType` (camelCase). `fully_qualified_name` is an "
+    "alias for `object_path` when the user or catalog gives a dotted FQN.\n\n"
+    "| Level | fullyQualifiedName / objectPath | object_type |\n"
+    "|-------|--------------------------------|-------------|\n"
+    "| Connector | — (pass `connection_id` only) | — |\n"
+    "| Database | `dbName`, `connectionName.dbName` | `database` |\n"
+    "| Schema | `dbName.schemaName`, `schemaName` | `schema` |\n"
+    "| Table | `dbName.schemaName.tableName`, `schemaName.tableName`, `tableName` | `table` |\n"
+    "| Column | `dbName.schemaName.tableName.columnName`, `schemaName.tableName.columnName`, "
+    "`tableName.columnName`, `columnName` | `column` |\n\n"
+    "**source_system_access (browse):** `object_path` is the **parent** scope; "
+    "`object_type` is the "
+    "**child level to list** — omit parent to list databases; `dbName` + `schema` lists schemas; "
+    "`dbName.schemaName` + `table` lists tables; `dbName.schemaName.tableName` + `column` "
+    "lists columns."
+)
+
 # source_system_access objectPath — must match backend path resolution.
 MCP_OBJECT_PATH_FORMATS_DOC = (
     "**object_path** formats (Redshift/Snowflake; dot-separated):\n"
@@ -212,7 +307,8 @@ MCP_OBJECT_PATH_FORMATS_DOC = (
     "- Partial names (e.g. table `ALERTS`, database `BUSINESS`) are allowed; the API "
     "may return **matchCandidates** — use a full path from candidates or "
     "resolve_all_matches=true.\n"
-    "- Tableau project: `Project Name`; report: `Project/Report Name`."
+    "- Tableau project: `Project Name`; report: `Project/Report Name`.\n\n"
+    + MCP_DAM_OBJECT_PATH_MATRIX_DOC
 )
 MCP_SOURCE_SYSTEM_ACCESS_OVERVIEW_DOC = (
     "**Why this tool exists:** `get_user_object_access` resolves effective access at the "
@@ -230,6 +326,127 @@ MCP_SOURCE_SYSTEM_ACCESS_OVERVIEW_DOC = (
     "(SELECT, INSERT, ALL, …) |\n"
     "| Object scope | All OvalEdge asset types | RS/SF database/schema/table/column; "
     "Tableau project/report |"
+)
+MCP_CATALOG_OBJECT_ACCESS_OVERVIEW_DOC = (
+    "Answers who can see or use a catalog object in OvalEdge (ACL grants), including "
+    "metadata-read/write and data permission levels. Effective permission is the highest "
+    "across direct user grants and role grants. Use source_system_access for native "
+    "database/BI grants only. Connectors (connections) are resolved from the database by "
+    "name — they are not in catalog search. Data Domains, Data Products, glossary Domains, "
+    "and Story Zones are resolved from the database when Elasticsearch has no document."
+)
+# Longest phrases first — used by detect_access_intent_from_question (disambiguation.py).
+MCP_ACCESS_CATALOG_ACL_SIGNAL_KEYWORDS = (
+    "catalog permissions",
+    "catalog access",
+    "catalog acl",
+    "ovaledge security",
+    "oe security",
+    "acl",
+)
+MCP_ACCESS_NATIVE_SIGNAL_KEYWORDS = (
+    "source system access",
+    "data access management",
+    "source system",
+    "native",
+    "remote",
+    "dam",
+    "source",
+)
+MCP_ACCESS_PLATFORM_NAME_KEYWORDS = frozenset({"snowflake", "redshift", "tableau"})
+MCP_ACCESS_NATIVE_SIGNAL_KEYWORDS_DOC = ", ".join(MCP_ACCESS_NATIVE_SIGNAL_KEYWORDS)
+MCP_ACCESS_CATALOG_ACL_SIGNAL_KEYWORDS_DOC = ", ".join(MCP_ACCESS_CATALOG_ACL_SIGNAL_KEYWORDS)
+MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC = (
+    "Naming Snowflake, Redshift, or Tableau (e.g. \"in Snowflake\", \"on Redshift\") "
+    "does **not** skip disambiguation — it only helps pick source_system **after** "
+    "intent is confirmed. Examples that still need **1** or **2**: "
+    "\"Who has access to BUSINESS.BANKING in Snowflake?\"; "
+    "\"Who has access to customer1 in redshift1 in Redshift?\"."
+)
+MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC = (
+    "Ambiguous who-has-access: disambiguate via resolve_object_access; "
+    "do not call access tools until user picks. "
+    "Skip disambiguation only when native/DAM or catalog ACL/OE security signals "
+    "are present. "
+    + MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC
+)
+MCP_ACCESS_DISAMBIGUATION_TOOL_LEAD_DOC = (
+    "**Who-has-access:** `resolve_object_access` then `access_intent_confirmed` "
+    "(native / catalog_acl). Snowflake/Redshift/Tableau alone do not skip "
+    "disambiguation.\n\n"
+)
+MCP_ACCESS_DISAMBIGUATION_SEARCH_GUARD_DOC = (
+    "**Not who-has-access or RDAM** — `resolve_object_access` first; RDAM via "
+    "`source_system_access` only.\n\n"
+)
+MCP_ACCESS_INTENT_NATIVE = "native"
+MCP_ACCESS_INTENT_CATALOG_ACL = "catalog_acl"
+MCP_ACCESS_INTENT_CONFIRMED_FIELD_DOC = (
+    "Who-has-access only: `native` after user picks **1** or when the question names "
+    "native/DAM signals (not Snowflake/Redshift/Tableau alone); `catalog_acl` after **2** "
+    "or when the question names OE security / ACL / catalog-access signals. "
+    "Omit for user_to_objects / user_to_object / browse."
+)
+MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE = (
+    "OvalEdge has **two** different tools for “who has access” questions:\n\n"
+    "| Tool | What it answers |\n"
+    "|------|------------------|\n"
+    f"| **`{TOOL_SOURCE_SYSTEM_ACCESS}`** | **Native / remote** permissions crawled from "
+    "Redshift, Snowflake, or Tableau — what you see on the **DAM** (Data Access Management) "
+    "screen (e.g. SELECT, roles, groups). |\n"
+    f"| **`{TOOL_GET_USER_OBJECT_ACCESS}`** | **OvalEdge catalog ACL** on the **Security** "
+    "page — metadata read/write and data permission levels for OvalEdge users and roles. |\n\n"
+    "Your question does not mention native/remote/DAM/source-system access or OvalEdge "
+    "catalog ACL / OE security signals.\n\n"
+    "**Which do you want?**\n"
+    "1. **Native source access** — database/BI grants from Redshift, Snowflake, or Tableau\n"
+    "2. **OvalEdge catalog ACL** — permissions inside OvalEdge on a catalog asset\n\n"
+    "Reply with **1** or **2**, then I will call the matching tool."
+)
+MCP_ACCESS_DISAMBIGUATION_RULE_DOC = (
+    "For who-has-access / permission questions (case-insensitive signals): "
+    "native/DAM keywords ("
+    + MCP_ACCESS_NATIVE_SIGNAL_KEYWORDS_DOC
+    + ") → source_system_access with access_intent_confirmed=native. Catalog ACL keywords ("
+    + MCP_ACCESS_CATALOG_ACL_SIGNAL_KEYWORDS_DOC
+    + ") → get_user_object_access with access_intent_confirmed=catalog_acl. When **neither** "
+    "signal set is present — do **not** call source_system_access or get_user_object_access; "
+    "show the disambiguation message and wait for **1** (native) or **2** (catalog ACL). "
+    + MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC
+    + " Workflow prompt: resolve_object_access."
+)
+MCP_CATALOG_OBJECT_ACCESS_DIRECTIONS = (
+    "`user_to_object` — what access does user X have on object Y? "
+    "`object_to_principals` — which users and roles have access on object Y?"
+)
+MCP_CATALOG_OBJECT_ACCESS_OBJECT_TYPES = frozenset(
+    {
+        "connection",
+        "oeschema",
+        "oetable",
+        "oecolumn",
+        "oefile",
+        "filefolder",
+        "oedomain",
+        "oechart",
+        "chartchild",
+        "oeapi",
+        "oeapicolumn",
+        "oequery",
+        "code",
+        "oecode",
+        "oeglobaldomain",
+        "storyzone",
+        "glossary",
+        "oetag",
+        "mastertag",
+        "oestory",
+        "dp_domain",
+        "dp_product",
+    }
+)
+MCP_CATALOG_OBJECT_ACCESS_OBJECT_TYPES_DOC = ", ".join(
+    sorted(MCP_CATALOG_OBJECT_ACCESS_OBJECT_TYPES)
 )
 MCP_SOURCE_SYSTEM_ACCESS_GRANT_MODELS_DOC = (
     "**Access grant models by source system** (each grant row includes `grant_mechanism` so "
@@ -278,144 +495,19 @@ MCP_SOURCE_SYSTEM_ACCESS_MULTI_OBJECT_TYPE_ERROR = (
     "Multiple object_type values are not supported in a single API request. "
     "Pass one RDAM object level (database, schema, table, column, project, or report)."
 )
-MCP_SOURCE_SYSTEM_ACCESS_REQUIRED_DOC = (
-    "**Mandatory API fields (both directions):** `source_system`, `query_direction` — infer "
-    "`query_direction` from the user's question; do not ask them to pick a direction.\n"
-    "**Optional (supply as the question allows):** `username` (user_to_objects), "
-    "`object_path`, `object_name`, `object_type`, `connection_id`, `privileges`, "
-    "`include_columns`, `resolve_all_matches`.\n"
-    "**Single value only:** `source_system`, `object_type`, `connection_id` — multiple values "
-    "for these fields return a validation error.\n"
-    "**Multiple values allowed:** `username` (user_to_objects only), `object_path`.\n"
-    "Pass only the fields you have; the API returns errors or empty results when more context "
-    "is needed. **Do not guess or discover `connection_id`, `object_type`, or `object_path`** — "
-    "ask the user, then retry."
+MCP_SOURCE_SYSTEM_USERNAME_REQUIRED_ERROR = (
+    "Query parameter username is required for user_to_objects."
 )
-MCP_SOURCE_SYSTEM_ACCESS_CONNECTION_ID_DOC = (
-    "**connection_id:** OvalEdge connector id from the user when they provide it. **Do not probe, "
-    "enumerate, or discover** connection ids (no scanning id ranges, no catalog search, no "
-    "inferring from defaults). Omit when unknown and ask the user for the connector id."
+MCP_SOURCE_SYSTEM_OBJECT_PATH_REQUIRED_ERROR = (
+    "Query parameter object_path is required for object_to_users (exact scope)."
 )
-MCP_SOURCE_SYSTEM_ACCESS_USERNAME_MATCH_DOC = (
-    "**username matching (user_to_objects):** exact remote login only — **case-insensitive**, "
-    "not SQL `LIKE` / substring / fuzzy search. Pass the name the user gave (e.g. `SIRISHA`); "
-    "do not invent variants (`sirisha_rdam`, `sirisha_sb`, …), catalog-search the name, or "
-    "scan principals with partial matches."
+MCP_SOURCE_SYSTEM_OBJECT_TYPE_REQUIRED_ERROR = (
+    "Query parameter objectType is required whenever objectPath is set "
+    "(database, schema, table, column, project, or report)."
 )
-MCP_SOURCE_SYSTEM_ACCESS_OBJECT_PATH_SCOPE_DOC = (
-    "**object_path scope (user_to_objects):** You may infer `object_type` when the user names a "
-    "level (e.g. \"tables\" → `table`, \"schemas\" → `schema`). **Never guess a specific table "
-    "path** from test data or prior calls.\n"
-    "- \"What **tables** can user X access?\" with `connection_id` → **all tables on that "
-    "connector**: `object_type=table`, **omit `object_path`**. Do not ask for a database/schema "
-    "unless the user narrows scope.\n"
-    "- Narrower table listing: `object_type=table`, `object_path=dbName.schema` when the user "
-    "names a schema; `object_path=dbName` when they name a database only.\n"
-    "- Single table: `object_type=table`, `object_path=dbName.schema.table` — only when the user "
-    "named that table (or confirmed schema after disambiguation).\n"
-    "- For non-table levels (`schema`, `database`, …), `object_path` is always required. Do not "
-    "report \"no access\" from a guessed table path when the user asked for all tables."
-)
-MCP_SOURCE_SYSTEM_ACCESS_TABLE_SCHEMA_DISAMBIGUATION_DOC = (
-    "**Table schema disambiguation (object_to_users + object_type=table):** When the user names "
-    "a table without a full `dbName.schema.table` path, pass only what they gave (table name, or "
-    "`dbName.table`) — **never invent a schema** (public, sakila, automation, …).\n"
-    "- If the response has `ambiguousMatch=true`, `requiresSchemaSelection=true`, or "
-    "`matchCandidates` with multiple entries, **stop and ask the user which schema** holds the "
-    "table. List schema names or full paths from `matchCandidates` / `advisoryMessage`, wait "
-    "for their choice, then retry with `object_path=dbName.schema.table`.\n"
-    "- Do not set `resolve_all_matches=true` unless the user explicitly wants combined access "
-    "across every match.\n"
-    "- Do not present schema/database parent grants as table access when the user did not "
-    "specify a schema and table-level grants are missing or ambiguous."
-)
-MCP_SOURCE_SYSTEM_ACCESS_OBJECT_NAME_DOC = (
-    "**object_name** (optional): bare table or report name when scope is in `object_path`. "
-    "Composed before the API call: `object_path=prod_db` + `object_name=orders` → "
-    "`prod_db.orders`; "
-    "`object_path=prod_db.public` + `object_name=orders` → `prod_db.public.orders`; "
-    "`object_name=transactions` alone → `transactions`. Use with `object_type=table`."
-)
-MCP_SOURCE_SYSTEM_ACCESS_PRIVILEGES_FILTER_DOC = (
-    "**privileges** (optional): post-filter response grants to rows whose native privilege list "
-    "includes any value you pass (e.g. `INSERT`, `UPDATE` for write-access checks). "
-    "Case-insensitive; does not change the API query."
-)
-MCP_SOURCE_SYSTEM_ACCESS_MULTI_CONNECTION_DOC = (
-    "**Multiple connections:** when the response spans more than one `connectionId` and you did "
-    "not pass `connection_id`, tell the user and ask for `connection_id` plus a narrower "
-    "`object_path` / `object_name` for best results — do not probe or discover connection ids."
-)
-MCP_SOURCE_SYSTEM_ACCESS_SAMPLE_PROMPTS_DOC = (
-    "**Sample routing (infer `query_direction`; only `source_system` + `query_direction` are "
-    "mandatory):**\n"
-    "1. \"What Redshift **tables** can svc_analytics access, and how was that granted?\" → "
-    "`user_to_objects`, `username=svc_analytics`, `object_type=table`. Present table grants only; "
-    "explain `grant_mechanism`, `contributing_role`, `contributing_group`.\n"
-    "2. \"Who has access to the **orders** table in prod_db in Redshift?\" → `object_to_users`, "
-    "`object_type=table`, `object_path=prod_db`, `object_name=orders` "
-    "(or full `prod_db.schema.orders` "
-    "when schema is known).\n"
-    "3. \"What can john.doe query in Snowflake? Which **roles** give him access?\" → "
-    "`user_to_objects`, `username=john.doe`, `object_type=all` "
-    "(every database/schema/table level). "
-    "Group by `contributing_role`.\n"
-    "4. \"Does svc_etl have **write** access to the transactions table in Redshift?\" → "
-    "`user_to_objects`, `username=svc_etl`, `object_type=table`, `object_name=transactions`, "
-    "`privileges=[\"INSERT\",\"UPDATE\",\"DELETE\"]`; answer yes/no from filtered rows."
-)
-MCP_SOURCE_SYSTEM_ACCESS_AGENT_RULES_DOC = (
-    "**Agent routing rules:**\n"
-    "- \"What can **user X** access?\" / \"What permissions does **RACHEL** have?\" → "
-    "`user_to_objects` with `username` = that user only. Present **only that user's** grants "
-    "from the response — never call `object_to_users` and list all principals.\n"
-    "- \"Who has access to **object Y**?\" → `object_to_users` with `object_path` + "
-    "`object_type`.\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_CONNECTION_ID_DOC
-    + "\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_OBJECT_PATH_SCOPE_DOC
-    + "\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_USERNAME_MATCH_DOC
-    + "\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_TABLE_SCHEMA_DISAMBIGUATION_DOC
-    + "\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_OBJECT_NAME_DOC
-    + "\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_PRIVILEGES_FILTER_DOC
-    + "\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_MULTI_CONNECTION_DOC
-    + "\n"
-    + MCP_SOURCE_SYSTEM_ACCESS_SAMPLE_PROMPTS_DOC
-    + "\n"
-    "- When the user gives `username` but not `connection_id`, `object_type`, or `object_path`, "
-    "call the tool with what you have — do not infer object level from path segment count or "
-    "discover connector ids; ask the user for missing context if the API response is insufficient."
-)
-MCP_SNOWFLAKE_BUILTIN_OBJECTS_DOC = (
-    "**Snowflake built-in objects:**\n"
-    "- Always set `object_type` with `object_path` — e.g. `SNOWFLAKE.ALERT` + "
-    "`object_type=schema` (built-in **schema** `ALERT` in database `SNOWFLAKE`).\n"
-    "- Without `object_type`, the API may infer level from `.` segment count only: "
-    "`ALERT` (one segment) → database; `SNOWFLAKE.ALERT` (two) → schema.\n"
-    "- Do not confuse schema `ALERT` with table `ALERTS` (`object_type=table`).\n"
-    "- Built-in `SNOWFLAKE.*` schemas may be missing from RDAM harvest; grants are often "
-    "via Snowflake database roles (e.g. `SNOWFLAKE.ALERT_VIEWER`) — not in catalog/RDAM. "
-    "If RDAM has no rows, say so; do not fall back to catalog search."
-)
-MCP_OBJECT_PATH_PARTIAL_DOC = (
-    "When `object_path` is partial, `object_type` still disambiguates the RDAM level "
-    "(e.g. table name only + `object_type=table`). "
-    "For tables, a full path is `dbName.schema.table` (three dot segments). "
-    + MCP_SOURCE_SYSTEM_ACCESS_TABLE_SCHEMA_DISAMBIGUATION_DOC
-    + "\n"
-    "Tableau: `object_type=project` vs `report` (path uses `/` for reports). "
-    "Redshift/Snowflake segment-count hints when `object_type` omitted on the API: "
-    "`BUSINESS` = database, `SNOWFLAKE.ALERT` = schema, `BUSINESS.BANKING.ALERTS` = table.\n"
-    "**Database paths:** for `object_type=database` and a single-segment path (e.g. "
-    "`IBIS_UDFS`, `BUSINESS`), the backend must resolve from `rdam_dbprivilege` without "
-    "requiring a catalog hit. If resolution returns not-found but the database exists in "
-    "Snowflake, verify crawl/RDAM harvest — uncrawled databases are a backend resolution "
-    "bug when RDAM rows exist."
+MCP_SOURCE_SYSTEM_DESCENDANTS_CONNECTION_REQUIRED_ERROR = (
+    "Query parameter connectionId is required when objectPath is omitted with "
+    "scope_mode=descendants."
 )
 
 # search-catalog query params (GET /api/v1/mcp/search-catalog).
@@ -433,6 +525,7 @@ MCP_SEARCH_CATEGORY_ID_PARAM = "categoryId"
 MCP_SEARCH_CATEGORY_NAME_PARAM = "categoryName"
 MCP_SEARCH_SUBCATEGORY_ID_PARAM = "subCategoryId"
 MCP_SEARCH_SUBCATEGORY_NAME_PARAM = "subCategoryName"
+MCP_SEARCH_CRITICAL_DATA_ELEMENT_PARAM = "criticalDataElement"
 MCP_SEARCH_SERVER_TYPE_PARAM = "serverType"
 
 # connectionInfo.serverType values (OvalEdge connector types).
@@ -631,3 +724,33 @@ CREDENTIALS_HEADER_MAX_LEN = 2048
 CREDENTIALS_COMBINED_MAX_LEN = (
     2 * CREDENTIALS_HEADER_MAX_LEN + len(CREDENTIALS_COMBINED_SEPARATOR)
 )
+
+# assess_cde_dq — must match backend McpDqApplicableObjectTypes.
+MCP_DQ_APPLICABLE_OBJECT_TYPES = frozenset(
+    {"oetable", "oecolumn", "oefile", "oefilecolumn"}
+)
+MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC = ", ".join(
+    sorted(MCP_DQ_APPLICABLE_OBJECT_TYPES)
+)
+MCP_DQ_OBJECT_TYPE_ALIASES: dict[str, str] = {
+    "table": "oetable",
+    "oetable": "oetable",
+    "column": "oecolumn",
+    "tablecolumn": "oecolumn",
+    "table_column": "oecolumn",
+    "oecolumn": "oecolumn",
+    "file": "oefile",
+    "oefile": "oefile",
+    "filecolumn": "oefilecolumn",
+    "file_column": "oefilecolumn",
+    "oefilecolumn": "oefilecolumn",
+}
+MCP_DQ_ASSESS_LIMIT_DEFAULT = 50
+MCP_DQ_ASSESS_LIMIT_MAX = 100
+MCP_PATH_LOOKUP_DQ_RULES = "/api/v1/mcp/lookup-dq-rules"
+MCP_PATH_ASSESS_CDE_DQ = "/api/v1/mcp/dq-intelligence/assess-cde"
+MCP_PATH_ASSOCIATE_DQ_RULE_OBJECTS = "/api/v1/mcp/dq-intelligence/associate-rule-objects"
+MCP_PATH_CREATE_DQ_RULES = "/api/v1/mcp/dq-intelligence/create-rules"
+MCP_PATH_GENERATE_DQ_QUERIES = "/api/v1/mcp/dq-intelligence/generate-queries"
+MCP_PATH_VALIDATE_DQ_QUERIES = "/api/v1/mcp/dq-intelligence/validate-queries"
+MCP_PATH_CREATE_SQL_DQ_RULE = "/api/v1/mcp/dq-intelligence/create-sql-rule"

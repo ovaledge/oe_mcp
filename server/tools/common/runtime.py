@@ -1,17 +1,11 @@
-"""Tool execution runtime: client factory and error-mapping decorator."""
+"""Tool execution runtime: injectable OvalEdge client factory."""
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from functools import wraps
-from typing import Any, ParamSpec, TypeVar
 
-from server.client import OvalEdgeClient, OvalEdgeError
-from server.tools.common.errors import map_ovaledge_error
-
-P = ParamSpec("P")
-R = TypeVar("R")
+from server.client import OvalEdgeClient
 
 _client_factory: Callable[[], OvalEdgeClient] = OvalEdgeClient
 
@@ -32,18 +26,3 @@ async def ovaledge_client() -> AsyncIterator[OvalEdgeClient]:
     client = get_ovaledge_client()
     async with client:
         yield client
-
-
-def ovaledge_tool[**P, R](
-    fn: Callable[P, Awaitable[R]],
-) -> Callable[P, Awaitable[R | dict[str, Any]]]:
-    """Map OvalEdgeError to standard MCP error payload; leave other exceptions raised."""
-
-    @wraps(fn)
-    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R | dict[str, Any]:
-        try:
-            return await fn(*args, **kwargs)
-        except OvalEdgeError as exc:
-            return map_ovaledge_error(exc)
-
-    return wrapper

@@ -4,6 +4,7 @@ from typing import Any
 import httpx
 from jose import jwt  # type: ignore[import-untyped]
 
+from server.auth.issuer_allowlist import assert_issuer_allowed, normalize_issuer
 from server.auth.oauth_discovery import (
     OAuthDiscoveryError,
     get_authorization_server_metadata_for_base,
@@ -57,7 +58,8 @@ async def verify_oauth_access_token(token: str) -> dict[str, Any]:
     tokens that use the canonical ``*.auth0.com`` issuer still validate when
     ``oauth_issuer`` is a custom domain used for the MCP metadata proxy.
 
-    ``aud`` must match ``oauth_audience``.
+    The token ``iss`` and discovered issuer must both appear in ``OAUTH_ISSUER`` /
+    ``OAUTH_ALLOWED_ISSUERS``. ``aud`` must match ``oauth_audience``.
     """
     if not settings.oauth_audience.strip():
         raise OAuthDiscoveryError("oauth_audience is not set (required for remote MCP)")
@@ -71,8 +73,12 @@ async def verify_oauth_access_token(token: str) -> dict[str, Any]:
     if not isinstance(token_iss, str) or not token_iss.strip():
         raise ValueError("Token missing iss claim")
 
-    meta = await get_authorization_server_metadata_for_base(token_iss.rstrip("/"))
+    token_iss_norm = normalize_issuer(token_iss)
+    assert_issuer_allowed(token_iss_norm, context="Token")
+
+    meta = await get_authorization_server_metadata_for_base(token_iss_norm)
     issuer = meta["issuer"]
+    assert_issuer_allowed(normalize_issuer(issuer), context="Discovered")
     jwks_uri = meta["jwks_uri"]
     jwks = await _get_jwks(jwks_uri)
 

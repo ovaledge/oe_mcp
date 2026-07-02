@@ -40,6 +40,13 @@ class TestErrors:
             str(exc), status_code=404
         )
 
+    def test_error_payload_optional_code(self) -> None:
+        assert error_payload("bad", error_code="validation_required") == {
+            "error": "bad",
+            "status_code": 400,
+            "error_code": "validation_required",
+        }
+
 
 class TestStripOrNone:
     def test_strip_or_none(self) -> None:

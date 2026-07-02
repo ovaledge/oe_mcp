@@ -240,7 +240,10 @@ class OvalEdgeClient:
             if (
                 not retried_401_local
                 and settings.auth_mode == "local"
-                and response.status_code == 401
+                and (
+                    response.status_code == 401
+                    or _oval_edge_revoked_session_jwt_response(response)
+                )
             ):
                 from server.auth.token_exchange import invalidate_local_jwt_cache
 

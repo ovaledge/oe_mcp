@@ -4,19 +4,17 @@ from fastmcp import FastMCP
 
 from server.client import OvalEdgeError
 from server.constants import (
-    MCP_OBJECT_PATH_FORMATS_DOC,
     MCP_PATH_SOURCE_SYSTEM_ACCESS,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_CONNECTION_ERROR,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_OBJECT_TYPE_ERROR,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_SOURCE_ERROR,
 )
+from server.docs.loader import read_doc_markdown
 from server.tools import rdam
 from server.tools.rdam.helpers import (
     _DESC_SOURCE_SYSTEM_ACCESS,
     _has_table_level_grants,
     _schema_names_from_schema_grants,
-    filter_user_to_objects_by_level,
-    is_connection_wide_table_listing,
     is_incomplete_table_object_path,
     normalize_string_list,
     reject_multiple_connection_id,
@@ -27,6 +25,11 @@ from server.tools.rdam.helpers import (
     validate_source_system_access_args,
 )
 from tests.helpers import get_tool_fn
+
+
+def assert_rdam_api_called(mock_client: AsyncMock, params: dict[str, object]) -> None:
+    mock_client.get.assert_any_call(MCP_PATH_SOURCE_SYSTEM_ACCESS, params=params)
+
 
 # Required on every source_system_access call (matches tool schema).
 _REQ = {
@@ -39,36 +42,42 @@ _REQ = {
 
 class TestGetSourceSystemAccess:
     def test_tool_description_documents_daa_scope(self) -> None:
-        assert "Instance Data Access Admin" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "Connector Data Access Admin" in _DESC_SOURCE_SYSTEM_ACCESS
+        governance_doc = read_doc_markdown("governance_model")
+        assert "Data Access Admin" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "Instance Data Access Admin" in governance_doc
+        assert "Connector Data Access Admin" in governance_doc
 
-    def test_tool_description_documents_object_path_patterns(self) -> None:
-        assert "connectionName.dbName" in MCP_OBJECT_PATH_FORMATS_DOC
-        assert "dbName" in MCP_OBJECT_PATH_FORMATS_DOC
-        assert "connectionName.dbName" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "snowflake.BUSINESS" in MCP_OBJECT_PATH_FORMATS_DOC
-        assert "SNOWFLAKE.ALERT" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "object_type=schema" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "rdam_tableprivilege" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "never call `search_catalog_assets`" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
-        assert "Mandatory API fields" in _DESC_SOURCE_SYSTEM_ACCESS
+    def test_tool_description_documents_routing_essentials(self) -> None:
+        rdam_doc = read_doc_markdown("rdam_source_access")
+        assert "connectionName.dbName" in rdam_doc
+        assert "dbName" in rdam_doc
+        assert "snowflake.BUSINESS" in rdam_doc
+        assert "SNOWFLAKE.ALERT" in rdam_doc
+        assert "object_type=schema" in rdam_doc
+        assert "rdam_tableprivilege" in rdam_doc
+        assert "never fall back to `search_catalog_assets`" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
+        assert "Mandatory API fields" in rdam_doc
         assert "object_name" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "object_type=all" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "svc_analytics" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "object_type=all" in rdam_doc
+        assert "svc_analytics" in rdam_doc
         assert "get_user_object_access" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "Access grant models by source system" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "Access grant models by source system" in rdam_doc
         assert "direct" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "contributing_group" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "contributing_role" in _DESC_SOURCE_SYSTEM_ACCESS
         assert "user_to_objects" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "object_to_users only" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
-        assert "never call `object_to_users`" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
-        assert "do not guess or discover `connection_id`" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
-        assert "do not probe, enumerate, or discover" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
+        assert "descendants" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "never call `object_to_users`" in rdam_doc.lower()
+        assert "do not probe" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
+        assert "do not probe" in rdam_doc.lower()
         assert "omit `object_path`" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
-        assert "all tables on that connector" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
-        assert "ask the user which schema" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
+        assert "all tables on that connector" in rdam_doc.lower()
+        assert "ask the user which schema" in rdam_doc.lower()
         assert "requiresSchemaSelection" in _DESC_SOURCE_SYSTEM_ACCESS
         assert "connection_id" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "docs://ovaledge/rdam_source_access" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "docs://ovaledge/mcp_workflows" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "native_source_access" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "disabled" in rdam_doc.lower()
         assert "filteredToObjectLevel" not in _DESC_SOURCE_SYSTEM_ACCESS
 
     def test_validate_only_source_system_and_query_direction_required(self) -> None:
@@ -76,11 +85,22 @@ class TestGetSourceSystemAccess:
             validate_source_system_access_args(
                 "redshift", "user_to_objects", None, None, None, None
             )
-            is None
+            is not None
         )
         assert (
             validate_source_system_access_args(
                 "snowflake", "object_to_users", None, None, None, None
+            )
+            is not None
+        )
+        assert (
+            validate_source_system_access_args(
+                "snowflake",
+                "object_to_users",
+                None,
+                "DB.SCHEMA",
+                "schema",
+                None,
             )
             is None
         )
@@ -88,7 +108,7 @@ class TestGetSourceSystemAccess:
         err = validate_source_system_access_args(
             "redshift", "user_to_objects", "", "prod_db.t", "table", 1000
         )
-        assert err is None
+        assert err is not None
 
         err = validate_source_system_access_args(
             "redshift", "user_to_objects", "u", "", "schema", 1000
@@ -103,7 +123,7 @@ class TestGetSourceSystemAccess:
         err = validate_source_system_access_args(
             "redshift", "user_to_objects", "u", "prod_db.t", None, None
         )
-        assert err is None
+        assert err is not None
 
     def test_validate_rejects_invalid_source_system_or_direction(self) -> None:
         err = validate_source_system_access_args(
@@ -117,14 +137,6 @@ class TestGetSourceSystemAccess:
         )
         assert err is not None
         assert "query_direction" in err["error"]
-
-    def test_connection_wide_table_listing_omits_object_path(self) -> None:
-        assert is_connection_wide_table_listing("user_to_objects", None, "table", 1000)
-        assert is_connection_wide_table_listing("user_to_objects", "", "oetable", 1000)
-        assert not is_connection_wide_table_listing(
-            "user_to_objects", "BUSINESS.BANKING", "table", 1000
-        )
-        assert not is_connection_wide_table_listing("user_to_objects", None, "schema", 1000)
 
     def test_validate_username_not_required_for_object_to_users(self) -> None:
         err = validate_source_system_access_args(
@@ -158,7 +170,7 @@ class TestGetSourceSystemAccess:
         err = validate_source_system_access_args(
             "redshift", "object_to_users", None, "", "table", 1000
         )
-        assert err is None
+        assert err is not None
 
     def test_reject_multiple_connection_id_values(self) -> None:
         err = reject_multiple_connection_id([1000, 1002])
@@ -190,17 +202,14 @@ class TestGetSourceSystemAccess:
         assert out["ok"] is True
         assert out["data"]["grants"] == []
         assert out["data"]["filteredToObjectLevel"] == "table"
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_SOURCE_SYSTEM_ACCESS,
-            params={
+        assert_rdam_api_called(mock_oe_client, {
                 "sourceSystem": "redshift",
                 "queryDirection": "user_to_objects",
                 "username": _REQ["username"],
                 "objectPath": _REQ["object_path"],
                 "objectType": _REQ["object_type"],
                 "connectionId": _REQ["connection_id"],
-            },
-        )
+            })
 
     async def test_user_to_objects_connection_wide_tables_omits_object_path(
         self, mock_oe_client: AsyncMock
@@ -217,16 +226,13 @@ class TestGetSourceSystemAccess:
             object_type="table",
             connection_id=1000,
         )
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_SOURCE_SYSTEM_ACCESS,
-            params={
+        assert_rdam_api_called(mock_oe_client, {
                 "sourceSystem": "redshift",
                 "queryDirection": "user_to_objects",
                 "username": "bhanuddm",
                 "objectType": "table",
                 "connectionId": 1000,
-            },
-        )
+            })
 
     async def test_object_to_users_forwards_params(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {}
@@ -236,20 +242,18 @@ class TestGetSourceSystemAccess:
         await fn(
             source_system="redshift",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             object_path=_REQ["object_path"],
             object_type=_REQ["object_type"],
             connection_id=_REQ["connection_id"],
         )
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_SOURCE_SYSTEM_ACCESS,
-            params={
+        assert_rdam_api_called(mock_oe_client, {
                 "sourceSystem": "redshift",
                 "queryDirection": "object_to_users",
                 "objectPath": _REQ["object_path"],
                 "objectType": _REQ["object_type"],
                 "connectionId": _REQ["connection_id"],
-            },
-        )
+            })
 
     async def test_user_to_objects_forwards_without_username(
         self, mock_oe_client: AsyncMock
@@ -266,17 +270,7 @@ class TestGetSourceSystemAccess:
             object_type=_REQ["object_type"],
             connection_id=_REQ["connection_id"],
         )
-        assert out["ok"] is True
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_SOURCE_SYSTEM_ACCESS,
-            params={
-                "sourceSystem": "redshift",
-                "queryDirection": "user_to_objects",
-                "objectPath": _REQ["object_path"],
-                "objectType": _REQ["object_type"],
-                "connectionId": _REQ["connection_id"],
-            },
-        )
+        assert out["status_code"] == 400
 
     async def test_rejects_invalid_source_system(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
@@ -298,20 +292,19 @@ class TestGetSourceSystemAccess:
         out = await fn(
             source_system="snowflake",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             object_path="SNOWFLAKE.ALERT",
-            object_type="",
+            object_type="schema",
             connection_id=_REQ["connection_id"],
         )
         assert out["ok"] is True
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_SOURCE_SYSTEM_ACCESS,
-            params={
+        assert_rdam_api_called(mock_oe_client, {
                 "sourceSystem": "snowflake",
                 "queryDirection": "object_to_users",
                 "objectPath": "SNOWFLAKE.ALERT",
+                "objectType": "schema",
                 "connectionId": _REQ["connection_id"],
-            },
-        )
+            })
 
     async def test_forwards_minimal_user_to_objects(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
@@ -325,15 +318,12 @@ class TestGetSourceSystemAccess:
             connection_id=1002,
         )
         assert out["ok"] is True
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_SOURCE_SYSTEM_ACCESS,
-            params={
+        assert_rdam_api_called(mock_oe_client, {
                 "sourceSystem": "snowflake",
                 "queryDirection": "user_to_objects",
                 "username": "RACHEL",
                 "connectionId": 1002,
-            },
-        )
+            })
 
     async def test_rejects_column_object_type_for_snowflake(
         self, mock_oe_client: AsyncMock
@@ -344,6 +334,7 @@ class TestGetSourceSystemAccess:
         out = await fn(
             source_system="snowflake",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             username=_REQ["username"],
             object_path="BUSINESS.BANKING.ACCOUNTSCHEDULE",
             object_type="column",
@@ -361,15 +352,14 @@ class TestGetSourceSystemAccess:
         await fn(
             source_system="snowflake",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             username=_REQ["username"],
             object_path="SNOWFLAKE.ALERT",
             object_type="oeschema",
             connection_id=1002,
             resolve_all_matches=True,
         )
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_SOURCE_SYSTEM_ACCESS,
-            params={
+        assert_rdam_api_called(mock_oe_client, {
                 "sourceSystem": "snowflake",
                 "queryDirection": "object_to_users",
                 "username": _REQ["username"],
@@ -377,8 +367,7 @@ class TestGetSourceSystemAccess:
                 "objectType": "schema",
                 "connectionId": 1002,
                 "resolveAllMatches": True,
-            },
-        )
+            })
 
     async def test_oval_edge_error(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.side_effect = OvalEdgeError(
@@ -418,15 +407,14 @@ class TestGetSourceSystemAccess:
         await fn(
             source_system="redshift",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             object_path="ovaledgedb.ovaledge.customer_vw",
             object_type="table",
             username=_REQ["username"],
             connection_id=42,
             include_columns=True,
         )
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_SOURCE_SYSTEM_ACCESS,
-            params={
+        assert_rdam_api_called(mock_oe_client, {
                 "sourceSystem": "redshift",
                 "queryDirection": "object_to_users",
                 "username": _REQ["username"],
@@ -434,8 +422,7 @@ class TestGetSourceSystemAccess:
                 "objectType": "table",
                 "includeColumns": True,
                 "connectionId": 42,
-            },
-        )
+            })
 
     async def test_object_path_not_found_error(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.side_effect = OvalEdgeError(
@@ -448,6 +435,7 @@ class TestGetSourceSystemAccess:
         out = await fn(
             source_system="redshift",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             object_path="ovaledgedb.ovaledge.customer_vw",
             object_type="table",
             username=_REQ["username"],
@@ -495,6 +483,7 @@ class TestGetSourceSystemAccess:
         out = await fn(
             source_system="redshift",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             object_path="ovaledgedb.automation.customers",
             object_type="table",
             username=_REQ["username"],
@@ -537,6 +526,7 @@ class TestGetSourceSystemAccess:
         out = await fn(
             source_system="tableau",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             object_path="Executive/Revenue Dashboard",
             object_type="report",
             username="svc_bi",
@@ -599,22 +589,20 @@ class TestGetSourceSystemAccess:
         await fn(
             source_system="snowflake",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             object_path="snowflake.BUSINESS",
             object_type="database",
             username=_REQ["username"],
             connection_id=1002,
         )
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_SOURCE_SYSTEM_ACCESS,
-            params={
+        assert_rdam_api_called(mock_oe_client, {
                 "sourceSystem": "snowflake",
                 "queryDirection": "object_to_users",
                 "username": _REQ["username"],
                 "objectPath": "snowflake.BUSINESS",
                 "objectType": "database",
                 "connectionId": 1002,
-            },
-        )
+            })
 
     async def test_forwards_resolve_all_matches(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {
@@ -627,15 +615,14 @@ class TestGetSourceSystemAccess:
         await fn(
             source_system="redshift",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             object_path="accountbalance",
             object_type="table",
             username=_REQ["username"],
             connection_id=_REQ["connection_id"],
             resolve_all_matches=True,
         )
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_SOURCE_SYSTEM_ACCESS,
-            params={
+        assert_rdam_api_called(mock_oe_client, {
                 "sourceSystem": "redshift",
                 "queryDirection": "object_to_users",
                 "username": _REQ["username"],
@@ -643,8 +630,7 @@ class TestGetSourceSystemAccess:
                 "objectType": "table",
                 "connectionId": _REQ["connection_id"],
                 "resolveAllMatches": True,
-            },
-        )
+            })
 
     async def test_user_to_objects_filters_by_object_type_level(
         self, mock_oe_client: AsyncMock
@@ -685,17 +671,14 @@ class TestGetSourceSystemAccess:
             object_type="database",
             connection_id=1000,
         )
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_SOURCE_SYSTEM_ACCESS,
-            params={
+        assert_rdam_api_called(mock_oe_client, {
                 "sourceSystem": "redshift",
                 "queryDirection": "user_to_objects",
                 "username": "john_analyst",
                 "objectPath": "ovaledgedb",
                 "objectType": "database",
                 "connectionId": 1000,
-            },
-        )
+            })
         assert len(out["data"]["grants"]) == 1
         assert out["data"]["grants"][0]["objectLevel"] == "database"
         assert out["data"]["filteredToObjectLevel"] == "database"
@@ -744,21 +727,6 @@ class TestGetSourceSystemAccess:
         assert levels == {"table"}
         assert out["data"]["filteredToObjectLevel"] == "table"
 
-    def test_filter_user_to_objects_by_level_exact_level_only(self) -> None:
-        result = {
-            "ok": True,
-            "data": {
-                "grants": [
-                    {"objectLevel": "database", "objectPath": "ovaledgedb"},
-                    {"objectLevel": "schema", "objectPath": "ovaledgedb.automation"},
-                    {"objectLevel": "table", "objectPath": "ovaledgedb.automation.customers"},
-                ],
-            },
-        }
-        out = filter_user_to_objects_by_level(result, "schema")
-        levels = {grant["objectLevel"] for grant in out["data"]["grants"]}
-        assert levels == {"schema"}
-
     async def test_redshift_object_to_users_passes_through_api_grants(
         self, mock_oe_client: AsyncMock
     ) -> None:
@@ -778,13 +746,14 @@ class TestGetSourceSystemAccess:
         out = await fn(
             source_system="redshift",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             object_path="ovaledgedb.automation.customers",
             object_type="table",
             connection_id=1000,
         )
         levels = {grant["objectLevel"] for grant in out["data"]["grants"]}
-        assert levels == {"database", "schema", "table"}
-        assert "filteredToObjectLevel" not in out["data"]
+        assert levels == {"table"}
+        assert out["data"].get("filteredToObjectLevel") == "table"
 
     async def test_redshift_multiple_usernames_forwards_params(
         self, mock_oe_client: AsyncMock
@@ -801,17 +770,14 @@ class TestGetSourceSystemAccess:
             object_type="database",
             connection_id=1000,
         )
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_SOURCE_SYSTEM_ACCESS,
-            params={
+        assert_rdam_api_called(mock_oe_client, {
                 "sourceSystem": "redshift",
                 "queryDirection": "user_to_objects",
                 "username": ["john_analyst", "svc_analytics"],
                 "objectPath": "ovaledgedb",
                 "objectType": "database",
                 "connectionId": 1000,
-            },
-        )
+            })
 
     def test_reject_multiple_object_type_values(self) -> None:
         err = reject_multiple_object_type(["database", "schema"])
@@ -840,6 +806,7 @@ class TestGetSourceSystemAccess:
         await fn(
             source_system="redshift",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             object_path=[
                 "ovaledgedb.automation.customers",
                 "ovaledgedb.automation.orders",
@@ -847,9 +814,7 @@ class TestGetSourceSystemAccess:
             object_type="table",
             connection_id=1000,
         )
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_SOURCE_SYSTEM_ACCESS,
-            params={
+        assert_rdam_api_called(mock_oe_client, {
                 "sourceSystem": "redshift",
                 "queryDirection": "object_to_users",
                 "objectPath": [
@@ -858,8 +823,7 @@ class TestGetSourceSystemAccess:
                 ],
                 "objectType": "table",
                 "connectionId": 1000,
-            },
-        )
+            })
 
     def test_normalize_string_list_splits_commas(self) -> None:
         assert normalize_string_list("john_analyst, svc_analytics") == [
@@ -1050,6 +1014,7 @@ class TestShapeObjectToUsersDisambiguation:
         out = await fn(
             source_system="redshift",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             object_path="actor",
             object_type="table",
             connection_id=1000,
@@ -1106,21 +1071,19 @@ class TestSourceSystemAccessHelpers:
         await fn(
             source_system="redshift",
             query_direction="object_to_users",
+            access_intent_confirmed="native",
             object_path="prod_db",
             object_name="orders",
             object_type="table",
             connection_id=1000,
         )
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_SOURCE_SYSTEM_ACCESS,
-            params={
+        assert_rdam_api_called(mock_oe_client, {
                 "sourceSystem": "redshift",
                 "queryDirection": "object_to_users",
                 "objectPath": "prod_db.orders",
                 "objectType": "table",
                 "connectionId": 1000,
-            },
-        )
+            })
 
     async def test_object_type_all_omits_wire_object_type(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {
@@ -1142,15 +1105,12 @@ class TestSourceSystemAccessHelpers:
             object_type="all",
             connection_id=1002,
         )
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_SOURCE_SYSTEM_ACCESS,
-            params={
+        assert_rdam_api_called(mock_oe_client, {
                 "sourceSystem": "snowflake",
                 "queryDirection": "user_to_objects",
                 "username": "john.doe",
                 "connectionId": 1002,
-            },
-        )
+            })
         assert len(out["data"]["grants"]) == 2
 
     async def test_privileges_filter_on_user_to_objects(self, mock_oe_client: AsyncMock) -> None:

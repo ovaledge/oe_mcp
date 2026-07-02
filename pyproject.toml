@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "oe-mcp"
-version = "1.0.1"
+version = "1.0.2"
 description = "OvalEdge MCP Server"
 authors = ["Rohit Anand <rohit.anand@ovaledge.com>"]
 readme = "README.md"
@@ -32,6 +32,7 @@ deepeval = "~3.9.9"
 
 [tool.poetry.scripts]
 oe-mcp-local = "entrypoints.local:main"
+oe-mcp-http = "entrypoints.http_local:main"
 
 [tool.ruff]
 line-length = 100
@@ -47,6 +48,13 @@ strict = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "integration: live OvalEdge API tests (requires running server and .env credentials)",
+]
+filterwarnings = [
+    "ignore:Please use `import python_multipart` instead.:PendingDeprecationWarning",
+    "ignore:There is no current event loop:DeprecationWarning:deepeval.utils",
+]
 # Coverage is opt-in via scripts/run_tests.sh or explicit --cov flags (see README).
 # Do not add --cov* to addopts: system pytest outside .venv would fail on Ubuntu/macOS.
 

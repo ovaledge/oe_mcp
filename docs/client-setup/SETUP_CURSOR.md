@@ -39,6 +39,28 @@ If `.env` in the repo is complete, you can omit most `env` keys and rely on the 
 
 **`poetry`** must be on `PATH` for the process that launches Cursor. Use an **absolute** repo path in `-C`.
 
+### Logo in Cursor (stdio vs HTTP)
+
+**`ovaledge-local` (stdio)** sends the icon as a data URI in MCP metadata, but Cursor typically shows a letter avatar for command-based servers, not the PNG.
+
+For the **OvalEdge logo**, use **local HTTP** instead:
+
+1. Add **`OVALEDGE_BASE_URL`**, **`OVALEDGE_USER_TOKEN`**, and **`OVALEDGE_USER_SECRET`** to repo **`.env`** (same values as stdio).
+2. Run: `poetry run oe-mcp-http` (or `./scripts/run_local_mcp_http.sh`).
+3. Add to `mcp.json`:
+
+```json
+"ovaledge-local-http": {
+  "url": "http://127.0.0.1:8000/mcp"
+}
+```
+
+4. Connect **`ovaledge-local-http`** in Cursor (disable **`ovaledge-local`** if you do not want duplicate tools).
+
+**502 on `POST /mcp`:** the HTTP server exchanges credentials at startup from `.env`. Ensure OvalEdge is reachable at `OVALEDGE_BASE_URL` and credentials match your working stdio setup. Do not use `remote_credentials` headers for this entry unless you intentionally run with `AUTH_MODE=remote_credentials`.
+
+See [.cursor/README.md](../../.cursor/README.md#mcp-server-logo-cursor).
+
 ---
 
 ## Remote HTTP configuration
@@ -81,7 +103,7 @@ With the server connected, Cursor can list **MCP prompts**, **resources**, and *
 | ---- | ---------- |
 | Internal policy / playbook / narrative | Prompt `organizational_knowledge` or tool `lookup_datastory` |
 | Find tables, files, reports | Prompt `data_discovery` or `search_catalog_assets` |
-| Create tag or glossary term | Prompt `create_governance_tag` / `create_business_glossary_term` (confirm preview, then `create_confirmed_by_user=true`) |
+| Create tag or glossary term | Prompt `create_governance_tag` / `create_business_glossary_term` (confirm preview, then `write_confirmed_by_user=true`) |
 | OvalEdge product how-to | Prompt `platform_help` or `search_platform_docs` |
 | Native Redshift / Snowflake / Tableau grants | Prompt `native_source_access` or tool `source_system_access` |
 | Deep link by id | `ovaledge://catalog/table/{id}`, `ovaledge://governance/data-story/{id}`, … |

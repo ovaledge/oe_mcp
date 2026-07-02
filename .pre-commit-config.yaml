@@ -1,19 +1,19 @@
 # https://pre-commit.com
 #
-# Requires pre-commit >= 3.2 (stage names pre-commit / pre-push). Installed via Poetry dev deps.
+# Requires pre-commit >= 3.2. Installed via Poetry dev deps.
 #
 # Install (automated on clone via scripts/setup_local_mcp.sh or manual):
 #   ./scripts/setup_git_hooks.sh
-#   # or: poetry run pre-commit install && poetry run pre-commit install --hook-type pre-push
+#   # or: poetry run pre-commit install
 #
-# On each `git commit`: ruff check + pytest (tests/).
-# On `git push` (if pre-push hook installed): ruff + pytest again.
+# On each `git commit`: ruff check, mypy, and pytest (tests/).
+# Checks do not run again on `git push` (pre-push hook is not installed).
 #
 # Run manually:
 #   poetry run pre-commit run --all-files
 minimum_pre_commit_version: "3.2.0"
 
-default_stages: [pre-commit, pre-push]
+default_stages: [pre-commit]
 
 repos:
   - repo: local
@@ -21,6 +21,13 @@ repos:
       - id: ruff-check
         name: ruff check (full tree)
         entry: bash scripts/run_ruff.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: mypy
+        name: mypy (server/ entrypoints/ evals/)
+        entry: bash scripts/run_mypy.sh
         language: system
         pass_filenames: false
         always_run: true

@@ -130,10 +130,10 @@ async def exchange_oauth_access_token(oauth_access_token: str) -> str:
     """
     Remote MCP path.
     Exchange a validated OAuth access token for an OvalEdge user-scoped JWT.
-    Called per MCP request — fully stateless.
 
-    TODO: confirm exact request body format from OvalEdge API docs.
-    TODO: confirm exact response field name (token / access_token / jwt).
+    Wire contract (OvalEdge ``POST /api/user/token/generate``): JSON body
+    ``{"userToken": "<IdP access token>"}``. Response JWT is parsed by
+    ``_extract_token`` (supports ``token``, ``access_token``, ``jwt``, ``data``, or raw text).
     """
     async with httpx.AsyncClient(
         base_url=settings.ovaledge_base_url,
@@ -161,11 +161,10 @@ async def exchange_oauth_access_token(oauth_access_token: str) -> str:
 async def exchange_client_credentials() -> str:
     """
     Local MCP path.
-    Exchange OvalEdge user token + user secret for an OvalEdge JWT.
-    Called via FastMCP lifespan hook at startup.
+    Exchange OvalEdge user token + user secret for an OvalEdge JWT at startup.
 
-    TODO: confirm exact request body format from OvalEdge API docs.
-    TODO: confirm exact response field name.
+    Wire contract: ``POST /api/user/token/generate`` with
+    ``{"userToken": "...", "userSecret": "..."}``; JWT via ``_extract_token``.
     """
     async with httpx.AsyncClient(
         base_url=settings.ovaledge_base_url,

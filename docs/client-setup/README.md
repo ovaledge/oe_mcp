@@ -20,7 +20,7 @@ Guides for connecting **OvalEdge MCP** from common editors and assistants.
 - MCP tools, resources, and workflow prompts: [server/docs/mcp_workflows.md](../../server/docs/mcp_workflows.md) (also `docs://ovaledge/mcp_workflows` when the server is connected)
 - Agent routing and human-in-the-loop creates: [README.md](../../README.md#agent-guidance-mirrors-serverapppy-instructions)
 
-**Workflow prompts** (optional): invoke by name in clients that support MCP prompts — e.g. `organizational_knowledge` for data-story questions (uses `lookup_datastory`, not platform docs), `platform_help` for OvalEdge product how-to, `create_governance_tag` / `create_business_glossary_term` for guided writes with **`create_confirmed_by_user`** after you approve the preview.
+**Workflow prompts** (optional): invoke by name in clients that support MCP prompts — e.g. `organizational_knowledge` for data-story questions (uses `lookup_datastory`, not platform docs), `platform_help` for OvalEdge product how-to, `create_governance_tag` / `create_business_glossary_term` for guided writes with **`write_confirmed_by_user`** after you approve the preview.
 
 **Quick routing:** organizational policy/playbooks → `lookup_datastory`; physical datasets → `search_catalog_assets`; OvalEdge UI/features → `search_platform_docs`; native Redshift/Snowflake/Tableau grants → `source_system_access`.
 

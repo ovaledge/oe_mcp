@@ -8,7 +8,7 @@ from server.auth.context import current_oe_jwt
 class TestLocalEntrypoint:
     async def test_local_lifespan_sets_oe_jwt(self) -> None:
         with patch(
-            "entrypoints.local.get_or_refresh_local_token",
+            "server.auth.local_lifespan.get_or_refresh_local_token",
             new=AsyncMock(return_value="local-oe-jwt"),
         ):
             from entrypoints.local import local_lifespan

@@ -24,14 +24,14 @@ Flow depends on **`tagSecurityMode`** from create-options:
 2. User chooses parent or no parent → call again with `parent_step_completed_by_user=true` plus either:  
    - `parent_tag_id` + `parent_tag_id_confirmed_by_user=true`, or  
    - `create_directly_under_master=true` (no parent; open root tag)  
-3. **Confirm** → call with same placement + `create_confirmed_by_user=true` → POST  
+3. **Confirm** → call with same placement + `write_confirmed_by_user=true` → POST  
 
 ### SECURE mode
 
 1. `tag_name` only → user must pick **master** (`master_tag_id` + `master_tag_id_confirmed_by_user=true`)  
 2. Show **parent** options under that master (optional). Rows with `hasChildren=true` support nested browse via `browse_parent_tag_id` on the next `create_tag` call (`GET parent-options?browseParentTagId=…`).  
 3. Finalize with `parent_step_completed_by_user=true` and parent choice or `create_directly_under_master=true`  
-4. **Confirm** → `create_confirmed_by_user=true` → POST  
+4. **Confirm** → `write_confirmed_by_user=true` → POST  
 
 Never invent `master_tag_id` or `parent_tag_id`. Never set confirmation flags on the same call as `tag_name` only.
 

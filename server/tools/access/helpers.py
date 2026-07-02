@@ -1,0 +1,94 @@
+"""Validation and response shaping for get_user_object_access."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from server.constants import (
+    MCP_ACCESS_DISAMBIGUATION_TOOL_LEAD_DOC,
+    MCP_PATH_GET_USER_OBJECT_ACCESS,
+)
+from server.tools.common.descriptions import classify_tool_desc
+
+_DESC_GET_USER_OBJECT_ACCESS = classify_tool_desc(
+    MCP_ACCESS_DISAMBIGUATION_TOOL_LEAD_DOC
+    + "Discover effective OvalEdge **catalog ACL** permissions (user and role grants). "
+    "Not native Redshift/Snowflake/Tableau grants — use source_system_access for those.\n\n"
+    f"Backend: GET {MCP_PATH_GET_USER_OBJECT_ACCESS}\n\n"
+    "**Directions:** user_to_object | object_to_principals — username required for "
+    "user_to_object.\n\n"
+    "**Asset resolution (one mode):** object_id + object_type (preferred after search), "
+    "fully_qualified_name, or object_name (may return matchCandidates).\n\n"
+    "**Connectors:** object_type=connection with object_name; not in search_catalog_assets.\n\n"
+    "JDBC-backed types, story-zone inheritance, and resolution workflow: "
+    "docs://ovaledge/mcp_workflows (Catalog object access) and workflow prompt "
+    "`catalog_object_access`.\n\n"
+    "Present effectiveAccess or principals, grantSources, contributingRoles, inheritedFrom, "
+    "redirectUrl."
+,
+    confidential=True,
+)
+
+
+def validate_get_user_object_access_args(
+    query_direction: str | None,
+    username: str | None,
+    object_id: int | None,
+    object_type: str | None,
+    fully_qualified_name: str | None,
+    object_name: str | None,
+) -> dict[str, Any] | None:
+    if not query_direction or not str(query_direction).strip():
+        return {"error": "query_direction is required.", "status_code": 400}
+    qd = str(query_direction).strip().lower()
+    if qd not in {"user_to_object", "object_to_principals"}:
+        return {
+            "error": "query_direction must be user_to_object or object_to_principals.",
+            "status_code": 400,
+        }
+    if qd == "user_to_object" and not (username and str(username).strip()):
+        return {"error": "username is required for user_to_object.", "status_code": 400}
+    has_id = object_id is not None and object_id > 0 and object_type and str(object_type).strip()
+    has_fqn = bool(fully_qualified_name and str(fully_qualified_name).strip())
+    has_name = bool(object_name and str(object_name).strip())
+    mode_count = int(bool(has_id)) + int(has_fqn) + int(has_name)
+    if mode_count == 0:
+        return {
+            "error": "Provide object_id+object_type, fully_qualified_name, or object_name.",
+            "status_code": 400,
+        }
+    if mode_count > 1:
+        return {
+            "error": "Use only one object resolution mode at a time.",
+            "status_code": 400,
+        }
+    if has_id and not has_fqn and not has_name:
+        if object_id is None or object_id <= 0:
+            return {"error": "object_id must be a positive integer.", "status_code": 400}
+    return None
+
+
+def enrich_get_user_object_access_response(result: dict[str, Any]) -> dict[str, Any]:
+    from server.nav_links import build_absolute_nav_url
+
+    if not isinstance(result, dict):
+        return result
+    data = result.get("data")
+    if not isinstance(data, dict):
+        return result
+    redirect = data.get("redirectUrl") or data.get("redirect_url")
+    nav = data.get("navLink") or data.get("nav_link")
+    if not redirect and nav:
+        data["redirectUrl"] = build_absolute_nav_url(str(nav))
+    elif redirect:
+        data["redirectUrl"] = build_absolute_nav_url(str(redirect))
+    inherited = data.get("inheritedFrom")
+    if isinstance(inherited, dict) and data.get("objectType") == "oestory":
+        zone_name = inherited.get("objectName") or inherited.get("object_name")
+        zone_type = inherited.get("objectType") or inherited.get("object_type")
+        if zone_name and not data.get("advisoryMessage"):
+            data["advisoryMessage"] = (
+                f"Data story access is inherited from Story Zone '{zone_name}' "
+                f"({zone_type}); the story has no direct ACL grants."
+            )
+    return result

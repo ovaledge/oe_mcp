@@ -12,11 +12,17 @@ from server.constants import (
     MCP_RESOURCE_GOVERNANCE_DATA_STORY,
     MCP_RESOURCE_GOVERNANCE_GLOSSARY_TERM,
     MCP_RESOURCE_GOVERNANCE_TAG,
+    TOOL_ASSESS_CDE_DQ,
     TOOL_ASSET_LINEAGE,
+    TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
     TOOL_CATALOG_ASSET_DETAILS,
     TOOL_COLUMN_PROFILE,
+    TOOL_CREATE_DQ_RULES,
     TOOL_CREATE_GLOSSARY_TERM,
+    TOOL_CREATE_SQL_DQ_RULE,
     TOOL_CREATE_TAG,
+    TOOL_GENERATE_DQ_QUERIES,
+    TOOL_GET_USER_OBJECT_ACCESS,
     TOOL_LOOKUP_DATASTORY,
     TOOL_LOOKUP_DQ_RULE,
     TOOL_LOOKUP_GLOSSARY_TERM,
@@ -27,7 +33,10 @@ from server.constants import (
     TOOL_SOURCE_SYSTEM_ACCESS,
     TOOL_TABLE_ENTITY_RELATIONSHIPS,
     TOOL_UPDATE_ASSET_DESCRIPTIONS,
+    TOOL_UPDATE_CDE_ASSOCIATIONS,
+    TOOL_UPDATE_CUSTOM_FIELD_VALUE,
     TOOL_UPDATE_GOVERNANCE_ROLES,
+    TOOL_VALIDATE_DQ_QUERIES,
 )
 
 MCP_TOOL_NAMES: frozenset[str] = frozenset(
@@ -45,9 +54,18 @@ MCP_TOOL_NAMES: frozenset[str] = frozenset(
         TOOL_LOOKUP_DATASTORY,
         TOOL_SEARCH_DOCS,
         TOOL_UPDATE_ASSET_DESCRIPTIONS,
+        TOOL_UPDATE_CDE_ASSOCIATIONS,
         TOOL_UPDATE_GOVERNANCE_ROLES,
+        TOOL_UPDATE_CUSTOM_FIELD_VALUE,
         TOOL_LOOKUP_DQ_RULE,
+        TOOL_ASSESS_CDE_DQ,
+        TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
+        TOOL_CREATE_DQ_RULES,
+        TOOL_GENERATE_DQ_QUERIES,
+        TOOL_VALIDATE_DQ_QUERIES,
+        TOOL_CREATE_SQL_DQ_RULE,
         TOOL_SOURCE_SYSTEM_ACCESS,
+        TOOL_GET_USER_OBJECT_ACCESS,
     }
 )
 
@@ -62,13 +80,18 @@ MCP_WORKFLOW_PROMPT_NAMES: frozenset[str] = frozenset(
         "organizational_knowledge",
         "platform_help",
         "metadata_drift",
+        "resolve_object_access",
         "native_source_access",
+        "dam_object_browse",
+        "catalog_object_access",
         "explain_tag",
         "explain_dq_rule",
         "create_business_glossary_term",
         "create_governance_tag",
         "document_asset_descriptions",
         "assign_governance_roles",
+        "assess_cde_dq_coverage",
+        "create_custom_sql_dq_workflow",
     }
 )
 

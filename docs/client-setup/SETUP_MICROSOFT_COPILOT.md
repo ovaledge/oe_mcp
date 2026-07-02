@@ -49,7 +49,7 @@ Deploy with **`AUTH_MODE=remote_credentials`**. **`AUTH_MODE=remote` (OAuth)** o
 
 ## Prerequisites
 
-1. **Deployed OvalEdge MCP** — `./scripts/deploy-zip.sh` or `./scripts/deploy.sh`; copy **`MCPEndpointUrl`** (ends with `/mcp`). See [infra/DEPLOY.md](../../infra/DEPLOY.md).
+1. **Deployed OvalEdge MCP** — `./scripts/deploy.sh` or `./scripts/deploy.sh --zip`; copy **`MCPEndpointUrl`** (ends with `/mcp`). See [infra/DEPLOY.md](../../infra/DEPLOY.md).
 2. **OvalEdge user token + secret** per connection (or per end user — see [Per-user connections](#per-user-connections)).
 3. **Generative orchestration** on the agent — **required** for MCP ([Microsoft Learn](https://learn.microsoft.com/en-us/microsoft-copilot-studio/agent-extend-action-mcp)). New agents default to generative mode; confirm under **Settings** → **Generative AI** → **Orchestration** → **Use generative AI orchestration** = **Yes**.
 4. **Power Platform** — Copilot Studio (and Power Apps if you use a custom connector). MCP may be blocked by **data loss prevention (DLP)** policies on connectors.

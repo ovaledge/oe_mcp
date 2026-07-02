@@ -25,7 +25,11 @@ Access to catalog assets, glossary content, lineage nodes, and previews is enfor
 
 Write tools (e.g. `create_tag`, `create_glossary_term`, `update_asset_descriptions`, `update_governance_roles`) invoke the same OvalEdge APIs as the UI; they succeed only when the authenticated user has the required governance privileges.
 
-The MCP adds **human-in-the-loop** steps for governed writes: picker responses (`formattedResponse`) on creates, explicit confirmation flags, and a final **`create_confirmed_by_user`** gate before POST (creates and updates). Agents must not skip pickers or auto-confirm on behalf of users.
+The MCP adds **human-in-the-loop** steps for governed writes: picker responses (`formattedResponse`) on creates, explicit confirmation flags, a **`confirmationToken`** that binds the confirmed POST to the previewed payload, and a final **`write_confirmed_by_user`** gate before POST (creates and updates). Agents must not skip pickers or auto-confirm on behalf of users.
+
+## Critical Data Element (CDE)
+
+Catalog assets (schemas, tables, columns, files, reports, APIs, codes) support a **Critical Data Element** designation. Use the `update_cde_associations` MCP tool to set `Yes`, `No`, or `None`, with optional category and justification — matching the catalog UI shutter. Resolve assets via `search_catalog_assets` first; updates require meta-write permission and are audited in asset history.
 
 ## Data stories
 
@@ -37,7 +41,18 @@ The MCP adds **human-in-the-loop** steps for governed writes: picker responses (
 
 ## Native source access (RDAM)
 
-**`source_system_access`** returns **native** Redshift, Snowflake, or Tableau grants from **RDAM SQL metadata** — not catalog ACLs, not Elasticsearch, and not `search_catalog_assets`. Do not fall back to catalog when RDAM is empty or errors. Instance/Connector **Data Access Admin** is enforced on the API. Use the **`native_source_access`** workflow prompt for grant questions. See [mcp_workflows](mcp_workflows#native-source-access-rdam) for `query_direction`, `object_path`, `object_type`, and examples.
+**`source_system_access`** returns **native** Redshift, Snowflake, or Tableau grants from **RDAM SQL metadata** — not catalog ACLs, not Elasticsearch, and not `search_catalog_assets`. Do not fall back to catalog when RDAM is empty or errors. Use the **`native_source_access`** workflow prompt for grant questions. See [mcp_workflows](mcp_workflows#native-source-access-rdam) for `query_direction`, `object_path`, `object_type`, and examples. Deep routing rules: [rdam_source_access](rdam_source_access).
+
+### Data Access Admin (DAA)
+
+**Data Access Admin (DAA)** — enforced server-side on `source_system_access` (same as DAM UI):
+
+- **Instance Data Access Admin:** RDAM instance roles; access to connectors on that instance.
+- **Connector Data Access Admin:** roles on one connection only.
+
+The API returns RDAM no-access if the caller lacks Connector DAA on the connection (or Instance DAA on its parent instance). No separate DAA check endpoint is required.
+
+**DAM object scope:** grant rows are limited to databases/schemas/tables/columns visible in DAM (active catalog objects with RDAM crawl — same as OETP RDAM browse). Harvested privileges for objects not in DAM (e.g. uncrawled schemas) are excluded.
 
 ## Glossary–catalog sync and inheritance
 

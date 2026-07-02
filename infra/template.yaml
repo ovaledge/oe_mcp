@@ -27,6 +27,11 @@ Parameters:
     Description: >
       (AUTH_MODE=remote) Authorization Server issuer URL (must match JWT iss). Discovery loads
       /.well-known/openid-configuration or oauth-authorization-server under this base.
+  OAuthAllowedIssuers:
+    Type: String
+    Default: ""
+    Description: >
+      Comma-separated additional trusted JWT iss values (e.g. Auth0 custom domain and *.auth0.com).
   OAuthAudience:
     Type: String
     Default: ""
@@ -71,11 +76,43 @@ Parameters:
     Description: >
       AUTH_MODE=remote_credentials only — max distinct credential-key JWT entries per Lambda
       instance (in-memory LRU).
+  LambdaMemorySize:
+    Type: String
+    Default: "1024"
+    AllowedPattern: "^[0-9]+$"
+    Description: >
+      Lambda memory (MB), 512–10240. Higher values add CPU and help large tool responses
+      (lineage, docs search). HTTP API integration timeout remains 30s max.
+  LambdaTimeout:
+    Type: String
+    Default: "30"
+    AllowedPattern: "^[0-9]+$"
+    Description: >
+      Lambda timeout (seconds), 10–30. API Gateway HTTP API caps integration at 30s; values
+      above 30 have no effect on /mcp until a longer-timeout front end is used.
+  EnableWaf:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >
+      Attach regional AWS WAF IP allowlist to the HTTP API stage (default action block).
+  AllowedSourceCidrs:
+    Type: String
+    Default: "127.0.0.1/32"
+    Description: >
+      Comma-separated IPv4 CIDR blocks allowed when EnableWaf=true. Ignored when WAF is disabled.
+      Example: 203.0.113.0/24,198.51.100.10/32
+
+Conditions:
+  CreateWaf:
+    Fn::Equals:
+      - !Ref EnableWaf
+      - "true"
 
 Globals:
   Function:
-    Timeout: 30
-    MemorySize: 512
+    Timeout: !Ref LambdaTimeout
+    MemorySize: !Ref LambdaMemorySize
     Architectures:
       - !Ref LambdaArchitecture
 
@@ -103,6 +140,7 @@ Resources:
           # Lambda env values must be strings (SAM / CFN strict validation).
           OVALEDGE_MAX_RETRIES: !Ref OvalEdgeMaxRetries
           OAUTH_ISSUER: !Ref OAuthIssuer
+          OAUTH_ALLOWED_ISSUERS: !Ref OAuthAllowedIssuers
           OAUTH_AUDIENCE: !Ref OAuthAudience
           # Do not set MCP_PUBLIC_BASE_URL from !Ref MCPApi here — it creates a CloudFormation
           # circular dependency (function → API → function). Leave unset; metadata uses
@@ -178,6 +216,12 @@ Resources:
             Path: /health
             Method: GET
             ApiId: !Ref MCPApi
+        BrandIcon:
+          Type: HttpApi
+          Properties:
+            Path: /brand/ovaledge-mcp-icon.png
+            Method: GET
+            ApiId: !Ref MCPApi
 
   MCPApi:
     Type: AWS::Serverless::HttpApi
@@ -210,6 +254,49 @@ Resources:
           ThrottlingBurstLimit: 10
           ThrottlingRateLimit: 5
 
+  AllowedSourceIpSet:
+    Type: AWS::WAFv2::IPSet
+    Condition: CreateWaf
+    Properties:
+      Name: !Sub ${AWS::StackName}-${Environment}-allowed-ipv4
+      Description: !Sub IPv4 allowlist for ${AWS::StackName} MCP HTTP API
+      Scope: REGIONAL
+      IPAddressVersion: IPV4
+      Addresses: !Split [",", !Ref AllowedSourceCidrs]
+
+  MCPWebACL:
+    Type: AWS::WAFv2::WebACL
+    Condition: CreateWaf
+    Properties:
+      Name: !Sub ${AWS::StackName}-${Environment}-webacl
+      Description: !Sub IP allowlist Web ACL for ${AWS::StackName} MCP HTTP API
+      Scope: REGIONAL
+      DefaultAction:
+        Block: {}
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub ${AWS::StackName}-${Environment}-webacl
+      Rules:
+        - Name: AllowListedSourceIpv4
+          Priority: 0
+          Statement:
+            IPSetReferenceStatement:
+              Arn: !GetAtt AllowedSourceIpSet.Arn
+          Action:
+            Allow: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AllowListedSourceIpv4
+
+  MCPWebACLAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Condition: CreateWaf
+    Properties:
+      ResourceArn: !Sub "arn:aws:apigateway:${AWS::Region}::/apis/${MCPApi}/stages/$default"
+      WebACLArn: !GetAtt MCPWebACL.Arn
+
 Outputs:
   MCPEndpointUrl:
     Description: Remote MCP endpoint
@@ -226,3 +313,23 @@ Outputs:
     Value: !Sub
       - "https://${ApiId}.execute-api.${AWS::Region}.amazonaws.com/health"
       - ApiId: !Ref MCPApi
+  MCPPublicBaseUrl:
+    Description: >-
+      Set as Lambda env MCP_PUBLIC_BASE_URL (no path suffix) so MCP initialize
+      advertises the branding icon URL. Not injected automatically (CFN circular dep).
+    Value: !Sub
+      - "https://${ApiId}.execute-api.${AWS::Region}.amazonaws.com"
+      - ApiId: !Ref MCPApi
+  MCPBrandIconUrl:
+    Description: Public MCP server icon (GET, no auth)
+    Value: !Sub
+      - "https://${ApiId}.execute-api.${AWS::Region}.amazonaws.com/brand/ovaledge-mcp-icon.png"
+      - ApiId: !Ref MCPApi
+  WAFWebAclArn:
+    Condition: CreateWaf
+    Description: Regional WAF Web ACL attached to the HTTP API $default stage
+    Value: !GetAtt MCPWebACL.Arn
+  WAFAllowedSourceCidrs:
+    Condition: CreateWaf
+    Description: IPv4 CIDR allowlist enforced by WAF
+    Value: !Ref AllowedSourceCidrs

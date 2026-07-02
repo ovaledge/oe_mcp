@@ -18,13 +18,22 @@ class TestGlossaryCreateConfirmationPreview:
             description="ASC 606 policy.",
             definition=None,
             publish=False,
+            post_body={
+                "termName": "Revenue",
+                "domainId": 12,
+                "description": "ASC 606 policy.",
+                "category1Id": 55,
+                "category2Id": 0,
+                "publish": False,
+            },
         )
         assert out["ok"] is True
         assert out["workflowPhase"] == "confirm_create"
         assert out["doNotCreate"] is True
-        assert out["createConfirmedByUser"] is False
+        assert out["writeConfirmedByUser"] is False
+        assert "confirmationToken" in out
         assert "Revenue" in out["formattedResponse"]
-        assert "create_confirmed_by_user=true" in out["formattedResponse"]
+        assert "write_confirmed_by_user=true" in out["formattedResponse"]
         assert out["pendingCreate"]["domainId"] == 12
 
 

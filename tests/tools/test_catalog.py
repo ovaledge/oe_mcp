@@ -11,6 +11,7 @@ from server.constants import (
     MCP_PATH_METADATA_CHANGES_BETWEEN_CRAWLS,
     MCP_PATH_SEARCH_CATALOG,
     MCP_PATH_UPDATE_ASSET_DESCRIPTIONS,
+    MCP_PATH_UPDATE_CDE_ASSOCIATIONS,
     MCP_SEARCH_CATEGORY_NAME_PARAM,
     MCP_SEARCH_CLASSIFICATIONS_PARAM,
     MCP_SEARCH_CONTEXT_QUERY_PARAM,
@@ -24,8 +25,14 @@ from server.constants import (
 )
 from server.tools import catalog
 from server.tools.catalog.helpers import _DESC_SEARCH
-from tests.conftest import MOCK_ASSET_DETAIL, MOCK_LINEAGE_RESPONSE, MOCK_SEARCH_RESPONSE
+from tests.conftest import (
+    MOCK_ASSET_DETAIL,
+    MOCK_LINEAGE_RESPONSE,
+    MOCK_SEARCH_RESPONSE,
+    MOCK_UPDATE_CDE_RESPONSE,
+)
 from tests.helpers import get_tool_fn
+from tests.tools.confirm_test_helpers import invoke_write_confirmed
 
 
 class TestSearchCatalogAssets:
@@ -55,7 +62,6 @@ class TestSearchCatalogAssets:
 
     def test_search_description_rejects_native_grant_fallback(self) -> None:
         assert "source_system_access" in _DESC_SEARCH
-        assert "Never use this tool as a fallback" in _DESC_SEARCH
 
     async def test_search_get_params(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
@@ -335,6 +341,14 @@ class TestColumnProfileStatistics:
         assert out["status_code"] == 400
         mock_oe_client.get.assert_not_called()
 
+    async def test_oval_edge_error_returns_structured_dict(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.side_effect = OvalEdgeError(502, "Bad gateway")
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "column_profile_statistics")
+        out = await fn(object_id=7, object_type="oetable")
+        assert out["status_code"] == 502
+
 
 class TestTableEntityRelationships:
     async def test_forwards_object_id(self, mock_oe_client: AsyncMock) -> None:
@@ -347,6 +361,14 @@ class TestTableEntityRelationships:
             MCP_PATH_ENTITY_RELATIONSHIPS,
             params={"objectId": 99},
         )
+
+    async def test_oval_edge_error_returns_structured_dict(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.side_effect = OvalEdgeError(503, "Unavailable")
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "table_entity_relationships")
+        out = await fn(object_id=99)
+        assert out["status_code"] == 503
 
 
 class TestAssetLineage:
@@ -369,6 +391,14 @@ class TestAssetLineage:
         out = await fn(object_id=1, object_type="glossary")
         assert out["status_code"] == 400
         mock_oe_client.get.assert_not_called()
+
+    async def test_oval_edge_error_returns_structured_dict(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.side_effect = OvalEdgeError(504, "Gateway timeout")
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "asset_lineage")
+        out = await fn(object_id=1, object_type="oetable")
+        assert out["status_code"] == 504
 
 
 class TestTableEntityRelationshipsErrors:
@@ -410,6 +440,7 @@ class TestUpdateAssetDescriptions:
         )
         assert out["workflowPhase"] == "confirm_update"
         assert out["doNotUpdate"] is True
+        assert "confirmationToken" in out
         mock_oe_client.post.assert_not_called()
 
     async def test_post_body_and_formatted_response(self, mock_oe_client: AsyncMock) -> None:
@@ -417,13 +448,14 @@ class TestUpdateAssetDescriptions:
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
         fn = await get_tool_fn(mcp, "update_asset_descriptions")
-        out = await fn(
+        out = await invoke_write_confirmed(
+
+            fn,
             object_id=42,
             object_type="oetable",
             description_field="business_description",
             description_text="Updated business text",
-            reason="MCP test",
-            create_confirmed_by_user=True,
+            reason="MCP test"
         )
         assert out["status"] == "success"
         assert "formattedResponse" in out
@@ -451,7 +483,7 @@ class TestUpdateAssetDescriptions:
             business_description="biz",
             technical_description="tech",
             dry_run=True,
-            create_confirmed_by_user=False,
+            write_confirmed_by_user=False,
         )
         body = mock_oe_client.post.call_args[0][1]
         assert body["descriptions"] == {
@@ -506,12 +538,13 @@ class TestUpdateAssetDescriptions:
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
         fn = await get_tool_fn(mcp, "update_asset_descriptions")
-        out = await fn(
+        out = await invoke_write_confirmed(
+
+            fn,
             object_id=1,
             object_type="oetable",
             technical_description="A description from MCP tool via cursor.",
-            prompt="Update the technical description of workflowtemplate table",
-            create_confirmed_by_user=True,
+            prompt="Update the technical description of workflowtemplate table"
         )
         assert out.get("status_code") != 400
         mock_oe_client.post.assert_called_once()
@@ -528,12 +561,13 @@ class TestUpdateAssetDescriptions:
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
         fn = await get_tool_fn(mcp, "update_asset_descriptions")
-        await fn(
+        await invoke_write_confirmed(
+
+            fn,
             object_id=1,
             object_type="oetable",
             description_field="business_description",
-            description_text="via generic pair",
-            create_confirmed_by_user=True,
+            description_text="via generic pair"
         )
         body = mock_oe_client.post.call_args[0][1]
         assert body["descriptions"] == {
@@ -558,11 +592,12 @@ class TestUpdateAssetDescriptions:
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
         fn = await get_tool_fn(mcp, "update_asset_descriptions")
-        await fn(
+        await invoke_write_confirmed(
+
+            fn,
             object_id=10,
             object_type="oeglobaldomain",
-            domain_description="Domain text",
-            create_confirmed_by_user=True,
+            domain_description="Domain text"
         )
         body = mock_oe_client.post.call_args[0][1]
         assert body["target"]["objectType"] == "oeglobaldomain"
@@ -573,12 +608,13 @@ class TestUpdateAssetDescriptions:
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
         fn = await get_tool_fn(mcp, "update_asset_descriptions")
-        await fn(
+        await invoke_write_confirmed(
+
+            fn,
             object_id=7,
             object_type="oecode",
             business_description="Code business",
-            prompt="Update the business description",
-            create_confirmed_by_user=True,
+            prompt="Update the business description"
         )
         body = mock_oe_client.post.call_args[0][1]
         assert body["target"]["objectType"] == "code"
@@ -602,12 +638,13 @@ class TestUpdateAssetDescriptions:
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
         fn = await get_tool_fn(mcp, "update_asset_descriptions")
-        out = await fn(
+        out = await invoke_write_confirmed(
+
+            fn,
             object_id=1,
             object_type="oetable",
             description_field="business_description",
-            description_text="x",
-            create_confirmed_by_user=True,
+            description_text="x"
         )
         assert out["status_code"] == 403
         assert "403" in out["error"]
@@ -664,3 +701,80 @@ class TestMetadataChangesBetweenCrawls:
         fn = await get_tool_fn(mcp, "metadata_changes_between_crawls")
         out = await fn(question="Show drift")
         assert out["status_code"] == 500
+
+
+class TestUpdateCdeAssociations:
+    async def test_confirm_preview_blocks_post(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_cde_associations")
+        out = await fn(
+            targets=[{"object_id": 3337, "object_type": "oeschema"}],
+            action="Yes",
+            cde_justification="Understanding CDE functionality",
+        )
+        assert out["workflowPhase"] == "confirm_update"
+        assert out["doNotUpdate"] is True
+        assert "confirmationToken" in out
+        mock_oe_client.post.assert_not_called()
+
+    async def test_post_body_matches_payload(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.return_value = dict(MOCK_UPDATE_CDE_RESPONSE)
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_cde_associations")
+        out = await invoke_write_confirmed(
+
+            fn,
+            targets=[{"object_id": 3337, "object_type": "oeschema"}],
+            action="Yes",
+            cde_justification="Understanding CDE functionality"
+        )
+        assert out["status"] == "success"
+        assert "formattedResponse" in out
+        mock_oe_client.post.assert_called_once_with(
+            MCP_PATH_UPDATE_CDE_ASSOCIATIONS,
+            {
+                "targets": [{"objectId": 3337, "objectType": "oeschema"}],
+                "action": "Yes",
+                "cdeJustification": "Understanding CDE functionality",
+            },
+        )
+
+    async def test_rejects_unsupported_object_type(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_cde_associations")
+        out = await fn(
+            targets=[{"object_id": 1, "object_type": "glossary"}],
+            action="Yes",
+        )
+        assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
+    async def test_dry_run_skips_confirm_and_posts(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.return_value = {"ok": True, "data": {"status": "success"}}
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_cde_associations")
+        await fn(
+            targets=[{"object_id": 10, "object_type": "oetable"}],
+            action="None",
+            dry_run=True,
+        )
+        body = mock_oe_client.post.call_args[0][1]
+        assert body["options"] == {"dryRun": True}
+        assert body["action"] == "None"
+
+    async def test_oval_edge_error_returns_structured_dict(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.side_effect = OvalEdgeError(403, "Forbidden")
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_cde_associations")
+        out = await invoke_write_confirmed(
+
+            fn,
+            targets=[{"object_id": 1, "object_type": "oetable"}],
+            action="Yes"
+        )
+        assert out["status_code"] == 403

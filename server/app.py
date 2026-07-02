@@ -2,8 +2,60 @@ from typing import Any
 
 from fastmcp import FastMCP
 
+from server.branding import mcp_server_icons
 from server.config import settings
+from server.constants import (
+    DOCS_RESOURCE_URI_PREFIX,
+    MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC,
+    MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC,
+    TOOL_GET_USER_OBJECT_ACCESS,
+    TOOL_LOOKUP_DATASTORY,
+    TOOL_SEARCH_CATALOG,
+    TOOL_SEARCH_DOCS,
+    TOOL_SOURCE_SYSTEM_ACCESS,
+)
 from server.mcp import register_all
+
+_MCP_WORKFLOWS_RESOURCE_URI = f"{DOCS_RESOURCE_URI_PREFIX}/mcp_workflows"
+
+# Tool names embedded in server instructions (tests assert ⊆ MCP_TOOL_NAMES).
+MCP_SERVER_INSTRUCTION_TOOL_NAMES: frozenset[str] = frozenset(
+    {
+        TOOL_LOOKUP_DATASTORY,
+        TOOL_SEARCH_DOCS,
+        TOOL_SEARCH_CATALOG,
+        TOOL_SOURCE_SYSTEM_ACCESS,
+        TOOL_GET_USER_OBJECT_ACCESS,
+    }
+)
+
+# Routing detail lives in tool descriptions and docs://ovaledge/mcp_workflows — keep
+# server instructions short to limit always-on MCP context size. Cross-tool disambiguation
+# only; enforcement caveats (e.g. never fall back to catalog search for RDAM) live on
+# the owning tool descriptions.
+_MCP_SERVER_INSTRUCTIONS = (
+    "You are connected to the OvalEdge data governance platform. "
+    f"{MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC} "
+    f"{MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC} "
+    "Ambiguous who-has-access: invoke resolve_object_access, present the 1/2 choice, and "
+    "call no access tools (including search_catalog_assets) until the user replies. "
+    "Use MCP tools for catalog discovery, governance lookups, native source access (RDAM), "
+    "and governed writes. At session start and before multi-step workflows, governed writes, "
+    f"RDAM, catalog ACL, or DQ work, read MCP resource {_MCP_WORKFLOWS_RESOURCE_URI} "
+    "(agent routing guide). Read each tool's description before calling; for multi-step "
+    "playbooks use workflow prompts listed in that guide. "
+    "Present formattedResponse from tools to the user when provided. "
+    "Governed writes require write_confirmed_by_user=true only after the user approves "
+    "a confirm_create or confirm_update preview. "
+    f"Org knowledge in data stories: {TOOL_LOOKUP_DATASTORY} (not {TOOL_SEARCH_DOCS}). "
+    f"Physical catalog discovery: {TOOL_SEARCH_CATALOG} — not for who-has-access. "
+    f"Native DB/BI grants (RDAM): {TOOL_SOURCE_SYSTEM_ACCESS} + access_intent_confirmed=native "
+    "— not catalog search or catalog ACL. "
+    f"OvalEdge catalog ACL (user/role grants on catalog objects): {TOOL_GET_USER_OBJECT_ACCESS} "
+    "+ access_intent_confirmed=catalog_acl — not native RDAM. "
+    "User-facing links: navLink or redirectUrl from tool responses; never show ovaledge:// URIs. "
+    "RBAC is enforced server-side; write tools need appropriate OvalEdge permissions."
+)
 
 
 def create_mcp(lifespan: Any = None) -> FastMCP:
@@ -11,62 +63,18 @@ def create_mcp(lifespan: Any = None) -> FastMCP:
     Build the FastMCP application.
 
     Pass a lifespan only for local stdio (client_credentials JWT at startup).
-    Remote Lambda uses the default lifespan and sets JWT per request in middleware.
+    Remote HTTP entrypoints use a separate FastAPI app with AuthMiddleware.
     """
     mcp = FastMCP(
         name=settings.mcp_server_name,
         version=settings.mcp_server_version,
-        instructions=(
-            "You are connected to the OvalEdge data governance platform. "
-            "Use tools to search the catalog, fetch asset details, lineage, profiles, and "
-            "governance (glossary lookup, create_glossary_term guided flow, tags). "
-            "For new glossary terms: use create_glossary_term (domain → category when "
-            "categories exist → subcategory when available; description required; never "
-            "invent description); present formattedResponse to the user and wait — never "
-            "auto-pick domain_id or skip_category unless the user explicitly skips category. "
-            "If user provides a domain name in natural language ('under <domain>'), pass it as "
-            "domain_name on the first call; otherwise use domain_id from picker. "
-            "Then create with term_name, resolved domain_id, and description. "
-            "Use tools for catalog discovery (search, details, profiles, lineage, "
-            "metadata drift), governance lookups (glossary, tags, data stories), "
-            "source-system access previews, and governed write operations where the "
-            "API allows (e.g. create_tag, update_asset_descriptions, update_governance_roles). "
-            "Governed writes require create_confirmed_by_user=true after the user approves "
-            "the confirm_create or confirm_update preview. "
-            "Organizational knowledge (policies, playbooks, onboarding narratives, domain "
-            "context documented in OvalEdge data stories): call lookup_datastory first — "
-            "usually content_query set to the user's question; add story_zone_name or "
-            "story_name when they name a zone or title. Present formattedResponse and lead "
-            "with storyCitation verbatim. Do not answer from model memory when a story may "
-            "exist. Use search_platform_docs only for OvalEdge product how-to (features, UI, "
-            "configuration), not for org-specific story content. Use search_catalog_assets "
-            "for physical datasets; when hits include oestory, follow with lookup_datastory. "
-            "For native Redshift/Snowflake/Tableau grants (not OvalEdge catalog ACLs), "
-            "use source_system_access only (Instance/Connector DAA enforced on the server; "
-            "RDAM SQL, not Elasticsearch). connection_id must come from the user — do not "
-            "discover connector ids. For \"what tables can user X access?\" with connection_id, "
-            "use object_type=table and omit object_path (all tables on connector); never guess a "
-            "specific table path. When a table name matches multiple schemas, ask the user to "
-            "pick the schema (from matchCandidates or advisoryMessage) before retrying with "
-            "dbName.schema.table. Never fall back to "
-            "search_catalog_assets when source_system_access is empty, errors, or not-found — "
-            "catalog cannot answer native DB/BI grants. "
-            "Never show ovaledge:// URIs to end users — they are agent-internal only. "
-            "For links in user-facing replies, use navLink or redirectUrl from tool "
-            "responses (e.g. Open in OvalEdge). Prefer lookup_datastory / lookup_tags "
-            "for rich formattedResponse. "
-            "Use prompts to run pre-packaged governance workflows (discovery, lineage, "
-            "stories, tags, metadata drift, native access, creates, DQ, role updates). "
-            "Every response includes full governance context where the API provides it. "
-            "RBAC is enforced by OvalEdge — users see only what they are entitled to; "
-            "write tools require appropriate OvalEdge permissions."
-        ),
+        instructions=_MCP_SERVER_INSTRUCTIONS,
         lifespan=lifespan,
+        icons=mcp_server_icons(),
     )
-
     register_all(mcp)
     return mcp
 
 
-# Shared instance for remote entrypoint and imports that expect a single app.
+# Default instance for stdio and tests.
 mcp = create_mcp()

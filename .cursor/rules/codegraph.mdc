@@ -1,0 +1,34 @@
+---
+description: Use CodeGraph MCP for structural navigation before Grep/Read in oe_mcp Python code
+globs: server/**/*.py,tests/**/*.py,evals/**/*.py,entrypoints/**/*.py
+alwaysApply: false
+---
+
+# CodeGraph (oe_mcp codebase)
+
+This repo is indexed at `.codegraph/` (`codegraph init -i` from repo root). The **codegraph** MCP server must be enabled in Cursor.
+
+## When editing or exploring code here
+
+1. Call **`codegraph_explore`** first when you can name symbols, files, or an area (e.g. `verify_write_confirmation`, `source_system_access register`, `golden_cases`).
+2. Use its line-numbered source for **Edit** — do not re-Read the same regions unless the response shows a staleness warning for those files.
+3. Prefer graph results over grep loops for **callers, callees, registration paths, and blast radius**.
+
+## When NOT to use CodeGraph
+
+- OvalEdge **runtime routing** (which MCP tool for user questions) → `server/docs/mcp_workflows.md`, `rdam_source_access.md`, `docs://ovaledge/*`
+- **New/changed MCP tools** → `@oe-mcp-tool-design` skill
+- Config, markdown-only, or infra YAML — use Read/Grep
+
+## Landmarks (query these names in explore)
+
+| Concern | Start here |
+|---------|------------|
+| Tool registration | `server/tools/<domain>/register.py` |
+| Descriptions | `_DESC_*` in `*/helpers.py` |
+| Paths / allow-lists | `server/constants.py` |
+| Tool inventory | `server/mcp_surface.py` |
+| Confirm gate | `server/tools/common/confirm_gate.py` |
+| Eval goldens | `evals/golden_cases.py` |
+
+If explore reports the project is not indexed, tell the user to run `codegraph init -i` — do not run it yourself unless they ask.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from pathlib import Path
 
@@ -34,6 +35,8 @@ from server.constants import MCP_PATH_SOURCE_SYSTEM_ACCESS  # noqa: E402
 @pytest.fixture(scope="session")
 def api_available() -> bool:
     base = settings.ovaledge_base_url.rstrip("/")
+    if base in ("https://mock.ovaledge.com", ""):
+        return False
     try:
         with httpx.Client(timeout=5.0, follow_redirects=True) as client:
             r = client.get(base + "/")
@@ -43,7 +46,7 @@ def api_available() -> bool:
 
 
 @pytest.fixture(scope="session")
-async def auth_headers(api_available: bool) -> dict[str, str]:
+def auth_headers(api_available: bool) -> dict[str, str]:
     if not api_available:
         pytest.skip("OvalEdge not reachable at OVALEDGE_BASE_URL")
 
@@ -52,7 +55,7 @@ async def auth_headers(api_available: bool) -> dict[str, str]:
         return {"Authorization": f"{settings.ovaledge_http_auth_scheme} {preset}"}
 
     try:
-        token = await get_or_refresh_local_token()
+        token = asyncio.run(get_or_refresh_local_token())
     except Exception as exc:  # noqa: BLE001
         pytest.skip(
             "Could not obtain OvalEdge JWT. Set OE_INTEGRATION_JWT to a fresh JWT from "

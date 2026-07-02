@@ -5,11 +5,15 @@
       "args": ["-C", "${workspaceFolder}", "run", "oe-mcp-local"],
       "env": {
         "AUTH_MODE": "local",
+        "MCP_PUBLIC_BASE_URL": "",
         "OVALEDGE_BASE_URL": "${env:OVALEDGE_BASE_URL}",
         "OVALEDGE_USER_TOKEN": "${env:OVALEDGE_USER_TOKEN}",
         "OVALEDGE_USER_SECRET": "${env:OVALEDGE_USER_SECRET}",
         "OVALEDGE_HTTP_AUTH_SCHEME": "jwt"
       }
+    },
+    "ovaledge-local-http": {
+      "url": "http://127.0.0.1:8000/mcp"
     },
     "ovaledge-remote-local": {
       "url": "https://YOUR_API_ID.execute-api.YOUR_REGION.amazonaws.com/mcp",
