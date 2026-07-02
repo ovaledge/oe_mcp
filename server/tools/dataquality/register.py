@@ -392,7 +392,7 @@ def register(mcp: FastMCP) -> None:
                 ),
             ),
         ],
-        rule_name: Annotated[str, Field(description="Draft DQ rule name.")],
+        rule_name: Annotated[str, Field(description="Data quality rule name.")],
         rule_query: Annotated[
             str | None,
             Field(description="Rule SELECT SQL (omit when code_object_id is set).", default=None),
@@ -440,7 +440,7 @@ def register(mcp: FastMCP) -> None:
             Field(description=CONFIRMATION_TOKEN_PARAM_DESCRIPTION, default=None),
         ] = None,
     ) -> dict[str, Any]:
-        """Create draft custom SQL DQ rule (see MCP tool description)."""
+        """Create custom SQL data quality rule (see MCP tool description)."""
         return await _invoke_create_sql_dq_rule(
             objects=objects,
             rule_name=rule_name,

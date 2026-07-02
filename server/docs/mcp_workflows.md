@@ -25,13 +25,15 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 | OvalEdge product how-to (UI, features) | `search_platform_docs`; prompt `platform_help` |
 | Business term definition | `lookup_glossary_term`; prompt `explain_business_term` |
 | Tag meaning or hierarchy | `lookup_tags`; prompt `explain_tag` |
-| DQ rule lookup | `lookup_dq_rule`; prompt `explain_dq_rule` |
-| CDE columns / DQ function & rule recommendations | `assess_cde_dq` (after `search_catalog_assets` or `discover_cde_columns=true`) |
-| Associate objects to data quality rule | `associate_dq_rule_objects` (after `assess_cde_dq` / `lookup_dq_rule`) |
-| Auto-create or associate DQ rules for CDE columns | `create_dq_rules` (assess + create/associate in one call) |
-| Generate custom SQL DQ queries | `generate_dq_queries` (after `assess_cde_dq` when workflow is custom_sql) |
-| Validate custom SQL DQ queries | `validate_dq_queries` (confirm gate; executes SELECT on connection) |
-| Create custom SQL DQ rule | `create_sql_dq_rule` (confirm gate; after validate when canCreateRule) |
+| Data quality rule lookup | `lookup_dq_rule`; prompt `explain_dq_rule` |
+| CDE assets / DQ function & rule recommendations | `assess_cde_dq` (after `search_catalog_assets` or `discover_cde_columns=true`) |
+| Associate objects to existing data quality rule | `associate_dq_rule_objects` (after `assess_cde_dq` / `lookup_dq_rule`; confirm gate) |
+| Auto-create or associate data quality rules (default: reuse existing) | `create_dq_rules` with `prefer_existing_rule=true` (default) |
+| Create a **new** data quality rule (second rule / explicit new) | `create_dq_rules` with `prefer_existing_rule=false`; often `skip_duplicate_function_on_object=false` |
+| Mark object as CDE before auto-create | `update_cde_associations` (confirm gate) → then `create_dq_rules` |
+| Generate custom SQL data quality queries | `generate_dq_queries` (after `assess_cde_dq` when workflow is `custom_sql`) |
+| Validate custom SQL data quality queries | `validate_dq_queries` (confirm gate; executes SELECT on connection) |
+| Create custom SQL data quality rule | `create_sql_dq_rule` (confirm gate; after validate when `canCreateRule`) |
 | CDE / custom SQL DQ workflow (prompt) | `create_custom_sql_dq_workflow` or `assess_cde_dq_coverage` |
 | Metadata drift between crawls | `metadata_changes_between_crawls`; prompt `metadata_drift` |
 | Native Redshift/Snowflake/Tableau grants | `source_system_access`; prompts `native_source_access`, `dam_object_browse` |
@@ -45,7 +47,7 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 | Create tag | `create_tag` (guided; human confirms); prompt `create_governance_tag` |
 | Update descriptions | `update_asset_descriptions`; prompt `document_asset_descriptions` |
 | Update governance roles | `update_governance_roles`; prompt `assign_governance_roles` |
-| Update CDE flag on columns | `update_cde_associations` (confirm gate) |
+| Update CDE flag on tables/columns/files | `update_cde_associations` (confirm gate) |
 | Update custom / additional field | `search_catalog_assets` (if needed) → `update_custom_field_value` (confirm gate) |
 
 **Data stories vs platform docs:** `lookup_datastory` searches **your organization’s** onboarded stories (`oestory`). `search_platform_docs` searches **OvalEdge product** documentation. Do not use platform docs for internal policy questions.
@@ -79,6 +81,129 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 | Access | `get_user_object_access` | — |
 | RDAM | `source_system_access` | — |
 | Docs | `search_platform_docs` | — |
+
+## Tool reference (concrete descriptions)
+
+Per-tool routing detail for all **25** registered tools. MCP client tool descriptions are short summaries; use this section for parameters, write gates, and which tool **not** to call.
+
+**Legend:** **Confirm gate** = preview without `write_confirmed_by_user` first; re-call with `write_confirmed_by_user=true` and `confirmation_token` after explicit user approval.
+
+### Catalog
+
+#### `search_catalog_assets`
+- **Purpose:** Discover catalog assets via Elasticsearch hybrid/keyword search plus optional semantic `context_query`.
+- **Use for:** Tables, columns, files, charts, APIs, schemas, data products, glossary, tags, stories, CDE assets, ownership filters.
+- **Key inputs:** `search_terms`, `tags`, `terms`, `classifications`, `critical_data_element`, `object_type`, `schema_name`, `connection_name`, `server_type`, `owner`/`steward`/`custodian`, `domain_name`, `context_query`.
+- **Returns:** Hits with `objectId`, `objectType`, `navLink`, `redirectUrl`.
+- **Not for:** Native DB grants; data quality rule lookup; who-has-access without disambiguation.
+- **Pairs with:** `catalog_asset_details`; `lookup_datastory` for `oestory`; `assess_cde_dq` after CDE search.
+
+#### `catalog_asset_details`
+- **Purpose:** Fetch one rich catalog document (descriptions, columns, governance roles, connection info, CDE flag, DQ counts).
+- **Key inputs:** `fully_qualified_name` **or** `object_id` + `object_type` (never both).
+- **Returns:** Full object JSON; long descriptions may truncate (~6k chars plain text).
+- **Not for:** FQN on `dp_domain`, `dp_product`, `oeglobaldomain`, `storyzone`, `oedomain` — use id + type from search.
+
+#### `column_profile_statistics`
+- **Purpose:** Column-level profile stats for one table or file.
+- **Key inputs:** `object_id`, `object_type` (`oetable` or `oefile` only).
+
+#### `table_entity_relationships`
+- **Purpose:** Entity-relationship patterns for one table.
+- **Key inputs:** Table `object_id` (`oetable` only).
+
+#### `asset_lineage`
+- **Purpose:** Upstream/downstream lineage graph.
+- **Key inputs:** `object_id`, `object_type` (`oetable` or `oefile`); optional `depth` (default 2).
+
+#### `metadata_changes_between_crawls`
+- **Purpose:** Metadata drift between crawls (schema/table/column changes, datatype deltas).
+- **Use for:** “What changed after the latest crawl?”
+
+#### `update_asset_descriptions` — **Confirm gate**
+- **Purpose:** Write description fields on catalog/governance assets.
+- **Rule:** Ask which slot if user says only “description”; never guess ids.
+
+#### `update_cde_associations` — **Confirm gate**
+- **Purpose:** Mark/unmark CDE on tables, columns, files, schemas, charts, APIs, queries.
+- **Key inputs:** `targets[]`; `action` = `Yes` | `No` | `None`.
+- **Required before:** `create_dq_rules` auto-create — object must be **CDE=Yes** or create is skipped with message.
+
+### Governance
+
+#### `lookup_glossary_term`
+- **Purpose:** Resolve glossary term(s) by id, name, or domain/category/subcategory placement.
+
+#### `create_glossary_term` — **Confirm gate**
+- **Purpose:** Guided glossary term creation. Guide: `docs://ovaledge/glossary_guide`.
+
+#### `lookup_tags`
+- **Purpose:** Look up tag(s) by id or name; hierarchy and tagged-asset context.
+
+#### `create_tag` — **Confirm gate**
+- **Purpose:** Create OPEN or SECURE tag. Guide: `docs://ovaledge/tags_guide`.
+
+#### `lookup_datastory`
+- **Purpose:** Organizational narrative from data stories — **not** product docs.
+- **Not for:** OvalEdge how-to (use `search_platform_docs`).
+
+#### `update_governance_roles` — **Confirm gate**
+- **Purpose:** Assign/clear owner, steward, custodian, governance roles 4–6.
+
+#### `update_custom_field_value` — **Confirm gate**
+- **Purpose:** Set custom/additional field on a catalog asset.
+
+### Data quality
+
+#### `lookup_dq_rule`
+- **Purpose:** Find data quality rules by name or id (not in catalog search).
+
+#### `assess_cde_dq`
+- **Purpose:** Read-only — recommended function, reusable rule, criteria gaps, `associatedToDqRule`.
+- **Key inputs:** `objects[]` or `discover_cde_columns=true`.
+- **Not for:** Creating rules (use write tools after approval).
+
+#### `associate_dq_rule_objects` — **Confirm gate**
+- **Purpose:** Link objects to an **existing** data quality rule when `dqrule_id` is known.
+- **Not for:** Auto-create (use `create_dq_rules`).
+
+#### `create_dq_rules` — **Confirm gate**
+- **Purpose:** Assess then associate to recommended rule **or** auto-create a data quality rule from business metadata.
+- **Key flags:**
+  - `prefer_existing_rule=true` (default) — associate/link when a recommended rule matches; skip if already linked to that rule.
+  - `prefer_existing_rule=false` — create a **new** data quality rule even when already linked to the recommended rule.
+  - `skip_duplicate_function_on_object=true` (default) — skip when same function type already exists on object.
+  - `skip_duplicate_function_on_object=false` — allow a second rule of the same function (e.g. two Total Rows Check rules).
+  - `supplemental_criteria_text` — criteria from user prompt when not in catalog metadata.
+- **Requirements:** Object must be **CDE=Yes**; every skipped/failed row includes a `message` (never silent skip).
+- **Agent routing:**
+  - User: “create DQ rule” / “from business description” → defaults (`prefer_existing_rule=true`).
+  - User: “create **new** rule” / second rule / different purpose → `prefer_existing_rule=false`; often `skip_duplicate_function_on_object=false`.
+
+#### `generate_dq_queries`
+- **Purpose:** Generate SQL for custom data quality rules. If `function_based`, use `create_dq_rules` instead.
+
+#### `validate_dq_queries` — **Confirm gate**
+- **Purpose:** Execute SELECTs to validate SQL before `create_sql_dq_rule`.
+
+#### `create_sql_dq_rule` — **Confirm gate**
+- **Purpose:** Create custom SQL data quality rule after validation.
+- **Not for:** Function-based rules (Total Rows Check, Null Check, etc.) — use `create_dq_rules`.
+
+### Access
+
+#### `get_user_object_access`
+- **Purpose:** OvalEdge catalog ACL — not native grants.
+- **Requires:** Disambiguation unless catalog ACL intent is explicit.
+
+#### `source_system_access`
+- **Purpose:** Native Redshift/Snowflake/Tableau grants (RDAM).
+- **Never fall back to** `search_catalog_assets` on RDAM empty/error.
+
+### Docs
+
+#### `search_platform_docs`
+- **Purpose:** OvalEdge **product** documentation — not organizational data stories.
 
 ## Catalog search (`search_catalog_assets`)
 
@@ -268,7 +393,7 @@ Invoke by name from the MCP client when supported. Each prompt returns instructi
 | `explain_business_term` | Glossary definition + linked physical assets |
 | `organizational_knowledge` | **Data stories first** — internal policies and narratives |
 | `explain_tag` | Tag lookup and tagged assets |
-| `explain_dq_rule` | DQ rule lookup and steward context |
+| `explain_dq_rule` | Data quality rule lookup and steward context |
 | `platform_help` | OvalEdge product docs via `search_platform_docs` |
 
 ### Lineage and quality
@@ -303,33 +428,76 @@ Invoke by name from the MCP client when supported. Each prompt returns instructi
 
 ## Update CDE associations (`update_cde_associations`)
 
-Mark or unmark columns as Critical Data Elements on catalog objects. Resolve targets via `search_catalog_assets` first.
+Mark or unmark **Critical Data Element (CDE)** on catalog objects — tables, columns, files, file columns, schemas, charts, APIs, and queries. Resolve targets via `search_catalog_assets` first.
+
+**Required before auto-create:** `create_dq_rules` skips objects that are not **CDE=Yes** (per-row message explains this).
 
 **Confirm gate:** call without `write_confirmed_by_user` for `confirm_update` preview → user approval → re-call with `write_confirmed_by_user=true` and `confirmation_token` from the preview.
 
-Often used after `assess_cde_dq` when the user wants to change CDE coverage before running DQ workflows.
+Often used before DQ workflows when the user wants to mark a table or column as CDE, or change CDE coverage after `assess_cde_dq`.
 
 ## Human confirmation before write (MCP-only)
 
 `create_glossary_term`, `create_tag`, `update_asset_descriptions`, `update_governance_roles`, `update_custom_field_value`, `update_cde_associations`, `associate_dq_rule_objects`, `create_dq_rules`, `validate_dq_queries`, and `create_sql_dq_rule` require **`write_confirmed_by_user=true`** on the call that performs the OvalEdge POST (unless `dry_run=true` on update tools). Earlier calls return **`confirm_create`** or **`confirm_update`** previews (`doNotCreate` / `doNotUpdate`) with `formattedResponse` and **`confirmationToken`** — the agent must show them and wait for explicit user approval.
 
-This gate is enforced in the MCP server only; **no OvalEdge backend change** is required.
+This gate is enforced in the MCP server (preview tokens, `write_confirmed_by_user`). The OvalEdge backend enforces RBAC and business rules on the actual POST (e.g. CDE prerequisite and skip reasons on `create_dq_rules`).
 
 See also: [glossary_guide](glossary_guide), [tags_guide](tags_guide), [data_stories](data_stories), [governance_model](governance_model).
 
 ## CDE / DQ intelligence (MCP)
 
+End-to-end routing for function-based and custom-SQL data quality workflows.
+
+### Read-only path
+
+1. `search_catalog_assets` with `critical_data_element=Yes` (types: `oetable`, `oecolumn`, `oefile`, `oefilecolumn`), **or** pass known `objects` to `assess_cde_dq`.
+2. `assess_cde_dq` — recommended function, reusable rule, criteria gaps, `associatedToDqRule`.
+3. Optional: `lookup_dq_rule` when the user names an existing rule (rules are not in catalog search).
+
+### Write path (function-based auto-create / associate)
+
 | Step | Tool | Notes |
 |------|------|--------|
-| Find CDE assets | `search_catalog_assets` | Set `critical_data_element=Yes`; object types `oetable`, `oecolumn`, `oefile`, `oefilecolumn` |
-| Read-only assessment | `assess_cde_dq` | Pass `objects` from search hits, or `discover_cde_columns=true` to auto-discover CDE columns |
-| Resolve existing rule | `lookup_dq_rule` | DQ rules are not in catalog search |
-| Link to data quality rule | `associate_dq_rule_objects` | Requires `dqrule_id` from assessment or lookup; **confirm gate** (`write_confirmed_by_user`) |
-| Create + associate | `create_dq_rules` | Re-assesses internally; prefer existing rule or auto-create when criteria sufficient; **confirm gate** |
-| Generate custom SQL | `generate_dq_queries` | After `assess_cde_dq` when workflow is `custom_sql`; read-only POST |
-| Validate custom SQL | `validate_dq_queries` | Executes SELECT on connection; **confirm gate** (`write_confirmed_by_user`) |
-| Create custom SQL rule | `create_sql_dq_rule` | After validate when `canCreateRule`; **confirm gate** (`write_confirmed_by_user`) |
+| Mark CDE (prerequisite) | `update_cde_associations` | Object must be **CDE=Yes** before auto-create; tables, columns, files, schemas, charts, APIs, queries; **confirm gate** |
+| Create or associate | `create_dq_rules` | Re-assesses internally; **confirm gate** |
+| Link to known rule only | `associate_dq_rule_objects` | When `dqrule_id` is known; does not auto-create; **confirm gate** |
+
+**`create_dq_rules` routing (agent):**
+
+| User intent | Parameters |
+|-------------|------------|
+| “Create data quality rule” / from business description (default) | `prefer_existing_rule=true` (default), `skip_duplicate_function_on_object=true` (default) |
+| “Create **new** rule” / second rule / different purpose on same object | `prefer_existing_rule=false`; often `skip_duplicate_function_on_object=false` |
+| Criteria only in user message, not in catalog | `supplemental_criteria_text` |
+
+**`prefer_existing_rule` behavior (backend):**
+
+- **`true` (default):** Associate to recommended existing rule when one matches; skip with message if already linked to that rule.
+- **`false`:** Auto-create a **new** data quality rule even when already linked to the recommended rule (supports multiple rules per object).
+
+**Skip / fail messages (per-row `message` — never silent):**
+
+| Situation | Typical message theme |
+|-----------|------------------------|
+| Not CDE | Mark object as CDE (Yes) before auto-create |
+| Already linked (prefer existing) | Already associated to recommended rule |
+| Duplicate function (skip dup on) | Object already has a rule for this function type |
+| Criteria missing | Insufficient business rule/description for auto-create |
+| Function not identified / not found | Cannot map business metadata to a DQ function |
+| Associate failed | Could not link to recommended rule |
+| Rule name exists / insert failed | Create collision or server error |
+
+Present skipped/failed rows and `message` to the user; fix prerequisites (CDE, criteria, flags) before re-calling.
+
+### Custom SQL path
+
+| Step | Tool | Notes |
+|------|------|--------|
+| Assess | `assess_cde_dq` | When workflow is `custom_sql` |
+| Generate SQL | `generate_dq_queries` | Read-only; not for function-based rules (use `create_dq_rules`) |
+| Validate | `validate_dq_queries` | Executes SELECT on connection; **confirm gate** |
+| Create rule | `create_sql_dq_rule` | After validate when `canCreateRule`; **confirm gate** |
 
 **Workflow prompts:** `assess_cde_dq_coverage` (pass `scope` = user question or domain name); `create_custom_sql_dq_workflow` for the full custom-SQL path.
 
-Read-only path: search → `assess_cde_dq` only. For writes, call without `write_confirmed_by_user` for a preview, then re-call with `write_confirmed_by_user=true` and `confirmation_token` after explicit user approval (same pattern as glossary/tag governed writes).
+For all writes: call without `write_confirmed_by_user` for a preview, then re-call with `write_confirmed_by_user=true` and `confirmation_token` after explicit user approval (same pattern as glossary/tag governed writes).
