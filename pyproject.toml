@@ -28,7 +28,7 @@ pytest-cov = "^7.1.0"
 
 
 [tool.poetry.group.eval.dependencies]
-deepeval = "~3.9.9"
+deepeval = ">=3.9.9,<4.1.0"
 
 [tool.poetry.scripts]
 oe-mcp-local = "entrypoints.local:main"
