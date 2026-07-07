@@ -2,7 +2,7 @@ import time
 from typing import Any
 
 import httpx
-from jose import jwt  # type: ignore[import-untyped]
+from jose import jwt
 
 from server.auth.issuer_allowlist import assert_issuer_allowed, normalize_issuer
 from server.auth.oauth_discovery import (
