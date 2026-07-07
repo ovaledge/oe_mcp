@@ -131,6 +131,34 @@ LAMBDA_ARCHITECTURE="${LAMBDA_ARCHITECTURE:-x86_64}"
 LAMBDA_MEMORY_SIZE="${LAMBDA_MEMORY_SIZE:-1024}"
 LAMBDA_TIMEOUT="${LAMBDA_TIMEOUT:-30}"
 
+read_mcp_server_version() {
+  if [[ -n "${MCP_SERVER_VERSION:-}" ]]; then
+    echo "$MCP_SERVER_VERSION"
+    return 0
+  fi
+  if command -v poetry >/dev/null 2>&1; then
+    local from_poetry
+    from_poetry="$(poetry version -s 2>/dev/null || true)"
+    if [[ -n "$from_poetry" ]]; then
+      echo "$from_poetry"
+      return 0
+    fi
+  fi
+  local from_toml
+  from_toml="$(
+    grep -E '^version[[:space:]]*=' pyproject.toml 2>/dev/null | head -1 |
+      sed -E 's/^version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/'
+  )"
+  if [[ -n "$from_toml" ]]; then
+    echo "$from_toml"
+    return 0
+  fi
+  echo "0.0.0-dev"
+}
+
+MCP_SERVER_VERSION="$(read_mcp_server_version)"
+echo "==> MCP server version: $MCP_SERVER_VERSION" >&2
+
 if [[ "$DEPLOY_ZIP" == true ]]; then
   BASE_TEMPLATE="infra/template-zip.yaml"
   DEPLOY_MODE="ZIP"
@@ -158,7 +186,7 @@ prepare_zip_stage() {
   rm -rf "$ZIP_STAGE_DIR"
   mkdir -p "$ZIP_STAGE_DIR/infra"
   cp -r server entrypoints "$ZIP_STAGE_DIR/"
-  cp requirements.txt "$ZIP_STAGE_DIR/"
+  cp requirements.txt pyproject.toml "$ZIP_STAGE_DIR/"
   cp infra/lambda-requirements.txt "$ZIP_STAGE_DIR/infra/"
   echo "==> Staged ZIP source at $ZIP_STAGE_DIR" >&2
 }
@@ -277,6 +305,7 @@ OVERRIDES=(
   "CredentialsCacheMaxEntries=${CREDENTIALS_CACHE_MAX_ENTRIES}"
   "LambdaMemorySize=${LAMBDA_MEMORY_SIZE}"
   "LambdaTimeout=${LAMBDA_TIMEOUT}"
+  "McpServerVersion=${MCP_SERVER_VERSION}"
 )
 if [[ "$ENABLE_WAF" == true ]]; then
   OVERRIDES+=("EnableWaf=true" "AllowedSourceCidrs=${ALLOWED_SOURCE_CIDRS}")

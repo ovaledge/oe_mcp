@@ -3,7 +3,7 @@ import time
 from typing import Any, cast
 
 import httpx
-from jose import jwt  # type: ignore[import-untyped]
+from jose import jwt
 
 from server.auth import context as auth_context
 from server.config import settings
