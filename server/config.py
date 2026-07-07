@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import tomllib
 from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -12,6 +13,28 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # ".env" would then be missed and OVALEDGE_BASE_URL falls back to the mock default.
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _ENV_FILE = _REPO_ROOT / ".env"
+
+
+def version_from_pyproject(repo_root: Path | None = None) -> str | None:
+    """Read ``[tool.poetry].version`` from pyproject.toml (Lambda ZIP has no package metadata)."""
+    path = (repo_root or _REPO_ROOT) / "pyproject.toml"
+    if not path.is_file():
+        return None
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return None
+    poetry = data.get("tool", {}).get("poetry", {})
+    if isinstance(poetry, dict):
+        version = poetry.get("version")
+        if isinstance(version, str) and version.strip():
+            return version.strip()
+    project = data.get("project", {})
+    if isinstance(project, dict):
+        version = project.get("version")
+        if isinstance(version, str) and version.strip():
+            return version.strip()
+    return None
 
 
 class Settings(BaseSettings):
@@ -101,6 +124,9 @@ class Settings(BaseSettings):
 
             return version("oe-mcp")
         except PackageNotFoundError:
+            from_pyproject = version_from_pyproject()
+            if from_pyproject:
+                return from_pyproject
             return "0.0.0-dev"
 
     @field_validator("auth_mode", mode="before")
