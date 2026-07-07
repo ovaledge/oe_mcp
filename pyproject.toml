@@ -8,7 +8,7 @@ packages = [{ include = "server" }, { include = "entrypoints" }, { include = "ev
 
 [tool.poetry.dependencies]
 python = "^3.12"
-fastmcp = "3.4.2"
+fastmcp-slim = {version = "3.4.2", extras = ["client", "server"]}
 fastapi = ">=0.111"
 httpx = ">=0.27"
 pydantic-settings = ">=2.0"
@@ -45,7 +45,7 @@ select = ["E", "F", "I", "UP"]
 python_version = "3.12"
 strict = true
 
-# fastmcp 3.4+ ships via fastmcp-slim without py.typed (PR #58).
+# fastmcp-slim 3.4+ (PR #58) lacks complete stubs for strict mypy on decorators.
 [[tool.mypy.overrides]]
 module = ["fastmcp", "fastmcp.*"]
 ignore_missing_imports = true
