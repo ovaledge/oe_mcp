@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from jose import jwt as jose_jwt  # type: ignore[import-untyped]
+from jose import jwt as jose_jwt
 from starlette.responses import Response
 from starlette.types import Receive, Send
 

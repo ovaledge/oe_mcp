@@ -53,6 +53,12 @@ Parameters:
     Description: >
       Streamable HTTP stateless mode (default true for Lambda). Set false only if your MCP client
       requires GET /mcp (SSE); adds session state in the worker.
+  McpServerVersion:
+    Type: String
+    Default: ""
+    Description: >
+      MCP product version for /health and initialize. deploy.sh sets from pyproject.toml; leave
+      empty to resolve from pyproject.toml at runtime when staged in the Lambda package.
   LambdaArchitecture:
     Type: String
     Default: x86_64
@@ -148,6 +154,7 @@ Resources:
           OVALEDGE_HTTP_AUTH_SCHEME: !Ref OvalEdgeHttpAuthScheme
           CREDENTIALS_CACHE_MAX_ENTRIES: !Ref CredentialsCacheMaxEntries
           MCP_HTTP_STATELESS: !Ref McpHttpStateless
+          MCP_SERVER_VERSION: !Ref McpServerVersion
       Events:
         MCPPost:
           Type: HttpApi
