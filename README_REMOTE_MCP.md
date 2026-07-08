@@ -37,16 +37,23 @@ Until stable, prefer **`remote_credentials`** or local stdio (**`AUTH_MODE=local
 ## Entrypoint and deployment
 
 - **App:** `entrypoints/lambda_handler.py` — `app` is shared; full OAuth routers ( **`remote` only — WIP** ) are included **only** when `settings.auth_mode == "remote"`. `remote_credentials` adds `server/auth/remote_credentials_discovery.py` only.
+- **Local HTTP (dev):** `./scripts/run_local_mcp_http.sh` or `poetry run oe-mcp-http` — forces **`AUTH_MODE=local`** (cached JWT at startup; see [README_LOCAL_MCP.md](README_LOCAL_MCP.md#runtime-architecture)). Pair with **`ovaledge-local-http`** in Cursor `mcp.json`.
 - **`MCP_HTTP_STATELESS`:** default **true** (good for Lambda). For **Cursor** (and similar) over plain HTTP, set **`MCP_HTTP_STATELESS=false`** so the MCP stack registers **GET** on `/mcp` for SSE fallback after Streamable HTTP negotiation. Without this, clients may get wrong `Content-Type` on GET.
+- **Observability:** optional OTLP to Phoenix or Langfuse — [infra/DEPLOY.md](infra/DEPLOY.md#telemetry-opentelemetry) (Lambda) or [.env.example](.env.example) (local).
 - **Lambda / SAM:** [infra/template.yaml](infra/template.yaml) — `AuthMode` parameter (`remote` **(OAuth WIP)** | `remote_credentials`), CORS allows the OvalEdge header names, optional empty defaults for `OAuthIssuer` / `OAuthAudience` when using credentials-only stacks. ZIP deploy: [infra/template-zip.yaml](infra/template-zip.yaml) via [`scripts/deploy.sh --zip`](scripts/deploy.sh). See [infra/DEPLOY.md](infra/DEPLOY.md).
 - **Troubleshooting (502/500, CloudWatch, redeploy):** [infra/TROUBLESHOOTING_REMOTE.md](infra/TROUBLESHOOTING_REMOTE.md).
 - **One-shot deploy:** from repo root, set `OVALEDGE_BASE_URL` and run [`scripts/deploy.sh`](scripts/deploy.sh) (`./scripts/deploy.sh --help` for flags). Guide: [infra/DEPLOY.md](infra/DEPLOY.md).
 - **Local HTTP (uvicorn):**
 
   ```bash
-  export AUTH_MODE=remote_credentials
+  ./scripts/run_local_mcp_http.sh
+  # or:
+  export AUTH_MODE=local
+  export MCP_HTTP_STATELESS=false
   poetry run uvicorn entrypoints.lambda_handler:app --host 127.0.0.1 --port 8000
   ```
+
+  For deployed-style header auth on localhost instead, use `AUTH_MODE=remote_credentials` (see [Testing `remote_credentials` on your laptop](#testing-remote_credentials-on-your-laptop)).
 
 ## Testing `remote_credentials` on your laptop
 

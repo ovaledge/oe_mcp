@@ -13,7 +13,10 @@ if [[ -f "$REPO_ROOT/.env" ]]; then
   set +a
 fi
 
-export AUTH_MODE="${AUTH_MODE:-local}"
+# Local HTTP must use AUTH_MODE=local so the JWT is exchanged once at startup and cached
+# (see local_oe_jwt_lifespan). Do not inherit AUTH_MODE=remote_credentials from .env —
+# that re-calls token/generate on every MCP request and breaks OvalEdge single-active-JWT.
+export AUTH_MODE=local
 export MCP_PUBLIC_BASE_URL="${MCP_PUBLIC_BASE_URL:-http://127.0.0.1:8000}"
 export MCP_HTTP_STATELESS="${MCP_HTTP_STATELESS:-false}"
 

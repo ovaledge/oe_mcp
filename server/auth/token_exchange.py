@@ -1,3 +1,4 @@
+import asyncio
 import json
 import time
 from typing import Any, cast
@@ -12,6 +13,15 @@ from server.constants import (
     JWT_REFRESH_LEEWAY_SECONDS,
     OVALEDGE_TOKEN_EXCHANGE_PATH,
 )
+
+_local_token_lock: asyncio.Lock | None = None
+
+
+def _get_local_token_lock() -> asyncio.Lock:
+    global _local_token_lock
+    if _local_token_lock is None:
+        _local_token_lock = asyncio.Lock()
+    return _local_token_lock
 
 
 class TokenExchangeError(Exception):
@@ -299,13 +309,20 @@ async def get_or_refresh_user_token(user_token: str, user_secret: str) -> str:
 async def get_or_refresh_local_token() -> str:
     """
     Return cached local JWT if still valid, otherwise exchange for a new one.
-    Cache is process-memory only.
+    Cache is process-memory only. A refresh lock prevents concurrent token/generate
+    stampedes (OvalEdge allows one active JWT per user token+secret).
     """
     cached = auth_context.local_cached_oe_jwt
     if cached and not is_token_expiring(cached):
         auth_context.current_oe_jwt.set(cached)
         return cached
-    token = await exchange_client_credentials()
-    auth_context.local_cached_oe_jwt = token
-    auth_context.current_oe_jwt.set(token)
-    return token
+
+    async with _get_local_token_lock():
+        cached = auth_context.local_cached_oe_jwt
+        if cached and not is_token_expiring(cached):
+            auth_context.current_oe_jwt.set(cached)
+            return cached
+        token = await exchange_client_credentials()
+        auth_context.local_cached_oe_jwt = token
+        auth_context.current_oe_jwt.set(token)
+        return token

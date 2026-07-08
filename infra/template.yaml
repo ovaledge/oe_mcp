@@ -108,6 +108,56 @@ Parameters:
     Description: >
       Comma-separated IPv4 CIDR blocks allowed when EnableWaf=true. Ignored when WAF is disabled.
       Example: 203.0.113.0/24,198.51.100.10/32
+  TelemetryBackend:
+    Type: String
+    Default: none
+    AllowedValues:
+      - none
+      - phoenix
+      - langfuse
+    Description: >
+      OpenTelemetry OTLP export backend. none = disabled (default). phoenix | langfuse = export traces.
+  TelemetryServiceName:
+    Type: String
+    Default: oe-mcp
+    Description: OTLP service.name resource attribute.
+  TelemetryProjectName:
+    Type: String
+    Default: ""
+    Description: >
+      OTLP project name (Phoenix x-project-name; openinference.project.name). Empty = TelemetryServiceName.
+  PhoenixHost:
+    Type: String
+    Default: ""
+    Description: Phoenix base URL when TelemetryBackend=phoenix (e.g. https://phoenix.example.com).
+  PhoenixApiKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: Optional Bearer token when Phoenix auth is enabled.
+  LangfuseHost:
+    Type: String
+    Default: ""
+    Description: Langfuse base URL when TelemetryBackend=langfuse (e.g. https://langfuse.example.com).
+  LangfusePublicKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: Langfuse public key (pk-lf-...) when TelemetryBackend=langfuse.
+  LangfuseSecretKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: Langfuse secret key (sk-lf-...) when TelemetryBackend=langfuse.
+  TelemetryOtlpEndpoint:
+    Type: String
+    Default: ""
+    Description: Optional full OTLP traces URL override (any backend).
+  TelemetryApiKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: Optional Bearer token when using TelemetryOtlpEndpoint.
 
 Conditions:
   CreateWaf:
@@ -156,6 +206,16 @@ Resources:
           CREDENTIALS_CACHE_MAX_ENTRIES: !Ref CredentialsCacheMaxEntries
           MCP_HTTP_STATELESS: !Ref McpHttpStateless
           MCP_SERVER_VERSION: !Ref McpServerVersion
+          TELEMETRY_BACKEND: !Ref TelemetryBackend
+          TELEMETRY_SERVICE_NAME: !Ref TelemetryServiceName
+          TELEMETRY_PROJECT_NAME: !Ref TelemetryProjectName
+          PHOENIX_HOST: !Ref PhoenixHost
+          PHOENIX_API_KEY: !Ref PhoenixApiKey
+          LANGFUSE_HOST: !Ref LangfuseHost
+          LANGFUSE_PUBLIC_KEY: !Ref LangfusePublicKey
+          LANGFUSE_SECRET_KEY: !Ref LangfuseSecretKey
+          TELEMETRY_OTLP_ENDPOINT: !Ref TelemetryOtlpEndpoint
+          TELEMETRY_API_KEY: !Ref TelemetryApiKey
       Events:
         MCPPost:
           Type: HttpApi

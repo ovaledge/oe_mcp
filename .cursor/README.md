@@ -13,7 +13,7 @@ Or merge into `~/.cursor/mcp.json` (user-wide). Restart Cursor after changes.
 | Key | Mode | When |
 |-----|------|------|
 | **`ovaledge-local`** | stdio (`AUTH_MODE=local`) | **Default for development** — `poetry run oe-mcp-local` |
-| **`ovaledge-local-http`** | HTTP → local uvicorn | **Shows OvalEdge logo in Cursor** — run `poetry run oe-mcp-http` (or `./scripts/run_local_mcp_http.sh`) first; same tools as stdio |
+| **`ovaledge-local-http`** | HTTP → local uvicorn | **Shows OvalEdge logo in Cursor** — run `./scripts/run_local_mcp_http.sh` (or `poetry run oe-mcp-http`) first; forces **`AUTH_MODE=local`** (JWT cached at startup); same tools as stdio |
 | `ovaledge-remote-local` | HTTP → local uvicorn | Alias pattern for deployed-style `remote_credentials` on port 8000 |
 | `ovaledge-remote-lambda` | HTTP → deployed API Gateway | Replace URL with your `MCPEndpointUrl` |
 | `ovaledge-remote-oauth-wip` | HTTP + Bearer | **`AUTH_MODE=remote` OAuth — WIP**; not production-ready |
@@ -26,6 +26,8 @@ Set in your shell, direnv, or Cursor’s environment (Cursor expands `${env:…}
 - `OVALEDGE_USER_TOKEN`, `OVALEDGE_USER_SECRET` — machine credentials for local / `remote_credentials`
 
 For **`ovaledge-local`**, you can omit the `env` block if `.env` in the repo root is complete and Poetry loads it (see [README_LOCAL_MCP.md](../README_LOCAL_MCP.md)).
+
+For **`ovaledge-local-http`**, put credentials in repo **`.env`** only — do not send `X-OvalEdge-*` headers from Cursor. The HTTP server uses **`AUTH_MODE=local`** (overrides `remote_credentials` in `.env`).
 
 If `${workspaceFolder}` is not expanded in your Cursor build, replace it with the **absolute** path to this repo in `args` (see [docs/client-setup/SETUP_CURSOR.md](../docs/client-setup/SETUP_CURSOR.md)).
 

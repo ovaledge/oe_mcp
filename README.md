@@ -21,13 +21,19 @@ cp .env.example .env
 
 Setup scripts (`scripts/setup_local_mcp.sh`, `scripts/setup_local_mcp.ps1`) create `.env` from `.env.example` only if `.env` is missing; they do not overwrite an existing file.
 
+## Observability (telemetry)
+
+Optional OpenTelemetry trace export to [Phoenix](https://arize.com/docs/phoenix) or [Langfuse](https://langfuse.com/docs) via `TELEMETRY_BACKEND` (default `none`). Variable reference: [.env.example](.env.example). Lambda deploy: [infra/DEPLOY.md](infra/DEPLOY.md#telemetry-opentelemetry).
+
+**Privacy:** enabled export sends tool spans that may include argument summaries (search terms, object ids) to your OTLP backend — review before pointing at a third-party host.
+
 ## OAuth 2.x remote MCP — work in progress
 
 **`AUTH_MODE=remote` (OAuth 2.x / OIDC Bearer for remote HTTP MCP) is WIP** and not fully validated end-to-end with real IdPs and MCP clients. Prefer **`remote_credentials`** (HTTP headers to OvalEdge) or **`local`** (stdio) until OAuth remote MCP is stable. Details: [README_REMOTE_MCP.md](README_REMOTE_MCP.md#work-in-progress-oauth-remote-mode).
 
 ## What this server provides
 
-- Catalog search and asset details (`search_catalog_assets`, `catalog_asset_details`)
+- Catalog search and asset details (`search_catalog_assets`, `catalog_asset_details`) — paginate with `page` when results exceed one page
 - Column profile, entity relationships, lineage, metadata drift (`metadata_changes_between_crawls`)
 - Glossary lookup and guided term creation (`lookup_glossary_term`, `create_glossary_term`)
 - Tag lookup and guided creation (`lookup_tags`, `create_tag`)
@@ -170,6 +176,7 @@ See **[SECURITY.md](SECURITY.md)** for the GitHub security policy (supported ver
 | `entrypoints/lambda_handler.py` | HTTP MCP (Mangum) |
 | `server/app.py` | FastMCP app assembly |
 | `server/auth/` | Auth, token exchange, middleware |
+| `server/telemetry/` | OpenTelemetry OTLP export (Phoenix / Langfuse) |
 | `server/client.py` | OvalEdge HTTP client |
 | `server/tools/`, `server/resources/`, `server/prompts/` | MCP surface |
 | `infra/template.yaml` | SAM sample for remote HTTP (`AuthMode`: `remote_credentials` or OAuth **`remote` (WIP)**) |

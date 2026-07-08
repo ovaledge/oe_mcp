@@ -9,6 +9,7 @@ os.environ["OVALEDGE_BASE_URL"] = "https://mock.ovaledge.com"
 os.environ["AUTH_MODE"] = "local"
 os.environ["OVALEDGE_USER_TOKEN"] = "test-user-token"
 os.environ["OVALEDGE_USER_SECRET"] = "test-user-secret"
+os.environ["TELEMETRY_BACKEND"] = "none"
 
 from server.auth.context import current_oe_jwt  # noqa: E402
 

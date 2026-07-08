@@ -511,6 +511,8 @@ MCP_SOURCE_SYSTEM_DESCENDANTS_CONNECTION_REQUIRED_ERROR = (
 )
 
 # search-catalog query params (GET /api/v1/mcp/search-catalog).
+# Some OvalEdge builds return HTTP 500 when limit is very high (e.g. >= 95 on localhost).
+MCP_SEARCH_CATALOG_MAX_LIMIT = 50
 MCP_SEARCH_CONTEXT_QUERY_PARAM = "contextQuery"
 # Lexical search — each value is a JSON array string on the wire.
 MCP_SEARCH_TERMS_PARAM = "searchTerms"
