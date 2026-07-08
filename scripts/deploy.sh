@@ -321,15 +321,23 @@ OVERRIDES=(
   "McpServerVersion=${MCP_SERVER_VERSION}"
   "TelemetryBackend=${TELEMETRY_BACKEND}"
   "TelemetryServiceName=${TELEMETRY_SERVICE_NAME}"
-  "TelemetryProjectName=${TELEMETRY_PROJECT_NAME}"
-  "PhoenixHost=${PHOENIX_HOST}"
-  "PhoenixApiKey=${PHOENIX_API_KEY}"
-  "LangfuseHost=${LANGFUSE_HOST}"
-  "LangfusePublicKey=${LANGFUSE_PUBLIC_KEY}"
-  "LangfuseSecretKey=${LANGFUSE_SECRET_KEY}"
-  "TelemetryOtlpEndpoint=${TELEMETRY_OTLP_ENDPOINT}"
-  "TelemetryApiKey=${TELEMETRY_API_KEY}"
 )
+# SAM rejects ParameterKey= with an empty value — omit optional telemetry params (template defaults apply).
+append_override_if_set() {
+  local key="$1"
+  local value="${2:-}"
+  if [[ -n "$value" ]]; then
+    OVERRIDES+=("${key}=${value}")
+  fi
+}
+append_override_if_set TelemetryProjectName "$TELEMETRY_PROJECT_NAME"
+append_override_if_set PhoenixHost "$PHOENIX_HOST"
+append_override_if_set PhoenixApiKey "$PHOENIX_API_KEY"
+append_override_if_set LangfuseHost "$LANGFUSE_HOST"
+append_override_if_set LangfusePublicKey "$LANGFUSE_PUBLIC_KEY"
+append_override_if_set LangfuseSecretKey "$LANGFUSE_SECRET_KEY"
+append_override_if_set TelemetryOtlpEndpoint "$TELEMETRY_OTLP_ENDPOINT"
+append_override_if_set TelemetryApiKey "$TELEMETRY_API_KEY"
 if [[ "$ENABLE_WAF" == true ]]; then
   OVERRIDES+=("EnableWaf=true" "AllowedSourceCidrs=${ALLOWED_SOURCE_CIDRS}")
 else
