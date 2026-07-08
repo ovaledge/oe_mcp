@@ -59,6 +59,23 @@ class Settings(BaseSettings):
     # Log full outbound URL (method + resolved URL with query) to stderr for tracing.
     ovaledge_log_http_requests: bool = True
 
+    # ── Telemetry (OpenTelemetry → Phoenix or Langfuse) ────────
+    # none = disabled (default). phoenix | langfuse = OTLP HTTP export.
+    telemetry_backend: Literal["none", "phoenix", "langfuse"] = "none"
+    telemetry_service_name: str = "oe-mcp"
+    # Optional full OTLP traces URL override (skips backend-specific path building).
+    telemetry_otlp_endpoint: str = ""
+    # Optional Bearer token (Phoenix when auth is enabled).
+    telemetry_api_key: str = ""
+    phoenix_host: str = "http://localhost:6006"
+    phoenix_api_key: str = ""
+    # OTLP project name (Phoenix x-project-name header; Langfuse resource grouping).
+    # Defaults to telemetry_service_name when empty.
+    telemetry_project_name: str = ""
+    langfuse_host: str = "http://localhost:3000"
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+
     # Retry config for transient OvalEdge errors
     ovaledge_max_retries: int = 3
     ovaledge_retry_backoff_seconds: float = 0.5
@@ -137,6 +154,15 @@ class Settings(BaseSettings):
             if s in ("local", "remote", "remote_credentials"):
                 return s
         return v if isinstance(v, str) else "local"
+
+    @field_validator("telemetry_backend", mode="before")
+    @classmethod
+    def normalize_telemetry_backend(cls, v: object) -> str:
+        if isinstance(v, str):
+            s = v.strip().lower()
+            if s in ("none", "phoenix", "langfuse"):
+                return s
+        return v if isinstance(v, str) else "none"
 
 _settings = Settings()
 

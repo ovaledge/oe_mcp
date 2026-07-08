@@ -49,6 +49,7 @@ After deploy:
 | Client / log symptom | Likely cause | What to check |
 | -------------------- | ------------ | ------------- |
 | **502** `token exchange returned an empty body (HTTP 200)` | OvalEdge `POST /api/user/token/generate` returned no JWT | Credentials, `OVALEDGE_BASE_URL`, OvalEdge pod health; run `validate_remote_mcp.py --credentials` |
+| **502** / **401** `INVALID_TOKEN` after parallel requests or local HTTP startup | Multiple `token/generate` calls for the same credentials | See [Token exchange: INVALID_TOKEN](#token-exchange-invalid_token--duplicate-jwt-issuance) |
 | **502** `user-cred exchange failed: 503` | OvalEdge temporarily unavailable | Retry; check OvalEdge load balancer / app logs |
 | **502** on first `initialize` only | Auth middleware before MCP | Same as token exchange; not an MCP tool bug |
 | **500** `{"message":"Internal Server Error"}` on `tools/call` | Lambda exception, timeout, or MCP lifespan | CloudWatch (below); `/health` `mcp_lifespan_ready`; redeploy latest code |
@@ -119,6 +120,33 @@ Log lines intentionally **omit** credential headers. Tool logs include `tool=<na
 - **HTTP API + Lambda** integration timeout is **30 seconds**. Increasing Lambda timeout above 30s does not extend API Gateway’s wait for `/mcp`.
 - **Large responses** (`asset_lineage`, `search_platform_docs`, fat `catalog_asset_details`) need CPU/memory to serialize. Default template memory is now **1024 MB**; raise with `LAMBDA_MEMORY_SIZE=2048` if CloudWatch shows duration near 30s or memory maxed.
 - **Intermittent 500s** with successful retries often indicate OvalEdge upstream slowness or warm/cold Lambda behavior — correlate `mcp_tool duration_ms` with OvalEdge HTTP logs (`OVALEDGE_LOG_HTTP_REQUESTS=true` in Lambda env).
+
+## Token exchange: INVALID_TOKEN / duplicate JWT issuance
+
+OvalEdge typically allows **one active JWT** per user token+secret pair. A second `POST /api/user/token/generate` **invalidates** the previous JWT.
+
+**Symptoms:** `INVALID_TOKEN` on tool calls, intermittent 401/502, or auth that works once then fails under load.
+
+**Common causes:**
+
+| Scenario | Fix |
+| -------- | --- |
+| **Local HTTP** with `AUTH_MODE=remote_credentials` in `.env` | Use `./scripts/run_local_mcp_http.sh` or `poetry run oe-mcp-http` — both force **`AUTH_MODE=local`** (single exchange at startup). |
+| **Parallel MCP requests** at startup before JWT is cached | Ensure JWT lifespan runs before MCP HTTP accepts traffic (current `lambda_handler` / `oe-mcp-http` ordering). Restart the server. |
+| **Stale credentials** after `.env` change | Restart the MCP process. |
+| **`remote_credentials` on Lambda** after downstream 401 | Client should **retry the same request** (headers unchanged); server drops the cached JWT and re-exchanges. |
+
+**Local stdio:** `get_or_refresh_local_token()` uses an async lock so concurrent tool calls share one in-flight exchange.
+
+## OTLP telemetry (Phoenix / Langfuse)
+
+When `TELEMETRY_BACKEND` is not `none`, each tool call exports an OTLP span. Span attributes may include **argument summaries** (search terms, object ids, queries) — not credential headers.
+
+- Confirm Lambda can reach your OTLP host (VPC/NAT, security groups, or public HTTPS).
+- Prefer **NoEcho** SAM parameters or Secrets Manager for Langfuse/Phoenix API keys in production.
+- Disable export (`TELEMETRY_BACKEND=none`) if your backend is not approved for governance metadata.
+
+Deploy parameters: [DEPLOY.md](DEPLOY.md#telemetry-opentelemetry).
 
 ## Client config (`mcp-remote` + Claude)
 

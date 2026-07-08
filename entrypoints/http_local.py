@@ -21,7 +21,7 @@ import uvicorn
 from dotenv import load_dotenv
 
 from server.branding import brand_icon_http_base, brand_icon_public_url, resolve_mcp_icon_src
-from server.logging_config import configure_stderr_logging
+from server.logging_config import configure_runtime_observability
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -53,9 +53,10 @@ def _require_local_credentials() -> None:
 
 
 def main() -> None:
-    configure_stderr_logging()
+    configure_runtime_observability()
     _load_repo_env()
-    os.environ.setdefault("AUTH_MODE", "local")
+    # Override .env AUTH_MODE=remote_credentials — local HTTP shares one cached JWT (stdio path).
+    os.environ["AUTH_MODE"] = "local"
     os.environ.setdefault("MCP_PUBLIC_BASE_URL", "http://127.0.0.1:8000")
     os.environ.setdefault("MCP_HTTP_STATELESS", "false")
     _require_local_credentials()

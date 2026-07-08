@@ -14,8 +14,9 @@ Guides for connecting **OvalEdge MCP** from common editors and assistants.
 
 **Shared references**
 
-- Local mode (env, scripts, architecture): [README_LOCAL_MCP.md](../../README_LOCAL_MCP.md)
+- Local mode (env, scripts, architecture, local HTTP): [README_LOCAL_MCP.md](../../README_LOCAL_MCP.md)
 - Remote mode (auth, TLS, deploy, testing): [README_REMOTE_MCP.md](../../README_REMOTE_MCP.md)
+- Lambda telemetry (Phoenix / Langfuse): [infra/DEPLOY.md](../../infra/DEPLOY.md#telemetry-opentelemetry)
 - Environment variables: [.env.example](../../.env.example)
 - MCP tools, resources, and workflow prompts: [server/docs/mcp_workflows.md](../../server/docs/mcp_workflows.md) (also `docs://ovaledge/mcp_workflows` when the server is connected)
 - Agent routing and human-in-the-loop creates: [README.md](../../README.md#agent-guidance-mirrors-serverapppy-instructions)

@@ -17,7 +17,7 @@ from typing import Any
 
 from server.app import create_mcp
 from server.auth.local_lifespan import local_oe_jwt_lifespan
-from server.logging_config import configure_stderr_logging
+from server.logging_config import configure_runtime_observability
 
 
 @asynccontextmanager
@@ -31,7 +31,7 @@ mcp = create_mcp(lifespan=local_lifespan)
 
 
 def main() -> None:
-    configure_stderr_logging()
+    configure_runtime_observability()
     mcp.run(transport="stdio")
 
 

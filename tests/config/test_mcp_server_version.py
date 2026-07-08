@@ -7,7 +7,7 @@ from server.config import Settings, version_from_pyproject
 
 def test_version_from_pyproject_reads_poetry_version() -> None:
     repo_root = Path(__file__).resolve().parents[2]
-    assert version_from_pyproject(repo_root) == "1.0.2"
+    assert version_from_pyproject(repo_root) == "1.0.3"
 
 
 def test_version_from_pyproject_missing_file() -> None:
@@ -25,4 +25,4 @@ def test_settings_mcp_server_version_resolves_from_pyproject_when_unset(
 ) -> None:
     monkeypatch.delenv("MCP_SERVER_VERSION", raising=False)
     s = Settings(mcp_server_version="")
-    assert s.mcp_server_version == "1.0.2"
+    assert s.mcp_server_version == "1.0.3"
