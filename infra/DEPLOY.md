@@ -118,6 +118,52 @@ Key parameters (full list in [template.yaml](template.yaml)):
 | `LambdaArchitecture` | `x86_64` | `arm64` for Graviton |
 | `EnableWaf` | `false` | Set via `--waf` |
 | `AllowedSourceCidrs` | `127.0.0.1/32` | Ignored when WAF disabled |
+| `TelemetryBackend` | `none` | `phoenix` or `langfuse` to enable OTLP export |
+| `TelemetryServiceName` | `oe-mcp` | OTLP `service.name` |
+| `TelemetryProjectName` | *(empty)* | Phoenix/Langfuse project routing; defaults to service name |
+| `PhoenixHost` / `PhoenixApiKey` | *(empty)* | When `TelemetryBackend=phoenix` |
+| `LangfuseHost` / keys | *(empty)* | When `TelemetryBackend=langfuse` (NoEcho in console) |
+
+## Telemetry (OpenTelemetry)
+
+The server can export MCP tool traces to **Phoenix** or **Langfuse** over OTLP HTTP. Default deploy: **disabled** (`TELEMETRY_BACKEND=none`).
+
+### Enable at deploy time
+
+Set env vars before `./scripts/deploy.sh` (passed as SAM parameter overrides):
+
+```bash
+export TELEMETRY_BACKEND=langfuse
+export TELEMETRY_PROJECT_NAME=oe-mcp-prod
+export LANGFUSE_HOST=https://langfuse.example.com
+export LANGFUSE_PUBLIC_KEY=pk-lf-...
+export LANGFUSE_SECRET_KEY=sk-lf-...
+./scripts/deploy.sh
+```
+
+Phoenix example:
+
+```bash
+export TELEMETRY_BACKEND=phoenix
+export TELEMETRY_PROJECT_NAME=oe-mcp-prod
+export PHOENIX_HOST=https://phoenix.example.com
+export PHOENIX_API_KEY=...   # when Phoenix auth is enabled
+./scripts/deploy.sh
+```
+
+Equivalent SAM parameters: `TelemetryBackend`, `TelemetryProjectName`, `PhoenixHost`, `LangfuseHost`, etc. (see [template.yaml](template.yaml)). API keys use **NoEcho** in the CloudFormation console.
+
+### After deploy
+
+1. Confirm Lambda env shows `TELEMETRY_BACKEND` and backend host/keys (Console → Configuration → Environment variables).
+2. Ensure the function can reach the OTLP endpoint (public HTTPS, VPC endpoint, or NAT as appropriate).
+3. Invoke a tool; check Phoenix/Langfuse for `mcp.tool.*` spans.
+
+### Privacy
+
+Exported spans may include **tool argument summaries** (search terms, object ids). Do not enable export to a third-party backend without reviewing your data-classification policy. Credentials are not included in spans.
+
+Variable reference for local dev: [.env.example](../.env.example). Troubleshooting: [TROUBLESHOOTING_REMOTE.md](TROUBLESHOOTING_REMOTE.md#otlp-telemetry-phoenix--langfuse).
 
 ## Manual SAM (equivalent to default container deploy)
 
@@ -186,6 +232,7 @@ Last resort: `docker builder prune -af` then rerun `./scripts/deploy.sh`.
 3. Verify **`MCPBrandIconUrl`** returns 200 (`image/png`).
 4. HTTP API has **no gateway authorizer**; **`AuthMiddleware`** enforces credentials or Bearer tokens on the function.
 5. For production hardening, use `./scripts/deploy.sh --waf` or add throttling / JWT authorizer.
+6. Optional: enable OTLP telemetry via deploy env or SAM parameters — [Telemetry (OpenTelemetry)](#telemetry-opentelemetry).
 
 ## MCP branding icon (`/brand/ovaledge-mcp-icon.png`)
 

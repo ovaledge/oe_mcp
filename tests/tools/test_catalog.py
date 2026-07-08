@@ -204,7 +204,7 @@ class TestSearchCatalogAssets:
         await tool_fn(search_terms=["x"], limit=500)
 
         params = mock_oe_client.get.call_args[1]["params"]
-        assert params["limit"] == 100
+        assert params["limit"] == 50
 
     async def test_search_accepts_extended_object_type(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE

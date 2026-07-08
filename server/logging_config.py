@@ -13,3 +13,11 @@ def configure_stderr_logging(level: int = logging.INFO) -> None:
     handler.setFormatter(logging.Formatter("%(levelname)s [%(name)s] %(message)s"))
     root.addHandler(handler)
     root.setLevel(level)
+
+
+def configure_runtime_observability(level: int = logging.INFO) -> None:
+    """Bootstrap stderr logging and optional OTLP telemetry (idempotent)."""
+    configure_stderr_logging(level=level)
+    from server.telemetry import setup_telemetry
+
+    setup_telemetry()

@@ -111,7 +111,7 @@ def register(mcp: FastMCP) -> None:
         ] = 1,
         limit: Annotated[
             int,
-            Field(description="Page size (default 20; capped at 100 for this client).", ge=1),
+            Field(description="Page size (default 20; capped at 50 for this client).", ge=1),
         ] = 20,
         connection_name: Annotated[
             str | None,

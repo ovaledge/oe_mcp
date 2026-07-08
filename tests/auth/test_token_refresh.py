@@ -101,3 +101,20 @@ async def test_get_or_refresh_exchanges_when_cache_empty() -> None:
         out = await get_or_refresh_local_token()
     assert out == new_t
     ex.assert_awaited_once()
+    assert auth_context.local_cached_oe_jwt == new_t
+    assert auth_context.current_oe_jwt.get() == new_t
+
+
+@pytest.mark.asyncio
+async def test_get_or_refresh_single_exchange_under_concurrency() -> None:
+    new_t = _jwt_expires_in(3600)
+    with patch(
+        "server.auth.token_exchange.exchange_client_credentials",
+        new_callable=AsyncMock,
+        return_value=new_t,
+    ) as ex:
+        import asyncio
+
+        results = await asyncio.gather(*[get_or_refresh_local_token() for _ in range(8)])
+    assert all(r == new_t for r in results)
+    ex.assert_awaited_once()

@@ -10,6 +10,13 @@ from typing import Any
 
 from server.client import OvalEdgeError
 from server.mcp_response_slim import slim_tool_response
+from server.telemetry.setup import flush_telemetry
+from server.telemetry.spans import (
+    record_tool_error,
+    record_tool_ovaledge_error,
+    record_tool_success,
+    tool_invocation_span,
+)
 from server.tools.common.errors import error_payload, map_ovaledge_error
 
 logger = logging.getLogger(__name__)
@@ -56,40 +63,55 @@ def logged_tool_invocation[**P, R](
     async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R | dict[str, Any]:
         start = time.monotonic()
         arg_summary = _summarize_args(dict(kwargs))
-        try:
-            result = await fn(*args, **kwargs)
-        except OvalEdgeError as exc:
-            duration_ms = (time.monotonic() - start) * 1000
-            logger.warning(
-                "mcp_tool tool=%s outcome=ovaledge_error status=%s duration_ms=%.0f %s",
-                tool_name,
-                exc.status_code,
-                duration_ms,
-                arg_summary,
-            )
-            return map_ovaledge_error(exc)
-        except Exception:
-            duration_ms = (time.monotonic() - start) * 1000
-            logger.exception(
-                "mcp_tool tool=%s outcome=error duration_ms=%.0f %s",
-                tool_name,
-                duration_ms,
-                arg_summary,
-            )
-            return error_payload(
-                "An unexpected error occurred while executing the tool.",
-                status_code=500,
-            )
-        else:
-            duration_ms = (time.monotonic() - start) * 1000
-            level = logging.WARNING if duration_ms > 25_000 else logging.INFO
-            logger.log(
-                level,
-                "mcp_tool tool=%s outcome=ok duration_ms=%.0f %s",
-                tool_name,
-                duration_ms,
-                arg_summary,
-            )
-            return _finalize_tool_result(result)
+        with tool_invocation_span(tool_name, arg_summary=arg_summary) as span:
+            try:
+                try:
+                    result = await fn(*args, **kwargs)
+                except OvalEdgeError as exc:
+                    duration_ms = (time.monotonic() - start) * 1000
+                    record_tool_ovaledge_error(
+                        span,
+                        duration_ms=duration_ms,
+                        status_code=exc.status_code,
+                    )
+                    logger.warning(
+                        "mcp_tool tool=%s outcome=ovaledge_error status=%s duration_ms=%.0f %s",
+                        tool_name,
+                        exc.status_code,
+                        duration_ms,
+                        arg_summary,
+                    )
+                    return map_ovaledge_error(exc)
+                except Exception:
+                    duration_ms = (time.monotonic() - start) * 1000
+                    record_tool_error(
+                        span,
+                        duration_ms=duration_ms,
+                        message="unexpected tool error",
+                    )
+                    logger.exception(
+                        "mcp_tool tool=%s outcome=error duration_ms=%.0f %s",
+                        tool_name,
+                        duration_ms,
+                        arg_summary,
+                    )
+                    return error_payload(
+                        "An unexpected error occurred while executing the tool.",
+                        status_code=500,
+                    )
+                else:
+                    duration_ms = (time.monotonic() - start) * 1000
+                    record_tool_success(span, duration_ms=duration_ms)
+                    level = logging.WARNING if duration_ms > 25_000 else logging.INFO
+                    logger.log(
+                        level,
+                        "mcp_tool tool=%s outcome=ok duration_ms=%.0f %s",
+                        tool_name,
+                        duration_ms,
+                        arg_summary,
+                    )
+                    return _finalize_tool_result(result)
+            finally:
+                flush_telemetry()
 
     return wrapper
