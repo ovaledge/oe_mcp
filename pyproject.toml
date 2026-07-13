@@ -8,7 +8,7 @@ packages = [{ include = "server" }, { include = "entrypoints" }, { include = "ev
 
 [tool.poetry.dependencies]
 python = "^3.12"
-fastmcp-slim = {version = "3.4.2", extras = ["client", "server"]}
+fastmcp-slim = {version = "3.4.4", extras = ["client", "server"]}
 fastapi = ">=0.111"
 httpx = ">=0.27"
 pydantic-settings = ">=2.0"
