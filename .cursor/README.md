@@ -14,7 +14,8 @@ Or merge into `~/.cursor/mcp.json` (user-wide). Restart Cursor after changes.
 |-----|------|------|
 | **`ovaledge-local`** | stdio (`AUTH_MODE=local`) | **Default for development** — `poetry run oe-mcp-local` |
 | **`ovaledge-local-http`** | HTTP → local uvicorn | **Shows OvalEdge logo in Cursor** — run `./scripts/run_local_mcp_http.sh` (or `poetry run oe-mcp-http`) first; forces **`AUTH_MODE=local`** (JWT cached at startup); same tools as stdio |
-| `ovaledge-remote-local` | HTTP → local uvicorn | Alias pattern for deployed-style `remote_credentials` on port 8000 |
+| **`ovaledge-remote-http`** | HTTP → remote host | EC2/VM: run `./scripts/run_remote_mcp_http.sh` on the server (`AUTH_MODE=remote_credentials`); put token/secret in **mcp.json headers** (not on the server `.env`) |
+| `ovaledge-remote-local` | HTTP → API Gateway / local | Alias pattern for deployed-style `remote_credentials` |
 | `ovaledge-remote-lambda` | HTTP → deployed API Gateway | Replace URL with your `MCPEndpointUrl` |
 | `ovaledge-remote-oauth-wip` | HTTP + Bearer | **`AUTH_MODE=remote` OAuth — WIP**; not production-ready |
 
@@ -28,6 +29,8 @@ Set in your shell, direnv, or Cursor’s environment (Cursor expands `${env:…}
 For **`ovaledge-local`**, you can omit the `env` block if `.env` in the repo root is complete and Poetry loads it (see [README_LOCAL_MCP.md](../README_LOCAL_MCP.md)).
 
 For **`ovaledge-local-http`**, put credentials in repo **`.env`** only — do not send `X-OvalEdge-*` headers from Cursor. The HTTP server uses **`AUTH_MODE=local`** (overrides `remote_credentials` in `.env`).
+
+For **`ovaledge-remote-http`**, the server `.env` needs only **`OVALEDGE_BASE_URL`**. Credentials travel in Cursor **`headers`** (`X-OvalEdge-Token` / `X-OvalEdge-Secret`) and are exchanged per user on each request. Include **`X-Forwarded-Proto: https`** when the URL is plain `http://` (TLS check). Prefer HTTPS via a reverse proxy in production.
 
 If `${workspaceFolder}` is not expanded in your Cursor build, replace it with the **absolute** path to this repo in `args` (see [docs/client-setup/SETUP_CURSOR.md](../docs/client-setup/SETUP_CURSOR.md)).
 

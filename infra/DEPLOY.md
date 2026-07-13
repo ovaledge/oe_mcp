@@ -1,4 +1,70 @@
-# Deploy to AWS (Lambda + HTTP API)
+# Deploy OvalEdge MCP
+
+How to run **oe_mcp** for clients (Cursor, Claude, etc.). Pick a path from the matrix below.
+
+## Deployment options
+
+| Option | Where it runs | Auth | Credentials | Script / entry |
+|--------|---------------|------|-------------|----------------|
+| **Local stdio** | Laptop (Cursor subprocess) | `AUTH_MODE=local` | `.env` or mcp.json `env` | `poetry run oe-mcp-local` — [README_LOCAL_MCP.md](../README_LOCAL_MCP.md) |
+| **Local HTTP** | Laptop uvicorn (`127.0.0.1`) | `AUTH_MODE=local` | Server `.env` (JWT at startup) | [`scripts/run_local_mcp_http.sh`](../scripts/run_local_mcp_http.sh) |
+| **Remote host HTTP** | EC2 / VM uvicorn (`0.0.0.0`) | `AUTH_MODE=remote_credentials` | **mcp.json headers** (not on server) | [`scripts/run_remote_mcp_http.sh`](../scripts/run_remote_mcp_http.sh) — [below](#remote-host-http-ec2--vm) |
+| **AWS Lambda (container)** | API Gateway + Lambda image | `remote_credentials` (default) or `remote` (OAuth WIP) | Client headers / Bearer | [`scripts/deploy.sh`](../scripts/deploy.sh) — default |
+| **AWS Lambda (ZIP)** | API Gateway + Lambda ZIP | same | same | `./scripts/deploy.sh --zip` |
+
+**Client setup:** [docs/client-setup/README.md](../docs/client-setup/README.md) · Cursor snippets: [.cursor/mcp.json.example](../.cursor/mcp.json.example)
+
+**Remote auth / TLS / laptop testing:** [README_REMOTE_MCP.md](../README_REMOTE_MCP.md) · Troubleshooting: [TROUBLESHOOTING_REMOTE.md](TROUBLESHOOTING_REMOTE.md)
+
+---
+
+## Remote host HTTP (EC2 / VM)
+
+Use when you want a long-lived HTTP MCP on a server **without** Lambda. Clients send OvalEdge token+secret in **mcp.json headers**; the server `.env` needs only **`OVALEDGE_BASE_URL`**.
+
+### Server setup
+
+```bash
+cd /path/to/oe_mcp
+poetry install
+# .env must include OVALEDGE_BASE_URL=https://your-ovaledge-host
+# Do NOT put OVALEDGE_USER_TOKEN / OVALEDGE_USER_SECRET on the server for this mode
+
+./scripts/run_remote_mcp_http.sh          # starts detached (nohup); survives SSH disconnect
+./scripts/run_remote_mcp_http.sh --status
+./scripts/run_remote_mcp_http.sh --stop
+```
+
+Optional env: `HOST` (default `0.0.0.0`), `PORT` (default `8000`), `MCP_PUBLIC_BASE_URL` (URL clients use).
+
+Logs: `/tmp/oe-mcp-remote-http.log` · PID: `/tmp/oe-mcp-remote-http.pid`
+
+Open **port 8000** (or your `PORT`) in the security group / firewall. Prefer a TLS reverse proxy (nginx/Caddy) in production.
+
+### Cursor mcp.json
+
+```json
+{
+  "mcpServers": {
+    "ovaledge-remote-http": {
+      "url": "http://YOUR_HOST_OR_IP:8000/mcp",
+      "headers": {
+        "X-Forwarded-Proto": "https",
+        "X-OvalEdge-Token": "${env:OVALEDGE_USER_TOKEN}",
+        "X-OvalEdge-Secret": "${env:OVALEDGE_USER_SECRET}"
+      }
+    }
+  }
+}
+```
+
+`X-Forwarded-Proto: https` is required when the client URL is plain `http://` (app TLS check). With real HTTPS at the proxy, you can omit that spoof.
+
+Foreground debug: `./scripts/run_remote_mcp_http.sh --foreground`
+
+---
+
+## AWS Lambda + HTTP API
 
 Guide for deploying **oe_mcp** to AWS Lambda behind API Gateway HTTP API.
 

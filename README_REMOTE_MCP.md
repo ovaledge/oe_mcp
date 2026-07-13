@@ -10,7 +10,7 @@ Run the same MCP tools over **HTTP** with FastAPI + Mangum (`entrypoints/lambda_
 
 | `AUTH_MODE` | Client credentials | OAuth / discovery routes | Notes |
 | ------------- | -------------------- | -------------------------- | ----- |
-| `remote` | `Authorization: Bearer <IdP access_token>` | `/.well-known/oauth-authorization-server`, `POST /register` | **OAuth 2.x remote MCP — WIP** — see below |
+| `remote` | `Authorization: Bearer` + IdP access token | `/.well-known/oauth-authorization-server`, `POST /register` | **OAuth 2.x remote MCP — WIP** — see below |
 | `remote_credentials` | `X-OvalEdge-Credentials` (`token::secret`) **or** `X-OvalEdge-Token` + `X-OvalEdge-Secret` | Minimal `/.well-known/*` stubs (no browser OAuth) | Per-user OvalEdge JWT cached server-side by credential key; many users share one process; use **HTTPS** |
 
 Shared: `POST /mcp` (streamable HTTP), `GET /health`, `GET /`.
@@ -27,7 +27,7 @@ Until stable, prefer **`remote_credentials`** or local stdio (**`AUTH_MODE=local
 
 ## `remote_credentials` (header auth)
 
-- Middleware reads **`X-OvalEdge-Credentials`** (`<token>::<secret>`) **or** **`X-OvalEdge-Token`** + **`X-OvalEdge-Secret`**, exchanges with OvalEdge, caches JWTs keyed by a digest of token+secret, sets `current_oe_jwt` and `current_oe_credential_cache_key` for the request. OvalEdge issuance does not include `::` in token or secret.
+- Middleware reads **`X-OvalEdge-Credentials`** (`token::secret`) **or** **`X-OvalEdge-Token`** + **`X-OvalEdge-Secret`**, exchanges with OvalEdge, caches JWTs keyed by a digest of token+secret, sets `current_oe_jwt` and `current_oe_credential_cache_key` for the request. OvalEdge issuance does not include `::` in token or secret.
 - **HTTPS** is enforced for protected routes (`request.url.scheme` or `X-Forwarded-Proto: https`). Plain HTTP returns **400** `tls_required`.
 - On downstream **401** from OvalEdge APIs, the in-memory cache entry for that credential key is dropped; the MCP client should **retry the same request** (headers unchanged) so the next call re-exchanges.
 - Tunables: `CREDENTIALS_CACHE_MAX_ENTRIES` (see `server/config.py` / `.env.example`).
@@ -37,7 +37,8 @@ Until stable, prefer **`remote_credentials`** or local stdio (**`AUTH_MODE=local
 ## Entrypoint and deployment
 
 - **App:** `entrypoints/lambda_handler.py` — `app` is shared; full OAuth routers ( **`remote` only — WIP** ) are included **only** when `settings.auth_mode == "remote"`. `remote_credentials` adds `server/auth/remote_credentials_discovery.py` only.
-- **Local HTTP (dev):** `./scripts/run_local_mcp_http.sh` or `poetry run oe-mcp-http` — forces **`AUTH_MODE=local`** (cached JWT at startup; see [README_LOCAL_MCP.md](README_LOCAL_MCP.md#runtime-architecture)). Pair with **`ovaledge-local-http`** in Cursor `mcp.json`.
+- **Local HTTP (dev):** `./scripts/run_local_mcp_http.sh` or `poetry run oe-mcp-http` — forces **`AUTH_MODE=local`** (cached JWT at startup; credentials in `.env`; see [README_LOCAL_MCP.md](README_LOCAL_MCP.md#runtime-architecture)). Pair with **`ovaledge-local-http`** in Cursor `mcp.json`.
+- **Remote host HTTP (EC2/VM):** `./scripts/run_remote_mcp_http.sh` — forces **`AUTH_MODE=remote_credentials`**, binds `0.0.0.0:8000`, requires only **`OVALEDGE_BASE_URL`** on the server. Client puts token/secret in **mcp.json headers** (`ovaledge-remote-http`). See [.cursor/mcp.json.example](.cursor/mcp.json.example).
 - **`MCP_HTTP_STATELESS`:** default **true** (good for Lambda). For **Cursor** (and similar) over plain HTTP, set **`MCP_HTTP_STATELESS=false`** so the MCP stack registers **GET** on `/mcp` for SSE fallback after Streamable HTTP negotiation. Without this, clients may get wrong `Content-Type` on GET.
 - **Observability:** optional OTLP to Phoenix or Langfuse — [infra/DEPLOY.md](infra/DEPLOY.md#telemetry-opentelemetry) (Lambda) or [.env.example](.env.example) (local).
 - **Lambda / SAM:** [infra/template.yaml](infra/template.yaml) — `AuthMode` parameter (`remote` **(OAuth WIP)** | `remote_credentials`), CORS allows the OvalEdge header names, optional empty defaults for `OAuthIssuer` / `OAuthAudience` when using credentials-only stacks. ZIP deploy: [infra/template-zip.yaml](infra/template-zip.yaml) via [`scripts/deploy.sh --zip`](scripts/deploy.sh). See [infra/DEPLOY.md](infra/DEPLOY.md).
@@ -45,13 +46,13 @@ Until stable, prefer **`remote_credentials`** or local stdio (**`AUTH_MODE=local
 - **One-shot deploy:** from repo root, set `OVALEDGE_BASE_URL` and run [`scripts/deploy.sh`](scripts/deploy.sh) (`./scripts/deploy.sh --help` for flags). Guide: [infra/DEPLOY.md](infra/DEPLOY.md).
 - **Local HTTP (uvicorn):**
 
-  ```bash
-  ./scripts/run_local_mcp_http.sh
-  # or:
-  export AUTH_MODE=local
-  export MCP_HTTP_STATELESS=false
-  poetry run uvicorn entrypoints.lambda_handler:app --host 127.0.0.1 --port 8000
-  ```
+```bash
+./scripts/run_local_mcp_http.sh
+# or:
+export AUTH_MODE=local
+export MCP_HTTP_STATELESS=false
+poetry run uvicorn entrypoints.lambda_handler:app --host 127.0.0.1 --port 8000
+```
 
   For deployed-style header auth on localhost instead, use `AUTH_MODE=remote_credentials` (see [Testing `remote_credentials` on your laptop](#testing-remote_credentials-on-your-laptop)).
 

@@ -15,6 +15,14 @@
     "ovaledge-local-http": {
       "url": "http://127.0.0.1:8000/mcp"
     },
+    "ovaledge-remote-http": {
+      "url": "http://YOUR_REMOTE_HOST:8000/mcp",
+      "headers": {
+        "X-Forwarded-Proto": "https",
+        "X-OvalEdge-Token": "${env:OVALEDGE_USER_TOKEN}",
+        "X-OvalEdge-Secret": "${env:OVALEDGE_USER_SECRET}"
+      }
+    },
     "ovaledge-remote-local": {
       "url": "https://YOUR_API_ID.execute-api.YOUR_REGION.amazonaws.com/mcp",
       "headers": {
