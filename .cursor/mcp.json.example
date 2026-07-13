@@ -23,6 +23,13 @@
         "X-OvalEdge-Secret": "${env:OVALEDGE_USER_SECRET}"
       }
     },
+    "ovaledge-ecs": {
+      "url": "https://YOUR_ALB_DNS/mcp",
+      "headers": {
+        "X-OvalEdge-Token": "${env:OVALEDGE_USER_TOKEN}",
+        "X-OvalEdge-Secret": "${env:OVALEDGE_USER_SECRET}"
+      }
+    },
     "ovaledge-remote-local": {
       "url": "https://YOUR_API_ID.execute-api.YOUR_REGION.amazonaws.com/mcp",
       "headers": {

@@ -2,12 +2,17 @@
 
 OvalEdge governance and catalog MCP server for MCP clients (Cursor, Claude Desktop, etc.): catalog discovery, lineage, glossary and tags, **data stories** for organizational knowledge, metadata drift, native source-system access previews, product docs, workflow prompts, and governed writes (glossary terms, tags, descriptions, roles) — all subject to OvalEdge RBAC. Server instructions in `server/app.py` tell agents to prefer **`lookup_datastory`** for internal policy/playbook questions and **`search_platform_docs`** only for OvalEdge product how-to.
 
-## How to run
+## How to run / deploy
 
 | Mode | Transport | Doc |
 | ---- | ----------- | --- |
-| **Local** | stdio (`poetry run oe-mcp-local`) | [README_LOCAL_MCP.md](README_LOCAL_MCP.md) |
-| **Remote (HTTP)** | `uvicorn entrypoints.lambda_handler:app` or AWS Lambda (Mangum) | [README_REMOTE_MCP.md](README_REMOTE_MCP.md) — use **`remote_credentials`** for supported header auth; **OAuth 2.x / OIDC (`AUTH_MODE=remote`) is WIP** |
+| **Local stdio** | `poetry run oe-mcp-local` | [README_LOCAL_MCP.md](README_LOCAL_MCP.md) |
+| **Local HTTP** | `./scripts/run_local_mcp_http.sh` (`AUTH_MODE=local`) | [README_LOCAL_MCP.md](README_LOCAL_MCP.md) · Cursor: `ovaledge-local-http` |
+| **Remote host HTTP** | `./scripts/run_remote_mcp_http.sh` (`remote_credentials`) | [README_REMOTE_MCP.md](README_REMOTE_MCP.md) · [infra/DEPLOY.md](infra/DEPLOY.md#remote-host-http-ec2--vm) |
+| **AWS ECS Fargate** | ALB + uvicorn image (`Dockerfile.ecs`) | [infra/DEPLOY.md](infra/DEPLOY.md#aws-ecs-fargate--alb) |
+| **AWS Lambda** | Container or ZIP (`./scripts/deploy.sh`) | [README_REMOTE_MCP.md](README_REMOTE_MCP.md) · [infra/DEPLOY.md](infra/DEPLOY.md#aws-lambda--http-api) |
+
+Full deployment matrix (auth, credentials, scripts): **[infra/DEPLOY.md](infra/DEPLOY.md)**. Prefer **`remote_credentials`** for remote HTTP; **OAuth (`AUTH_MODE=remote`) is WIP**.
 
 **Editor / assistant connection:** [docs/client-setup/README.md](docs/client-setup/README.md) (Cursor, Kiro, Claude, GitHub Copilot in VS Code, Microsoft Copilot in Studio — separate guides).
 

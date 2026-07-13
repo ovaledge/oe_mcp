@@ -5,7 +5,7 @@ Description: OvalEdge MCP Server — Remote MCP (Lambda ZIP package; same stack 
 Parameters:
   AuthMode:
     Type: String
-    Default: remote
+    Default: remote_credentials
     AllowedValues:
       - remote
       - remote_credentials
@@ -44,7 +44,7 @@ Parameters:
       If true, skip OvalEdge token/generate and forward the IdP access token to OvalEdge APIs.
   Environment:
     Type: String
-    Default: prod
+    Default: dev
     AllowedValues: [dev, staging, prod]
   McpHttpStateless:
     Type: String
