@@ -32,19 +32,6 @@ Optional OpenTelemetry trace export to [Phoenix](https://arize.com/docs/phoenix)
 
 **Privacy:** enabled export sends tool spans that may include argument summaries (search terms, object ids) to your OTLP backend — review before pointing at a third-party host.
 
-## Remote OAuth (`AUTH_MODE=remote`)
-
-Okta Connect for remote HTTP is **supported end-to-end**: clients use Connect → Okta → MCP validates the access token (JWT or opaque introspect) → forwards `Authorization: Bearer` to OvalEdge (OvalEdge must run the `oauth2` profile with matching introspect credentials).
-
-| Topic | Doc |
-|-------|-----|
-| Flow, OvalEdge prerequisites, redirect URIs | [README_REMOTE_MCP.md](README_REMOTE_MCP.md#auth_moderremote-okta--oidc-connect) |
-| Lambda ZIP deploy steps | [infra/DEPLOY.md — Okta Connect Lambda ZIP](infra/DEPLOY.md#okta-connect-lambda-zip) |
-| Cursor / Claude / GitHub Copilot / Microsoft Copilot | [docs/client-setup/README.md](docs/client-setup/README.md) |
-| Troubleshooting | [infra/TROUBLESHOOTING_REMOTE.md](infra/TROUBLESHOOTING_REMOTE.md#okta-connect-auth_moderremote) |
-
-Host script: `./scripts/run_remote_oauth_mcp_http.sh`. Lambda: `AUTH_MODE=remote ./scripts/deploy.sh --zip`.
-
 ## What this server provides
 
 - Catalog search and asset details (`search_catalog_assets`, `catalog_asset_details`) — paginate with `page` when results exceed one page
