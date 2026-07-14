@@ -703,6 +703,300 @@ class TestMetadataChangesBetweenCrawls:
         assert out["status_code"] == 500
 
 
+class TestMetadataChangesFormatter:
+    def test_builds_compact_response_with_top_row_count_adds(self) -> None:
+        from server.tools.catalog.formatters import _enhance_metadata_changes_response
+
+        raw = {
+            "ok": True,
+            "data": {
+                # Bloated backend narrative must not replace the compact MCP format.
+                "formattedResponse": (
+                    "## Metadata changes — CUSTOMER\n\nBackend summary.\n"
+                    + ("- col.x [modified]: detail\n" * 200)
+                ),
+                "contextHeader": {
+                    "catalogSchema": "CUSTOMER",
+                    "schemaId": 10,
+                    "connection": "Snowflake PROD",
+                },
+                "rollup": {
+                    "totalChanges": 369,
+                    "tablesAdded": 33,
+                    "tablesDeleted": 0,
+                    "tablesModified": 26,
+                    "columnsAdded": 0,
+                    "columnsDeleted": 0,
+                    "columnsModified": 310,
+                    "schemasAdded": 0,
+                    "schemasModified": 0,
+                    "schemasRemoved": 0,
+                    "rowCountChanges": 6,
+                },
+                "notableDeltas": [
+                    {
+                        "tableName": "oe_internal_diagnostics_delete_query",
+                        "rowCountDelta": 81708,
+                    },
+                    {"tableName": "a_dqi_score", "rowCountDelta": 60616},
+                    {"tableName": "oe_async_call_stats", "rowCountDelta": 36488},
+                ],
+                "compareSchemaUrl": (
+                    "https://example.com#nav/comparedb?srchtab=history&id=5"
+                ),
+                "fallback": {"show": False},
+            },
+        }
+        out = _enhance_metadata_changes_response(
+            raw,
+            include_links=True,
+            header_title="What changed in CUSTOMER schema after the latest crawl?",
+        )
+        fr = out["data"]["formattedResponse"]
+        assert "Backend summary." not in fr
+        assert "**Top row-count adds**" in fr
+        assert "`oe_internal_diagnostics_delete_query` (+81,708)" in fr
+        assert "`a_dqi_score` (+60,616)" in fr
+        assert "**Summary**" in fr
+        assert "| Metric | Value |" in fr
+        assert "**Useful links**" in fr
+        assert out["formattedResponse"] == fr
+        assert out["data"]["usefulLinks"]["compareSchemaUrl"].endswith("id=5")
+
+    def test_caps_large_change_lists(self) -> None:
+        from server.tools.catalog.formatters import (
+            _MCP_COLUMN_CHANGE_LIST_CAP,
+            _enhance_metadata_changes_response,
+        )
+
+        raw = {
+            "ok": True,
+            "data": {
+                "contextHeader": {"catalogSchema": "S"},
+                "rollup": {"totalChanges": 100, "columnsModified": 100},
+                "columnChanges": [
+                    {"tableName": "t", "columnName": f"c{i}", "changeType": "modified"}
+                    for i in range(_MCP_COLUMN_CHANGE_LIST_CAP + 25)
+                ],
+                "notableDeltas": [
+                    {"tableName": "big", "rowCountDelta": 1000},
+                ],
+                "fallback": {"show": False},
+            },
+        }
+        out = _enhance_metadata_changes_response(raw, include_links=False)
+        assert len(out["data"]["columnChanges"]) == _MCP_COLUMN_CHANGE_LIST_CAP
+        assert out["data"]["_columnChangesTruncated"] is True
+        assert "**Top row-count adds**" in out["data"]["formattedResponse"]
+        assert "`big` (+1,000)" in out["data"]["formattedResponse"]
+
+    def test_shows_fallback_message_when_no_data(self) -> None:
+        from server.tools.catalog.formatters import _enhance_metadata_changes_response
+
+        raw = {
+            "ok": True,
+            "data": {
+                "contextHeader": {},
+                "rollup": {"totalChanges": 0},
+                "fallback": {
+                    "show": True,
+                    "message": "Run Deep Analysis under Advance Tools, then ask again.",
+                },
+            },
+        }
+        out = _enhance_metadata_changes_response(raw)
+        assert "Run Deep Analysis" in out["data"]["formattedResponse"]
+
+    def test_renders_property_previous_current_for_modified_columns(self) -> None:
+        from server.tools.catalog.formatters import _enhance_metadata_changes_response
+
+        raw = {
+            "ok": True,
+            "data": {
+                "contextHeader": {"catalogSchema": "CUSTOMER"},
+                "rollup": {
+                    "totalChanges": 1,
+                    "tablesAdded": 0,
+                    "tablesDeleted": 0,
+                    "tablesModified": 0,
+                    "columnsAdded": 0,
+                    "columnsDeleted": 0,
+                    "columnsModified": 1,
+                    "dataTypeChanges": 1,
+                    "lengthChanges": 1,
+                },
+                "columnChanges": [
+                    {
+                        "tableName": "CUSTOMER_PROFILE",
+                        "columnName": "status_code",
+                        "changeType": "modified",
+                        "previousDataType": "CHAR",
+                        "currentDataType": "VARCHAR",
+                        "previousLength": "20",
+                        "currentLength": "30",
+                    }
+                ],
+                "fallback": {"show": False},
+            },
+        }
+        out = _enhance_metadata_changes_response(raw)
+        fr = out["data"]["formattedResponse"]
+        assert "**Datatype / length changes (modified columns)**" in fr
+        assert "`CUSTOMER_PROFILE.status_code`" in fr
+        assert "| Property | Previous | Current |" in fr
+        assert "| Data Type | CHAR | VARCHAR |" in fr
+        assert "| Length | 20 | 30 |" in fr
+
+    def test_shows_named_column_examples_for_added_modified_deleted(self) -> None:
+        from server.tools.catalog.formatters import _enhance_metadata_changes_response
+
+        raw = {
+            "ok": True,
+            "data": {
+                "contextHeader": {"catalogSchema": "CUSTOMER"},
+                "rollup": {
+                    "totalChanges": 3,
+                    "columnsAdded": 2,
+                    "columnsDeleted": 1,
+                    "columnsModified": 1,
+                },
+                "columnChanges": [
+                    {
+                        "tableName": "ORDERS",
+                        "columnName": "region_code",
+                        "changeType": "added",
+                    },
+                    {
+                        "tableName": "ORDERS",
+                        "columnName": "legacy_flag",
+                        "changeType": "deleted",
+                    },
+                    {
+                        "tableName": "CUSTOMER_PROFILE",
+                        "columnName": "status_code",
+                        "changeType": "modified",
+                        "previousDataType": "CHAR",
+                        "currentDataType": "VARCHAR",
+                    },
+                    {
+                        "tableName": "AUDIT",
+                        "columnName": "id",
+                        "changeType": "modified",
+                        "detail": "Data Modified for the transaction",
+                    },
+                ],
+                "fallback": {"show": False},
+            },
+        }
+        out = _enhance_metadata_changes_response(
+            raw, header_title="What columns were added, modified, or deleted?"
+        )
+        fr = out["data"]["formattedResponse"]
+        assert "**Example columns added**" in fr
+        assert "`ORDERS.region_code`" in fr
+        assert "**Example columns deleted**" in fr
+        assert "`ORDERS.legacy_flag`" in fr
+        assert "**Example columns modified**" in fr
+        assert "`CUSTOMER_PROFILE.status_code`" in fr
+        # Prefer structural modifies over data-modified rows in the example list.
+        assert "AUDIT.id" not in fr.split("**Example columns modified**", 1)[1].split(
+            "**Useful links**", 1
+        )[0]
+
+    def test_added_question_falls_back_to_new_table_column_counts(self) -> None:
+        from server.tools.catalog.formatters import _enhance_metadata_changes_response
+
+        raw = {
+            "ok": True,
+            "data": {
+                "contextHeader": {"catalogSchema": "ovaledgedb"},
+                "rollup": {
+                    "totalChanges": 10,
+                    "tablesAdded": 2,
+                    "columnsAdded": 95,
+                    "columnsDeleted": 0,
+                    "columnsModified": 0,
+                },
+                "columnChanges": [
+                    {
+                        "tableName": "audit_user_signin",
+                        "columnName": "id",
+                        "changeType": "modified",
+                        "detail": "Data Modified for the transaction",
+                    }
+                ],
+                "tableSummaries": [
+                    {
+                        "tableName": "a_filecolumn",
+                        "changeType": "added",
+                        "columnsAdded": 52,
+                    },
+                    {
+                        "tableName": "tickettemplate",
+                        "changeType": "added",
+                        "columnsAdded": 43,
+                    },
+                ],
+                "fallback": {"show": False},
+            },
+        }
+        out = _enhance_metadata_changes_response(
+            raw, header_title="What columns were added recently?"
+        )
+        fr = out["data"]["formattedResponse"]
+        assert "**Example columns added**" in fr
+        assert "`a_filecolumn` (+52 columns)" in fr
+        assert "`tickettemplate` (+43 columns)" in fr
+        # Added-focused question should not dump data-modified column noise.
+        assert "Example columns with recent data changes" not in fr
+
+    def test_prioritizes_added_columns_before_list_cap(self) -> None:
+        from server.tools.catalog.formatters import (
+            _MCP_COLUMN_CHANGE_LIST_CAP,
+            _enhance_metadata_changes_response,
+        )
+
+        noisy = [
+            {
+                "tableName": "AUDIT",
+                "columnName": f"c{i}",
+                "changeType": "modified",
+                "detail": "Data Modified for the transaction",
+            }
+            for i in range(_MCP_COLUMN_CHANGE_LIST_CAP + 5)
+        ]
+        noisy.append(
+            {
+                "tableName": "ORDERS",
+                "columnName": "new_col",
+                "changeType": "added",
+            }
+        )
+        raw = {
+            "ok": True,
+            "data": {
+                "contextHeader": {"catalogSchema": "S"},
+                "rollup": {
+                    "totalChanges": len(noisy),
+                    "columnsAdded": 1,
+                    "columnsModified": len(noisy) - 1,
+                },
+                "columnChanges": noisy,
+                "fallback": {"show": False},
+            },
+        }
+        out = _enhance_metadata_changes_response(
+            raw, header_title="What columns were added?"
+        )
+        capped = out["data"]["columnChanges"]
+        assert len(capped) == _MCP_COLUMN_CHANGE_LIST_CAP
+        assert any(
+            c.get("columnName") == "new_col" and c.get("changeType") == "added"
+            for c in capped
+        )
+        assert "`ORDERS.new_col`" in out["data"]["formattedResponse"]
+
+
 class TestUpdateCdeAssociations:
     async def test_confirm_preview_blocks_post(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
