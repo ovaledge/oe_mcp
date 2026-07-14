@@ -114,6 +114,10 @@ def test_upstream_exchange_502(rc_app: FastAPI) -> None:
             headers={HEADER_OE_USER_TOKEN: "t", HEADER_OE_USER_SECRET: "s"},
         )
     assert r.status_code == 502
+    body = r.json()
+    assert body["error"] == "server_error"
+    assert body["error_description"] == "Token exchange failed"
+    assert "boom" not in body["error_description"]
 
 
 def test_bad_credentials_401(rc_app: FastAPI) -> None:
@@ -130,6 +134,8 @@ def test_bad_credentials_401(rc_app: FastAPI) -> None:
         )
     assert r.status_code == 401
     assert r.json()["error"] == "invalid_credentials"
+    assert r.json()["error_description"] == "Invalid credentials"
+    assert "nope" not in r.json()["error_description"]
 
 
 def test_success_with_valid_oe_jwt(rc_app: FastAPI) -> None:

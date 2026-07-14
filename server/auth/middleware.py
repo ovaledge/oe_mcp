@@ -174,10 +174,16 @@ async def _auth_response_or_none(request: Request) -> Response | None:
         except TokenExchangeError as e:
             status = 401 if e.status_code == 401 else 502
             body_key = "invalid_credentials" if status == 401 else "server_error"
+            client_desc = (
+                "Invalid credentials"
+                if status == 401
+                else "Token exchange failed"
+            )
+            logger.warning("OvalEdge token exchange failed: %s", e)
             return JSONResponse(
                 {
                     "error": body_key,
-                    "error_description": str(e),
+                    "error_description": client_desc,
                 },
                 status_code=status,
             )
@@ -186,7 +192,7 @@ async def _auth_response_or_none(request: Request) -> Response | None:
             return JSONResponse(
                 {
                     "error": "server_error",
-                    "error_description": str(e),
+                    "error_description": "Token exchange failed",
                 },
                 status_code=502,
             )
@@ -250,10 +256,11 @@ async def _auth_response_or_none(request: Request) -> Response | None:
     try:
         await verify_oauth_access_token(access_token)
     except OAuthDiscoveryError as e:
+        logger.warning("OAuth discovery unavailable: %s", e)
         return JSONResponse(
             {
                 "error": "server_error",
-                "error_description": str(e),
+                "error_description": "OAuth discovery unavailable",
             },
             status_code=503,
         )
@@ -262,7 +269,7 @@ async def _auth_response_or_none(request: Request) -> Response | None:
         return _json_unauthorized(
             request,
             error="invalid_token",
-            error_description=str(e),
+            error_description="Invalid or expired access token",
         )
 
     if settings.ovaledge_remote_forward_idp_token:
@@ -271,10 +278,11 @@ async def _auth_response_or_none(request: Request) -> Response | None:
         try:
             oe_jwt = await exchange_oauth_access_token(access_token)
         except TokenExchangeError as e:
+            logger.warning("OAuth access token exchange failed: %s", e)
             return JSONResponse(
                 {
                     "error": "server_error",
-                    "error_description": str(e),
+                    "error_description": "Token exchange failed",
                 },
                 status_code=502,
             )
