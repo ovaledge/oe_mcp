@@ -106,17 +106,27 @@ class Settings(BaseSettings):
     # Comma-separated trusted JWT iss values (in addition to oauth_issuer). Include every
     # issuer your IdP may emit — e.g. Auth0 custom domain and canonical *.auth0.com.
     oauth_allowed_issuers: str = ""
-    # Resource identifier expected as JWT ``aud`` (API audience).
+    # Resource identifier expected as JWT ``aud`` (API audience). Optional — when empty,
+    # JWT signature+issuer are still checked; introspection skips aud unless set.
     oauth_audience: str = ""
+    # Pre-registered Okta (or other IdP) OAuth app — returned by POST /register (not a random id).
+    oauth_client_id: str = ""
+    # Used for opaque-token introspection (and confidential clients). Public PKCE
+    # apps may leave empty for authorize; Okta introspect typically needs id+secret.
+    oauth_client_secret: str = ""
+    # RFC 7662 introspection URL. Empty → ``{oauth_issuer}/v1/introspect`` (Okta AS pattern).
+    oauth_introspection_url: str = ""
+    # Space-separated scopes advertised in discovery / registration (Okta: openid profile email).
+    oauth_scopes: str = "openid profile email"
     mcp_public_base_url: str = ""
     # Optional HTTPS base for MCP ``initialize`` icon URL only (``GET /brand/...``).
     # Use when MCP runs on localhost but Cursor must fetch the icon from a public URL.
     mcp_brand_icon_base_url: str = ""
     aws_region: str = "us-east-1"
     # Remote only: if True, skip POST /api/user/token/generate and send the validated IdP
-    # access token to OvalEdge as Authorization (see ovaledge_http_auth_scheme). If False,
-    # exchange IdP token for an OvalEdge-issued JWT first (legacy).
-    ovaledge_remote_forward_idp_token: bool = False
+    # access token to OvalEdge as Authorization (see ovaledge_http_auth_scheme). Default True for
+    # Okta resource-server pods (opaque introspect on /api/**). Set False only for legacy exchange.
+    ovaledge_remote_forward_idp_token: bool = True
 
     # When create_tag omits description, MCP builds wiki HTML from tag name (+ hierarchy).
     # Set false to preserve legacy behavior (POST with no description field).

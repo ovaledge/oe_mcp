@@ -97,6 +97,51 @@ claude mcp remove ovaledge-remote
 
 ---
 
+## Remote OAuth (`AUTH_MODE=remote`)
+
+Use when the MCP server is deployed with **Okta Connect** (browser login; no OvalEdge token/secret headers). Server setup: [README_REMOTE_MCP.md](../../README_REMOTE_MCP.md#auth_moderremote-okta--oidc-connect). Lambda ZIP: [infra/DEPLOY.md — Okta Connect Lambda ZIP](../../infra/DEPLOY.md#okta-connect-lambda-zip).
+
+### Okta Sign-in redirect URIs (required)
+
+In the Okta OIDC app used as `OAUTH_CLIENT_ID`, add:
+
+```text
+https://claude.ai/api/mcp/auth_callback
+http://localhost:8788/callback
+http://127.0.0.1:8788/callback
+```
+
+| Surface | URI |
+|---------|-----|
+| Claude.ai / Desktop / mobile | `https://claude.ai/api/mcp/auth_callback` |
+| Claude Code (CLI) | Fixed loopback, e.g. `http://localhost:8788/callback` (and `127.0.0.1`) |
+
+Claude Code picks a **random** port unless you fix it. Okta typically requires an **exact** redirect URI, so register **8788** (or another port you choose) and pass the same port when adding the server.
+
+Also enable **Authorization Code + PKCE** on that Okta app. Full Cursor + Claude + Copilot allowlist: [README_REMOTE_MCP.md — Okta redirect URIs (all clients)](../../README_REMOTE_MCP.md#okta-redirect-uris-all-clients).
+
+### Claude.ai / Desktop
+
+Add the connector URL `https://YOUR_PUBLIC_MCP_BASE_URL/mcp` and complete **Connect** in the browser (callback is `https://claude.ai/api/mcp/auth_callback`).
+
+### Claude Code
+
+```bash
+claude mcp add --transport http --callback-port 8788 ovaledge-remote-oauth \
+  https://YOUR_PUBLIC_MCP_BASE_URL/mcp
+```
+
+Or JSON with a fixed callback port:
+
+```bash
+claude mcp add-json ovaledge-remote-oauth \
+  '{"type":"http","url":"https://YOUR_PUBLIC_MCP_BASE_URL/mcp","oauth":{"callbackPort":8788}}'
+```
+
+If authorize fails with *redirect_uri must be a Login redirect URI*, add the exact URI (including port) in Okta and retry Connect / `claude mcp`.
+
+---
+
 ## Shared references
 
 - Remote auth and TLS: [README_REMOTE_MCP.md](../../README_REMOTE_MCP.md)

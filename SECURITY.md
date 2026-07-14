@@ -60,7 +60,7 @@ Review and merge Dependabot pull requests after CI passes. Regenerate `poetry.lo
 
 - **Never commit** `.env`, API keys, OvalEdge user tokens/secrets, or IdP client secrets. `.gitignore` excludes `.env`.
 - **`remote_credentials`:** `X-OvalEdge-Credentials` and/or `X-OvalEdge-Token` / `X-OvalEdge-Secret` are sensitive. Terminate TLS at the edge (API Gateway, ALB). Do not log header values or full outbound URLs that embed secrets.
-- **`remote` (OAuth WIP):** Treat Bearer tokens like secrets in transit; validate `aud` / issuer configuration before production use.
+- **`remote` (Okta/OIDC):** Treat Bearer tokens like secrets in transit; validate issuer / audience (JWT) or introspect (opaque) before production use. Forwarding IdP tokens to OvalEdge is the default.
 
 ## Deployment surface
 

@@ -164,6 +164,14 @@ append_if_set LangfusePublicKey "$LANGFUSE_PUBLIC_KEY"
 append_if_set LangfuseSecretKey "$LANGFUSE_SECRET_KEY"
 append_if_set TelemetryOtlpEndpoint "$TELEMETRY_OTLP_ENDPOINT"
 append_if_set TelemetryApiKey "$TELEMETRY_API_KEY"
+append_if_set OAuthIssuer "${OAUTH_ISSUER:-}"
+append_if_set OAuthAllowedIssuers "${OAUTH_ALLOWED_ISSUERS:-}"
+append_if_set OAuthAudience "${OAUTH_AUDIENCE:-}"
+append_if_set OAuthClientId "${OAUTH_CLIENT_ID:-}"
+append_if_set OAuthClientSecret "${OAUTH_CLIENT_SECRET:-}"
+append_if_set OAuthIntrospectionUrl "${OAUTH_INTROSPECTION_URL:-}"
+append_if_set OAuthScopes "${OAUTH_SCOPES:-}"
+OVERRIDES+=("OvalEdgeForwardIdpToken=${OVALEDGE_REMOTE_FORWARD_IDP_TOKEN:-true}")
 
 echo "==> cloudformation deploy stack=${STACK_NAME} region=${AWS_REGION}"
 aws cloudformation deploy \

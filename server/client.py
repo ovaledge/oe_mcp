@@ -23,7 +23,16 @@ def _log_outbound_request(request: httpx.Request) -> None:
 
 
 def _ovaledge_authorization(token: str) -> str:
-    return f"{settings.ovaledge_http_auth_scheme} {token}"
+    """Build ``Authorization`` value for OvalEdge APIs."""
+    scheme = (settings.ovaledge_http_auth_scheme or "jwt").strip() or "jwt"
+    # Okta / IdP access tokens use Bearer; config default ``jwt`` is for OvalEdge-issued JWTs.
+    if (
+        settings.auth_mode == "remote"
+        and settings.ovaledge_remote_forward_idp_token
+        and scheme.lower() == "jwt"
+    ):
+        scheme = "Bearer"
+    return f"{scheme} {token}"
 
 
 def _log_inbound_response(response: httpx.Response) -> None:
@@ -338,4 +347,19 @@ class OvalEdgeClient:
 
         if response.status_code in (429, 502, 503, 504):
             raise OvalEdgeTransientError(response.status_code, str(detail))
-        raise OvalEdgeError(response.status_code, str(detail), body=body)
+
+        message = str(detail)
+        if (
+            response.status_code == 401
+            and settings.auth_mode == "remote"
+            and settings.ovaledge_remote_forward_idp_token
+        ):
+            message = (
+                f"{message} — MCP forwarded the Okta Bearer token; OvalEdge rejected it. "
+                "Ensure the OvalEdge JVM has spring.profiles.active containing 'oauth2' "
+                "(opaque Okta introspect on /api/**), api.introspection.uri matches "
+                "OAUTH_ISSUER, and the Okta principal maps to an existing OvalEdge user. "
+                "Do not set OVALEDGE_REMOTE_FORWARD_IDP_TOKEN=false: stock "
+                "/api/user/token/generate cannot exchange an Okta access token for an OE JWT."
+            )
+        raise OvalEdgeError(response.status_code, message, body=body)

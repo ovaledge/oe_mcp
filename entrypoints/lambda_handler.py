@@ -3,8 +3,9 @@ Remote MCP entrypoint — Streamable HTTP via Mangum.
 
 Auth depends on ``AUTH_MODE``:
 
-- ``remote``: OAuth 2.x / OIDC ``Authorization: Bearer`` → OvalEdge JWT (per request).
-  Registers OAuth discovery + dynamic registration routes.
+- ``remote``: OAuth 2.x / OIDC ``Authorization: Bearer`` → validate (JWT or opaque
+  introspect) → forward to OvalEdge (default) or exchange via token/generate.
+  Registers OAuth discovery + registration routes.
 
 - ``remote_credentials``: ``X-OvalEdge-Credentials`` (``token::secret``) or
   ``X-OvalEdge-Token`` + ``X-OvalEdge-Secret`` → cached OvalEdge JWT.
@@ -15,7 +16,9 @@ Auth depends on ``AUTH_MODE``:
 Routes:
     GET  /.well-known/oauth-authorization-server  → IdP metadata (``remote``) or discovery stub
                                                       (``remote_credentials``)
-    POST /register                                 → Dynamic client registration (remote only)
+    GET  /.well-known/openid-configuration        → OIDC discovery (``remote``)
+    GET  /.well-known/oauth-protected-resource*   → RFC 9728 (``remote``)
+    POST /register                                 → Returns configured OAUTH_CLIENT_ID (remote)
     GET  /health                                   → Health check
     POST /mcp                                      → MCP (protected)
 

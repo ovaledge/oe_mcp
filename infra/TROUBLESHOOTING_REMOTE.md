@@ -148,6 +148,25 @@ When `TELEMETRY_BACKEND` is not `none`, each tool call exports an OTLP span. Spa
 
 Deploy parameters: [DEPLOY.md](DEPLOY.md#telemetry-opentelemetry).
 
+## Okta Connect (`AUTH_MODE=remote`)
+
+| Symptom | Likely cause | Fix |
+| ------- | ------------ | --- |
+| *redirect_uri must be a Login redirect URI* | Client callback not on Okta app | Add URIs from [README_REMOTE_MCP.md — all clients](../README_REMOTE_MCP.md#okta-redirect-uris-all-clients) |
+| Okta `E0000005` / `Invalid session` during Connect | Client tried Okta Dynamic Client Registration | Redeploy MCP that sets `authorization_servers` to the MCP host; disconnect and Connect again |
+| Claude Code redirect mismatch | Ephemeral localhost port | Register fixed port **8788** in Okta; `claude mcp add … --callback-port 8788` |
+| VS Code / GitHub Copilot redirect mismatch | Ephemeral localhost port | Register **8790**; set `"oauth":{"callbackPort":8790}` in `.vscode/mcp.json` |
+| Microsoft Copilot Studio redirect mismatch | Wizard slug / missing URI | Copy exact URI from error or Studio (often `global.consent.azure-apim.net/redirect/…`) into Okta |
+| Connect OK, tools 302 → `/login` or 401 *Full authentication is required* | OvalEdge ignored Okta Bearer (wrong introspect client/org, or no `oauth2` profile) | Align `api.introspection.uri` + `api.clientid` with token issuer; enable `oauth2` on OE; curl `/api/...` with same Bearer. **Do not** set `OVALEDGE_REMOTE_FORWARD_IDP_TOKEN=false` — stock `token/generate` cannot exchange Okta→OE JWT. |
+| Connect OK, tools 401 *user … doesnot exist* | Okta principal not in OvalEdge user table | Create/link OE user with matching email/username |
+| *Client authentication failed* on token exchange | Confidential Okta Web app + public client (auth none) | Set `OAUTH_CLIENT_ID` + `OAUTH_CLIENT_SECRET` on **server** and redeploy (`/register` supplies secret). Do **not** put secrets in `mcp.json`. Or use Okta Native/SPA app. |
+| *oauth_audience is not set* | Old build requiring audience for JWT | Redeploy current code (audience optional; introspect preferred when client id is set) |
+| Cursor `fetch failed` / cannot connect | Wrong `MCPEndpointUrl`, DNS, or laptop network | `curl /health` from the same machine; URL must be `https://…/mcp` |
+
+Client guides: [SETUP_CURSOR.md](../docs/client-setup/SETUP_CURSOR.md#remote-oauth-auth_moderremote) · [SETUP_CLAUDE.md](../docs/client-setup/SETUP_CLAUDE.md#remote-oauth-auth_moderremote) · [SETUP_VSCODE_GITHUB_COPILOT.md](../docs/client-setup/SETUP_VSCODE_GITHUB_COPILOT.md#remote-oauth-auth_moderremote) · [SETUP_MICROSOFT_COPILOT.md](../docs/client-setup/SETUP_MICROSOFT_COPILOT.md#remote-oauth-auth_moderremote).
+
+Deploy ZIP Okta: [DEPLOY.md — Okta Connect Lambda ZIP](DEPLOY.md#okta-connect-lambda-zip).
+
 ## Client config (`mcp-remote` + Claude)
 
 ```json

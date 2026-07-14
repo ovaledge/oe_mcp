@@ -2,7 +2,7 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description: >
   OvalEdge MCP Server on Amazon ECS Fargate behind an Application Load Balancer.
   Uses Dockerfile.ecs (uvicorn). Auth: AUTH_MODE=remote_credentials (client headers)
-  or remote (OAuth WIP). Requires an existing VPC with at least two subnets.
+  or remote (Okta Connect). Requires an existing VPC with at least two subnets.
 
 Parameters:
   Environment:
@@ -19,6 +19,33 @@ Parameters:
     Type: String
     Default: remote_credentials
     AllowedValues: [remote_credentials, remote]
+  OAuthIssuer:
+    Type: String
+    Default: ""
+    Description: (AUTH_MODE=remote) Okta/OIDC issuer base URL
+  OAuthAllowedIssuers:
+    Type: String
+    Default: ""
+  OAuthAudience:
+    Type: String
+    Default: ""
+  OAuthClientId:
+    Type: String
+    Default: ""
+  OAuthClientSecret:
+    Type: String
+    Default: ""
+    NoEcho: true
+  OAuthIntrospectionUrl:
+    Type: String
+    Default: ""
+  OAuthScopes:
+    Type: String
+    Default: "openid profile email"
+  OvalEdgeForwardIdpToken:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
   VpcId:
     Type: AWS::EC2::VPC::Id
   SubnetIds:
@@ -276,6 +303,22 @@ Resources:
               Value: !Ref OvalEdgeBaseUrl
             - Name: OVALEDGE_HTTP_AUTH_SCHEME
               Value: !Ref OvalEdgeHttpAuthScheme
+            - Name: OAUTH_ISSUER
+              Value: !Ref OAuthIssuer
+            - Name: OAUTH_ALLOWED_ISSUERS
+              Value: !Ref OAuthAllowedIssuers
+            - Name: OAUTH_AUDIENCE
+              Value: !Ref OAuthAudience
+            - Name: OAUTH_CLIENT_ID
+              Value: !Ref OAuthClientId
+            - Name: OAUTH_CLIENT_SECRET
+              Value: !Ref OAuthClientSecret
+            - Name: OAUTH_INTROSPECTION_URL
+              Value: !Ref OAuthIntrospectionUrl
+            - Name: OAUTH_SCOPES
+              Value: !Ref OAuthScopes
+            - Name: OVALEDGE_REMOTE_FORWARD_IDP_TOKEN
+              Value: !Ref OvalEdgeForwardIdpToken
             - Name: CREDENTIALS_CACHE_MAX_ENTRIES
               Value: !Ref CredentialsCacheMaxEntries
             - Name: MCP_HTTP_STATELESS

@@ -2,7 +2,7 @@
 
 LLM-as-judge checks on **how well an agent uses MCP** (tool choice, arguments, multi-turn flows). Tier 1 remains `pytest` + FastMCP in-process tests under `tests/`.
 
-Main project docs: [README.md](../README.md) (local stdio, remote HTTP, **OAuth 2.x remote MCP — WIP**). Agent routing (data stories vs platform docs, confirm-before-create): [README.md#agent-guidance](../README.md#agent-guidance-mirrors-serverapppy-instructions).
+Main project docs: [README.md](../README.md) (local stdio, remote HTTP, Okta `remote` OAuth). Agent routing (data stories vs platform docs, confirm-before-create): [README.md#agent-guidance](../README.md#agent-guidance-mirrors-serverapppy-instructions).
 
 ## Install
 

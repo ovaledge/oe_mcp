@@ -93,7 +93,51 @@ GitHub Copilot MCP is **HTTP-first**. For local **`AUTH_MODE=local`**, use the s
 
 ---
 
+## Remote OAuth (`AUTH_MODE=remote`)
+
+Use when the MCP server is deployed with **Okta Connect** (browser login; no `X-OvalEdge-*` headers). Server setup: [README_REMOTE_MCP.md](../../README_REMOTE_MCP.md#auth_moderremote-okta--oidc-connect). Lambda ZIP: [infra/DEPLOY.md — Okta Connect Lambda ZIP](../../infra/DEPLOY.md#okta-connect-lambda-zip).
+
+### Okta Sign-in redirect URIs (required)
+
+VS Code / GitHub Copilot use a **loopback** callback. Okta requires an **exact** port match — do **not** rely on a random ephemeral port.
+
+Register:
+
+```text
+http://localhost:8790/callback
+http://127.0.0.1:8790/callback
+```
+
+Full allowlist (Cursor, Claude, Microsoft Copilot): [README_REMOTE_MCP.md — Okta redirect URIs (all clients)](../../README_REMOTE_MCP.md#okta-redirect-uris-all-clients).
+
+### `.vscode/mcp.json` (or user MCP config)
+
+```json
+{
+  "servers": {
+    "ovaledge-remote-oauth": {
+      "type": "http",
+      "url": "https://YOUR_PUBLIC_MCP_BASE_URL/mcp",
+      "oauth": {
+        "callbackPort": 8790
+      }
+    }
+  }
+}
+```
+
+- **`callbackPort: 8790`** must match the Okta redirect URIs above.
+- **Do not** put `OAUTH_CLIENT_SECRET` in this file. Keep secrets on the Lambda/server; `POST /register` supplies the confidential client when needed.
+- If your VS Code build requires `oauth.clientId`, set it to the same value as server `OAUTH_CLIENT_ID` (public id only).
+
+Complete the browser Connect flow when VS Code prompts. If Okta rejects `redirect_uri`, confirm port **8790** is on the app allowlist.
+
+**GitHub Copilot CLI** (when supported): use the same fixed callback port via the CLI’s OAuth / `callbackPort` option so it matches Okta.
+
+---
+
 ## References
 
 - [README_REMOTE_MCP.md](../../README_REMOTE_MCP.md) — auth, deploy, testing
 - [README_LOCAL_MCP.md](../../README_LOCAL_MCP.md) — local stdio mode
+- [SETUP_MICROSOFT_COPILOT.md](SETUP_MICROSOFT_COPILOT.md) — Microsoft Copilot Studio (not this guide)

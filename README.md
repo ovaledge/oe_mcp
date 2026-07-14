@@ -8,15 +8,15 @@ OvalEdge governance and catalog MCP server for MCP clients (Cursor, Claude Deskt
 | ---- | ----------- | --- |
 | **Local stdio** | `poetry run oe-mcp-local` | [README_LOCAL_MCP.md](README_LOCAL_MCP.md) |
 | **Local HTTP** | `./scripts/run_local_mcp_http.sh` (`AUTH_MODE=local`) | [README_LOCAL_MCP.md](README_LOCAL_MCP.md) · Cursor: `ovaledge-local-http` |
-| **Remote host HTTP** | `./scripts/run_remote_mcp_http.sh` (`remote_credentials`) | [README_REMOTE_MCP.md](README_REMOTE_MCP.md) · [infra/DEPLOY.md](infra/DEPLOY.md#remote-host-http-ec2--vm) |
+| **Remote host HTTP** | `./scripts/run_remote_mcp_http.sh` (`remote_credentials`) or `./scripts/run_remote_oauth_mcp_http.sh` (`remote` / Okta) | [README_REMOTE_MCP.md](README_REMOTE_MCP.md) · [infra/DEPLOY.md](infra/DEPLOY.md#remote-host-http-ec2--vm) |
 | **AWS ECS Fargate** | ALB + uvicorn image (`Dockerfile.ecs`) | [infra/DEPLOY.md](infra/DEPLOY.md#aws-ecs-fargate--alb) |
 | **AWS Lambda** | Container or ZIP (`./scripts/deploy.sh`) | [README_REMOTE_MCP.md](README_REMOTE_MCP.md) · [infra/DEPLOY.md](infra/DEPLOY.md#aws-lambda--http-api) |
 
-Full deployment matrix (auth, credentials, scripts): **[infra/DEPLOY.md](infra/DEPLOY.md)**. Prefer **`remote_credentials`** for remote HTTP; **OAuth (`AUTH_MODE=remote`) is WIP**.
+Full deployment matrix (auth, credentials, scripts): **[infra/DEPLOY.md](infra/DEPLOY.md)**.
 
 **Editor / assistant connection:** [docs/client-setup/README.md](docs/client-setup/README.md) (Cursor, Kiro, Claude, GitHub Copilot in VS Code, Microsoft Copilot in Studio — separate guides).
 
-**`AUTH_MODE`** in `.env` (or process env) selects behavior: `local`, **`remote` (OAuth 2.x remote MCP — WIP)**, or `remote_credentials`. Full variable reference: [.env.example](.env.example).
+**`AUTH_MODE`** in `.env` (or process env): `local`, **`remote`** (Okta/OIDC Connect — forward Bearer), or `remote_credentials` (header token+secret). Full variable reference: [.env.example](.env.example).
 
 **`.env` is not committed.** Copy the example, then edit:
 
@@ -32,9 +32,18 @@ Optional OpenTelemetry trace export to [Phoenix](https://arize.com/docs/phoenix)
 
 **Privacy:** enabled export sends tool spans that may include argument summaries (search terms, object ids) to your OTLP backend — review before pointing at a third-party host.
 
-## OAuth 2.x remote MCP — work in progress
+## Remote OAuth (`AUTH_MODE=remote`)
 
-**`AUTH_MODE=remote` (OAuth 2.x / OIDC Bearer for remote HTTP MCP) is WIP** and not fully validated end-to-end with real IdPs and MCP clients. Prefer **`remote_credentials`** (HTTP headers to OvalEdge) or **`local`** (stdio) until OAuth remote MCP is stable. Details: [README_REMOTE_MCP.md](README_REMOTE_MCP.md#work-in-progress-oauth-remote-mode).
+Okta Connect for remote HTTP is **supported end-to-end**: clients use Connect → Okta → MCP validates the access token (JWT or opaque introspect) → forwards `Authorization: Bearer` to OvalEdge (OvalEdge must run the `oauth2` profile with matching introspect credentials).
+
+| Topic | Doc |
+|-------|-----|
+| Flow, OvalEdge prerequisites, redirect URIs | [README_REMOTE_MCP.md](README_REMOTE_MCP.md#auth_moderremote-okta--oidc-connect) |
+| Lambda ZIP deploy steps | [infra/DEPLOY.md — Okta Connect Lambda ZIP](infra/DEPLOY.md#okta-connect-lambda-zip) |
+| Cursor / Claude / GitHub Copilot / Microsoft Copilot | [docs/client-setup/README.md](docs/client-setup/README.md) |
+| Troubleshooting | [infra/TROUBLESHOOTING_REMOTE.md](infra/TROUBLESHOOTING_REMOTE.md#okta-connect-auth_moderremote) |
+
+Host script: `./scripts/run_remote_oauth_mcp_http.sh`. Lambda: `AUTH_MODE=remote ./scripts/deploy.sh --zip`.
 
 ## What this server provides
 
@@ -184,7 +193,7 @@ See **[SECURITY.md](SECURITY.md)** for the GitHub security policy (supported ver
 | `server/telemetry/` | OpenTelemetry OTLP export (Phoenix / Langfuse) |
 | `server/client.py` | OvalEdge HTTP client |
 | `server/tools/`, `server/resources/`, `server/prompts/` | MCP surface |
-| `infra/template.yaml` | SAM sample for remote HTTP (`AuthMode`: `remote_credentials` or OAuth **`remote` (WIP)**) |
+| `infra/template.yaml` | SAM sample for remote HTTP (`AuthMode`: `remote_credentials` or Okta **`remote`**) |
 | `scripts/` | Setup and validation helpers |
 
 More detail: [README_LOCAL_MCP.md](README_LOCAL_MCP.md#layout-local-relevant-paths) · [README_REMOTE_MCP.md](README_REMOTE_MCP.md#layout-remote-relevant-paths)

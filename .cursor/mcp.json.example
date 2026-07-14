@@ -45,8 +45,11 @@
         "X-OvalEdge-Secret": "${env:OVALEDGE_USER_SECRET}"
       }
     },
-    "ovaledge-remote-oauth-wip": {
-      "url": "https://YOUR_API_ID.execute-api.YOUR_REGION.amazonaws.com/mcp",
+    "ovaledge-remote-oauth": {
+      "url": "https://YOUR_MCP_HOST/mcp"
+    },
+    "ovaledge-remote-oauth-manual-token": {
+      "url": "https://YOUR_MCP_HOST/mcp",
       "headers": {
         "X-Forwarded-Proto": "https",
         "Authorization": "Bearer ${env:OAUTH_ACCESS_TOKEN}"

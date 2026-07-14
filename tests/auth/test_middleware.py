@@ -27,6 +27,8 @@ def test_health_style_route_not_in_unprotected_returns_401(minimal_remote_app: F
     with TestClient(minimal_remote_app) as client:
         r = client.post("/mcp", headers={"x-forwarded-proto": "https"})
     assert r.status_code == 401
+    assert "WWW-Authenticate" in r.headers
+    assert "resource_metadata=" in r.headers["WWW-Authenticate"]
 
 
 def test_mcp_http_requires_tls_for_bearer(minimal_remote_app: FastAPI) -> None:
@@ -36,7 +38,10 @@ def test_mcp_http_requires_tls_for_bearer(minimal_remote_app: FastAPI) -> None:
     assert r.json()["error"] == "tls_required"
 
 
-def test_mcp_with_bearer_calls_verify_and_exchange(minimal_remote_app: FastAPI) -> None:
+def test_mcp_with_bearer_calls_verify_and_exchange(
+    minimal_remote_app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "ovaledge_remote_forward_idp_token", False)
     with TestClient(minimal_remote_app) as client:
         with (
             patch(

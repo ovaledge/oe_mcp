@@ -1,6 +1,6 @@
 # Deploy OvalEdge MCP
 
-How to run **oe_mcp** for clients (Cursor, Claude, etc.). Pick a path from the matrix below.
+How to run **oe_mcp** for clients (Cursor, Claude, GitHub Copilot, Microsoft Copilot Studio). Pick a path from the matrix below.
 
 ## Deployment options
 
@@ -8,9 +8,9 @@ How to run **oe_mcp** for clients (Cursor, Claude, etc.). Pick a path from the m
 |--------|---------------|------|-------------|----------------|
 | **Local stdio** | Laptop (Cursor subprocess) | `AUTH_MODE=local` | `.env` or mcp.json `env` | `poetry run oe-mcp-local` — [README_LOCAL_MCP.md](../README_LOCAL_MCP.md) |
 | **Local HTTP** | Laptop uvicorn (`127.0.0.1`) | `AUTH_MODE=local` | Server `.env` (JWT at startup) | [`scripts/run_local_mcp_http.sh`](../scripts/run_local_mcp_http.sh) |
-| **Remote host HTTP** | EC2 / VM uvicorn (`0.0.0.0`) | `AUTH_MODE=remote_credentials` | **mcp.json headers** (not on server) | [`scripts/run_remote_mcp_http.sh`](../scripts/run_remote_mcp_http.sh) — [below](#remote-host-http-ec2--vm) |
-| **AWS ECS Fargate** | ALB + Fargate (uvicorn image) | `remote_credentials` (default) or `remote` (OAuth WIP) | Client headers / Bearer | [`scripts/deploy_ecs.sh`](../scripts/deploy_ecs.sh) — [below](#aws-ecs-fargate--alb) |
-| **AWS Lambda (container)** | API Gateway + Lambda image | `remote_credentials` (default) or `remote` (OAuth WIP) | Client headers / Bearer | [`scripts/deploy.sh`](../scripts/deploy.sh) — default |
+| **Remote host HTTP** | EC2 / VM uvicorn (`0.0.0.0`) | `AUTH_MODE=remote_credentials` **or** `remote` (Okta) | Headers **or** Connect/Bearer | [`run_remote_mcp_http.sh`](../scripts/run_remote_mcp_http.sh) / [`run_remote_oauth_mcp_http.sh`](../scripts/run_remote_oauth_mcp_http.sh) — [below](#remote-host-http-ec2--vm) |
+| **AWS ECS Fargate** | ALB + Fargate (uvicorn image) | `remote_credentials` (default) or `remote` (Okta) | Client headers / Bearer | [`scripts/deploy_ecs.sh`](../scripts/deploy_ecs.sh) — [below](#aws-ecs-fargate--alb) |
+| **AWS Lambda (container)** | API Gateway + Lambda image | `remote_credentials` (default) or `remote` (Okta) | Client headers / Bearer | [`scripts/deploy.sh`](../scripts/deploy.sh) — default |
 | **AWS Lambda (ZIP)** | API Gateway + Lambda ZIP | same | same | `./scripts/deploy.sh --zip` |
 
 **Client setup:** [docs/client-setup/README.md](../docs/client-setup/README.md) · Cursor snippets: [.cursor/mcp.json.example](../.cursor/mcp.json.example)
@@ -21,9 +21,9 @@ How to run **oe_mcp** for clients (Cursor, Claude, etc.). Pick a path from the m
 
 ## Remote host HTTP (EC2 / VM)
 
-Use when you want a long-lived HTTP MCP on a server **without** Lambda. Clients send OvalEdge token+secret in **mcp.json headers**; the server `.env` needs only **`OVALEDGE_BASE_URL`**.
+### Header auth (`remote_credentials`)
 
-### Server setup
+Use when you want a long-lived HTTP MCP on a server **without** Lambda. Clients send OvalEdge token+secret in **mcp.json headers**; the server `.env` needs only **`OVALEDGE_BASE_URL`**.
 
 ```bash
 cd /path/to/oe_mcp
@@ -36,13 +36,26 @@ poetry install
 ./scripts/run_remote_mcp_http.sh --stop
 ```
 
+### Okta Connect (`remote`)
+
+Clients use the MCP **Connect** button (OAuth). Server needs `OAUTH_ISSUER`, `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, and `OVALEDGE_BASE_URL`. See [README_REMOTE_MCP.md](../README_REMOTE_MCP.md#auth_moderremote-okta--oidc-connect).
+
+Before Connect works, register client **Sign-in redirect URIs** on the Okta app for every IDE you use: [Okta redirect URIs (all clients)](../README_REMOTE_MCP.md#okta-redirect-uris-all-clients).
+
+```bash
+./scripts/run_remote_oauth_mcp_http.sh
+# Lambda ZIP:  see [Okta Connect Lambda ZIP](#okta-connect-lambda-zip) below
+# Lambda ECR:  AUTH_MODE=remote ./scripts/deploy.sh   (use a unique STACK_NAME)
+```
+
 Optional env: `HOST` (default `0.0.0.0`), `PORT` (default `8000`), `MCP_PUBLIC_BASE_URL` (URL clients use).
 
-Logs: `/tmp/oe-mcp-remote-http.log` · PID: `/tmp/oe-mcp-remote-http.pid`
+Logs (credentials mode): `/tmp/oe-mcp-remote-http.log` · PID: `/tmp/oe-mcp-remote-http.pid`  
+Logs (OAuth mode): `/tmp/oe-mcp-remote-oauth-http.log` · PID: `/tmp/oe-mcp-remote-oauth-http.pid`
 
 Open **port 8000** (or your `PORT`) in the security group / firewall. Prefer a TLS reverse proxy (nginx/Caddy) in production.
 
-### Cursor mcp.json
+### Cursor mcp.json (header auth)
 
 ```json
 {
@@ -181,7 +194,7 @@ First run creates ECR repository `oe-mcp` (override with `ECR_REPO`) if missing.
 ```bash
 export STACK_NAME=oe-mcp-prod
 export AWS_REGION=ap-south-1
-export AUTH_MODE=remote_credentials   # or remote (OAuth WIP)
+export AUTH_MODE=remote_credentials   # or remote (Okta Connect)
 export ENVIRONMENT=prod
 export MCP_HTTP_STATELESS=true        # false if your MCP client needs GET/SSE on /mcp
 ```
@@ -218,6 +231,63 @@ Runtime dependencies: [lambda-requirements.txt](lambda-requirements.txt) (also r
 
 Switching **image ↔ ZIP** on the same stack changes Lambda `PackageType`; prefer a new `STACK_NAME` or plan a deliberate stack update.
 
+## Okta Connect Lambda ZIP
+
+Deploy **`AUTH_MODE=remote`** (browser Connect → Okta → Bearer forward to OvalEdge) with a ZIP package.
+
+### Prerequisites
+
+1. OvalEdge accepts Okta Bearer on `/api/**` (`spring.profiles.active` includes `oauth2`; `api.introspection.uri` / `api.clientid` / `api.clientsecret` match the same Okta org as `OAUTH_*`).
+2. Okta OIDC app: Authorization Code + PKCE; redirect URIs for Cursor / Claude / GitHub Copilot / Microsoft Copilot — [allowlist](../README_REMOTE_MCP.md#okta-redirect-uris-all-clients).
+3. `OVALEDGE_BASE_URL` reachable **from Lambda** (public HTTPS or VPC — not `127.0.0.1`).
+4. Unique `STACK_NAME` if another `oe-mcp*` stack already exists in the account/region.
+
+### Deploy
+
+```bash
+export STACK_NAME=oe-mcp-oauth-zip
+export ENVIRONMENT=dev
+export AWS_REGION=ap-south-1
+
+export AUTH_MODE=remote
+export OVALEDGE_BASE_URL=https://your-oval-edge-host.example.com/ovaledge
+
+export OAUTH_ISSUER=https://YOUR_OKTA_ORG.okta.com/oauth2/default
+export OAUTH_CLIENT_ID=0oa...
+export OAUTH_CLIENT_SECRET='...'
+export OAUTH_INTROSPECTION_URL=https://YOUR_OKTA_ORG.okta.com/oauth2/default/v1/introspect
+export OAUTH_SCOPES="openid profile email"
+# OAUTH_AUDIENCE optional — leave unset for Okta default AS / opaque tokens
+
+export OVALEDGE_REMOTE_FORWARD_IDP_TOKEN=true
+export MCP_HTTP_STATELESS=true
+
+./scripts/deploy.sh --zip
+```
+
+### After deploy
+
+1. Note outputs **`MCPEndpointUrl`**, **`MCPPublicBaseUrl`**, **`HealthUrl`**.
+2. Set Lambda environment **`MCP_PUBLIC_BASE_URL`** = `MCPPublicBaseUrl` (host only, **no** `/mcp`).
+3. Verify:
+
+```bash
+curl -sS "$(aws cloudformation describe-stacks --stack-name oe-mcp-oauth-zip \
+  --query "Stacks[0].Outputs[?OutputKey=='HealthUrl'].OutputValue" --output text)"
+# expect: "auth_mode":"remote","mcp_lifespan_ready":true
+```
+
+4. Point clients at **`MCPEndpointUrl`** (URL only for Connect — no secrets in `mcp.json`):
+
+| Client | Config |
+|--------|--------|
+| Cursor | `"url": "<MCPEndpointUrl>"` |
+| Claude Code | `claude mcp add --transport http --callback-port 8788 … <MCPEndpointUrl>` |
+| VS Code / GitHub Copilot | `"type":"http"`, `"url":"<MCPEndpointUrl>"`, `"oauth":{"callbackPort":8790}` |
+| Microsoft Copilot Studio | Prefer API key + `remote_credentials`, or OAuth wizard — [SETUP_MICROSOFT_COPILOT.md](../docs/client-setup/SETUP_MICROSOFT_COPILOT.md) |
+
+Details: [README_REMOTE_MCP.md](../README_REMOTE_MCP.md#lambda-zip-okta-connect-auth_moderremote).
+
 ## WAF IP allowlist (`--waf`)
 
 Both templates support optional **regional AWS WAF** via CloudFormation parameters `EnableWaf` and `AllowedSourceCidrs`.
@@ -248,9 +318,9 @@ Key parameters (full list in [template.yaml](template.yaml)):
 
 | Parameter | Default | Notes |
 |-----------|---------|-------|
-| `AuthMode` | `remote_credentials` | `remote` for OAuth (WIP) |
+| `AuthMode` | `remote_credentials` | `remote` for Okta/OIDC Connect |
 | `OvalEdgeBaseUrl` | *(required)* | From `OVALEDGE_BASE_URL` |
-| `Environment` | `dev` | Suffixes resource names |
+| `Environment` | `dev` | Combined with stack name for Lambda: `{STACK_NAME}-{ENVIRONMENT}` |
 | `McpHttpStateless` | `true` | Set `false` for GET/SSE clients |
 | `LambdaArchitecture` | `x86_64` | `arm64` for Graviton |
 | `EnableWaf` | `false` | Set via `--waf` |

@@ -15,10 +15,11 @@ Or merge into `~/.cursor/mcp.json` (user-wide). Restart Cursor after changes.
 | **`ovaledge-local`** | stdio (`AUTH_MODE=local`) | **Default for development** — `poetry run oe-mcp-local` |
 | **`ovaledge-local-http`** | HTTP → local uvicorn | **Shows OvalEdge logo in Cursor** — run `./scripts/run_local_mcp_http.sh` (or `poetry run oe-mcp-http`) first; forces **`AUTH_MODE=local`** (JWT cached at startup); same tools as stdio |
 | **`ovaledge-remote-http`** | HTTP → remote host | EC2/VM: run `./scripts/run_remote_mcp_http.sh` on the server (`AUTH_MODE=remote_credentials`); put token/secret in **mcp.json headers** (not on the server `.env`) |
+| **`ovaledge-remote-oauth`** | HTTP → remote (Okta Connect) | Run `./scripts/run_remote_oauth_mcp_http.sh` or `AUTH_MODE=remote ./scripts/deploy.sh --zip`; Connect → Okta; register redirect URIs ([README_REMOTE_MCP.md](../README_REMOTE_MCP.md#okta-redirect-uris-all-clients)) |
 | **`ovaledge-ecs`** | HTTP → ALB | ECS Fargate: `./scripts/deploy_ecs.sh` — use stack output `McpEndpointUrl`; credentials in headers ([infra/DEPLOY.md](../infra/DEPLOY.md#aws-ecs-fargate--alb)) |
 | `ovaledge-remote-local` | HTTP → API Gateway / local | Alias pattern for deployed-style `remote_credentials` |
 | `ovaledge-remote-lambda` | HTTP → deployed API Gateway | Replace URL with your `MCPEndpointUrl` |
-| `ovaledge-remote-oauth-wip` | HTTP + Bearer | **`AUTH_MODE=remote` OAuth — WIP**; not production-ready |
+| `ovaledge-remote-oauth-manual-token` | HTTP + Bearer | Debug: paste an Okta access token instead of Connect |
 
 ## Environment variables
 

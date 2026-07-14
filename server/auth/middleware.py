@@ -42,6 +42,38 @@ def _is_mcp_mount_root(path: str) -> bool:
     return path == "/mcp" or path == "/mcp/"
 
 
+def _resource_metadata_url(request: Request) -> str:
+    configured = (settings.mcp_public_base_url or "").strip().rstrip("/")
+    base = configured or str(request.base_url).rstrip("/")
+    return f"{base}/.well-known/oauth-protected-resource/mcp"
+
+
+def _bearer_www_authenticate(request: Request, error: str, description: str) -> str:
+    """RFC 6750 + RFC 9728 resource_metadata hint for MCP OAuth clients."""
+    meta = _resource_metadata_url(request)
+    desc = description.replace("\\", "\\\\").replace('"', '\\"')
+    return (
+        f'Bearer error="{error}", error_description="{desc}", '
+        f'resource_metadata="{meta}"'
+    )
+
+
+def _json_unauthorized(
+    request: Request,
+    *,
+    error: str,
+    error_description: str,
+    status_code: int = 401,
+) -> JSONResponse:
+    return JSONResponse(
+        {"error": error, "error_description": error_description},
+        status_code=status_code,
+        headers={
+            "WWW-Authenticate": _bearer_www_authenticate(request, error, error_description),
+        },
+    )
+
+
 # Paths that never require authentication
 _UNPROTECTED = {
     "/",
@@ -207,12 +239,10 @@ async def _auth_response_or_none(request: Request) -> Response | None:
         )
 
     if not auth_header.startswith("Bearer "):
-        return JSONResponse(
-            {
-                "error": "unauthorized",
-                "error_description": "Bearer token required",
-            },
-            status_code=401,
+        return _json_unauthorized(
+            request,
+            error="unauthorized",
+            error_description="Bearer token required",
         )
 
     access_token = auth_header.removeprefix("Bearer ")
@@ -229,12 +259,10 @@ async def _auth_response_or_none(request: Request) -> Response | None:
         )
     except Exception as e:
         logger.warning("OAuth access token rejected: %s", e)
-        return JSONResponse(
-            {
-                "error": "invalid_token",
-                "error_description": str(e),
-            },
-            status_code=401,
+        return _json_unauthorized(
+            request,
+            error="invalid_token",
+            error_description=str(e),
         )
 
     if settings.ovaledge_remote_forward_idp_token:
@@ -260,9 +288,9 @@ class AuthMiddleware:
     Handles auth for MCP modes.
 
     Remote (auth_mode=remote):
-        1. Validate OAuth access token (JWT) via IdP JWKS from discovery
-        2. Either forward that token to OvalEdge (ovaledge_remote_forward_idp_token) or
-           exchange via OvalEdge token/generate, then set current_oe_jwt ContextVar
+        1. Validate OAuth access token (JWT via JWKS, or opaque via IdP introspect)
+        2. Forward that token to OvalEdge (default) or exchange via token/generate when
+           ovaledge_remote_forward_idp_token is False; set current_oe_jwt ContextVar
 
     Remote credentials (auth_mode=remote_credentials):
         X-OvalEdge-Credentials (token::secret) or X-OvalEdge-Token + X-OvalEdge-Secret

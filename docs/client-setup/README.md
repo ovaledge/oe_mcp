@@ -2,13 +2,15 @@
 
 Guides for connecting **OvalEdge MCP** from common editors and assistants.
 
-| Client | Local (stdio) | Remote HTTP (`remote_credentials`) |
-| ------ | --------------- | ---------------------------------- |
-| **Cursor** | [SETUP_CURSOR.md](SETUP_CURSOR.md#local-stdio-configuration) | [SETUP_CURSOR.md](SETUP_CURSOR.md#remote-http-configuration) |
-| **Kiro** | [SETUP_KIRO.md](SETUP_KIRO.md#local-stdio-configuration) | [SETUP_KIRO.md](SETUP_KIRO.md#remote-http-configuration) |
-| **Claude** (Desktop, Chat, Code) | [SETUP_CLAUDE.md](SETUP_CLAUDE.md) (Desktop: `mcp-remote`; local stdio: same Poetry pattern as Cursor) | [SETUP_CLAUDE.md](SETUP_CLAUDE.md) |
-| **VS Code + GitHub Copilot** | — (HTTP-first; optional stdio) | [SETUP_VSCODE_GITHUB_COPILOT.md](SETUP_VSCODE_GITHUB_COPILOT.md) |
-| **Microsoft Copilot** (Studio / Teams / M365 agents) | — | [SETUP_MICROSOFT_COPILOT.md](SETUP_MICROSOFT_COPILOT.md) |
+| Client | Local (stdio) | Remote HTTP (`remote_credentials`) | Remote OAuth (`AUTH_MODE=remote` / Okta) |
+| ------ | --------------- | ---------------------------------- | ---------------------------------------- |
+| **Cursor** | [SETUP_CURSOR.md](SETUP_CURSOR.md#local-stdio-configuration) | [SETUP_CURSOR.md](SETUP_CURSOR.md#remote-http-configuration) | [SETUP_CURSOR.md](SETUP_CURSOR.md#remote-oauth-auth_moderremote) |
+| **Kiro** | [SETUP_KIRO.md](SETUP_KIRO.md#local-stdio-configuration) | [SETUP_KIRO.md](SETUP_KIRO.md#remote-http-configuration) | — |
+| **Claude** (Desktop, Chat, Code) | [SETUP_CLAUDE.md](SETUP_CLAUDE.md) | [SETUP_CLAUDE.md](SETUP_CLAUDE.md) (`mcp-remote` / headers) | [SETUP_CLAUDE.md](SETUP_CLAUDE.md#remote-oauth-auth_moderremote) |
+| **VS Code + GitHub Copilot** | — (HTTP-first; optional stdio) | [SETUP_VSCODE_GITHUB_COPILOT.md](SETUP_VSCODE_GITHUB_COPILOT.md) | [SETUP_VSCODE_GITHUB_COPILOT.md](SETUP_VSCODE_GITHUB_COPILOT.md#remote-oauth-auth_moderremote) |
+| **Microsoft Copilot** (Studio / Teams / M365 agents) | — | [SETUP_MICROSOFT_COPILOT.md](SETUP_MICROSOFT_COPILOT.md) (API key) | [SETUP_MICROSOFT_COPILOT.md](SETUP_MICROSOFT_COPILOT.md#remote-oauth-auth_moderremote) |
+
+**Okta Sign-in redirect URI allowlist** (Cursor, Claude, GitHub Copilot, Microsoft Copilot): [README_REMOTE_MCP.md — Okta redirect URIs (all clients)](../../README_REMOTE_MCP.md#okta-redirect-uris-all-clients).
 
 **Do not mix guides:** GitHub Copilot (VS Code `mcp.json`) and Microsoft Copilot (Copilot Studio wizard) use different hosts, config surfaces, and auth UI.
 
@@ -16,6 +18,7 @@ Guides for connecting **OvalEdge MCP** from common editors and assistants.
 
 - Local mode (env, scripts, architecture, local HTTP): [README_LOCAL_MCP.md](../../README_LOCAL_MCP.md)
 - Remote mode (auth, TLS, deploy, testing): [README_REMOTE_MCP.md](../../README_REMOTE_MCP.md)
+- Lambda ZIP Okta Connect: [infra/DEPLOY.md — Okta Connect Lambda ZIP](../../infra/DEPLOY.md#okta-connect-lambda-zip)
 - Lambda telemetry (Phoenix / Langfuse): [infra/DEPLOY.md](../../infra/DEPLOY.md#telemetry-opentelemetry)
 - Environment variables: [.env.example](../../.env.example)
 - MCP tools, resources, and workflow prompts: [server/docs/mcp_workflows.md](../../server/docs/mcp_workflows.md) (also `docs://ovaledge/mcp_workflows` when the server is connected)

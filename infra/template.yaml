@@ -35,13 +35,31 @@ Parameters:
   OAuthAudience:
     Type: String
     Default: ""
-    Description: (AUTH_MODE=remote) Resource identifier expected as access token aud claim
+    Description: (AUTH_MODE=remote) Resource identifier expected as JWT aud claim (optional for opaque)
+  OAuthClientId:
+    Type: String
+    Default: ""
+    Description: (AUTH_MODE=remote) Pre-registered Okta/OIDC app client_id returned by POST /register
+  OAuthClientSecret:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: (AUTH_MODE=remote) Client secret for token introspection (and confidential clients)
+  OAuthIntrospectionUrl:
+    Type: String
+    Default: ""
+    Description: >
+      (AUTH_MODE=remote) RFC 7662 introspect URL. Empty uses {OAuthIssuer}/v1/introspect.
+  OAuthScopes:
+    Type: String
+    Default: "openid profile email"
+    Description: (AUTH_MODE=remote) Scopes advertised in discovery / registration
   OvalEdgeForwardIdpToken:
     Type: String
-    Default: "false"
+    Default: "true"
     AllowedValues: ["true", "false"]
     Description: >
-      If true, skip OvalEdge token/generate and forward the IdP access token to OvalEdge APIs.
+      If true (default), skip OvalEdge token/generate and forward the IdP access token to OvalEdge APIs.
   Environment:
     Type: String
     Default: dev
@@ -180,7 +198,9 @@ Resources:
       DockerContext: ..
       Dockerfile: Dockerfile
     Properties:
-      FunctionName: !Sub oe-mcp-${Environment}
+      # Lambda name = {CloudFormation stack name}-{Environment}
+      # Example: STACK_NAME=oe-mcp-oauth ENVIRONMENT=dev → oe-mcp-oauth-dev
+      FunctionName: !Sub "${AWS::StackName}-${Environment}"
       PackageType: Image
       Tags:
         Application: oe-mcp
@@ -198,6 +218,10 @@ Resources:
           OAUTH_ISSUER: !Ref OAuthIssuer
           OAUTH_ALLOWED_ISSUERS: !Ref OAuthAllowedIssuers
           OAUTH_AUDIENCE: !Ref OAuthAudience
+          OAUTH_CLIENT_ID: !Ref OAuthClientId
+          OAUTH_CLIENT_SECRET: !Ref OAuthClientSecret
+          OAUTH_INTROSPECTION_URL: !Ref OAuthIntrospectionUrl
+          OAUTH_SCOPES: !Ref OAuthScopes
           # Do not set MCP_PUBLIC_BASE_URL from !Ref MCPApi here — it creates a CloudFormation
           # circular dependency (function → API → function). Leave unset; metadata uses
           # Request.base_url (API Gateway / custom domain). Override via Lambda console if needed.

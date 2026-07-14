@@ -26,9 +26,16 @@ MCP in Copilot Studio uses **Power Platform connectors** under the hood. Your Ov
 
 ---
 
-## OvalEdge authentication (API key header)
+## OvalEdge authentication
 
-Copilot Studio exposes **one** API-key slot per MCP server (header **or** query). OvalEdge **`remote_credentials`** maps to a **single header**:
+| Mode | Copilot Studio auth | MCP `AUTH_MODE` | When to use |
+| ---- | ------------------- | ----------------- | ----------- |
+| **API key** (recommended for Studio) | Header `X-OvalEdge-Credentials` = `token::secret` | `remote_credentials` | Simplest path; per-user or shared OvalEdge credentials |
+| **OAuth 2.0 / Okta Connect** | Studio OAuth wizard → Okta authorize/token | `remote` | Same Okta Connect path as Cursor/Claude; requires Studio redirect URI on the Okta app |
+
+### API key header (`remote_credentials`)
+
+Copilot Studio exposes **one** API-key slot per MCP server (header **or** query). OvalEdge maps to a **single header**:
 
 | Field | Value |
 | ----- | ----- |
@@ -43,8 +50,7 @@ Rules:
 
 The MCP server also accepts **`X-OvalEdge-Token`** + **`X-OvalEdge-Secret`** for Cursor, VS Code, etc. Use the **combined** header for Copilot Studio only.
 
-Deploy with **`AUTH_MODE=remote_credentials`**. **`AUTH_MODE=remote` (OAuth)** on this server is **WIP** — do not use Copilot Studio OAuth against it unless you are testing that stack explicitly.
-
+Deploy with **`AUTH_MODE=remote_credentials`**. For Okta Connect instead, see [Remote OAuth](#remote-oauth-auth_moderremote) below.
 ---
 
 ## Prerequisites
@@ -97,7 +103,7 @@ OvalEdge works with the **native MCP wizard** (Path A below). Path B is for a se
 
 ### A3. Authentication — API key
 
-1. **Authentication:** **API key** (not OAuth for OvalEdge today).
+1. **Authentication:** **API key** (for `remote_credentials`). For Okta Connect use [Remote OAuth](#remote-oauth-auth_moderremote) instead.
 2. **Type:** **Header** (not query).
 3. **Header / parameter name:** `X-OvalEdge-Credentials`
 
@@ -183,6 +189,60 @@ on `POST /mcp`. OvalEdge does **not** require this path if Path A works. Use Pat
 
 ---
 
+---
+
+## Remote OAuth (`AUTH_MODE=remote`)
+
+Use when the MCP Lambda/host runs **Okta Connect** (same as Cursor/Claude): Studio completes OAuth against **Okta**, MCP validates the access token, and forwards `Authorization: Bearer` to OvalEdge.
+
+**Prefer API key + `remote_credentials` for Copilot Studio** unless you need the same Okta identity as IDE clients. Studio’s OAuth UX is maker-configured (Client ID/Secret in the connection wizard), and redirect URIs are **per tool / environment**.
+
+### Prerequisites
+
+1. Deploy MCP with **`AUTH_MODE=remote`** — [Lambda ZIP Okta Connect](../../infra/DEPLOY.md#okta-connect-lambda-zip) or [README_REMOTE_MCP.md](../../README_REMOTE_MCP.md#lambda-zip-okta-connect-auth_moderremote).
+2. OvalEdge `oauth2` + `api.introspection.*` aligned with the same Okta org.
+3. Okta app: Authorization Code + PKCE; Client ID/Secret available for the Studio wizard **and** for Lambda `OAUTH_CLIENT_ID` / `OAUTH_CLIENT_SECRET`.
+
+### Okta Sign-in redirect URIs
+
+Copilot Studio **generates** a redirect URL when you create the MCP tool with OAuth 2.0. Copy it into Okta **Sign-in redirect URIs**. Typical patterns:
+
+| URI | When |
+|-----|------|
+| `https://global.consent.azure-apim.net/redirect/<slug>` | MCP connector wizard (slug depends on tool name — changes if you rename the tool) |
+| `https://token.botframework.com/.auth/web/redirect` | Bot Framework / Power Platform auth (common) |
+| `https://europe.token.botframework.com/.auth/web/redirect` | Europe tenants |
+| `https://copilotstudio.microsoft.com/auth/callback` | Copilot Studio web callback (when shown) |
+
+If Okta/Entra returns **redirect_uri mismatch**, copy the **exact** URI from the error and add it to Okta.
+
+Full IDE + Studio allowlist notes: [README_REMOTE_MCP.md — Okta redirect URIs (all clients)](../../README_REMOTE_MCP.md#okta-redirect-uris-all-clients).
+
+### Studio wizard (OAuth 2.0)
+
+1. **Add a tool** → **New tool** → **Model Context Protocol**.
+2. **Server URL:** your **`MCPEndpointUrl`** (ends with `/mcp`).
+3. **Authentication:** **OAuth 2.0** (Manual or Dynamic discovery if offered).
+4. Point authorization/token at your Okta AS, for example:
+
+| Field | Example |
+|-------|---------|
+| Authorization URL | `https://YOUR_OKTA_ORG.okta.com/oauth2/default/v1/authorize` |
+| Token URL | `https://YOUR_OKTA_ORG.okta.com/oauth2/default/v1/token` |
+| Client ID | Same as MCP `OAUTH_CLIENT_ID` |
+| Client secret | Same as MCP `OAUTH_CLIENT_SECRET` (Studio connection secret — not `mcp.json`) |
+| Scopes | `openid profile email` |
+
+5. Copy the **callback / redirect URL** from Studio → add to Okta → finish connection.
+
+Users who authorize must already exist in OvalEdge (email/username match) for tool calls to succeed after Connect.
+
+### Microsoft 365 / Teams
+
+Publish the agent as usual. End users complete the OAuth consent / connection prompt the first time tools run (similar to per-user API key connections).
+
+---
+
 ## Publish to Microsoft 365 / Teams
 
 1. **Test** in Copilot Studio (enable **Show activity map** to see MCP tool calls).
@@ -245,6 +305,7 @@ Expect **200** on `/health`. `/mcp` should return a valid MCP response when cred
 
 ## Related docs
 
-- [README_REMOTE_MCP.md](../../README_REMOTE_MCP.md) — deploy, `MCP_HTTP_STATELESS`, security  
-- [.env.example](../../.env.example) — `remote_credentials`  
+- [README_REMOTE_MCP.md](../../README_REMOTE_MCP.md) — deploy, Okta Connect, `MCP_HTTP_STATELESS`, security  
+- [infra/DEPLOY.md — Okta Connect Lambda ZIP](../../infra/DEPLOY.md#okta-connect-lambda-zip)  
+- [.env.example](../../.env.example) — `remote` / `remote_credentials`  
 - [SETUP_VSCODE_GITHUB_COPILOT.md](SETUP_VSCODE_GITHUB_COPILOT.md) — GitHub Copilot only  
