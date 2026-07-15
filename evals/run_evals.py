@@ -107,7 +107,8 @@ def run_metrics(threshold: float, cases_json: str | None) -> tuple[int, list[Met
     reports: list[MetricReport] = []
 
     if cases_json:
-        mcp_use_cases = load_mcp_use_cases_from_json(Path(cases_json))
+        # Skip structural-only rows (llm_score: false), e.g. intentional invalid-arg fixtures.
+        mcp_use_cases = load_mcp_use_cases_from_json(Path(cases_json), llm_only=True)
     else:
         mcp_use_cases = [
             getattr(golden_cases, fn_name)() for fn_name in golden_cases.all_mcp_use_golden_fns()
