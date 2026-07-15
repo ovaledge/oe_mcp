@@ -62,6 +62,30 @@ class TestSlimToolResponse:
         out = slim_tool_response(payload)
         assert _bytes(out) <= MCP_TOOL_RESPONSE_MAX_BYTES + 500
 
+    def test_preserves_formatted_response_under_aggressive_cap(self) -> None:
+        # Simulate a metadata-drift narrative that would previously be chopped at 2k
+        # before Top row-count adds reached the agent.
+        body = (
+            "**Summary**\n\n| Metric | Value |\n| --- | --- |\n| Total changes | 369 |\n\n"
+            "**Top row-count adds**\n\n"
+            "- `oe_internal_diagnostics_delete_query` (+81,708)\n"
+            "- `a_dqi_score` (+60,616)\n"
+            + ("- filler note about unrelated columns\n" * 80)
+        )
+        assert len(body) > 2_000
+        payload = {
+            "ok": True,
+            "formattedResponse": body,
+            "data": {
+                "formattedResponse": body,
+                "columnChanges": [{"detail": "x" * 50_000} for _ in range(40)],
+            },
+        }
+        out = slim_tool_response(payload)
+        assert "**Top row-count adds**" in out["formattedResponse"]
+        assert "`oe_internal_diagnostics_delete_query` (+81,708)" in out["formattedResponse"]
+        assert "**Top row-count adds**" in out["data"]["formattedResponse"]
+
 
 def _bytes(payload: object) -> int:
     return len(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
