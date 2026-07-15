@@ -244,6 +244,14 @@ class TestSearchCatalogAssets:
         assert "error" in result
         assert result["status_code"] == 403
 
+    async def test_rejects_invalid_object_type(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "search_catalog_assets")
+        out = await fn(search_terms=["x"], object_type="not_a_real_type")
+        assert out["status_code"] == 400
+        mock_oe_client.get.assert_not_called()
+
 
 class TestCatalogAssetDetails:
     async def test_enriches_absolute_nav_url_from_relative_nav_link(
@@ -320,17 +328,70 @@ class TestCatalogAssetDetails:
         assert result["status_code"] == 502
         assert "502" in result["error"]
 
+    async def test_happy_path_returns_enriched_detail(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "objectId": 1019,
+                "objectType": "oetable",
+                "objectName": "film",
+                "navLink": "#nav/table?browse=summary&id=1019",
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "catalog_asset_details")
+        out = await fn(object_id=1019, object_type="oetable")
+        assert out["data"]["objectName"] == "film"
+        assert out["data"]["redirectUrl"].endswith("#nav/table?browse=summary&id=1019")
+        mock_oe_client.get.assert_called_once()
+
+    async def test_not_found_returns_structured_dict(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.side_effect = OvalEdgeError(404, "Not found")
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "catalog_asset_details")
+        out = await fn(fully_qualified_name="missing.table")
+        assert out["status_code"] == 404
+        assert "404" in out["error"]
+
+    async def test_rejects_object_id_without_type(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "catalog_asset_details")
+        out = await fn(object_id=10)
+        assert out["status_code"] == 400
+        assert "fully_qualified_name" in out["error"]
+        mock_oe_client.get.assert_not_called()
+
 
 class TestColumnProfileStatistics:
     async def test_oetable(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = {"columns": []}
+        mock_oe_client.get.return_value = {"columns": [{"name": "id", "nulls": 0}]}
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
         fn = await get_tool_fn(mcp, "column_profile_statistics")
-        await fn(object_id=7, object_type="oetable")
+        out = await fn(object_id=7, object_type="oetable")
+        assert out["columns"][0]["name"] == "id"
         mock_oe_client.get.assert_called_once_with(
             MCP_PATH_COLUMN_PROFILE,
             params={"objectId": 7, "objectType": "oetable"},
+        )
+
+    async def test_oefile_happy_path(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {"columns": [{"name": "col_a"}]}
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "column_profile_statistics")
+        out = await fn(object_id=55, object_type="oefile")
+        assert out == {"columns": [{"name": "col_a"}]}
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_COLUMN_PROFILE,
+            params={"objectId": 55, "objectType": "oefile"},
         )
 
     async def test_rejects_glossary(self, mock_oe_client: AsyncMock) -> None:
@@ -338,6 +399,15 @@ class TestColumnProfileStatistics:
         catalog.register(mcp)
         fn = await get_tool_fn(mcp, "column_profile_statistics")
         out = await fn(object_id=1, object_type="glossary")
+        assert out["status_code"] == 400
+        assert "oetable or oefile" in out["error"]
+        mock_oe_client.get.assert_not_called()
+
+    async def test_rejects_oeschema(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "column_profile_statistics")
+        out = await fn(object_id=1, object_type="oeschema")
         assert out["status_code"] == 400
         mock_oe_client.get.assert_not_called()
 
@@ -349,18 +419,38 @@ class TestColumnProfileStatistics:
         out = await fn(object_id=7, object_type="oetable")
         assert out["status_code"] == 502
 
+    async def test_not_found_returns_structured_dict(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.side_effect = OvalEdgeError(404, "Object not found")
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "column_profile_statistics")
+        out = await fn(object_id=999, object_type="oetable")
+        assert out["status_code"] == 404
+        assert "404" in out["error"]
+
 
 class TestTableEntityRelationships:
     async def test_forwards_object_id(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = {"relationships": []}
+        mock_oe_client.get.return_value = {
+            "relationships": [{"from": "a", "to": "b", "type": "FK"}]
+        }
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
         fn = await get_tool_fn(mcp, "table_entity_relationships")
-        await fn(object_id=99)
+        out = await fn(object_id=99)
+        assert out["relationships"][0]["type"] == "FK"
         mock_oe_client.get.assert_called_once_with(
             MCP_PATH_ENTITY_RELATIONSHIPS,
             params={"objectId": 99},
         )
+
+    async def test_empty_relationships_happy_path(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {"relationships": []}
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "table_entity_relationships")
+        out = await fn(object_id=12)
+        assert out == {"relationships": []}
 
     async def test_oval_edge_error_returns_structured_dict(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.side_effect = OvalEdgeError(503, "Unavailable")
@@ -369,6 +459,15 @@ class TestTableEntityRelationships:
         fn = await get_tool_fn(mcp, "table_entity_relationships")
         out = await fn(object_id=99)
         assert out["status_code"] == 503
+
+    async def test_unauthorized_returns_structured_dict(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.side_effect = OvalEdgeError(401, "Unauthorized")
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "table_entity_relationships")
+        out = await fn(object_id=99)
+        assert out["status_code"] == 401
+        assert "401" in out["error"]
 
 
 class TestAssetLineage:
@@ -384,11 +483,32 @@ class TestAssetLineage:
             params={"objectId": 1, "objectType": "oefile", "depth": 4},
         )
 
+    async def test_oetable_default_depth_happy_path(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {"nodes": [{"id": 1}], "edges": []}
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "asset_lineage")
+        out = await fn(object_id=1019, object_type="oetable")
+        assert out["nodes"][0]["id"] == 1
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_LINEAGE,
+            params={"objectId": 1019, "objectType": "oetable", "depth": 2},
+        )
+
     async def test_rejects_non_table_file_object_type(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
         fn = await get_tool_fn(mcp, "asset_lineage")
         out = await fn(object_id=1, object_type="glossary")
+        assert out["status_code"] == 400
+        assert "oetable or oefile" in out["error"]
+        mock_oe_client.get.assert_not_called()
+
+    async def test_rejects_oeschema(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "asset_lineage")
+        out = await fn(object_id=1004, object_type="oeschema")
         assert out["status_code"] == 400
         mock_oe_client.get.assert_not_called()
 
@@ -399,6 +519,15 @@ class TestAssetLineage:
         fn = await get_tool_fn(mcp, "asset_lineage")
         out = await fn(object_id=1, object_type="oetable")
         assert out["status_code"] == 504
+
+    async def test_forbidden_returns_structured_dict(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.side_effect = OvalEdgeError(403, "Forbidden")
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "asset_lineage")
+        out = await fn(object_id=1, object_type="oetable")
+        assert out["status_code"] == 403
+        assert "403" in out["error"]
 
 
 class TestTableEntityRelationshipsErrors:
@@ -702,6 +831,272 @@ class TestMetadataChangesBetweenCrawls:
         out = await fn(question="Show drift")
         assert out["status_code"] == 500
 
+    async def test_enhances_response_and_replaces_backend_formatted_response(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {
+            "ok": True,
+            "data": {
+                "formattedResponse": "Backend narrative that must not win.\n"
+                + ("- col.x [modified]\n" * 50),
+                "contextHeader": {
+                    "catalogSchema": "CUSTOMER",
+                    "schemaId": 10,
+                    "connection": "Snowflake PROD",
+                },
+                "rollup": {
+                    "totalChanges": 3,
+                    "tablesModified": 1,
+                    "columnsModified": 2,
+                    "rowCountChanges": 1,
+                },
+                "notableDeltas": [
+                    {"tableName": "orders", "rowCountDelta": 1200},
+                ],
+                "compareSchemaUrl": (
+                    "https://example.com#nav/comparedb?srchtab=history&id=5"
+                ),
+                "fallback": {"show": False},
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "metadata_changes_between_crawls")
+        out = await fn(
+            question="What changed in CUSTOMER schema after the latest crawl?"
+        )
+        fr = out["formattedResponse"]
+        assert "Backend narrative that must not win." not in fr
+        assert "**Top row-count adds**" in fr
+        assert "`orders` (+1,200)" in fr
+        assert out["data"]["formattedResponse"] == fr
+        assert "requiredInfo" in out
+        assert out["data"]["usefulLinks"]["compareSchemaUrl"].endswith("id=5")
+
+    async def test_table_scoped_question_uses_object_redirect_links_only(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {
+            "ok": True,
+            "data": {
+                "contextHeader": {"catalogSchema": "sakila", "schemaId": 1004},
+                "redirectUrl": "https://example.com#nav/table?id=1019",
+                "compareSchemaUrl": "https://example.com#nav/comparedb?id=5",
+                "rollup": {"totalChanges": 1, "tablesModified": 1},
+                "fallback": {"show": False},
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "metadata_changes_between_crawls")
+        out = await fn(
+            question="What changed in table film?",
+            table_names=["film"],
+        )
+        links_section = out["formattedResponse"].split("**Useful links**", 1)[1]
+        assert "OvalEdge object redirect URL" in links_section
+        assert "CompareSchema" not in links_section
+
+    async def test_forwards_last_n_weeks(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.return_value = {
+            "ok": True,
+            "data": {
+                "contextHeader": {},
+                "rollup": {"totalChanges": 0},
+                "fallback": {"show": False},
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "metadata_changes_between_crawls")
+        await fn(last_n_weeks=3, connection_name="PROD")
+        mock_oe_client.post.assert_called_once_with(
+            MCP_PATH_METADATA_CHANGES_BETWEEN_CRAWLS,
+            body={"connectionName": "PROD", "lastNWeeks": 3},
+        )
+
+    async def test_happy_path_timestamp_window_and_schema_filter(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {
+            "ok": True,
+            "data": {
+                "contextHeader": {
+                    "catalogSchema": "sakila",
+                    "schemaId": 1004,
+                    "connection": "MySQL",
+                },
+                "rollup": {
+                    "totalChanges": 2,
+                    "tablesAdded": 1,
+                    "columnsAdded": 5,
+                },
+                "columnChanges": [
+                    {
+                        "tableName": "film",
+                        "columnName": "rating_code",
+                        "changeType": "added",
+                    }
+                ],
+                "analyzedFromTimestamp": "2026-07-01T00:00:00Z",
+                "analyzedToTimestamp": "2026-07-08T00:00:00Z",
+                "fallback": {"show": False},
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "metadata_changes_between_crawls")
+        out = await fn(
+            question="What columns were added recently?",
+            connection_name="MySQL",
+            schema_names=["sakila", "  ", "northwind"],
+            from_timestamp="2026-07-01T00:00:00Z",
+            to_timestamp="2026-07-08T00:00:00Z",
+        )
+        mock_oe_client.post.assert_called_once_with(
+            MCP_PATH_METADATA_CHANGES_BETWEEN_CRAWLS,
+            body={
+                "question": "What columns were added recently?",
+                "connectionName": "MySQL",
+                "schemaNames": ["sakila", "northwind"],
+                "fromTimestamp": "2026-07-01T00:00:00Z",
+                "toTimestamp": "2026-07-08T00:00:00Z",
+            },
+        )
+        fr = out["formattedResponse"]
+        assert "**Example columns added**" in fr
+        assert "`film.rating_code`" in fr
+        assert "period 2026-07-01T00:00:00Z → 2026-07-08T00:00:00Z" in fr
+        assert out["requiredInfo"]["timestampOfAnalyzedCrawls"].startswith("2026-07-01")
+
+    async def test_happy_path_equal_crawl_ids_allowed(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {
+            "ok": True,
+            "data": {
+                "contextHeader": {"catalogSchema": "S"},
+                "rollup": {"totalChanges": 0},
+                "fallback": {"show": False},
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "metadata_changes_between_crawls")
+        out = await fn(from_crawl_id=50, to_crawl_id=50)
+        assert out["ok"] is True
+        mock_oe_client.post.assert_called_once_with(
+            MCP_PATH_METADATA_CHANGES_BETWEEN_CRAWLS,
+            body={"fromCrawlId": 50, "toCrawlId": 50},
+        )
+
+    async def test_happy_path_fallback_when_deep_analysis_missing(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {
+            "ok": True,
+            "data": {
+                "contextHeader": {"catalogSchema": "CUSTOMER"},
+                "rollup": {"totalChanges": 0},
+                "fallback": {
+                    "show": True,
+                    "message": "Run Deep Analysis under Advance Tools, then ask again.",
+                },
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "metadata_changes_between_crawls")
+        out = await fn(question="Show drift for CUSTOMER")
+        assert "Run Deep Analysis" in out["formattedResponse"]
+        assert out["data"]["fallback"]["show"] is True
+
+    async def test_omits_blank_schema_and_table_filters(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {
+            "ok": True,
+            "data": {
+                "contextHeader": {},
+                "rollup": {"totalChanges": 0},
+                "fallback": {"show": False},
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "metadata_changes_between_crawls")
+        await fn(schema_names=["", "  "], table_names=None, last_n_days=1)
+        mock_oe_client.post.assert_called_once_with(
+            MCP_PATH_METADATA_CHANGES_BETWEEN_CRAWLS,
+            body={"lastNDays": 1},
+        )
+
+    async def test_rejects_days_and_weeks_error_message(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "metadata_changes_between_crawls")
+        out = await fn(last_n_days=2, last_n_weeks=1, question="drift?")
+        assert out["status_code"] == 400
+        assert "last_n_days or last_n_weeks" in out["error"]
+        mock_oe_client.post.assert_not_called()
+
+    async def test_rejects_inverted_crawl_range_error_message(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "metadata_changes_between_crawls")
+        out = await fn(from_crawl_id=20, to_crawl_id=10)
+        assert out["status_code"] == 400
+        assert "from_crawl_id must be <= to_crawl_id" in out["error"]
+        mock_oe_client.post.assert_not_called()
+
+    async def test_unauthorized_returns_structured_dict(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.side_effect = OvalEdgeError(401, "Unauthorized")
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "metadata_changes_between_crawls")
+        out = await fn(question="Show drift")
+        assert out["status_code"] == 401
+        assert "401" in out["error"]
+
+    async def test_forbidden_returns_structured_dict(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.side_effect = OvalEdgeError(403, "Forbidden")
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "metadata_changes_between_crawls")
+        out = await fn(connection_name="PROD")
+        assert out["status_code"] == 403
+        assert "403" in out["error"]
+
+    async def test_not_found_returns_structured_dict(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.side_effect = OvalEdgeError(404, "Schema not found")
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "metadata_changes_between_crawls")
+        out = await fn(schema_names=["missing_schema"])
+        assert out["status_code"] == 404
+        assert "404" in out["error"]
+
+    async def test_non_dict_backend_payload_passes_through(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {"ok": True, "data": "not-a-dict"}
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "metadata_changes_between_crawls")
+        out = await fn(question="Show drift")
+        assert out == {"ok": True, "data": "not-a-dict"}
+        assert "formattedResponse" not in out
+
 
 class TestMetadataChangesFormatter:
     def test_builds_compact_response_with_top_row_count_adds(self) -> None:
@@ -996,6 +1391,386 @@ class TestMetadataChangesFormatter:
         )
         assert "`ORDERS.new_col`" in out["data"]["formattedResponse"]
 
+    def test_builds_nav_links_from_schema_id_when_backend_urls_absent(self) -> None:
+        from server.tools.catalog.formatters import _enhance_metadata_changes_response
+
+        raw = {
+            "ok": True,
+            "data": {
+                "contextHeader": {
+                    "catalogSchema": "CUSTOMER",
+                    "schemaId": 42,
+                    "compareSchemaId": 7,
+                },
+                "redirectUrl": "https://oe.example/#nav/schema?id=42",
+                "rollup": {"totalChanges": 1, "tablesModified": 1},
+                "fallback": {"show": False},
+            },
+        }
+        out = _enhance_metadata_changes_response(raw, include_links=True)
+        links = out["data"]["usefulLinks"]
+        assert links["compareSchemaUrl"].endswith(
+            "#nav/comparedb?srchtab=history&id=7"
+        )
+        assert links["objectSchemaUrl"].endswith("#nav/schema?browse=summary&id=42")
+        assert "dataandmetachanges?searchTab=datachanges" in links["dataChangeUrl"]
+        assert (
+            "dataandmetachanges?searchTab=metadatachanges/table"
+            in links["metadataChangeUrl"]
+        )
+        assert "schemaname=42" in links["dataChangeUrl"]
+        fr = out["data"]["formattedResponse"]
+        assert "**Useful links**" in fr
+        assert "CompareSchema" in fr
+
+    def test_prefers_backend_urls_over_constructed_nav_links(self) -> None:
+        from server.tools.catalog.formatters import _enhance_metadata_changes_response
+
+        raw = {
+            "ok": True,
+            "data": {
+                "contextHeader": {
+                    "catalogSchema": "CUSTOMER",
+                    "schemaId": 42,
+                    "compareSchemaId": 7,
+                },
+                "redirectUrl": "https://oe.example/#nav/schema?id=42",
+                "compareSchemaUrl": "https://oe.example/#nav/comparedb?srchtab=history&id=99",
+                "objectSchemaUrl": "https://oe.example/#nav/schema?browse=summary&id=88",
+                "dataChangeUrl": "https://oe.example/#nav/dataandmetachanges?searchTab=datachanges",
+                "metadataChangeUrl": (
+                    "https://oe.example/#nav/dataandmetachanges"
+                    "?searchTab=metadatachanges/table"
+                ),
+                "rollup": {"totalChanges": 1},
+                "fallback": {"show": False},
+            },
+        }
+        out = _enhance_metadata_changes_response(raw, include_links=True)
+        links = out["data"]["usefulLinks"]
+        assert links["compareSchemaUrl"].endswith("id=99")
+        assert links["objectSchemaUrl"].endswith("id=88")
+        assert links["dataChangeUrl"].endswith("searchTab=datachanges")
+        assert links["metadataChangeUrl"].endswith("searchTab=metadatachanges/table")
+
+    def test_deleted_question_falls_back_to_table_column_counts(self) -> None:
+        from server.tools.catalog.formatters import _enhance_metadata_changes_response
+
+        raw = {
+            "ok": True,
+            "data": {
+                "contextHeader": {"catalogSchema": "S"},
+                "rollup": {
+                    "totalChanges": 5,
+                    "columnsDeleted": 12,
+                    "columnsAdded": 0,
+                    "columnsModified": 0,
+                },
+                "columnChanges": [],
+                "tableSummaries": [
+                    {
+                        "tableName": "legacy_orders",
+                        "changeType": "deleted",
+                        "columnsDeleted": 8,
+                    },
+                    {
+                        "tableName": "old_audit",
+                        "changeType": "modified",
+                        "columnsDeleted": 4,
+                    },
+                ],
+                "fallback": {"show": False},
+            },
+        }
+        out = _enhance_metadata_changes_response(
+            raw, header_title="Which columns were deleted?"
+        )
+        fr = out["data"]["formattedResponse"]
+        assert "**Example columns deleted**" in fr
+        assert "`legacy_orders` (-8 columns)" in fr
+        assert "`old_audit` (-4 columns)" in fr
+        assert "Example columns added" not in fr
+
+    def test_data_modified_only_uses_recent_data_changes_examples(self) -> None:
+        from server.tools.catalog.formatters import _enhance_metadata_changes_response
+
+        raw = {
+            "ok": True,
+            "data": {
+                "contextHeader": {"catalogSchema": "S"},
+                "rollup": {
+                    "totalChanges": 2,
+                    "columnsModified": 2,
+                    "columnsAdded": 0,
+                    "columnsDeleted": 0,
+                },
+                "columnChanges": [
+                    {
+                        "tableName": "ORDERS",
+                        "columnName": "amount",
+                        "changeType": "modified",
+                        "detail": "Data Modified for the transaction",
+                    },
+                    {
+                        "tableName": "ORDERS",
+                        "columnName": "status",
+                        "changeType": "modified",
+                        "detail": "Data Modified for the transaction",
+                    },
+                ],
+                "fallback": {"show": False},
+            },
+        }
+        out = _enhance_metadata_changes_response(
+            raw, header_title="What columns were modified?"
+        )
+        fr = out["data"]["formattedResponse"]
+        assert "**Example columns with recent data changes**" in fr
+        assert "`ORDERS.amount`" in fr
+        assert "`ORDERS.status`" in fr
+        assert "**Example columns modified**" not in fr
+
+    def test_question_intent_filters_example_buckets(self) -> None:
+        from server.tools.catalog.formatters import _enhance_metadata_changes_response
+
+        raw = {
+            "ok": True,
+            "data": {
+                "contextHeader": {"catalogSchema": "S"},
+                "rollup": {
+                    "totalChanges": 3,
+                    "columnsAdded": 1,
+                    "columnsDeleted": 1,
+                    "columnsModified": 1,
+                },
+                "columnChanges": [
+                    {
+                        "tableName": "T",
+                        "columnName": "a",
+                        "changeType": "added",
+                    },
+                    {
+                        "tableName": "T",
+                        "columnName": "d",
+                        "changeType": "deleted",
+                    },
+                    {
+                        "tableName": "T",
+                        "columnName": "m",
+                        "changeType": "modified",
+                        "previousDataType": "INT",
+                        "currentDataType": "BIGINT",
+                    },
+                ],
+                "fallback": {"show": False},
+            },
+        }
+        deleted_only = _enhance_metadata_changes_response(
+            raw, header_title="Which columns were deleted or dropped?"
+        )["data"]["formattedResponse"]
+        assert "**Example columns deleted**" in deleted_only
+        assert "`T.d`" in deleted_only
+        assert "Example columns added" not in deleted_only
+        assert "Example columns modified" not in deleted_only
+
+        modified_only = _enhance_metadata_changes_response(
+            raw, header_title="Show datatype or length changes"
+        )["data"]["formattedResponse"]
+        assert "**Example columns modified**" in modified_only
+        assert "`T.m`" in modified_only
+        assert "Example columns added" not in modified_only
+        assert "Example columns deleted" not in modified_only
+
+    def test_caps_datatype_length_property_tables_with_remaining_note(self) -> None:
+        from server.tools.catalog.formatters import (
+            _MCP_PROPERTY_CHANGE_TABLE_CAP,
+            _enhance_metadata_changes_response,
+        )
+
+        column_changes = [
+            {
+                "tableName": "T",
+                "columnName": f"c{i}",
+                "changeType": "modified",
+                "previousDataType": "INT",
+                "currentDataType": "BIGINT",
+            }
+            for i in range(_MCP_PROPERTY_CHANGE_TABLE_CAP + 3)
+        ]
+        raw = {
+            "ok": True,
+            "data": {
+                "contextHeader": {"catalogSchema": "S"},
+                "rollup": {
+                    "totalChanges": len(column_changes),
+                    "columnsModified": len(column_changes),
+                    "dataTypeChanges": len(column_changes),
+                },
+                "columnChanges": column_changes,
+                "fallback": {"show": False},
+            },
+        }
+        fr = _enhance_metadata_changes_response(raw)["data"]["formattedResponse"]
+        assert "**Datatype / length changes (modified columns)**" in fr
+        assert "`T.c0`" in fr
+        assert f"`T.c{_MCP_PROPERTY_CHANGE_TABLE_CAP - 1}`" in fr
+        assert f"`T.c{_MCP_PROPERTY_CHANGE_TABLE_CAP}`" not in fr
+        assert "_…and 3 more modified column(s) with type/length changes_" in fr
+
+    def test_shows_no_changes_message_when_rollup_empty(self) -> None:
+        from server.tools.catalog.formatters import _enhance_metadata_changes_response
+
+        raw = {
+            "ok": True,
+            "data": {
+                "contextHeader": {"catalogSchema": "EMPTY", "connection": "PROD"},
+                "rollup": {"totalChanges": 0},
+                "fallback": {"show": False},
+            },
+        }
+        fr = _enhance_metadata_changes_response(raw)["data"]["formattedResponse"]
+        assert "No structural or row-count changes were found for this scope." in fr
+        assert "**Summary**" not in fr
+        assert "connection PROD" in fr
+        assert "schema EMPTY" in fr
+
+    def test_top_row_count_adds_from_row_count_changes_ignores_negatives(self) -> None:
+        from server.tools.catalog.formatters import _enhance_metadata_changes_response
+
+        raw = {
+            "ok": True,
+            "data": {
+                "contextHeader": {"catalogSchema": "S"},
+                "rollup": {"totalChanges": 2, "rowCountChanges": 2},
+                "rowCountChanges": [
+                    {"tableName": "grew", "rowCountDelta": 500},
+                    {"tableName": "shrank", "rowCountDelta": -200},
+                    {"tableName": "grew_more", "rowCountDelta": 900},
+                ],
+                "fallback": {"show": False},
+            },
+        }
+        out = _enhance_metadata_changes_response(raw)
+        fr = out["data"]["formattedResponse"]
+        assert "**Top row-count adds**" in fr
+        assert "`grew_more` (+900)" in fr
+        assert "`grew` (+500)" in fr
+        assert "shrank" not in fr
+        top = out["data"]["topLargeRowCountAdds"]
+        assert [d["tableName"] for d in top] == ["grew_more", "grew"]
+
+    def test_caps_table_and_notable_delta_lists(self) -> None:
+        from server.tools.catalog.formatters import (
+            _MCP_NOTABLE_DELTA_LIST_CAP,
+            _MCP_TABLE_CHANGE_LIST_CAP,
+            _enhance_metadata_changes_response,
+        )
+
+        raw = {
+            "ok": True,
+            "data": {
+                "contextHeader": {"catalogSchema": "S"},
+                "rollup": {"totalChanges": 200, "tablesModified": 200},
+                "tableChanges": [
+                    {"tableName": f"t{i}", "changeType": "modified"}
+                    for i in range(_MCP_TABLE_CHANGE_LIST_CAP + 10)
+                ],
+                "tableSummaries": [
+                    {"tableName": f"s{i}", "changeType": "modified"}
+                    for i in range(_MCP_TABLE_CHANGE_LIST_CAP + 5)
+                ],
+                "notableDeltas": [
+                    {"tableName": f"d{i}", "rowCountDelta": i + 1}
+                    for i in range(_MCP_NOTABLE_DELTA_LIST_CAP + 8)
+                ],
+                "fallback": {"show": False},
+            },
+        }
+        data = _enhance_metadata_changes_response(raw)["data"]
+        assert len(data["tableChanges"]) == _MCP_TABLE_CHANGE_LIST_CAP
+        assert data["_tableChangesTruncated"] is True
+        assert len(data["tableSummaries"]) == _MCP_TABLE_CHANGE_LIST_CAP
+        assert data["_tableSummariesTruncated"] is True
+        assert len(data["notableDeltas"]) == _MCP_NOTABLE_DELTA_LIST_CAP
+        assert data["_notableDeltasTruncated"] is True
+
+    def test_populates_required_info_and_mirrors_top_level_fields(self) -> None:
+        from server.tools.catalog.formatters import _enhance_metadata_changes_response
+
+        raw = {
+            "ok": True,
+            "data": {
+                "contextHeader": {"catalogSchema": "S"},
+                "redirectUrl": "https://oe.example/#nav/schema?id=1",
+                "crawlComparisonReference": "crawl-101-vs-102",
+                "changeSummary": "Tables and columns drifted",
+                "analyzedFromTimestamp": "2026-07-01T00:00:00Z",
+                "analyzedToTimestamp": "2026-07-08T00:00:00Z",
+                "rollup": {"totalChanges": 1, "tablesModified": 1},
+                "fallback": {"show": False},
+            },
+        }
+        out = _enhance_metadata_changes_response(raw)
+        required = out["requiredInfo"]
+        assert required["ovaledgeObjectRedirectUrl"].startswith("https://oe.example")
+        assert required["crawlComparisonReference"] == "crawl-101-vs-102"
+        assert required["changeSummary"] == "Tables and columns drifted"
+        assert (
+            required["timestampOfAnalyzedCrawls"]
+            == "2026-07-01T00:00:00Z -> 2026-07-08T00:00:00Z"
+        )
+        assert "Required info" in required["requiredInfoMarkdown"]
+        assert out["data"]["requiredInfo"] == required
+        assert out["summaryTableMarkdown"] == out["data"]["summaryTableMarkdown"]
+        assert "period 2026-07-01T00:00:00Z → 2026-07-08T00:00:00Z" in out[
+            "formattedResponse"
+        ]
+
+    def test_show_object_redirect_limits_useful_links_table(self) -> None:
+        from server.tools.catalog.formatters import _enhance_metadata_changes_response
+
+        raw = {
+            "ok": True,
+            "data": {
+                "contextHeader": {"catalogSchema": "S", "schemaId": 10},
+                "redirectUrl": "https://oe.example/#nav/table?id=55",
+                "compareSchemaUrl": "https://oe.example/#nav/comparedb?id=5",
+                "rollup": {"totalChanges": 1},
+                "fallback": {"show": False},
+            },
+        }
+        fr = _enhance_metadata_changes_response(
+            raw, include_links=True, show_object_redirect=True
+        )["data"]["formattedResponse"]
+        assert "OvalEdge object redirect URL" in fr
+        assert "Open object" in fr
+        assert "CompareSchema" not in fr.split("**Useful links**", 1)[1]
+
+
+class TestIsSpecificTableCompare:
+    def test_true_when_table_names_provided(self) -> None:
+        from server.tools.catalog.helpers import _is_specific_table_compare
+
+        assert _is_specific_table_compare(None, ["CUSTOMER_PROFILE"]) is True
+
+    def test_true_for_table_phrasing_in_question(self) -> None:
+        from server.tools.catalog.helpers import _is_specific_table_compare
+
+        assert _is_specific_table_compare("changes in table film", None) is True
+        assert _is_specific_table_compare("what changed at actor", None) is True
+        assert _is_specific_table_compare("deltas from rental table", None) is True
+
+    def test_false_for_schema_level_question(self) -> None:
+        from server.tools.catalog.helpers import _is_specific_table_compare
+
+        assert (
+            _is_specific_table_compare(
+                "What changed in CUSTOMER schema after the latest crawl?",
+                None,
+            )
+            is False
+        )
+
 
 class TestUpdateCdeAssociations:
     async def test_confirm_preview_blocks_post(self, mock_oe_client: AsyncMock) -> None:
@@ -1035,6 +1810,44 @@ class TestUpdateCdeAssociations:
             },
         )
 
+    async def test_happy_path_alias_object_type_and_category(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {"status": "success", "updated": 1}
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_cde_associations")
+        out = await invoke_write_confirmed(
+            fn,
+            targets=[{"object_id": 88, "object_type": "filecolumn"}],
+            action="Yes",
+            cde_category="PII",
+            cde_justification="Contains customer email",
+        )
+        assert out["status"] == "success"
+        body = mock_oe_client.post.call_args[0][1]
+        assert body["targets"] == [{"objectId": 88, "objectType": "oefilecolumn"}]
+        assert body["cdeCategory"] == "PII"
+        assert body["cdeJustification"] == "Contains customer email"
+
+    async def test_happy_path_action_none_clears_cde(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {"status": "success"}
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_cde_associations")
+        out = await invoke_write_confirmed(
+            fn,
+            targets=[{"object_id": 10, "object_type": "oetable"}],
+            action="None",
+        )
+        assert out["status"] == "success"
+        body = mock_oe_client.post.call_args[0][1]
+        assert body["action"] == "None"
+        assert "cdeCategory" not in body
+        assert "cdeJustification" not in body
+
     async def test_rejects_unsupported_object_type(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
@@ -1044,6 +1857,83 @@ class TestUpdateCdeAssociations:
             action="Yes",
         )
         assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
+    async def test_rejects_empty_targets(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_cde_associations")
+        out = await fn(targets=[], action="Yes")
+        assert out["status_code"] == 400
+        assert "at least one" in out["error"]
+        mock_oe_client.post.assert_not_called()
+
+    async def test_rejects_invalid_action(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_cde_associations")
+        out = await fn(
+            targets=[{"object_id": 1, "object_type": "oetable"}],
+            action="Maybe",
+        )
+        assert out["status_code"] == 400
+        assert "action must be one of" in out["error"]
+        mock_oe_client.post.assert_not_called()
+
+    async def test_rejects_missing_object_id(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_cde_associations")
+        out = await fn(
+            targets=[{"object_type": "oetable"}],
+            action="Yes",
+        )
+        assert out["status_code"] == 400
+        assert "object_id and object_type" in out["error"]
+        mock_oe_client.post.assert_not_called()
+
+    async def test_rejects_non_positive_object_id(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_cde_associations")
+        out = await fn(
+            targets=[{"object_id": 0, "object_type": "oetable"}],
+            action="Yes",
+        )
+        assert out["status_code"] == 400
+        assert "positive integer" in out["error"]
+        mock_oe_client.post.assert_not_called()
+
+    async def test_rejects_non_integer_object_id(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_cde_associations")
+        out = await fn(
+            targets=[{"object_id": "abc", "object_type": "oetable"}],
+            action="Yes",
+        )
+        assert out["status_code"] == 400
+        assert "integer" in out["error"]
+        mock_oe_client.post.assert_not_called()
+
+    async def test_rejects_confirmation_token_mismatch(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "update_cde_associations")
+        preview = await fn(
+            targets=[{"object_id": 10, "object_type": "oetable"}],
+            action="Yes",
+        )
+        assert preview["workflowPhase"] == "confirm_update"
+        out = await fn(
+            targets=[{"object_id": 10, "object_type": "oetable"}],
+            action="Yes",
+            write_confirmed_by_user=True,
+            confirmation_token="not-the-real-token",
+        )
+        assert out.get("error_code") == "confirmation_token_mismatch"
         mock_oe_client.post.assert_not_called()
 
     async def test_dry_run_skips_confirm_and_posts(self, mock_oe_client: AsyncMock) -> None:

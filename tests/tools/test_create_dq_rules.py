@@ -128,6 +128,40 @@ class TestCreateDqRules:
         out = await invoke_write_confirmed(fn, discover_cde_columns=True)
         assert out["status_code"] == 502
 
+    async def test_rejects_invalid_object_type(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
+        out = await fn(objects=[{"objectId": 1, "objectType": "dqrule"}])
+        assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
+    async def test_description_custom_field_name_forwarded(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {"rows": []}
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
+        await invoke_write_confirmed(
+            fn,
+            discover_cde_columns=True,
+            description_custom_field_name=" Business Definition ",
+        )
+        body = mock_oe_client.post.call_args[0][1]
+        assert body["descriptionCustomFieldName"] == "Business Definition"
+
+    async def test_limit_capped_at_max(self, mock_oe_client: AsyncMock) -> None:
+        from server.constants import MCP_DQ_ASSESS_LIMIT_MAX
+
+        mock_oe_client.post.return_value = {"rows": []}
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
+        await invoke_write_confirmed(fn, discover_cde_columns=True, limit=999)
+        body = mock_oe_client.post.call_args[0][1]
+        assert body["limit"] == MCP_DQ_ASSESS_LIMIT_MAX
+
 
 def test_format_create_dq_rules_created_with_object_linked():
     body = {

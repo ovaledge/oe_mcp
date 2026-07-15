@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -20,6 +22,58 @@ def _mcp_tools_called(case: LLMTestCase) -> list[MCPToolCall]:
     tools = case.mcp_tools_called
     assert tools is not None
     return tools
+
+
+def _tool_result_payload(tool: MCPToolCall) -> dict[str, Any]:
+    """Best-effort structured content from an MCPToolCall result."""
+    result = tool.result
+    if result is None:
+        return {}
+    structured = getattr(result, "structuredContent", None)
+    if isinstance(structured, dict):
+        # tool_call_result() wraps as {"result": <payload>}
+        inner = structured.get("result")
+        if isinstance(inner, dict):
+            return inner
+        return structured
+    # DeepEval / MCP CallToolResult may nest content differently across versions.
+    content = getattr(result, "content", None)
+    if isinstance(content, list):
+        for item in content:
+            text = getattr(item, "text", None)
+            if isinstance(text, str) and text.strip().startswith("{"):
+                try:
+                    parsed = json.loads(text)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(parsed, dict):
+                    inner = parsed.get("result")
+                    return inner if isinstance(inner, dict) else parsed
+    if isinstance(result, dict):
+        inner = result.get("result")
+        return inner if isinstance(inner, dict) else result
+    return {}
+
+
+def _path_kind(result: dict[str, Any]) -> str:
+    """Classify a tool result as happy vs adverse (error / empty / confirm gate / intent)."""
+    if result.get("error") is not None or result.get("status_code") is not None:
+        return "adverse"
+    if result.get("error_code") is not None:
+        return "adverse"
+    if result.get("doNotUpdate") or result.get("doNotCreate") or result.get("doNotCreateTag"):
+        return "adverse"
+    phase = str(result.get("workflowPhase") or "")
+    if phase.startswith("confirm_"):
+        return "adverse"
+    if result.get("total") == 0:
+        return "adverse"
+    data = result.get("data")
+    if isinstance(data, dict):
+        fb = data.get("fallback")
+        if isinstance(fb, dict) and fb.get("show") is True:
+            return "adverse"
+    return "happy"
 
 
 def test_load_example_mcp_use_json() -> None:
@@ -69,6 +123,33 @@ def test_example_json_covers_all_mcp_tools() -> None:
             covered.add(tool.name)
     missing = MCP_TOOL_NAMES - covered
     assert not missing, f"example JSON missing tools: {sorted(missing)}"
+
+
+def test_example_json_has_happy_and_adverse_path_per_tool() -> None:
+    """Every MCP tool must appear in ≥1 happy and ≥1 adverse (error/empty/confirm/intent) case."""
+    from server.mcp_surface import MCP_TOOL_NAMES
+
+    cases = load_mcp_use_cases_from_json(_EXAMPLES)
+    happy: set[str] = set()
+    adverse: set[str] = set()
+    for case in cases:
+        for tool in _mcp_tools_called(case):
+            kind = _path_kind(_tool_result_payload(tool))
+            if kind == "happy":
+                happy.add(tool.name)
+            else:
+                adverse.add(tool.name)
+
+    missing_happy = sorted(MCP_TOOL_NAMES - happy)
+    missing_adverse = sorted(MCP_TOOL_NAMES - adverse)
+    assert not missing_happy, (
+        "example JSON missing happy-path coverage for: "
+        f"{missing_happy}. Add a success result (no error/confirm-block)."
+    )
+    assert not missing_adverse, (
+        "example JSON missing adverse-path coverage for: "
+        f"{missing_adverse}. Add error, empty, confirm preview, or ACCESS_INTENT result."
+    )
 
 
 def test_load_root_array(tmp_path: Path) -> None:

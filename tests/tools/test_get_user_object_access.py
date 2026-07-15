@@ -127,3 +127,99 @@ class TestGetUserObjectAccess:
             object_type="oetable",
         )
         assert out["status_code"] == 403
+
+    @patch("server.tools.access.register.ovaledge_client")
+    async def test_object_to_principals_requires_access_intent(
+        self, mock_client_factory
+    ) -> None:
+        mock_client = AsyncMock()
+        mock_client_factory.return_value.__aenter__.return_value = mock_client
+
+        mcp = FastMCP("test")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_GET_USER_OBJECT_ACCESS)
+        out = await fn(
+            query_direction="object_to_principals",
+            object_id=42,
+            object_type="oetable",
+        )
+        assert out.get("error_code") == "ACCESS_INTENT_REQUIRED"
+        mock_client.get.assert_not_awaited()
+
+    @patch("server.tools.access.register.ovaledge_client")
+    async def test_object_to_principals_rejects_wrong_intent_native(
+        self, mock_client_factory
+    ) -> None:
+        mock_client = AsyncMock()
+        mock_client_factory.return_value.__aenter__.return_value = mock_client
+
+        mcp = FastMCP("test")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_GET_USER_OBJECT_ACCESS)
+        out = await fn(
+            query_direction="object_to_principals",
+            object_id=42,
+            object_type="oetable",
+            access_intent_confirmed="native",
+        )
+        assert out.get("error_code") == "ACCESS_INTENT_REQUIRED"
+        mock_client.get.assert_not_awaited()
+
+    @patch("server.tools.access.register.ovaledge_client")
+    async def test_invoke_rejects_no_resolution_mode(self, mock_client_factory) -> None:
+        mock_client = AsyncMock()
+        mock_client_factory.return_value.__aenter__.return_value = mock_client
+
+        mcp = FastMCP("test")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_GET_USER_OBJECT_ACCESS)
+        out = await fn(
+            query_direction="user_to_object",
+            username="john.doe",
+        )
+        assert out["status_code"] == 400
+        mock_client.get.assert_not_awaited()
+
+    @patch("server.tools.access.register.ovaledge_client")
+    async def test_invoke_fqn_happy_path(self, mock_client_factory) -> None:
+        mock_client = AsyncMock()
+        mock_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "queryDirection": "user_to_object",
+                "fullyQualifiedName": "db.schema.table",
+            },
+        }
+        mock_client_factory.return_value.__aenter__.return_value = mock_client
+
+        mcp = FastMCP("test")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_GET_USER_OBJECT_ACCESS)
+        result = await fn(
+            query_direction="user_to_object",
+            username="john.doe",
+            fully_qualified_name="db.schema.table",
+        )
+        assert result["ok"] is True
+        params = mock_client.get.await_args.kwargs["params"]
+        assert params["fullyQualifiedName"] == "db.schema.table"
+        assert params["username"] == "john.doe"
+
+    @patch("server.tools.access.register.ovaledge_client")
+    async def test_invoke_resolve_all_matches_forwarded(self, mock_client_factory) -> None:
+        mock_client = AsyncMock()
+        mock_client.get.return_value = {"ok": True, "data": {}}
+        mock_client_factory.return_value.__aenter__.return_value = mock_client
+
+        mcp = FastMCP("test")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_GET_USER_OBJECT_ACCESS)
+        await fn(
+            query_direction="object_to_principals",
+            object_name="looker",
+            object_type="connection",
+            access_intent_confirmed="catalog_acl",
+            resolve_all_matches=True,
+        )
+        params = mock_client.get.await_args.kwargs["params"]
+        assert params["resolveAllMatches"] is True
