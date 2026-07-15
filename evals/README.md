@@ -24,6 +24,22 @@ Pinned package: `deepeval` (~3.9.9) in the `eval` Poetry group (`pyproject.toml`
 
 If `OPENAI_API_KEY` is unset, `python -m evals.run_evals` **exits 0** after printing a skip message (fork-friendly CI). Use `--require-key` to exit `2` when the key is missing.
 
+### GitHub Actions secret (public repo)
+
+1. Create repo secret **`OPENAI_API_KEY`** (Settings → Secrets and variables → Actions).
+2. Optional Actions variable **`DEEPEVAL_JUDGE_MODEL`** (e.g. `gpt-4o-mini`).
+3. Run **Eval nightly (DeepEval MCP)** via **Actions → workflow_dispatch**, or wait for the daily cron.
+4. Forks never receive your secrets; keep “secrets for PRs from forks” disabled.
+
+The nightly job always runs:
+
+1. **Structural gates** — `test_json_cases_loader`, `test_red_team_cases`, golden construct/coverage/rigor (**must pass**, no LLM key).
+2. **`--dry-run`** — builds Python goldens plus both example JSON files (happy-path + red-team).
+3. **LLM golden metrics** — `test_mcp_deepeval.py` (skips without key; `continue-on-error: true`).
+4. **LLM red-team metrics** — same key, `DEEPEVAL_MCP_USE_CASES_JSON=evals/examples/mcp_red_team_cases.example.json`, plus `run_evals --cases-json … --output evals/out/red-team-report.json` (`continue-on-error: true`).
+
+Artifacts: `evals/out/eval-pytest.xml`, `red-team-pytest.xml`, `red-team-report.json`.
+
 ## User-provided JSON (MCPUseMetric)
 
 DeepEval does not run arbitrary JSON by itself. You describe each scenario in JSON; this repo **loads** it into `LLMTestCase` (see `evals/json_cases.py`) and then runs **`MCPUseMetric`** the same way as for Python goldens.
@@ -50,6 +66,31 @@ DeepEval does not run arbitrary JSON by itself. You describe each scenario in JS
    ```
 
 Example schema: `evals/examples/mcp_use_cases.example.json`. **v1 JSON** covers **tools** only (`mcp_prompts_called` / `mcp_resources_called` for file-driven cases stay in Python `golden_cases.py` until you extend the loader). Tool names must appear in `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
+
+The example file is gated by `evals/test_json_cases_loader.py`: every registered tool must appear in **≥1 happy** success result and **≥1 adverse** result (API/`status_code` error, empty search, confirm preview / `doNot*`, Deep Analysis fallback, or `ACCESS_INTENT_REQUIRED`).
+
+## Red team (MCP agent misuse)
+
+Adversarial agent-routing cases live in [`evals/examples/mcp_red_team_cases.example.json`](examples/mcp_red_team_cases.example.json). They encode **safe** behavior under attack prompts (confirm-gate bypass, forged tokens, access-intent skip, catalog-vs-RDAM misuse, secret exfil requests, docs-vs-datastory injection).
+
+Structural checks (no LLM key):
+
+```bash
+poetry run pytest evals/test_red_team_cases.py -q
+```
+
+LLM judge (uses your secret) — also runs on **Eval nightly** when `OPENAI_API_KEY` is set:
+
+```bash
+export DEEPEVAL_MCP_USE_CASES_JSON="$PWD/evals/examples/mcp_red_team_cases.example.json"
+poetry run pytest evals/test_mcp_deepeval.py::test_mcp_use_metric_from_user_json_file -v
+# or
+poetry run python -m evals.run_evals \
+  --cases-json evals/examples/mcp_red_team_cases.example.json \
+  --output evals/out/red-team-report.json
+```
+
+These are **MCP contract / agent-routing** red teams, not full DeepTeam attack generation. Extend the JSON when you find a new misuse pattern.
 
 ## Commands
 

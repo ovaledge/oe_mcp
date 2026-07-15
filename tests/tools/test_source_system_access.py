@@ -255,6 +255,39 @@ class TestGetSourceSystemAccess:
                 "connectionId": _REQ["connection_id"],
             })
 
+    async def test_object_to_users_requires_access_intent(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        rdam.register(mcp)
+        fn = await get_tool_fn(mcp, "source_system_access")
+        out = await fn(
+            source_system="redshift",
+            query_direction="object_to_users",
+            object_path=_REQ["object_path"],
+            object_type=_REQ["object_type"],
+            connection_id=_REQ["connection_id"],
+        )
+        assert out.get("error_code") == "ACCESS_INTENT_REQUIRED"
+        mock_oe_client.get.assert_not_called()
+
+    async def test_object_to_users_rejects_wrong_intent_catalog_acl(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        rdam.register(mcp)
+        fn = await get_tool_fn(mcp, "source_system_access")
+        out = await fn(
+            source_system="redshift",
+            query_direction="object_to_users",
+            access_intent_confirmed="catalog_acl",
+            object_path=_REQ["object_path"],
+            object_type=_REQ["object_type"],
+            connection_id=_REQ["connection_id"],
+        )
+        assert out.get("error_code") == "ACCESS_INTENT_REQUIRED"
+        mock_oe_client.get.assert_not_called()
+
     async def test_user_to_objects_forwards_without_username(
         self, mock_oe_client: AsyncMock
     ) -> None:

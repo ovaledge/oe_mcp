@@ -49,3 +49,48 @@ class TestLookupDqRule:
         out = await fn(rule_name="missing-rule")
         assert out["status_code"] == 404
         assert "404" in out["error"]
+
+    async def test_rejects_neither_id_nor_name(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_dq_rule")
+        out = await fn()
+        assert out["status_code"] == 400
+        assert out.get("error_code") == "validation_required"
+        mock_oe_client.get.assert_not_called()
+
+    async def test_whitespace_rule_name_treated_as_missing(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_dq_rule")
+        out = await fn(rule_name="   ")
+        assert out["status_code"] == 400
+        mock_oe_client.get.assert_not_called()
+
+    async def test_object_id_only_happy_path(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": [{"objectId": 42, "objectType": "dqrule"}],
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_dq_rule")
+        out = await fn(object_id=42)
+        assert out["ok"] is True
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_LOOKUP_DQ_RULES,
+            params={"objectId": 42, "limit": MCP_GLOSSARY_TAGS_LIMIT_DEFAULT},
+        )
+
+    async def test_limit_capped_at_max(self, mock_oe_client: AsyncMock) -> None:
+        from server.constants import MCP_GLOSSARY_TAGS_LIMIT_MAX
+
+        mock_oe_client.get.return_value = {"ok": True, "data": []}
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_dq_rule")
+        await fn(rule_name="Null Check", limit=999)
+        params = mock_oe_client.get.call_args[1]["params"]
+        assert params["limit"] == MCP_GLOSSARY_TAGS_LIMIT_MAX

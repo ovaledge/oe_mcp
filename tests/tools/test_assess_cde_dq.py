@@ -91,3 +91,70 @@ class TestAssessCdeDq:
         )
         assert payload["descriptionTermName"] == "Net Revenue"
         assert "descriptionCustomFieldName" not in payload
+
+    async def test_description_term_name_forwarded_on_invoke(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {"rows": [], "assessedCount": 0}
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ASSESS_CDE_DQ)
+        await fn(discover_cde_columns=True, description_term_name=" Net Revenue ")
+        mock_oe_client.post.assert_called_once_with(
+            MCP_PATH_ASSESS_CDE_DQ,
+            {
+                "discoverCdeColumns": True,
+                "limit": MCP_DQ_ASSESS_LIMIT_DEFAULT,
+                "descriptionTermName": "Net Revenue",
+            },
+        )
+
+    async def test_limit_capped_at_max(self, mock_oe_client: AsyncMock) -> None:
+        from server.constants import MCP_DQ_ASSESS_LIMIT_MAX
+
+        mock_oe_client.post.return_value = {"rows": [], "assessedCount": 0}
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ASSESS_CDE_DQ)
+        await fn(discover_cde_columns=True, limit=999)
+        body = mock_oe_client.post.call_args[0][1]
+        assert body["limit"] == MCP_DQ_ASSESS_LIMIT_MAX
+
+    async def test_rejects_missing_object_id(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ASSESS_CDE_DQ)
+        out = await fn(objects=[{"objectType": "oecolumn"}])
+        assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
+    async def test_rejects_non_positive_object_id(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ASSESS_CDE_DQ)
+        out = await fn(objects=[{"objectId": 0, "objectType": "oecolumn"}])
+        assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
+    async def test_happy_path_sets_formatted_response(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {
+            "assessedCount": 1,
+            "rows": [
+                {
+                    "tableColumnName": "film.rating",
+                    "objectId": 11,
+                    "objectType": "oecolumn",
+                    "descriptionSource": "none",
+                    "descriptionMessage": "No description found",
+                }
+            ],
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ASSESS_CDE_DQ)
+        out = await fn(objects=[{"objectId": 11, "objectType": "oecolumn"}])
+        assert "formattedResponse" in out
+        assert "film.rating" in out["formattedResponse"]
+        assert "descriptionSource=none" in out["formattedResponse"]

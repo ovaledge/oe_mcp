@@ -144,3 +144,40 @@ class TestAssociateDqRuleObjects:
             objects=[{"object_id": 10, "object_type": "column"}],
         )
         assert out["status_code"] == 409
+
+    async def test_rejects_invalid_object_type(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ASSOCIATE_DQ_RULE_OBJECTS)
+        out = await fn(
+            dqrule_id=42,
+            objects=[{"objectId": 10, "objectType": "glossary"}],
+        )
+        assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
+    async def test_rejects_missing_object_id(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ASSOCIATE_DQ_RULE_OBJECTS)
+        out = await fn(
+            dqrule_id=42,
+            objects=[{"objectType": "oecolumn"}],
+        )
+        assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
+    async def test_default_skip_already_associated_true(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {"data": {"associatedCount": 0}}
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ASSOCIATE_DQ_RULE_OBJECTS)
+        await invoke_write_confirmed(
+            fn,
+            dqrule_id=42,
+            objects=[{"objectId": 10, "objectType": "oecolumn"}],
+        )
+        body = mock_oe_client.post.call_args[0][1]
+        assert body["skipAlreadyAssociated"] is True
