@@ -152,6 +152,16 @@ def test_example_json_has_happy_and_adverse_path_per_tool() -> None:
     )
 
 
+def test_llm_only_skips_structural_validation_fixtures() -> None:
+    """Intentional invalid-arg rows use llm_score=false so MCPUseMetric is not run on them."""
+    all_cases = load_mcp_use_cases_from_json(_EXAMPLES)
+    llm_cases = load_mcp_use_cases_from_json(_EXAMPLES, llm_only=True)
+    assert len(llm_cases) < len(all_cases)
+    skipped = {c.name for c in all_cases} - {c.name for c in llm_cases}
+    assert "example_search_rejects_invalid_object_type" in skipped
+    assert "example_lookup_tags_neither_id_nor_name" in skipped
+
+
 def test_load_root_array(tmp_path: Path) -> None:
     p = tmp_path / "cases.json"
     p.write_text(

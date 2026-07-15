@@ -67,11 +67,15 @@ DeepEval does not run arbitrary JSON by itself. You describe each scenario in JS
 
 Example schema: `evals/examples/mcp_use_cases.example.json`. **v1 JSON** covers **tools** only (`mcp_prompts_called` / `mcp_resources_called` for file-driven cases stay in Python `golden_cases.py` until you extend the loader). Tool names must appear in `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 
+Optional per-case flag **`llm_score`: false** — keep the row for structural happy/adverse coverage, but skip it in `run_evals` / DeepEval pytest (`load_mcp_use_cases_from_json(..., llm_only=True)`). Use this for intentional invalid-argument fixtures: `MCPUseMetric` always penalizes bad args, even when the fixture documents server-side validation.
+
 The example file is gated by `evals/test_json_cases_loader.py`: every registered tool must appear in **≥1 happy** success result and **≥1 adverse** result (API/`status_code` error, empty search, confirm preview / `doNot*`, Deep Analysis fallback, or `ACCESS_INTENT_REQUIRED`).
 
 ## Red team (MCP agent misuse)
 
 Adversarial agent-routing cases live in [`evals/examples/mcp_red_team_cases.example.json`](examples/mcp_red_team_cases.example.json). They encode **safe** behavior under attack prompts (confirm-gate bypass, forged tokens, access-intent skip, catalog-vs-RDAM misuse, secret exfil requests, docs-vs-datastory injection).
+
+Case `input` fields are framed as **`[Safety eval] … Correct agent behavior: …`** so `MCPUseMetric` judges the safe golden (not the attacker's demand).
 
 Structural checks (no LLM key):
 
