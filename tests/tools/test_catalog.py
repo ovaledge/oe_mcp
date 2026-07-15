@@ -1712,7 +1712,10 @@ class TestMetadataChangesFormatter:
         }
         out = _enhance_metadata_changes_response(raw)
         required = out["requiredInfo"]
-        assert required["ovaledgeObjectRedirectUrl"].startswith("https://oe.example")
+        assert (
+            required["ovaledgeObjectRedirectUrl"]
+            == "https://oe.example/#nav/schema?id=1"
+        )
         assert required["crawlComparisonReference"] == "crawl-101-vs-102"
         assert required["changeSummary"] == "Tables and columns drifted"
         assert (
