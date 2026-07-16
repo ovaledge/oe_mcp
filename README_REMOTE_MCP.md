@@ -90,8 +90,8 @@ Okta (strict mode) requires an **exact** URI match, including loopback **port**.
 | **Claude.ai / Desktop / mobile** | `https://claude.ai/api/mcp/auth_callback` | Hosted Claude Connect |
 | **Claude Code** (CLI) | `http://localhost:8788/callback` and `http://127.0.0.1:8788/callback` | Pass `--callback-port 8788` |
 | **GitHub Copilot / VS Code** | `http://localhost:8790/callback` and `http://127.0.0.1:8790/callback` | Set `oauth.callbackPort: 8790` in `.vscode/mcp.json` |
-| **Microsoft Copilot Studio** | Wizard-issued URL (often `https://global.consent.azure-apim.net/redirect/<slug>`) | Copy from Studio after creating the MCP tool; slug changes if you rename the tool |
-| **Microsoft Copilot Studio** (common extras) | `https://token.botframework.com/.auth/web/redirect`, `https://europe.token.botframework.com/.auth/web/redirect`, `https://copilotstudio.microsoft.com/auth/callback` | Add when Studio / Bot Framework auth requires them |
+| **Microsoft Copilot Studio** | Wizard-issued URL (often `https://global.consent.azure-apim.net/redirect/<slug>`) | **Do not invent the slug** — copy the full callback URL after creating the MCP tool with OAuth, or from a `redirect_uri` mismatch error. Slug changes if you rename the tool. See [SETUP_MICROSOFT_COPILOT.md](docs/client-setup/SETUP_MICROSOFT_COPILOT.md#redirect-url--you-do-not-invent-the-slug) |
+| **Microsoft Copilot Studio** (common extras) | `https://token.botframework.com/.auth/web/redirect`, `https://europe.token.botframework.com/.auth/web/redirect`, `https://copilotstudio.microsoft.com/auth/callback` | Pre-add these; then add the wizard-issued `azure-apim.net` URL |
 
 **Recommended allowlist (IDE clients — copy-paste):**
 

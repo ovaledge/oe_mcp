@@ -1,5 +1,7 @@
 # VS Code + GitHub Copilot + OvalEdge MCP
 
+**Last reviewed:** July 2026.
+
 This guide is for **GitHub Copilot** in **Visual Studio Code** only. For **Microsoft Copilot** (Copilot Studio / Teams / M365 agents), use [SETUP_MICROSOFT_COPILOT.md](SETUP_MICROSOFT_COPILOT.md) — do not use this file.
 
 [Add and manage MCP servers in VS Code](https://code.visualstudio.com/docs/copilot/customization/mcp-servers) · [MCP configuration reference](https://code.visualstudio.com/docs/copilot/reference/mcp-configuration)
@@ -89,7 +91,31 @@ If you prefer one secret prompt, use **`X-OvalEdge-Credentials`** with value **`
 
 ## Local stdio (optional)
 
-GitHub Copilot MCP is **HTTP-first**. For local **`AUTH_MODE=local`**, use the same Poetry **`oe-mcp-local`** pattern as [SETUP_CURSOR.md](SETUP_CURSOR.md#local-stdio-configuration) inside **`mcp.json`** with `"type": "stdio"` if your VS Code build supports command-based servers.
+GitHub Copilot MCP is **HTTP-first**. For local **`AUTH_MODE=local`**, use the same Poetry **`oe-mcp-local`** pattern as [SETUP_CURSOR.md](SETUP_CURSOR.md#local-stdio-configuration) inside **`mcp.json`** with `"type": "stdio"` if your VS Code build supports command-based servers:
+
+```json
+{
+  "servers": {
+    "ovaledge-local": {
+      "type": "stdio",
+      "command": "poetry",
+      "args": [
+        "-C",
+        "/absolute/path/to/oe_mcp",
+        "run",
+        "oe-mcp-local"
+      ],
+      "env": {
+        "OVALEDGE_BASE_URL": "https://YOUR_OVALEDGE_APP_BASE_URL",
+        "OVALEDGE_USER_TOKEN": "your-user-token",
+        "OVALEDGE_USER_SECRET": "your-user-secret",
+        "OVALEDGE_HTTP_AUTH_SCHEME": "jwt",
+        "AUTH_MODE": "local"
+      }
+    }
+  }
+}
+```
 
 ---
 
@@ -136,8 +162,20 @@ Complete the browser Connect flow when VS Code prompts. If Okta rejects `redirec
 
 ---
 
+## Troubleshooting
+
+| Symptom | Action |
+| ------- | ------ |
+| Server not listed | Command Palette → **MCP: List Servers** / reload window |
+| Auth headers ignored | Confirm `"type": "http"` and `headers` under `servers` (not Cursor `mcpServers`) |
+| OAuth redirect mismatch | Register **8790** in Okta; set `"oauth": { "callbackPort": 8790 }` |
+| Confused with Microsoft Copilot | Use [SETUP_MICROSOFT_COPILOT.md](SETUP_MICROSOFT_COPILOT.md) instead |
+
+---
+
 ## References
 
 - [README_REMOTE_MCP.md](../../README_REMOTE_MCP.md) — auth, deploy, testing
 - [README_LOCAL_MCP.md](../../README_LOCAL_MCP.md) — local stdio mode
 - [SETUP_MICROSOFT_COPILOT.md](SETUP_MICROSOFT_COPILOT.md) — Microsoft Copilot Studio (not this guide)
+- [docs/client-setup/README.md](README.md) — all clients
