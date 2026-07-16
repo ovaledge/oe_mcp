@@ -14,7 +14,7 @@ OvalEdge governance and catalog MCP server for MCP clients (Cursor, Claude Deskt
 
 Full deployment matrix (auth, credentials, scripts): **[infra/DEPLOY.md](infra/DEPLOY.md)**.
 
-**Editor / assistant connection:** [docs/client-setup/README.md](docs/client-setup/README.md) (Cursor, Kiro, Claude, GitHub Copilot in VS Code, Microsoft Copilot in Studio — separate guides).
+**Editor / assistant connection:** [docs/client-setup/README.md](docs/client-setup/README.md) (Cursor, Kiro, Claude, GitHub Copilot in VS Code, Microsoft Copilot Studio / M365 — separate guides; last reviewed July 2026).
 
 **`AUTH_MODE`** in `.env` (or process env): `local`, **`remote`** (Okta/OIDC Connect — forward Bearer), or `remote_credentials` (header token+secret). Full variable reference: [.env.example](.env.example).
 

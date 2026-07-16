@@ -1,8 +1,12 @@
 # Cursor + OvalEdge MCP
 
-[Official MCP docs](https://docs.cursor.com/context/model-context-protocol) · Cursor reads **`~/.cursor/mcp.json`** (user) or project-level **`.cursor/mcp.json`** depending on your Cursor version and settings.
+**Last reviewed:** July 2026.
+
+[Cursor MCP docs](https://cursor.com/docs) · Cursor reads **`~/.cursor/mcp.json`** (user) and/or project **`.cursor/mcp.json`** depending on version and settings.
 
 **Project template:** copy [`.cursor/mcp.json.example`](../../.cursor/mcp.json.example) → `.cursor/mcp.json` (see [`.cursor/README.md`](../../.cursor/README.md)).
+
+This guide is for **Cursor** only. Microsoft Copilot Studio is [SETUP_MICROSOFT_COPILOT.md](SETUP_MICROSOFT_COPILOT.md); VS Code GitHub Copilot is [SETUP_VSCODE_GITHUB_COPILOT.md](SETUP_VSCODE_GITHUB_COPILOT.md).
 
 ---
 
@@ -150,6 +154,16 @@ With the server connected, Cursor can list **MCP prompts**, **resources**, and *
 | Deep link by id | `ovaledge://catalog/table/{id}`, `ovaledge://governance/data-story/{id}`, … |
 
 Full index: [server/docs/mcp_workflows.md](../../server/docs/mcp_workflows.md) (`docs://ovaledge/mcp_workflows`). Agent rules: [README.md](../../README.md#agent-guidance-mirrors-serverapppy-instructions).
+
+## Troubleshooting
+
+| Symptom | Action |
+| ------- | ------ |
+| Tools missing after edit | Restart Cursor / toggle MCP server off→on |
+| `fetch failed` on remote URL | `curl` `…/health`; confirm URL ends with `/mcp` |
+| OAuth redirect rejected | Add Cursor URIs in Okta (above); retry Connect |
+| Token exchange / client auth failed | Ensure Lambda has `OAUTH_CLIENT_SECRET`; redeploy |
+| Duplicate tools | Disable stdio **or** HTTP entry, not both |
 
 ## Security
 

@@ -1,6 +1,10 @@
 # Claude (Desktop, Chat, Code) + OvalEdge MCP
 
+**Last reviewed:** July 2026.
+
 Anthropic’s [MCP quickstart (user)](https://modelcontextprotocol.io/quickstart/user) · [Connect Claude Desktop to local MCP](https://support.anthropic.com/en/articles/10995153-connecting-claude-desktop-to-local-mcp-servers) · [`mcp-remote` (npm)](https://www.npmjs.com/package/mcp-remote) · [Claude Code setup](https://code.claude.com/docs/en/setup)
+
+Not for Microsoft Copilot Studio — see [SETUP_MICROSOFT_COPILOT.md](SETUP_MICROSOFT_COPILOT.md).
 
 ---
 
@@ -142,7 +146,17 @@ If authorize fails with *redirect_uri must be a Login redirect URI*, add the exa
 
 ---
 
+## Troubleshooting
+
+| Symptom | Action |
+| ------- | ------ |
+| Desktop ignores config | Restart Claude Desktop; confirm Developer/MCP enabled |
+| `mcp-remote` auth fails | Header format `Name:value` (no space after `:`); pin `mcp-remote` version |
+| Claude Code OAuth redirect mismatch | Register fixed port **8788** in Okta; pass `--callback-port 8788` |
+| SSE / GET `/mcp` issues | Set server `MCP_HTTP_STATELESS=false` |
+
 ## Shared references
 
 - Remote auth and TLS: [README_REMOTE_MCP.md](../../README_REMOTE_MCP.md)
 - Local stdio env: [README_LOCAL_MCP.md](../../README_LOCAL_MCP.md)
+- Client index: [README.md](README.md)
