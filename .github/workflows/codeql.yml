@@ -1,5 +1,9 @@
-# CodeQL analysis — catches issues like py/weak-sensitive-data-hashing on PRs
-# and pushes (complements local pre-commit scripts/run_codeql.sh).
+# Advanced CodeQL setup (Python). Complements local scripts/run_codeql.sh.
+#
+# If the PR check "Code scanning results / CodeQL" fails in ~2s with
+# "Error when processing the SARIF file" while this job is green or missing:
+#   Settings → Code security → CodeQL → turn OFF "Default setup"
+# (default + advanced uploads can collide). Prefer this workflow only.
 name: CodeQL
 
 on:
@@ -8,7 +12,6 @@ on:
   pull_request:
     branches: [main, dev]
   schedule:
-    # Weekly catch-up if a PR path skipped local CLI
     - cron: "17 5 * * 1"
 
 permissions:
@@ -22,23 +25,25 @@ jobs:
     permissions:
       contents: read
       actions: read
+      packages: read
       security-events: write
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # Python needs no compile step; build-mode none avoids empty/broken SARIF
+      # from a failed or no-op autobuild.
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
           languages: python
-          queries: security-extended
+          build-mode: none
           config-file: ./.github/codeql/codeql-config.yml
-
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v4
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
         with:
-          category: "/language:python"
+          # Distinct from CodeQL default-setup's "/language:python" so uploads
+          # do not overwrite / collide when default setup is still enabled.
+          category: "/language:python-advanced"

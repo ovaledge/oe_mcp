@@ -49,7 +49,8 @@ Repository admins should enable **Private vulnerability reporting** under **Sett
 ## Code scanning (CodeQL)
 
 - **Local (every commit):** pre-commit runs `scripts/run_codeql.sh` (CLI required by default). Install with `./scripts/install_codeql_cli.sh`.
-- **CI:** [`.github/workflows/codeql.yml`](.github/workflows/codeql.yml) analyzes Python on PRs and pushes to `main`/`dev`, and uploads results to **Security → Code scanning**.
+- **CI (advanced setup):** [`.github/workflows/codeql.yml`](.github/workflows/codeql.yml) analyzes Python on PRs and pushes to `main`/`dev` using [`.github/codeql/codeql-config.yml`](.github/codeql/codeql-config.yml).
+- **Disable CodeQL default setup** in **Settings → Code security → Code scanning** when using this workflow. Running default + advanced together often produces the PR check *Code scanning results / CodeQL* failing in a few seconds with *Error when processing the SARIF file*.
 - Findings such as `py/weak-sensitive-data-hashing` should be fixed or justified before merge; do not rely on post-merge Security-tab discovery alone.
 
 ## Automated dependency updates
