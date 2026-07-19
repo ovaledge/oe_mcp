@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install pre-commit git hooks (ruff, mypy, pytest on commit only).
+# Install pre-commit git hooks (ruff, mypy, pytest, CodeQL on commit only).
 # Idempotent — safe to re-run.
 #
 # Usage:
@@ -31,6 +31,10 @@ poetry run pre-commit install
 poetry run pre-commit uninstall --hook-type pre-push 2>/dev/null || true
 poetry run pre-commit validate-config .pre-commit-config.yaml
 
+chmod +x scripts/run_codeql.sh 2>/dev/null || true
+
 echo "==> Git hooks ready:"
-echo "    git commit → ruff check + mypy + pytest (tests/)"
-echo "    git push   → no local hook (CI runs on the remote)"
+echo "    git commit → ruff check + mypy + pytest (tests/) + CodeQL"
+echo "                 (CodeQL skips if CLI missing; CODEQL_REQUIRED=1 to enforce;"
+echo "                  CODEQL_SKIP=1 to skip once)"
+echo "    git push   → no local hook (CI / GitHub Code Scanning on the remote)"

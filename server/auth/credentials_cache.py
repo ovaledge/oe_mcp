@@ -7,7 +7,6 @@ In-memory default; ``CredentialsCacheBackend`` allows swapping in DynamoDB / Red
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import time
 from collections import OrderedDict
 from collections.abc import AsyncIterator
@@ -15,6 +14,7 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
+from server.auth.cache_keys import opaque_cache_key
 from server.constants import (
     CREDENTIALS_CACHE_MAX_ENTRIES,
     CREDENTIALS_CACHE_POST_EXP_GRACE_SECONDS,
@@ -25,11 +25,7 @@ from server.constants import (
 
 def credential_cache_key(user_token: str, user_secret: str) -> str:
     """Stable cache key; never log — derived from digested material only."""
-    h = hashlib.sha256()
-    h.update(user_token.encode("utf-8"))
-    h.update(b":")
-    h.update(user_secret.encode("utf-8"))
-    return h.hexdigest()
+    return opaque_cache_key(user_token, user_secret)
 
 
 @dataclass(frozen=True)

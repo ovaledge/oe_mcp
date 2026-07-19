@@ -145,7 +145,7 @@ Use `./scripts/run_tests.sh` on macOS and Linux so tests always run in the proje
 
 Unit tests measure coverage for `server/` and `entrypoints/` (report-only threshold for now; see `[tool.coverage.*]` in `pyproject.toml`). HTML report: `./scripts/run_tests.sh --cov-report=html` then open `htmlcov/index.html`.
 
-Git hooks (**ruff**, **mypy**, and **pytest** on each **commit** only) are installed automatically when you run `./scripts/setup_local_mcp.sh` in a git clone. To install or refresh hooks only:
+Git hooks (**ruff**, **mypy**, **pytest**, and **CodeQL** on each **commit**) are installed automatically when you run `./scripts/setup_local_mcp.sh` in a git clone. CodeQL (`scripts/run_codeql.sh`) is skipped if the CLI is not installed; set `CODEQL_REQUIRED=1` to enforce, or `CODEQL_SKIP=1` to skip once. To install or refresh hooks only:
 
 ```bash
 chmod +x scripts/setup_git_hooks.sh   # once, if needed
