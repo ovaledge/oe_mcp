@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import time
 from typing import Any, cast
@@ -166,6 +167,51 @@ async def exchange_oauth_access_token(oauth_access_token: str) -> str:
             )
         payload = _payload_from_token_exchange_response(response)
         return _extract_token(payload)
+
+
+def _oauth_exchange_cache_key(oauth_access_token: str) -> str:
+    """Stable cache key for the OAuth->OvalEdge JWT exchange; never logged."""
+    h = hashlib.sha256()
+    h.update(b"oauth-exchange:")
+    h.update(oauth_access_token.encode("utf-8"))
+    return h.hexdigest()
+
+
+async def get_or_refresh_oauth_exchanged_token(oauth_access_token: str) -> str:
+    """
+    Remote OAuth path: return a cached OvalEdge JWT for this IdP access token when still
+    fresh, otherwise exchange via ``POST /api/user/token/generate`` and cache the result.
+
+    Removes a token/generate round-trip on every MCP request when
+    ``ovaledge_remote_forward_idp_token`` is False. The cache key is a digest of the
+    access token (never logged); entries expire with the OvalEdge JWT's own ``exp``.
+    """
+    from server.auth.credentials_cache import (
+        CachedJwtEntry,
+        get_default_credentials_cache,
+    )
+
+    key = _oauth_exchange_cache_key(oauth_access_token)
+    cache = get_default_credentials_cache()
+
+    entry = await cache.get_entry(key)
+    if entry and not is_token_expiring(
+        entry.jwt, leeway_seconds=CREDENTIALS_REFRESH_LEEWAY_SECONDS
+    ):
+        return entry.jwt
+
+    async with cache.refresh_lock(key):
+        entry = await cache.get_entry(key)
+        if entry and not is_token_expiring(
+            entry.jwt, leeway_seconds=CREDENTIALS_REFRESH_LEEWAY_SECONDS
+        ):
+            return entry.jwt
+        new_jwt = await exchange_oauth_access_token(oauth_access_token)
+        await cache.set_entry(
+            key,
+            CachedJwtEntry(jwt=new_jwt, exp_epoch=jwt_exp_epoch(new_jwt)),
+        )
+        return new_jwt
 
 
 async def exchange_client_credentials() -> str:

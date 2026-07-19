@@ -719,6 +719,14 @@ HEADER_OE_USER_COMBINED = "X-OvalEdge-Credentials"
 CREDENTIALS_COMBINED_SEPARATOR = "::"
 CREDENTIALS_REFRESH_LEEWAY_SECONDS = 60
 CREDENTIALS_CACHE_MAX_ENTRIES = 10_000
+
+# ── AUTH_MODE=remote (OAuth) per-request validation cache ────────
+# Bounds the in-process cache of validated access-token claims so repeated MCP calls
+# in a short burst do not re-introspect / re-verify on every request. TTL is always
+# capped by the token's own ``exp`` (minus the leeway below); see OAUTH validation cache
+# TTL setting in server.config.
+OAUTH_VALIDATION_CACHE_MAX_ENTRIES = 10_000
+OAUTH_VALIDATION_REFRESH_LEEWAY_SECONDS = 30
 NEGATIVE_CREDENTIALS_CACHE_TTL_SECONDS = 30
 NEGATIVE_CREDENTIALS_CACHE_MAX_ENTRIES = 10_000
 CREDENTIALS_CACHE_POST_EXP_GRACE_SECONDS = 0

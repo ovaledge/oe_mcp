@@ -1,12 +1,16 @@
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from jose import jwt as jose_jwt
 
+from server.auth.credentials_cache import reset_default_credentials_cache
 from server.auth.token_exchange import (
     TokenExchangeError,
     exchange_client_credentials,
     exchange_oauth_access_token,
     exchange_user_credentials,
+    get_or_refresh_oauth_exchanged_token,
 )
 
 
@@ -154,3 +158,32 @@ async def test_exchange_user_credentials_5xx_sets_status() -> None:
             await exchange_user_credentials("t", "s")
 
     assert ei.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_get_or_refresh_oauth_exchanged_token_caches() -> None:
+    reset_default_credentials_cache()
+    oe_jwt = jose_jwt.encode({"exp": int(time.time()) + 3600}, "s", algorithm="HS256")
+    ex = AsyncMock(return_value=oe_jwt)
+    try:
+        with patch("server.auth.token_exchange.exchange_oauth_access_token", ex):
+            first = await get_or_refresh_oauth_exchanged_token("idp-token")
+            second = await get_or_refresh_oauth_exchanged_token("idp-token")
+        assert first == second == oe_jwt
+        ex.assert_awaited_once()
+    finally:
+        reset_default_credentials_cache()
+
+
+@pytest.mark.asyncio
+async def test_get_or_refresh_oauth_exchanged_token_distinct_tokens_dont_collide() -> None:
+    reset_default_credentials_cache()
+    oe_jwt = jose_jwt.encode({"exp": int(time.time()) + 3600}, "s", algorithm="HS256")
+    ex = AsyncMock(return_value=oe_jwt)
+    try:
+        with patch("server.auth.token_exchange.exchange_oauth_access_token", ex):
+            await get_or_refresh_oauth_exchanged_token("token-a")
+            await get_or_refresh_oauth_exchanged_token("token-b")
+        assert ex.await_count == 2
+    finally:
+        reset_default_credentials_cache()

@@ -1,3 +1,4 @@
+import time
 from collections.abc import Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -10,9 +11,11 @@ from server.auth import bearer_jwt, oauth_discovery
 def clear_caches() -> Generator[None, None, None]:
     oauth_discovery.clear_metadata_cache()
     bearer_jwt.clear_jwks_cache()
+    bearer_jwt.clear_token_validation_cache()
     yield
     oauth_discovery.clear_metadata_cache()
     bearer_jwt.clear_jwks_cache()
+    bearer_jwt.clear_token_validation_cache()
 
 
 @pytest.mark.asyncio
@@ -205,3 +208,90 @@ async def test_verify_opaque_rejects_inactive(monkeypatch: pytest.MonkeyPatch) -
     with patch("server.auth.bearer_jwt.httpx.AsyncClient", return_value=mock_client):
         with pytest.raises(ValueError, match="not active"):
             await bearer_jwt.verify_oauth_access_token("dead-token")
+
+
+def _introspect_mock_client() -> AsyncMock:
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "active": True,
+        "iss": "https://idp.example.com/oauth2/default",
+        "sub": "user@example.com",
+    }
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    return mock_client
+
+
+def _configure_introspection(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("server.config.settings.oauth_client_id", "0oa-test")
+    monkeypatch.setattr("server.config.settings.oauth_client_secret", "secret")
+    monkeypatch.setattr(
+        "server.config.settings.oauth_introspection_url",
+        "https://idp.example.com/oauth2/default/v1/introspect",
+    )
+    monkeypatch.setattr(
+        "server.config.settings.oauth_issuer", "https://idp.example.com/oauth2/default"
+    )
+    monkeypatch.setattr("server.config.settings.oauth_audience", "")
+
+
+@pytest.mark.asyncio
+async def test_validation_result_cached_skips_second_introspection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_introspection(monkeypatch)
+    monkeypatch.setattr("server.config.settings.oauth_validation_cache_ttl_seconds", 60)
+    mock_client = _introspect_mock_client()
+
+    with patch("server.auth.bearer_jwt.httpx.AsyncClient", return_value=mock_client):
+        first = await bearer_jwt.verify_oauth_access_token("opaque-token")
+        second = await bearer_jwt.verify_oauth_access_token("opaque-token")
+
+    assert first == second
+    mock_client.post.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_validation_cache_disabled_when_ttl_zero(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_introspection(monkeypatch)
+    monkeypatch.setattr("server.config.settings.oauth_validation_cache_ttl_seconds", 0)
+    mock_client = _introspect_mock_client()
+
+    with patch("server.auth.bearer_jwt.httpx.AsyncClient", return_value=mock_client):
+        await bearer_jwt.verify_oauth_access_token("opaque-token")
+        await bearer_jwt.verify_oauth_access_token("opaque-token")
+
+    assert mock_client.post.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_validation_cache_not_extended_past_token_exp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_introspection(monkeypatch)
+    monkeypatch.setattr("server.config.settings.oauth_validation_cache_ttl_seconds", 3600)
+
+    # exp already within the refresh leeway → entry must not be cached.
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "active": True,
+        "iss": "https://idp.example.com/oauth2/default",
+        "sub": "user@example.com",
+        "exp": int(time.time()) + 5,
+    }
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    with patch("server.auth.bearer_jwt.httpx.AsyncClient", return_value=mock_client):
+        await bearer_jwt.verify_oauth_access_token("soon-expiring")
+        await bearer_jwt.verify_oauth_access_token("soon-expiring")
+
+    assert mock_client.post.await_count == 2

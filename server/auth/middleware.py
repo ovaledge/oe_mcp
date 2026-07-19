@@ -23,7 +23,7 @@ from server.auth.remote_credentials_parse import (
 )
 from server.auth.token_exchange import (
     TokenExchangeError,
-    exchange_oauth_access_token,
+    get_or_refresh_oauth_exchanged_token,
     get_or_refresh_user_token,
 )
 from server.branding import MCP_BRAND_ICON_ROUTE
@@ -276,7 +276,7 @@ async def _auth_response_or_none(request: Request) -> Response | None:
         current_oe_jwt.set(access_token)
     else:
         try:
-            oe_jwt = await exchange_oauth_access_token(access_token)
+            oe_jwt = await get_or_refresh_oauth_exchanged_token(access_token)
         except TokenExchangeError as e:
             logger.warning("OAuth access token exchange failed: %s", e)
             return JSONResponse(

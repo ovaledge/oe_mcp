@@ -89,6 +89,12 @@ class Settings(BaseSettings):
     # remote_credentials only: max distinct credential-key JWT entries in memory
     credentials_cache_max_entries: int = 10_000
 
+    # remote (OAuth) only: seconds to cache a validated access token's claims (and the
+    # OvalEdge JWT it exchanges to) so a burst of MCP calls does not re-introspect /
+    # re-exchange on every request. Always bounded by the token's own ``exp``. Set 0 to
+    # validate on every request (tightest revocation window, highest per-call latency).
+    oauth_validation_cache_ttl_seconds: int = 60
+
     # Streamable HTTP: ``True`` = POST/DELETE only per request (good for Lambda). ``False`` =
     # enables GET on ``/mcp`` for long-lived sessions — required for Cursor (and similar)
     # clients that fall back to SSE / GET after Streamable HTTP negotiation.

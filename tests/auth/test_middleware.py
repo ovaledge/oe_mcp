@@ -49,7 +49,7 @@ def test_mcp_with_bearer_calls_verify_and_exchange(
                 new=AsyncMock(return_value={"sub": "u"}),
             ),
             patch(
-                "server.auth.middleware.exchange_oauth_access_token",
+                "server.auth.middleware.get_or_refresh_oauth_exchanged_token",
                 new=AsyncMock(return_value="oe-jwt"),
             ),
         ):
@@ -75,7 +75,7 @@ def test_mcp_forward_idp_skips_exchange(
                 "server.auth.middleware.verify_oauth_access_token",
                 new=AsyncMock(return_value={"sub": "u"}),
             ),
-            patch("server.auth.middleware.exchange_oauth_access_token", exchange),
+            patch("server.auth.middleware.get_or_refresh_oauth_exchanged_token", exchange),
         ):
             r = client.post(
                 "/mcp",
@@ -152,7 +152,7 @@ def test_token_exchange_error_hides_exception_details(
             new=AsyncMock(return_value={"sub": "u"}),
         ),
         patch(
-            "server.auth.middleware.exchange_oauth_access_token",
+            "server.auth.middleware.get_or_refresh_oauth_exchanged_token",
             new=AsyncMock(side_effect=TokenExchangeError(leak)),
         ),
     ):

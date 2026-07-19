@@ -1,4 +1,6 @@
+import hashlib
 import time
+from collections import OrderedDict
 from typing import Any
 
 import httpx
@@ -10,11 +12,19 @@ from server.auth.oauth_discovery import (
     get_authorization_server_metadata_for_base,
 )
 from server.config import settings
+from server.constants import (
+    OAUTH_VALIDATION_CACHE_MAX_ENTRIES,
+    OAUTH_VALIDATION_REFRESH_LEEWAY_SECONDS,
+)
 
 _JWKS_TTL_SECONDS = 3600.0
 _jwks_cache: dict[str, Any] | None = None
 _jwks_url_cached: str | None = None
 _jwks_fetched_at: float = 0.0
+
+# Validated access-token claims, keyed by a digest of the token. Value is
+# (expiry_monotonic, claims). Bounded LRU; TTL capped by the token's own exp.
+_validation_cache: "OrderedDict[str, tuple[float, dict[str, Any]]]" = OrderedDict()
 
 
 def clear_jwks_cache() -> None:
@@ -22,6 +32,50 @@ def clear_jwks_cache() -> None:
     _jwks_cache = None
     _jwks_url_cached = None
     _jwks_fetched_at = 0.0
+
+
+def clear_token_validation_cache() -> None:
+    _validation_cache.clear()
+
+
+def _validation_ttl_seconds() -> int:
+    try:
+        return max(0, int(settings.oauth_validation_cache_ttl_seconds))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _validation_cache_key(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _cached_validation(key: str) -> dict[str, Any] | None:
+    entry = _validation_cache.get(key)
+    if entry is None:
+        return None
+    expiry, claims = entry
+    if time.monotonic() >= expiry:
+        _validation_cache.pop(key, None)
+        return None
+    _validation_cache.move_to_end(key)
+    return claims
+
+
+def _store_validation(key: str, claims: dict[str, Any]) -> None:
+    ttl = _validation_ttl_seconds()
+    if ttl <= 0:
+        return
+    # Never let the cache extend a token's real lifetime: cap TTL at exp - now - leeway.
+    exp = claims.get("exp")
+    if isinstance(exp, (int, float)) and exp > 0:
+        remaining = int(exp) - int(time.time()) - OAUTH_VALIDATION_REFRESH_LEEWAY_SECONDS
+        if remaining <= 0:
+            return
+        ttl = min(ttl, remaining)
+    _validation_cache[key] = (time.monotonic() + ttl, claims)
+    _validation_cache.move_to_end(key)
+    while len(_validation_cache) > OAUTH_VALIDATION_CACHE_MAX_ENTRIES:
+        _validation_cache.popitem(last=False)
 
 
 def _looks_like_jwt(token: str) -> bool:
@@ -174,20 +228,33 @@ async def _verify_opaque_access_token(token: str) -> dict[str, Any]:
 
 async def verify_oauth_access_token(token: str) -> dict[str, Any]:
     """
-    Validate OAuth access token.
+    Validate OAuth access token, caching the validated claims briefly.
 
     Prefer **introspection** when ``OAUTH_CLIENT_ID`` (+ issuer/introspect URL) is
     configured — same path OvalEdge uses for Okta. Falls back to JWT JWKS when
     introspection is unavailable or fails for a JWT-shaped token.
 
-    ``OAUTH_AUDIENCE`` is optional for both paths.
-    Credentials stay on the server (``OAUTH_CLIENT_ID`` / ``OAUTH_CLIENT_SECRET``);
-    MCP clients must not put them in ``mcp.json``.
+    Successful validations are cached in-process for ``oauth_validation_cache_ttl_seconds``
+    (bounded by the token's own ``exp``) so a burst of MCP calls does not re-introspect /
+    re-verify on every request. Failures are never cached. ``OAUTH_AUDIENCE`` is optional
+    for both paths. Credentials stay on the server (``OAUTH_CLIENT_ID`` /
+    ``OAUTH_CLIENT_SECRET``); MCP clients must not put them in ``mcp.json``.
     """
     token = (token or "").strip()
     if not token:
         raise ValueError("Empty access token")
 
+    key = _validation_cache_key(token)
+    cached = _cached_validation(key)
+    if cached is not None:
+        return cached
+
+    claims = await _verify_oauth_access_token_uncached(token)
+    _store_validation(key, claims)
+    return claims
+
+
+async def _verify_oauth_access_token_uncached(token: str) -> dict[str, Any]:
     if _introspection_configured():
         try:
             return await _verify_opaque_access_token(token)
