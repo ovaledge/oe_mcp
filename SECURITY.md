@@ -46,6 +46,12 @@ We may request additional information and will coordinate disclosure after a fix
 
 Repository admins should enable **Private vulnerability reporting** under **Settings** → **Security** → **Code security and analysis** so reporters can use **Security** → **Report a vulnerability**.
 
+## Code scanning (CodeQL)
+
+- **Local (every commit):** pre-commit runs `scripts/run_codeql.sh` (CLI required by default). Install with `./scripts/install_codeql_cli.sh`.
+- **CI:** [`.github/workflows/codeql.yml`](.github/workflows/codeql.yml) analyzes Python on PRs and pushes to `main`/`dev`, and uploads results to **Security → Code scanning**.
+- Findings such as `py/weak-sensitive-data-hashing` should be fixed or justified before merge; do not rely on post-merge Security-tab discovery alone.
+
 ## Automated dependency updates
 
 Dependabot is configured in [`.github/dependabot.yml`](.github/dependabot.yml) for:

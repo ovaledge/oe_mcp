@@ -1,0 +1,19 @@
+# Shared by local scripts/run_codeql.sh and .github/workflows/codeql.yml
+name: oe-mcp CodeQL
+
+# Only first-party code — do not extract SAM/Lambda build trees or venvs
+# (those contain vendored deps and a stale copy of server/, which explode alert counts).
+paths:
+  - server
+  - entrypoints
+  - evals
+  - .github/workflows
+
+paths-ignore:
+  - .aws-sam
+  - .venv
+  - .codeql
+  - .tools
+  - htmlcov
+  - '**/__pycache__'
+  - '**/.pytest_cache'

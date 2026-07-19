@@ -7,9 +7,9 @@
 #   # or: poetry run pre-commit install
 #
 # On each `git commit`: ruff check, mypy, pytest (tests/), and CodeQL Python
-# security (`scripts/run_codeql.sh` — skipped if the CodeQL CLI is not installed
-# unless CODEQL_REQUIRED=1; set CODEQL_SKIP=1 to skip once).
-# Checks do not run again on `git push` (pre-push hook is not installed).
+# security (`scripts/run_codeql.sh`). CodeQL CLI is **required** by default
+# (install: ./scripts/install_codeql_cli.sh). Set CODEQL_SKIP=1 to skip once, or
+# CODEQL_REQUIRED=0 to allow a missing CLI. CI also runs .github/workflows/codeql.yml.
 #
 # Run manually:
 #   poetry run pre-commit run --all-files

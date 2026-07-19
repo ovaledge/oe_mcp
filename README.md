@@ -145,12 +145,15 @@ Use `./scripts/run_tests.sh` on macOS and Linux so tests always run in the proje
 
 Unit tests measure coverage for `server/` and `entrypoints/` (report-only threshold for now; see `[tool.coverage.*]` in `pyproject.toml`). HTML report: `./scripts/run_tests.sh --cov-report=html` then open `htmlcov/index.html`.
 
-Git hooks (**ruff**, **mypy**, **pytest**, and **CodeQL** on each **commit**) are installed automatically when you run `./scripts/setup_local_mcp.sh` in a git clone. CodeQL (`scripts/run_codeql.sh`) is skipped if the CLI is not installed; set `CODEQL_REQUIRED=1` to enforce, or `CODEQL_SKIP=1` to skip once. To install or refresh hooks only:
+Git hooks (**ruff**, **mypy**, **pytest**, and **CodeQL** on each **commit**) are installed automatically when you run `./scripts/setup_local_mcp.sh` in a git clone. CodeQL is **required** locally by default (`scripts/run_codeql.sh`); install the CLI once, then refresh hooks:
 
 ```bash
-chmod +x scripts/setup_git_hooks.sh   # once, if needed
+./scripts/install_codeql_cli.sh        # one-time (~CodeQL bundle download)
+export PATH="$HOME/.local/bin:$PATH"   # if needed
 ./scripts/setup_git_hooks.sh
 ```
+
+Skip CodeQL for a single commit with `CODEQL_SKIP=1`, or set `CODEQL_REQUIRED=0` if the CLI is unavailable. Local/CI analysis uses [`.github/codeql/codeql-config.yml`](.github/codeql/codeql-config.yml) so `.aws-sam/` build trees and venvs are **not** scanned (those copies of `server/` and vendored deps make scans slow and noisy). GitHub Actions runs [`.github/workflows/codeql.yml`](.github/workflows/codeql.yml) on PRs/pushes to `main`/`dev`.
 
 See `.pre-commit-config.yaml` for hook definitions.
 
