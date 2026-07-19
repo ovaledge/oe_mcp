@@ -1,4 +1,3 @@
-import hashlib
 import time
 from collections import OrderedDict
 from typing import Any
@@ -6,6 +5,7 @@ from typing import Any
 import httpx
 from jose import jwt
 
+from server.auth.cache_keys import opaque_cache_key
 from server.auth.issuer_allowlist import assert_issuer_allowed, normalize_issuer
 from server.auth.oauth_discovery import (
     OAuthDiscoveryError,
@@ -46,7 +46,7 @@ def _validation_ttl_seconds() -> int:
 
 
 def _validation_cache_key(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+    return opaque_cache_key("oauth-validation", token)
 
 
 def _cached_validation(key: str) -> dict[str, Any] | None:

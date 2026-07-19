@@ -1,5 +1,4 @@
 import asyncio
-import hashlib
 import json
 import time
 from typing import Any, cast
@@ -8,6 +7,7 @@ import httpx
 from jose import jwt
 
 from server.auth import context as auth_context
+from server.auth.cache_keys import opaque_cache_key
 from server.config import settings
 from server.constants import (
     CREDENTIALS_REFRESH_LEEWAY_SECONDS,
@@ -171,10 +171,7 @@ async def exchange_oauth_access_token(oauth_access_token: str) -> str:
 
 def _oauth_exchange_cache_key(oauth_access_token: str) -> str:
     """Stable cache key for the OAuth->OvalEdge JWT exchange; never logged."""
-    h = hashlib.sha256()
-    h.update(b"oauth-exchange:")
-    h.update(oauth_access_token.encode("utf-8"))
-    return h.hexdigest()
+    return opaque_cache_key("oauth-exchange", oauth_access_token)
 
 
 async def get_or_refresh_oauth_exchanged_token(oauth_access_token: str) -> str:
