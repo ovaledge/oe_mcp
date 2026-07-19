@@ -1,9 +1,12 @@
 # Advanced CodeQL setup (Python). Complements local scripts/run_codeql.sh.
 #
-# If the PR check "Code scanning results / CodeQL" fails in ~2s with
-# "Error when processing the SARIF file" while this job is green or missing:
-#   Settings → Code security → CodeQL → turn OFF "Default setup"
-# (default + advanced uploads can collide). Prefer this workflow only.
+# REQUIRED: CodeQL *default setup* must be disabled for this repo, or analyze
+# fails with:
+#   "CodeQL analyses from advanced configurations cannot be processed when
+#    the default setup is enabled"
+# Disable via UI: Settings → Code security → CodeQL analysis → Disable
+# Or API: gh api -X PATCH repos/OWNER/REPO/code-scanning/default-setup \
+#            -f state=not-configured
 name: CodeQL
 
 on:
