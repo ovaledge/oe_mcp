@@ -158,6 +158,8 @@ async def exchange_oauth_access_token(oauth_access_token: str) -> str:
             headers={
                 "Content-Type": "application/json",
                 "Accept": "application/json",
+                "User-Agent": "OvalEdge-MCP",
+                "X-OvalEdge-Client": "MCP",
             },
         )
         if response.status_code != 200:
@@ -232,6 +234,8 @@ async def exchange_client_credentials() -> str:
             headers={
                 "Content-Type": "application/json",
                 "Accept": "application/json",
+                "User-Agent": "OvalEdge-MCP",
+                "X-OvalEdge-Client": "MCP",
             },
         )
         if response.status_code != 200:
@@ -277,6 +281,8 @@ async def exchange_user_credentials(user_token: str, user_secret: str) -> str:
             headers={
                 "Content-Type": "application/json",
                 "Accept": "application/json",
+                "User-Agent": "OvalEdge-MCP",
+                "X-OvalEdge-Client": "MCP",
             },
         )
         if response.status_code == 401:
