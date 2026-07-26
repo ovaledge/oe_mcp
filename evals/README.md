@@ -126,7 +126,7 @@ poetry run python -m evals.run_evals --output evals/out/report.json
 
 Defined in `golden_cases.py`:
 
-- `MCPUseMetric` — five single-turn goldens: catalog search, `data_discovery` prompt + search, `lookup_datastory`, `organizational_knowledge` prompt + datastory, `source_system_access`.
+- `MCPUseMetric` — five single-turn goldens: asset exploration, `data_discovery` prompt + search, `knowledge_search`, `organizational_knowledge` prompt + knowledge search, `source_system_access`.
 - `MCPTaskCompletionMetric` — conversational discovery with expected outcome.
 - `MultiTurnMCPUseMetric` — follow-up user turn with resource read.
 
@@ -141,10 +141,10 @@ Typical patterns in reports:
 | Score band | Meaning |
 |------------|---------|
 | **1.0** | Judge fully agrees tool choice, args, and outcome (see `task_completion_discovery`). |
-| **0.75** | Correct primary tool; judge nitpicks optional follow-ups (e.g. “could also call catalog_asset_details”). |
+| **0.75** | Correct primary tool; judge nitpicks optional follow-ups (e.g. “could also call asset_details”). |
 | **0.5** | Passes threshold but judge wanted a different tool or richer args — often because the golden registered **all** MCP tools and the judge prefers alternates. |
 
-Goldens now pass **subset** `tool_names` / `prompt_names` into `ovaledge_eval_mcp_server()` so the judge only sees relevant tools. **`actual_output`** text explicitly states why other tools were *not* used (e.g. data stories vs `search_platform_docs`).
+Goldens now pass **subset** `tool_names` / `prompt_names` into `ovaledge_eval_mcp_server()` so the judge only sees relevant tools. **`actual_output`** text explicitly states why other tools were *not* used (e.g. knowledge search vs asset discovery).
 
 **MultiTurnMCPUseMetric** at `0.5` is common even when passing; treat as advisory ([DeepEval #2579](https://github.com/confident-ai/deepeval/issues/2579)). The lineage golden now calls **`asset_lineage`** plus a catalog resource read.
 

@@ -6,7 +6,7 @@
       "actual_output": "I searched the catalog for revenue keywords and listed certified oetables.",
       "mcp_tools_called": [
         {
-          "name": "search_catalog_assets",
+          "name": "asset_explorer",
           "args": {
             "search_terms": [
               "revenue"
@@ -31,7 +31,7 @@
       "actual_output": "I ran a catalog search; there were no matching oetables.",
       "mcp_tools_called": [
         {
-          "name": "search_catalog_assets",
+          "name": "asset_explorer",
           "args": {
             "search_terms": [
               "dark",
@@ -53,9 +53,10 @@
       "actual_output": "I looked up the glossary term and summarized the official definition.",
       "mcp_tools_called": [
         {
-          "name": "lookup_glossary_term",
+          "name": "asset_explorer",
           "args": {
-            "term_name": "PII"
+            "name": "PII",
+            "object_type": "glossary"
           },
           "result": {
             "term": "PII",
@@ -70,9 +71,9 @@
       "actual_output": "I searched data stories and cited the matching policy narrative.",
       "mcp_tools_called": [
         {
-          "name": "lookup_datastory",
+          "name": "knowledge_search",
           "args": {
-            "content_query": "customer PII retention policy"
+            "query": "customer PII retention policy"
           },
           "result": {
             "ok": true,
@@ -131,7 +132,7 @@
       "actual_output": "I searched OvalEdge platform documentation and summarized the steps.",
       "mcp_tools_called": [
         {
-          "name": "search_platform_docs",
+          "name": "knowledge_search",
           "args": {
             "query": "create data quality rule",
             "limit": 7
@@ -153,7 +154,7 @@
       "actual_output": "I searched for payroll tables, then loaded details for payroll_fact.",
       "mcp_tools_called": [
         {
-          "name": "search_catalog_assets",
+          "name": "asset_explorer",
           "args": {
             "search_terms": [
               "payroll"
@@ -171,7 +172,7 @@
           }
         },
         {
-          "name": "catalog_asset_details",
+          "name": "asset_details",
           "args": {
             "object_id": 1,
             "object_type": "oetable"
@@ -195,7 +196,7 @@
       "actual_output": "I searched for customer, churn, and certified oetables and returned the top hits.",
       "mcp_tools_called": [
         {
-          "name": "search_catalog_assets",
+          "name": "asset_explorer",
           "args": {
             "search_terms": [
               "customer",
@@ -224,7 +225,7 @@
     {
       "name": "example_asset_lineage",
       "input": "What feeds customer_transactions upstream?",
-      "actual_output": "I called asset_lineage on the table (not search_catalog_assets alone) to show upstream nodes.",
+      "actual_output": "I called asset_lineage on the table (not asset_explorer alone) to show upstream nodes.",
       "mcp_tools_called": [
         {
           "name": "asset_lineage",
@@ -249,10 +250,10 @@
     {
       "name": "example_column_profile_trust",
       "input": "Show column statistics for customer_revenue_daily to assess data quality.",
-      "actual_output": "I used column_profile_statistics on the resolved oetable for null rates and distributions.",
+      "actual_output": "I used asset_details on the resolved oetable for null rates and distributions.",
       "mcp_tools_called": [
         {
-          "name": "column_profile_statistics",
+          "name": "asset_details",
           "args": {
             "object_id": 42,
             "object_type": "oetable"
@@ -270,12 +271,12 @@
       ]
     },
     {
-      "name": "example_table_entity_relationships",
+      "name": "example_asset_details",
       "input": "What tables are related to orders_fact?",
-      "actual_output": "I called table_entity_relationships for graph edges from orders_fact.",
+      "actual_output": "I called asset_details for graph edges from orders_fact.",
       "mcp_tools_called": [
         {
-          "name": "table_entity_relationships",
+          "name": "asset_details",
           "args": {
             "object_id": 88
           },
@@ -292,12 +293,12 @@
       ]
     },
     {
-      "name": "example_lookup_tags",
+      "name": "example_asset_explorer",
       "input": "What does our Confidential tag mean?",
-      "actual_output": "I used lookup_tags with tag_name (not lookup_glossary_term) for governance tag metadata.",
+      "actual_output": "I used asset_explorer with tag_name (not asset_explorer) for governance tag metadata.",
       "mcp_tools_called": [
         {
-          "name": "lookup_tags",
+          "name": "asset_explorer",
           "args": {
             "tag_name": "Confidential"
           },
@@ -580,10 +581,10 @@
     {
       "name": "example_trust_assessment_chain",
       "input": "How trustworthy is customer_revenue_daily for executive reporting?",
-      "actual_output": "I searched the catalog, loaded catalog_asset_details, then column_profile_statistics for trust signals.",
+      "actual_output": "I searched the catalog, loaded asset_details, then asset_details for trust signals.",
       "mcp_tools_called": [
         {
-          "name": "search_catalog_assets",
+          "name": "asset_explorer",
           "args": {
             "search_terms": [
               "customer",
@@ -603,7 +604,7 @@
           }
         },
         {
-          "name": "catalog_asset_details",
+          "name": "asset_details",
           "args": {
             "object_id": 42,
             "object_type": "oetable"
@@ -616,7 +617,7 @@
           }
         },
         {
-          "name": "column_profile_statistics",
+          "name": "asset_details",
           "args": {
             "object_id": 42,
             "object_type": "oetable"
@@ -850,10 +851,10 @@
     {
       "name": "example_catalog_details_not_found",
       "input": "Show catalog details for missing.table.",
-      "actual_output": "catalog_asset_details returned 404; I told the user the FQN was not found.",
+      "actual_output": "asset_details returned 404; I told the user the FQN was not found.",
       "mcp_tools_called": [
         {
-          "name": "catalog_asset_details",
+          "name": "asset_details",
           "args": {
             "fully_qualified_name": "missing.table"
           },
@@ -867,10 +868,10 @@
     {
       "name": "example_catalog_details_rejects_mixed_lookup",
       "input": "Get details with both FQN and object_id.",
-      "actual_output": "catalog_asset_details returned 400 \u2014 use FQN alone or object_id+object_type, not both.",
+      "actual_output": "asset_details returned 400 \u2014 use FQN alone or object_id+object_type, not both.",
       "mcp_tools_called": [
         {
-          "name": "catalog_asset_details",
+          "name": "asset_details",
           "args": {
             "fully_qualified_name": "db.schema.t",
             "object_id": 1,
@@ -906,10 +907,10 @@
     {
       "name": "example_column_profile_rejects_glossary",
       "input": "Profile columns for a glossary term.",
-      "actual_output": "column_profile_statistics rejected glossary; only oetable/oefile are supported.",
+      "actual_output": "asset_details rejected glossary; only oetable/oefile are supported.",
       "mcp_tools_called": [
         {
-          "name": "column_profile_statistics",
+          "name": "asset_details",
           "args": {
             "object_id": 1,
             "object_type": "glossary"
@@ -925,10 +926,10 @@
     {
       "name": "example_entity_relationships_unauthorized",
       "input": "Show entity relationships for table 99.",
-      "actual_output": "table_entity_relationships returned 401; I reported authorization failure.",
+      "actual_output": "asset_details returned 401; I reported authorization failure.",
       "mcp_tools_called": [
         {
-          "name": "table_entity_relationships",
+          "name": "asset_details",
           "args": {
             "object_id": 99
           },
@@ -990,10 +991,10 @@
     {
       "name": "example_glossary_lookup_not_found",
       "input": "What does ZzzUnknownTerm mean in the glossary?",
-      "actual_output": "lookup_glossary_term returned no match / 404; I said the term was not found.",
+      "actual_output": "asset_explorer returned no match / 404; I said the term was not found.",
       "mcp_tools_called": [
         {
-          "name": "lookup_glossary_term",
+          "name": "asset_explorer",
           "args": {
             "term_name": "ZzzUnknownTerm"
           },
@@ -1005,12 +1006,12 @@
       ]
     },
     {
-      "name": "example_lookup_tags_neither_id_nor_name",
+      "name": "example_asset_explorer_neither_id_nor_name",
       "input": "Look up a tag without providing name or id.",
-      "actual_output": "lookup_tags returned 400 \u2014 provide tag_name or object_id.",
+      "actual_output": "asset_explorer returned 400 \u2014 provide tag_name or object_id.",
       "mcp_tools_called": [
         {
-          "name": "lookup_tags",
+          "name": "asset_explorer",
           "args": {},
           "result": {
             "error": "Provide tag_name or object_id.",
@@ -1023,12 +1024,12 @@
     {
       "name": "example_datastory_not_found",
       "input": "Find a data story about fictional unicorns.",
-      "actual_output": "lookup_datastory returned 404; I reported no matching organizational story.",
+      "actual_output": "knowledge_search returned 404; I reported no matching organizational story.",
       "mcp_tools_called": [
         {
-          "name": "lookup_datastory",
+          "name": "knowledge_search",
           "args": {
-            "content_query": "fictional unicorns"
+            "query": "fictional unicorns"
           },
           "result": {
             "error": "OvalEdge API error 404: Not found",
@@ -1040,10 +1041,10 @@
     {
       "name": "example_platform_docs_server_error",
       "input": "How do I configure crawlers?",
-      "actual_output": "search_platform_docs failed with 500; I reported the docs search error.",
+      "actual_output": "knowledge_search failed with 500; I reported the docs search error.",
       "mcp_tools_called": [
         {
-          "name": "search_platform_docs",
+          "name": "knowledge_search",
           "args": {
             "query": "configure crawlers"
           },
@@ -1080,7 +1081,7 @@
           "name": "assess_cde_dq",
           "args": {},
           "result": {
-            "error": "Provide objects from search_catalog_assets, or set discover_cde_columns=true to discover CDE columns.",
+            "error": "Provide objects from asset_explorer, or set discover_cde_columns=true to discover CDE columns.",
             "status_code": 400
           }
         }
@@ -1397,10 +1398,10 @@
     {
       "name": "example_search_rejects_invalid_object_type",
       "input": "Search catalog with object_type=not_a_real_type.",
-      "actual_output": "search_catalog_assets returned 400 for invalid object_type.",
+      "actual_output": "asset_explorer returned 400 for invalid object_type.",
       "mcp_tools_called": [
         {
-          "name": "search_catalog_assets",
+          "name": "asset_explorer",
           "args": {
             "search_terms": [
               "x"

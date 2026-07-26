@@ -4,7 +4,7 @@ Use these values when filtering catalog search or specifying `object_type` on de
 
 ## MCP catalog `objectType` (lowercase)
 
-`search_catalog_assets` and `catalog_asset_details` (id + type mode) accept the following **lowercase** API values. The canonical set lives in `server.constants.MCP_CATALOG_OBJECT_TYPES`.
+`asset_explorer` and `asset_details` (id + type mode) accept the following **lowercase** API values. The canonical set lives in `server.constants.MCP_CATALOG_OBJECT_TYPES`.
 
 | Value | Typical use |
 |-------|-------------|
@@ -23,7 +23,7 @@ Use these values when filtering catalog search or specifying `object_type` on de
 | `oetag` | Tags |
 | `oestory` | Data stories |
 
-**Narrow tools:** `column_profile_statistics` and `asset_lineage` accept **`oetable`** and **`oefile`** only. `table_entity_relationships` is **table-only** (`object_id` for an `oetable`).
+`asset_details` automatically includes a profile for **`oetable`** and **`oefile`**, plus relationships for an **`oetable`**. `asset_lineage` accepts **`oetable`** and **`oefile`** only.
 
 ## UI / filter labels (uppercase)
 

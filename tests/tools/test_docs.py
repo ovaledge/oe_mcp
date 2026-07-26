@@ -3,20 +3,20 @@ from unittest.mock import AsyncMock
 from fastmcp import FastMCP
 
 from server.client import OvalEdgeError
-from server.constants import MCP_PATH_SEARCH_PLATFORM_DOCS
+from server.constants import MCP_PATH_KNOWLEDGE_SEARCH
 from server.tools import docs as docs_tools
 from tests.conftest import MOCK_DOCS_SEARCH
 from tests.helpers import get_tool_fn
 
 
-class TestSearchPlatformDocs:
+class TestKnowledgeSearch:
     async def test_limit_cap(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = MOCK_DOCS_SEARCH
         mcp = FastMCP(name="test", version="0.0.1")
         docs_tools.register(mcp)
-        fn = await get_tool_fn(mcp, "search_platform_docs")
-        await fn("how to", limit=100)
-        assert mock_oe_client.get.call_args[0][0] == MCP_PATH_SEARCH_PLATFORM_DOCS
+        fn = await get_tool_fn(mcp, "knowledge_search")
+        await fn(query="how to", limit=100)
+        assert mock_oe_client.get.call_args[0][0] == MCP_PATH_KNOWLEDGE_SEARCH
         params = mock_oe_client.get.call_args[1]["params"]
         assert params["query"] == "how to"
         assert params["limit"] == 50
@@ -26,8 +26,8 @@ class TestSearchPlatformDocs:
         mock_oe_client.get.return_value = MOCK_DOCS_SEARCH
         mcp = FastMCP(name="test", version="0.0.1")
         docs_tools.register(mcp)
-        fn = await get_tool_fn(mcp, "search_platform_docs")
-        await fn("dq rules", limit=15)
+        fn = await get_tool_fn(mcp, "knowledge_search")
+        await fn(query="dq rules", limit=15)
         params = mock_oe_client.get.call_args[1]["params"]
         assert params["limit"] == 15
         assert params["numCandidates"] == 128
@@ -36,8 +36,8 @@ class TestSearchPlatformDocs:
         mock_oe_client.get.return_value = MOCK_DOCS_SEARCH
         mcp = FastMCP(name="test", version="0.0.1")
         docs_tools.register(mcp)
-        fn = await get_tool_fn(mcp, "search_platform_docs")
-        await fn("x", limit=5, num_candidates=200)
+        fn = await get_tool_fn(mcp, "knowledge_search")
+        await fn(query="x", limit=5, num_candidates=200)
         params = mock_oe_client.get.call_args[1]["params"]
         assert params["limit"] == 5
         assert params["numCandidates"] == 200
@@ -46,8 +46,8 @@ class TestSearchPlatformDocs:
         mock_oe_client.get.return_value = MOCK_DOCS_SEARCH
         mcp = FastMCP(name="test", version="0.0.1")
         docs_tools.register(mcp)
-        fn = await get_tool_fn(mcp, "search_platform_docs")
-        await fn("x", limit=20, num_candidates=5)
+        fn = await get_tool_fn(mcp, "knowledge_search")
+        await fn(query="x", limit=20, num_candidates=5)
         params = mock_oe_client.get.call_args[1]["params"]
         assert params["limit"] == 20
         assert params["numCandidates"] == 20
@@ -56,8 +56,8 @@ class TestSearchPlatformDocs:
         mock_oe_client.get.side_effect = OvalEdgeError(500, "Internal error")
         mcp = FastMCP(name="test", version="0.0.1")
         docs_tools.register(mcp)
-        fn = await get_tool_fn(mcp, "search_platform_docs")
-        out = await fn("failure query")
+        fn = await get_tool_fn(mcp, "knowledge_search")
+        out = await fn(query="failure query")
         assert out["status_code"] == 500
         assert "500" in out["error"]
 
@@ -67,11 +67,11 @@ class TestSearchPlatformDocs:
         mock_oe_client.get.return_value = MOCK_DOCS_SEARCH
         mcp = FastMCP(name="test", version="0.0.1")
         docs_tools.register(mcp)
-        fn = await get_tool_fn(mcp, "search_platform_docs")
-        out = await fn("how to crawl")
+        fn = await get_tool_fn(mcp, "knowledge_search")
+        out = await fn(query="how to crawl")
         assert out == MOCK_DOCS_SEARCH
         mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_SEARCH_PLATFORM_DOCS,
+            MCP_PATH_KNOWLEDGE_SEARCH,
             params={"query": "how to crawl"},
         )
 
@@ -81,8 +81,8 @@ class TestSearchPlatformDocs:
         mock_oe_client.get.return_value = MOCK_DOCS_SEARCH
         mcp = FastMCP(name="test", version="0.0.1")
         docs_tools.register(mcp)
-        fn = await get_tool_fn(mcp, "search_platform_docs")
-        await fn("dq rules", num_candidates=64)
+        fn = await get_tool_fn(mcp, "knowledge_search")
+        await fn(query="dq rules", num_candidates=64)
         params = mock_oe_client.get.call_args[1]["params"]
         assert params == {"query": "dq rules", "numCandidates": 64}
         assert "limit" not in params
@@ -91,9 +91,9 @@ class TestSearchPlatformDocs:
         mock_oe_client.get.return_value = MOCK_DOCS_SEARCH
         mcp = FastMCP(name="test", version="0.0.1")
         docs_tools.register(mcp)
-        fn = await get_tool_fn(mcp, "search_platform_docs")
-        await fn("x", num_candidates=0)
+        fn = await get_tool_fn(mcp, "knowledge_search")
+        await fn(query="x", num_candidates=0)
         params = mock_oe_client.get.call_args[1]["params"]
         assert params["numCandidates"] == 1
-        await fn("x", num_candidates=9999)
+        await fn(query="x", num_candidates=9999)
         assert mock_oe_client.get.call_args[1]["params"]["numCandidates"] == 512

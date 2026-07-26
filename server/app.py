@@ -8,10 +8,9 @@ from server.constants import (
     DOCS_RESOURCE_URI_PREFIX,
     MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC,
     MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC,
+    TOOL_ASSET_EXPLORER,
     TOOL_GET_USER_OBJECT_ACCESS,
-    TOOL_LOOKUP_DATASTORY,
-    TOOL_SEARCH_CATALOG,
-    TOOL_SEARCH_DOCS,
+    TOOL_KNOWLEDGE_SEARCH,
     TOOL_SOURCE_SYSTEM_ACCESS,
 )
 from server.mcp import register_all
@@ -21,9 +20,8 @@ _MCP_WORKFLOWS_RESOURCE_URI = f"{DOCS_RESOURCE_URI_PREFIX}/mcp_workflows"
 # Tool names embedded in server instructions (tests assert ⊆ MCP_TOOL_NAMES).
 MCP_SERVER_INSTRUCTION_TOOL_NAMES: frozenset[str] = frozenset(
     {
-        TOOL_LOOKUP_DATASTORY,
-        TOOL_SEARCH_DOCS,
-        TOOL_SEARCH_CATALOG,
+        TOOL_KNOWLEDGE_SEARCH,
+        TOOL_ASSET_EXPLORER,
         TOOL_SOURCE_SYSTEM_ACCESS,
         TOOL_GET_USER_OBJECT_ACCESS,
     }
@@ -38,7 +36,7 @@ _MCP_SERVER_INSTRUCTIONS = (
     f"{MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC} "
     f"{MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC} "
     "Ambiguous who-has-access: invoke resolve_object_access, present the 1/2 choice, and "
-    "call no access tools (including search_catalog_assets) until the user replies. "
+    "call no access tools (including asset_explorer) until the user replies. "
     "Use MCP tools for catalog discovery, governance lookups, native source access (RDAM), "
     "and governed writes. At session start and before multi-step workflows, governed writes, "
     f"RDAM, catalog ACL, or DQ work, read MCP resource {_MCP_WORKFLOWS_RESOURCE_URI} "
@@ -47,8 +45,8 @@ _MCP_SERVER_INSTRUCTIONS = (
     "Present formattedResponse from tools to the user when provided. "
     "Governed writes require write_confirmed_by_user=true only after the user approves "
     "a confirm_create or confirm_update preview. "
-    f"Org knowledge in data stories: {TOOL_LOOKUP_DATASTORY} (not {TOOL_SEARCH_DOCS}). "
-    f"Physical catalog discovery: {TOOL_SEARCH_CATALOG} — not for who-has-access. "
+    f"Org knowledge and OvalEdge product documentation: {TOOL_KNOWLEDGE_SEARCH}. "
+    f"Physical catalog discovery: {TOOL_ASSET_EXPLORER} — not for who-has-access. "
     f"Native DB/BI grants (RDAM): {TOOL_SOURCE_SYSTEM_ACCESS} + access_intent_confirmed=native "
     "— not catalog search or catalog ACL. "
     f"OvalEdge catalog ACL (user/role grants on catalog objects): {TOOL_GET_USER_OBJECT_ACCESS} "

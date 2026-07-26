@@ -55,7 +55,7 @@ class TestGetSourceSystemAccess:
         assert "SNOWFLAKE.ALERT" in rdam_doc
         assert "object_type=schema" in rdam_doc
         assert "rdam_tableprivilege" in rdam_doc
-        assert "never fall back to `search_catalog_assets`" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
+        assert "never fall back to `asset_explorer`" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
         assert "Mandatory API fields" in rdam_doc
         assert "object_name" in _DESC_SOURCE_SYSTEM_ACCESS
         assert "object_type=all" in rdam_doc

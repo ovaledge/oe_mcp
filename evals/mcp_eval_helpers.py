@@ -36,7 +36,7 @@ def ovaledge_eval_mcp_server(
     Build MCPServer metadata for DeepEval judges.
 
     Pass ``tool_names`` / ``prompt_names`` subsets per golden case so the judge
-    does not recommend unrelated tools (e.g. search_platform_docs for data stories).
+    does not recommend unrelated tools (e.g. asset_explorer for org data-story narratives alone).
     """
     selected_tools = tool_names if tool_names is not None else MCP_TOOL_NAMES
     selected_prompts = prompt_names if prompt_names is not None else MCP_WORKFLOW_PROMPT_NAMES

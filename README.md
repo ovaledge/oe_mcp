@@ -1,6 +1,6 @@
 # OvalEdge MCP Server
 
-OvalEdge governance and catalog MCP server for MCP clients (Cursor, Claude Desktop, etc.): catalog discovery, lineage, glossary and tags, **data stories** for organizational knowledge, metadata drift, native source-system access previews, product docs, workflow prompts, and governed writes (glossary terms, tags, descriptions, roles) — all subject to OvalEdge RBAC. Server instructions in `server/app.py` tell agents to prefer **`lookup_datastory`** for internal policy/playbook questions and **`search_platform_docs`** only for OvalEdge product how-to.
+OvalEdge governance and catalog MCP server for MCP clients (Cursor, Claude Desktop, etc.): catalog discovery, lineage, glossary and tags, organizational knowledge, metadata drift, native source-system access previews, product docs, workflow prompts, and governed writes (glossary terms, tags, descriptions, roles) — all subject to OvalEdge RBAC. Server instructions route knowledge questions through **`knowledge_search`**.
 
 ## How to run / deploy
 
@@ -34,12 +34,10 @@ Optional OpenTelemetry trace export to [Phoenix](https://arize.com/docs/phoenix)
 
 ## What this server provides
 
-- Catalog search and asset details (`search_catalog_assets`, `catalog_asset_details`) — paginate with `page` when results exceed one page
+- Catalog search and asset details (`asset_explorer`, `asset_details`) — paginate with `page` when results exceed one page
 - Column profile, entity relationships, lineage, metadata drift (`metadata_changes_between_crawls`)
-- Glossary lookup and guided term creation (`lookup_glossary_term`, `create_glossary_term`)
-- Tag lookup and guided creation (`lookup_tags`, `create_tag`)
-- **Data stories** for organizational knowledge (`lookup_datastory`) — not a substitute for `search_platform_docs`
-- Platform product documentation (`search_platform_docs`)
+- Glossary/tag search and guided creation (`asset_explorer`, `create_glossary_term`, `create_tag`)
+- **Knowledge search** for organizational stories and product documentation (`knowledge_search`)
 - Native source-system grant previews (`source_system_access`) — Redshift / Snowflake / Tableau, not catalog ACLs
 - OvalEdge catalog ACL (`get_user_object_access`) — user/role grants on catalog objects, not native RDAM
 - DQ rule lookup (`lookup_dq_rule`)
@@ -59,10 +57,9 @@ These rules apply to every MCP session (also exposed to clients as server **inst
 
 | Topic | Behavior |
 | ----- | -------- |
-| **Organizational knowledge** | Call **`lookup_datastory`** first (`content_query` = user question; add `story_zone_name` or `story_name` when named). Present **`formattedResponse`** and lead with **`storyCitation`** verbatim. Do not answer from model memory when a story may exist. |
-| **Product how-to** | Use **`search_platform_docs`** only for OvalEdge UI/features/configuration — not for internal policy or playbooks. |
-| **Physical datasets** | Use **`search_catalog_assets`**; if results include `oestory`, follow with **`lookup_datastory`**. |
-| **Native DB/BI access** | Use **`source_system_access`** only (RDAM SQL). Never fall back to **`search_catalog_assets`** when RDAM is empty or errors. |
+| **Organizational knowledge / product how-to** | Use **`knowledge_search`**, which searches both corpora without a corpus enum. Present returned citations and formatted content. |
+| **Physical datasets** | Use **`asset_explorer`**, then **`asset_details`** for one selected object. |
+| **Native DB/BI access** | Use **`source_system_access`** only (RDAM SQL). Never fall back to **`asset_explorer`** when RDAM is empty or errors. |
 | **Catalog ACL** | Use **`get_user_object_access`** for OvalEdge user/role grants on catalog objects — not **`source_system_access`**. |
 | **Deep links** | Use **`ovaledge://...` resources** when you already have object ids; prefer lookup tools for rich formatted output. |
 | **Governed writes** | **`create_glossary_term`**, **`create_tag`**, **`update_asset_descriptions`**, **`update_governance_roles`**, **`update_cde_associations`**, **`update_custom_field_value`**, **`associate_dq_rule_objects`**, **`create_dq_rules`**, **`validate_dq_queries`**, **`create_sql_dq_rule`**: show **`confirm_create`** / **`confirm_update`** preview, then POST only with **`write_confirmed_by_user=true`** (`dry_run` skips confirm on updates). |
@@ -77,15 +74,13 @@ Canonical inventory: `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 
 **Catalog & access**
 
-- `search_catalog_assets`, `catalog_asset_details`, `column_profile_statistics`
-- `table_entity_relationships`, `asset_lineage`, `metadata_changes_between_crawls`
+- `asset_explorer`, `asset_details`, `asset_lineage`, `metadata_changes_between_crawls`
 - `update_asset_descriptions`, `update_cde_associations`
 - `get_user_object_access` (catalog ACL)
 
 **Governance**
 
-- `lookup_glossary_term`, `create_glossary_term`, `lookup_tags`, `create_tag`
-- `lookup_datastory`, `update_governance_roles`, `update_custom_field_value`
+- `create_glossary_term`, `create_tag`, `update_governance_roles`, `update_custom_field_value`
 
 **Native access (RDAM)**
 
@@ -97,7 +92,7 @@ Canonical inventory: `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 
 **Platform docs**
 
-- `search_platform_docs`
+- `knowledge_search`
 
 **`create_glossary_term` workflow:** (1) `term_name` → domain picker; (2) `term_name` + `domain_id` → category picker when categories exist (skip only after user says skip: `skip_category=true` + `category_skip_confirmed=true`); (3) subcategory picker when applicable; (4) non-blank `description` required; (5) `confirm_create` preview; (6) POST with `write_confirmed_by_user=true`. Manual pickers: `search_on=oeglobaldomain|category|subcategory`.
 
@@ -107,7 +102,7 @@ Canonical inventory: `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 
 **DQ governed writes (`associate_dq_rule_objects`, `create_dq_rules`, `validate_dq_queries`, `create_sql_dq_rule`):** Same confirm gate before POST. `generate_dq_queries` is read-only (no confirm). Workflow prompts: `assess_cde_dq_coverage`, `create_custom_sql_dq_workflow`.
 
-**Data stories:** Prefer `lookup_datastory` (`content_query`) for organizational knowledge; use `organizational_knowledge` prompt. Not `search_platform_docs`. See [server/docs/data_stories.md](server/docs/data_stories.md).
+**Knowledge:** Use `knowledge_search` for organizational knowledge and OvalEdge product documentation; it searches both corpora. See [server/docs/data_stories.md](server/docs/data_stories.md).
 
 **Agent guides (static MCP doc resources):** [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md) (tools, resources, prompts index), [glossary_guide.md](server/docs/glossary_guide.md), [governance_model.md](server/docs/governance_model.md), [asset_types.md](server/docs/asset_types.md). Exposed as `docs://ovaledge/{name}` (e.g. `docs://ovaledge/mcp_workflows`).
 
@@ -116,8 +111,8 @@ Canonical inventory: `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 - `ovaledge://catalog/table/{object_id}` — oetable catalog document
 - `ovaledge://catalog/file/{object_id}` — oefile catalog document
 - `ovaledge://governance/glossary-term/{object_id}` — glossary term
-- `ovaledge://governance/data-story/{object_id}` — data story (prefer `lookup_datastory` for narrative)
-- `ovaledge://governance/tag/{object_id}` — tag (prefer `lookup_tags` for hierarchy)
+- `ovaledge://governance/data-story/{object_id}` — data story (prefer `knowledge_search` for narrative)
+- `ovaledge://governance/tag/{object_id}` — tag (prefer `asset_explorer` for hierarchy)
 
 Static product docs: `docs://ovaledge/...` (all `server/docs/*.md`, including `mcp_workflows`, `data_stories`, `tags_guide`).
 

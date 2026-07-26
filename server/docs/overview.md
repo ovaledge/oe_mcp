@@ -29,9 +29,9 @@ This repository ships an MCP server (see `server/app.py` **instructions**) for c
 
 | Intent | Tool / prompt |
 |--------|----------------|
-| Organizational policy, playbook, onboarding narrative | **`lookup_datastory`** (`content_query`); prompt **`organizational_knowledge`** |
-| OvalEdge product UI / features / configuration | **`search_platform_docs`**; prompt **`platform_help`** |
-| Tables, files, columns, reports | **`search_catalog_assets`** → **`catalog_asset_details`** |
+| Organizational policy, playbook, onboarding narrative | **`knowledge_search`**; prompt **`organizational_knowledge`** |
+| OvalEdge product UI / features / configuration | **`knowledge_search`**; prompt **`platform_help`** |
+| Tables, files, columns, reports | **`asset_explorer`** → **`asset_details`** |
 | Native Redshift / Snowflake / Tableau grants | **`source_system_access`** (not catalog ACLs) |
 | Create glossary term or tag | **`create_glossary_term`** / **`create_tag`** with picker flow; POST only after **`write_confirmed_by_user=true`** |
 

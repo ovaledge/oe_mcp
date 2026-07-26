@@ -15,7 +15,7 @@ Deep routing reference for **`source_system_access`** — native Redshift, Snowf
 
 ## No catalog / Elasticsearch fallback
 
-`source_system_access` reads RDAM SQL metadata only. Never call `search_catalog_assets`, `catalog_asset_details`, or other catalog tools as a substitute when RDAM returns empty grants, 4xx/5xx, not-found, or not-harvested — catalog search cannot answer native Redshift/Snowflake/Tableau grants. Report the RDAM result (or API error) and suggest RDAM harvest, DAA, object_path / object_type, or native SQL (e.g. Snowflake `SHOW GRANTS`) — do not invoke catalog search.
+`source_system_access` reads RDAM SQL metadata only. Never call `asset_explorer`, `asset_details`, or other catalog tools as a substitute when RDAM returns empty grants, 4xx/5xx, not-found, or not-harvested — catalog search cannot answer native Redshift/Snowflake/Tableau grants. Report the RDAM result (or API error) and suggest RDAM harvest, DAA, object_path / object_type, or native SQL (e.g. Snowflake `SHOW GRANTS`) — do not invoke catalog search.
 
 ## Mandatory API fields
 

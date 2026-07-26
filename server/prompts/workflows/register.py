@@ -7,25 +7,20 @@ from server.constants import (
     MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC,
     MCP_SOURCE_SYSTEMS_DOC,
     TOOL_ASSESS_CDE_DQ,
+    TOOL_ASSET_DETAILS,
+    TOOL_ASSET_EXPLORER,
     TOOL_ASSET_LINEAGE,
     TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
-    TOOL_CATALOG_ASSET_DETAILS,
-    TOOL_COLUMN_PROFILE,
     TOOL_CREATE_DQ_RULES,
     TOOL_CREATE_GLOSSARY_TERM,
     TOOL_CREATE_SQL_DQ_RULE,
     TOOL_CREATE_TAG,
     TOOL_GENERATE_DQ_QUERIES,
     TOOL_GET_USER_OBJECT_ACCESS,
-    TOOL_LOOKUP_DATASTORY,
+    TOOL_KNOWLEDGE_SEARCH,
     TOOL_LOOKUP_DQ_RULE,
-    TOOL_LOOKUP_GLOSSARY_TERM,
-    TOOL_LOOKUP_TAGS,
     TOOL_METADATA_CHANGES_BETWEEN_CRAWLS,
-    TOOL_SEARCH_CATALOG,
-    TOOL_SEARCH_DOCS,
     TOOL_SOURCE_SYSTEM_ACCESS,
-    TOOL_TABLE_ENTITY_RELATIONSHIPS,
     TOOL_UPDATE_ASSET_DESCRIPTIONS,
     TOOL_UPDATE_GOVERNANCE_ROLES,
     TOOL_VALIDATE_DQ_QUERIES,
@@ -49,16 +44,16 @@ def register(mcp: FastMCP) -> None:
             f"Help me find data for: '{query}'\n\n"
             f"Please follow this sequence:\n"
             f"1. Extract search keywords from the query\n"
-            f"2. Call {TOOL_SEARCH_CATALOG} with search_terms as a JSON array of those keywords, "
+            f"2. Call {TOOL_ASSET_EXPLORER} with search_terms as a JSON array of those keywords, "
             f"and context_query set verbatim to: '{query}' (for server vector/semantic search); "
             f"optionally set object_type (see docs://ovaledge/asset_types)\n"
-            f"3. Call {TOOL_LOOKUP_GLOSSARY_TERM} with term_name for each key business concept\n"
+            f"3. Call {TOOL_ASSET_EXPLORER} with name and object_type=glossary "
+            f"for each key business concept\n"
             f"4. Cross-reference glossary-linked objects against catalog hits\n"
             f"5. Use pagination or repeat search with filters "
             f"(owner, steward, connection) if scope is unclear\n"
             f"6. If the user needs narrative or policy context (not just metadata), call "
-            f"{TOOL_LOOKUP_DATASTORY}(content_query=…) or search with object_type=oestory, "
-            f"then {TOOL_LOOKUP_DATASTORY} for formattedResponse\n"
+            f"{TOOL_KNOWLEDGE_SEARCH} with the narrative question\n"
             f"7. Present the top 5 recommended assets with:\n"
             f"   - Full governance context from the catalog document "
             f"(owner, steward, certification, DQ)\n"
@@ -81,9 +76,9 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Explain the business term '{term}' as defined in our organisation.\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_LOOKUP_GLOSSARY_TERM}(term_name='{term}')\n"
+            f"1. Call {TOOL_ASSET_EXPLORER}(name='{term}', object_type=glossary)\n"
             f"2. Traverse related-term and synonym fields from the response one level\n"
-            f"3. For up to two linked physical objects, call {TOOL_CATALOG_ASSET_DETAILS} "
+            f"3. For up to two linked physical objects, call {TOOL_ASSET_DETAILS} "
             f"with object_id and object_type from the payload "
             f"(see docs://ovaledge/asset_types; prefer oetable/oefile for physical data)\n"
             f"4. Synthesise and present:\n"
@@ -110,15 +105,14 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Produce a trust assessment for the data asset: '{asset_name}'\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_SEARCH_CATALOG} with search_terms derived from '{asset_name}' "
+            f"1. Call {TOOL_ASSET_EXPLORER} with search_terms derived from '{asset_name}' "
             f"(e.g. split into tokens) to resolve object_id and object_type "
             f"(prefer oetable or oefile)\n"
-            f"2. Call {TOOL_CATALOG_ASSET_DETAILS} with object_id and object_type — certification, "
+            f"2. Call {TOOL_ASSET_DETAILS} with object_id and object_type — certification, "
             f"governance roles, classifications\n"
             f"3. If object_type is oetable or oefile, call {TOOL_ASSET_LINEAGE} with that id/type "
             f"and depth 2–3 to verify data origin\n"
-            f"4. Optionally call {TOOL_COLUMN_PROFILE} for column-level statistics "
-            f"(oetable/oefile only)\n"
+            f"4. Asset details includes profile statistics automatically for oetable/oefile\n"
             f"5. Score each trust dimension and produce a red/amber/green scorecard:\n"
             f"   - DQ score and rule signals if returned\n"
             f"   - Metadata completeness\n"
@@ -144,15 +138,14 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Give me an overview of the '{domain}' data domain.\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_SEARCH_CATALOG} with search_terms including '{domain}' and related "
-            f"tokens, object_type=glossary for key terms; also try term-specific "
-            f"{TOOL_LOOKUP_GLOSSARY_TERM} when names are known\n"
-            f"2. Call {TOOL_SEARCH_CATALOG} with search_terms for domain keywords and "
+            f"1. Call {TOOL_ASSET_EXPLORER} with search_terms including '{domain}' and related "
+            f"tokens, object_type=glossary for key terms; use name when a term is known\n"
+            f"2. Call {TOOL_ASSET_EXPLORER} with search_terms for domain keywords and "
             f"object_type=oetable or oefile for anchor datasets\n"
-            f"3. Optionally call {TOOL_LOOKUP_TAGS} with tag_name matching the domain "
-            f"if tags are used\n"
-            f"4. Call {TOOL_LOOKUP_DATASTORY}(content_query='{domain}' domain overview) "
-            f"or object_type=oestory search for domain narrative stories\n"
+            f"3. Optionally call {TOOL_ASSET_EXPLORER} with name matching the domain "
+            f"and object_type=oetag if tags are used\n"
+            f"4. Call {TOOL_KNOWLEDGE_SEARCH}(query='{domain}' domain overview) "
+            f"for narrative stories or product documentation\n"
             f"5. Aggregate quality and certification signals from returned catalog documents\n"
             f"6. Identify governance contacts (owners/stewards) across key assets\n"
             f"7. Present:\n"
@@ -177,10 +170,10 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Trace the full data lineage for: '{asset_name}'\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_SEARCH_CATALOG} to resolve name to object_id and object_type "
+            f"1. Call {TOOL_ASSET_EXPLORER} to resolve name to object_id and object_type "
             f"(oetable or oefile)\n"
             f"2. Call {TOOL_ASSET_LINEAGE}(object_id=…, object_type=…, depth=3)\n"
-            f"3. For important nodes, call {TOOL_CATALOG_ASSET_DETAILS} "
+            f"3. For important nodes, call {TOOL_ASSET_DETAILS} "
             f"and flag weak certification\n"
             f"4. Narrate the path in plain language: source → transformations → consumers\n"
             f"5. Present:\n"
@@ -204,17 +197,16 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Find all assets related to: '{asset_name}'\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_SEARCH_CATALOG} to resolve name to object_id; "
+            f"1. Call {TOOL_ASSET_EXPLORER} to resolve name to object_id; "
             f"if the asset is an oetable, note the numeric id\n"
-            f"2. For oetable assets, call {TOOL_TABLE_ENTITY_RELATIONSHIPS}(object_id=…) "
-            f"for column/pattern relationships\n"
-            f"3. Call {TOOL_CATALOG_ASSET_DETAILS} for the anchor — extract glossary or "
-            f"tag references from the document if present\n"
-            f"4. Call {TOOL_LOOKUP_GLOSSARY_TERM} or {TOOL_LOOKUP_TAGS} for those references "
-            f"when ids or names are known\n"
-            f"5. De-duplicate and rank: (1) entity relationships "
+            f"2. Call {TOOL_ASSET_DETAILS} for the anchor — it includes relationships "
+            f"for oetable assets; extract glossary or tag references from the document "
+            f"if present\n"
+            f"3. Call {TOOL_ASSET_EXPLORER} with the reference name and the applicable "
+            f"glossary/oetag type when names are known\n"
+            f"4. De-duplicate and rank: (1) entity relationships "
             f"(2) shared glossary/tag linkage\n"
-            f"6. Present join or relationship details, semantic links, and trust indicators "
+            f"5. Present join or relationship details, semantic links, and trust indicators "
             f"per related asset"
         )
         return [Message(text)]
@@ -234,20 +226,15 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Answer using our organization's data stories: '{question}'\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_LOOKUP_DATASTORY}(content_query='{question}') first. "
-            f"If the user named a story zone or title, also pass story_zone_name "
-            f"and/or story_name to narrow the search.\n"
-            f"2. If no story is found (404) or the answer is incomplete, optionally call "
-            f"{TOOL_SEARCH_CATALOG} with search_terms derived from the question and "
-            f"object_type=oestory to discover story object ids, then call "
-            f"{TOOL_LOOKUP_DATASTORY} again with object_id or a refined content_query "
-            f"(or read ovaledge://governance/data-story/{{object_id}} for the catalog document).\n"
-            f"3. Do not use {TOOL_SEARCH_DOCS} for this workflow — that is for OvalEdge "
-            f"product documentation only.\n"
-            f"4. Present the answer using formattedResponse from the lookup. The first line "
+            f"1. Call {TOOL_KNOWLEDGE_SEARCH}(query='{question}') first. "
+            f"Knowledge search covers both organizational stories and product documentation.\n"
+            f"2. If the answer is incomplete, refine the search wording or optionally call "
+            f"{TOOL_ASSET_EXPLORER} with search_terms derived from the question and "
+            f"object_type=oestory to discover related story metadata.\n"
+            f"3. Present the answer using formattedResponse when returned. The first line "
             f"must be storyCitation exactly (verbatim). Do not prepend phrases like "
             f"'Based on' or 'According to' before the citation.\n"
-            f"5. If multiple stories match, summarize each with its citation and navUrl; "
+            f"4. If multiple stories match, summarize each with its citation and navUrl; "
             f"say clearly when no entitled story matched the question."
         )
         return [Message(text)]
@@ -264,7 +251,7 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Analyze metadata drift for: '{scope}'\n\n"
             f"Steps:\n"
-            f"1. If the scope is an asset name, call {TOOL_SEARCH_CATALOG} to resolve "
+            f"1. If the scope is an asset name, call {TOOL_ASSET_EXPLORER} to resolve "
             f"object_id, connection, and schema/table names\n"
             f"2. Call {TOOL_METADATA_CHANGES_BETWEEN_CRAWLS} with filters matching the scope "
             f"(schema, table, connection, time window, or crawl ids as supported by the tool)\n"
@@ -272,7 +259,7 @@ def register(mcp: FastMCP) -> None:
             f"from the response\n"
             f"4. If the API recommends ANALYSIS_TRANSACTION_JOB or data is incomplete, "
             f"say so clearly\n"
-            f"5. Link to affected assets via {TOOL_CATALOG_ASSET_DETAILS} when ids are known"
+            f"5. Link to affected assets via {TOOL_ASSET_DETAILS} when ids are known"
         )
         return [Message(text)]
 
@@ -298,7 +285,7 @@ def register(mcp: FastMCP) -> None:
             f"{MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE}\n\n"
             f"After **1**: native_source_access → {TOOL_SOURCE_SYSTEM_ACCESS} with "
             f"access_intent_confirmed=native. "
-            f"After **2**: catalog_object_access → {TOOL_SEARCH_CATALOG} (if needed) → "
+            f"After **2**: catalog_object_access → {TOOL_ASSET_EXPLORER} (if needed) → "
             f"{TOOL_GET_USER_OBJECT_ACCESS} with access_intent_confirmed=catalog_acl."
         )
         return [Message(text)]
@@ -401,7 +388,7 @@ def register(mcp: FastMCP) -> None:
             f"Steps:\n"
             f"1. Infer query_direction: user_to_object when asking what a specific user can do; "
             f"object_to_principals when asking who has access on an asset.\n"
-            f"2. Resolve the asset with {TOOL_SEARCH_CATALOG} when the user names it; pass "
+            f"2. Resolve the asset with {TOOL_ASSET_EXPLORER} when the user names it; pass "
             f"object_id and object_type from the chosen hit. If multiple matches, ask the user "
             f"to pick or use matchCandidates from get_user_object_access.\n"
             f"3. Call {TOOL_GET_USER_OBJECT_ACCESS} with query_direction, username (for "
@@ -423,14 +410,12 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Explain the governance tag '{tag_name}'.\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_LOOKUP_TAGS}(tag_name='{tag_name}') — add "
-            f"include_parent=true and/or include_children=true when the user asks for "
-            f"parent or child tags in the hierarchy\n"
-            f"2. If not found, call {TOOL_SEARCH_CATALOG} with search_terms including "
+            f"1. Call {TOOL_ASSET_EXPLORER}(name='{tag_name}', object_type=oetag)\n"
+            f"2. If not found, call {TOOL_ASSET_EXPLORER} with search_terms including "
             f"'{tag_name}' and object_type=oetag\n"
             f"3. Present tag description, master/parent hierarchy, child tags, and "
             f"stewardship from formattedResponse or returned fields\n"
-            f"4. Optionally list catalog assets tagged via {TOOL_SEARCH_CATALOG} with tags filter "
+            f"4. Optionally list catalog assets tagged via {TOOL_ASSET_EXPLORER} with tags filter "
             f"when the user asks what data uses this tag"
         )
         return [Message(text)]
@@ -448,7 +433,7 @@ def register(mcp: FastMCP) -> None:
             f"Steps:\n"
             f"1. Call {TOOL_LOOKUP_DQ_RULE}(rule_name='{rule_name}')\n"
             f"2. Present rule purpose, object binding, steward, and redirectUrl from hits\n"
-            f"3. Note that DQ rules are not in {TOOL_SEARCH_CATALOG}; always use "
+            f"3. Note that DQ rules are not in {TOOL_ASSET_EXPLORER}; always use "
             f"{TOOL_LOOKUP_DQ_RULE} first\n"
             f"4. If the user wants to change steward only, mention {TOOL_UPDATE_GOVERNANCE_ROLES} "
             f"with object_type=dqrule (steward role only)"
@@ -516,8 +501,8 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Improve descriptions for asset '{asset_name}': {intent}\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_SEARCH_CATALOG} to resolve object_id and object_type\n"
-            f"2. Call {TOOL_CATALOG_ASSET_DETAILS} to read current descriptions and governance\n"
+            f"1. Call {TOOL_ASSET_EXPLORER} to resolve object_id and object_type\n"
+            f"2. Call {TOOL_ASSET_DETAILS} to read current descriptions and governance\n"
             f"3. Draft description text from the user intent — do not invent facts beyond "
             f"what the user or catalog already states\n"
             f"4. Confirm the draft with the user; call {TOOL_UPDATE_ASSET_DESCRIPTIONS} "
@@ -542,7 +527,7 @@ def register(mcp: FastMCP) -> None:
             f"Update governance roles for '{asset_name}': {role_changes}\n\n"
             f"Steps:\n"
             f"1. If the target sounds like a DQ rule, call {TOOL_LOOKUP_DQ_RULE} first; "
-            f"otherwise {TOOL_SEARCH_CATALOG} then {TOOL_CATALOG_ASSET_DETAILS}\n"
+            f"otherwise {TOOL_ASSET_EXPLORER} then {TOOL_ASSET_DETAILS}\n"
             f"2. Confirm object_id, object_type, and role_changes with the user (owner, steward, "
             f"custodian, governance_role_4–6; null removes)\n"
             f"3. Call {TOOL_UPDATE_GOVERNANCE_ROLES} without write_confirmed_by_user for "
@@ -565,7 +550,7 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Answer this OvalEdge platform question: '{question}'\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_SEARCH_DOCS}(query='{question}', limit=7, num_candidates=128)\n"
+            f"1. Call {TOOL_KNOWLEDGE_SEARCH}(query='{question}', limit=7)\n"
             f"2. Grade relevance of returned chunks against the question\n"
             f"3. If relevant docs found:\n"
             f"   - Synthesise a step-by-step answer\n"
@@ -588,7 +573,7 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Assess Critical Data Element (CDE) DQ coverage for: '{scope}'\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_SEARCH_CATALOG} with search_terms from the scope and "
+            f"1. Call {TOOL_ASSET_EXPLORER} with search_terms from the scope and "
             f"critical_data_element=Yes (and object_type oetable/oecolumn/oefile/oefilecolumn "
             f"when narrowing)\n"
             f"2. Build objects from hits (objectId + objectType). When the user named one "
@@ -603,7 +588,7 @@ def register(mcp: FastMCP) -> None:
             f"Only when no catalog candidates remain, use custom_sql "
             f"({TOOL_GENERATE_DQ_QUERIES})\n"
             f"4. Use {TOOL_LOOKUP_DQ_RULE} when the user names an existing rule; do not use "
-            f"{TOOL_SEARCH_CATALOG} for dqrule objects\n"
+            f"{TOOL_ASSET_EXPLORER} for dqrule objects\n"
             f"5. Only after explicit user approval for writes: {TOOL_ASSOCIATE_DQ_RULE_OBJECTS} "
             f"for a known data quality rule id, or {TOOL_CREATE_DQ_RULES} "
             f"with the same scoped objects (never broaden a single-column request)"
@@ -621,7 +606,7 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"CDE / custom SQL DQ workflow for: {user_intent}\n\n"
             f"Steps:\n"
-            f"1. If column ids are unknown, call {TOOL_SEARCH_CATALOG} with "
+            f"1. If column ids are unknown, call {TOOL_ASSET_EXPLORER} with "
             f"criticalDataElement filter or search_terms for CDE columns\n"
             f"2. Call {TOOL_ASSESS_CDE_DQ} with explicit objects for the named assets "
             f"(discover_cde_columns=true only when listing all CDE columns)\n"

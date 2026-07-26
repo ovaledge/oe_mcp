@@ -8,8 +8,6 @@ from typing import Any
 
 from server.client import OvalEdgeClient, OvalEdgeError
 from server.constants import (
-    MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
-    MCP_GLOSSARY_TAGS_LIMIT_MAX,
     MCP_PATH_TAGS,
     MCP_PATH_TAGS_CREATE_OPTIONS,
     MCP_PATH_TAGS_PARENT_OPTIONS,
@@ -32,18 +30,10 @@ from server.tools.governance._shared import (
     _positive_int,
 )
 
+# Deprecated as a standalone MCP tool — use asset_explorer. Kept for enrichment helpers.
 _DESC_TAGS = classify_tool_desc(
-    "Look up OETAG (tag) document(s) by id or name from Elasticsearch; name search "
-    "may return multiple hits.\n\n"
-    f"Backend: GET {MCP_PATH_TAGS} (objectId OR tagName — mutually exclusive).\n"
-    f"Optional query param limit (default {MCP_GLOSSARY_TAGS_LIMIT_DEFAULT} on server; "
-    f"this client caps at {MCP_GLOSSARY_TAGS_LIMIT_MAX}).\n\n"
-    "Provide either tag_name or object_id, never both.\n\n"
-    "Hierarchy: set include_parent=true when the user asks for the parent tag; "
-    "include_children=true when they ask for child tags (or both). The API enriches "
-    "each hit with parentTag and/or childTags from tagrelationship.\n\n"
-    "Each hit includes relative navLink plus redirectUrl (absolute, from OVALEDGE_BASE_URL). "
-    "When hierarchy flags are set, formattedResponse summarizes tag, parent, and children."
+    "Tag enrichment helper (not registered as a standalone MCP tool). "
+    "Use asset_explorer with name + object_type=oetag (optional include_parent/children)."
 )
 _DESC_CREATE_TAG = classify_tool_desc(
     "Create a new OETAG (guided pickers). Flow depends on tagSecurityMode from create-options.\n\n"
@@ -866,15 +856,24 @@ async def _resolve_tag_hierarchy_names_for_create(
 
 
 async def _lookup_tag_name_by_id(client: OvalEdgeClient, object_id: int) -> str | None:
+    from server.constants import MCP_PATH_ASSET_EXPLORER
+
     try:
-        result = await client.get(MCP_PATH_TAGS, params={"objectId": object_id})
+        result = await client.get(
+            MCP_PATH_ASSET_EXPLORER,
+            params={"objectId": object_id, "objectType": "oetag"},
+        )
     except OvalEdgeError:
         return None
     if not isinstance(result, dict) or not result.get("ok"):
         return None
     data = result.get("data")
-    if isinstance(data, dict):
-        name = data.get("objectName") or data.get("tagName") or data.get("name")
+    tags = data.get("tags") if isinstance(data, dict) else None
+    hit = tags if isinstance(tags, dict) else None
+    if hit is None and isinstance(tags, list) and tags and isinstance(tags[0], dict):
+        hit = tags[0]
+    if isinstance(hit, dict):
+        name = hit.get("objectName") or hit.get("tagName") or hit.get("name")
         if isinstance(name, str) and name.strip():
             return name.strip()
     return None
@@ -1506,7 +1505,7 @@ def _enrich_create_tag_response(
     if not indexed:
         create_body["catalogLookupNote"] = (
             "Tag catalog document not indexed yet; nav link built from create ids. "
-            "Retry lookup_tags(object_id) later for full summary."
+            "Retry asset_explorer(object_id) later for full summary."
         )
         data["catalogLookupNote"] = create_body["catalogLookupNote"]
 
@@ -1517,11 +1516,27 @@ async def _lookup_tag_after_create(
     client: OvalEdgeClient,
     tag_id: int,
 ) -> dict[str, Any] | None:
+    from server.constants import MCP_PATH_ASSET_EXPLORER
+
     try:
-        return await client.get(
-            MCP_PATH_TAGS,
-            params={"objectId": tag_id, "limit": 1},
+        body = await client.get(
+            MCP_PATH_ASSET_EXPLORER,
+            params={"objectId": tag_id, "objectType": "oetag", "limit": 1},
         )
     except OvalEdgeError:
         return None
+    if not isinstance(body, dict):
+        return None
+    data = body.get("data")
+    tags = data.get("tags") if isinstance(data, dict) else None
+    if isinstance(tags, dict):
+        return {"ok": True, "data": tags}
+    if isinstance(tags, list) and tags and isinstance(tags[0], dict):
+        return {"ok": True, "data": tags[0]}
+    # Already a classic McpApiResult tag payload
+    if body.get("ok") and isinstance(data, dict) and (
+        "objectId" in data or "tagName" in data or "objectName" in data
+    ):
+        return body
+    return body if isinstance(body, dict) else None
 

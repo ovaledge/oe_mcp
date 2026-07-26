@@ -29,19 +29,19 @@ The MCP adds **human-in-the-loop** steps for governed writes: picker responses (
 
 ## Critical Data Element (CDE)
 
-Catalog assets (schemas, tables, columns, files, reports, APIs, codes) support a **Critical Data Element** designation. Use the `update_cde_associations` MCP tool to set `Yes`, `No`, or `None`, with optional category and justification — matching the catalog UI shutter. Resolve assets via `search_catalog_assets` first; updates require meta-write permission and are audited in asset history.
+Catalog assets (schemas, tables, columns, files, reports, APIs, codes) support a **Critical Data Element** designation. Use the `update_cde_associations` MCP tool to set `Yes`, `No`, or `None`, with optional category and justification — matching the catalog UI shutter. Resolve assets via `asset_explorer` first; updates require meta-write permission and are audited in asset history.
 
 ## Data stories
 
-**Data stories** (`oestory`) hold narrative organizational knowledge (policies, playbooks, domain context). They are governed and RBAC-scoped like other assets. Use `lookup_datastory` for search and display; see [data_stories](data_stories).
+**Data stories** (`oestory`) hold narrative organizational knowledge (policies, playbooks, domain context). They are governed and RBAC-scoped like other assets. Use `knowledge_search` for search and display; see [data_stories](data_stories).
 
 ## Tags
 
-**Tags** (`oetag`) classify assets. Lookup via `lookup_tags`; creation follows secure or open master/parent flows via `create_tag`. See [tags_guide](tags_guide).
+**Tags** (`oetag`) classify assets. Search via `asset_explorer` (`name` + `object_type=oetag`); creation follows secure or open master/parent flows via `create_tag`. See [tags_guide](tags_guide).
 
 ## Native source access (RDAM)
 
-**`source_system_access`** returns **native** Redshift, Snowflake, or Tableau grants from **RDAM SQL metadata** — not catalog ACLs, not Elasticsearch, and not `search_catalog_assets`. Do not fall back to catalog when RDAM is empty or errors. Use the **`native_source_access`** workflow prompt for grant questions. See [mcp_workflows](mcp_workflows#native-source-access-rdam) for `query_direction`, `object_path`, `object_type`, and examples. Deep routing rules: [rdam_source_access](rdam_source_access).
+**`source_system_access`** returns **native** Redshift, Snowflake, or Tableau grants from **RDAM SQL metadata** — not catalog ACLs, not Elasticsearch, and not `asset_explorer`. Do not fall back to catalog when RDAM is empty or errors. Use the **`native_source_access`** workflow prompt for grant questions. See [mcp_workflows](mcp_workflows#native-source-access-rdam) for `query_direction`, `object_path`, `object_type`, and examples. Deep routing rules: [rdam_source_access](rdam_source_access).
 
 ### Data Access Admin (DAA)
 

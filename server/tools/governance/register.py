@@ -11,110 +11,24 @@ from server.constants import (
     MCP_CUSTOM_FIELD_OBJECT_TYPES,
     MCP_DOMAIN_METADATA_SIZE_DEFAULT,
     MCP_DOMAIN_METADATA_SIZE_MAX,
-    MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
-    MCP_GLOSSARY_TAGS_LIMIT_MAX,
     TOOL_UPDATE_CUSTOM_FIELD_VALUE,
 )
 from server.tools.common.confirm_gate import CONFIRMATION_TOKEN_PARAM_DESCRIPTION
 from server.tools.governance.helpers import (
     _DESC_CREATE_GLOSSARY,
     _DESC_CREATE_TAG,
-    _DESC_DATASTORY,
-    _DESC_GLOSSARY,
-    _DESC_TAGS,
     _DESC_UPDATE_CUSTOM_FIELD_VALUE,
     _DESC_UPDATE_GOVERNANCE_ROLES,
 )
 from server.tools.governance.invocations import (
     _invoke_create_glossary_term,
     _invoke_create_tag,
-    _invoke_lookup_datastory,
-    _invoke_lookup_glossary_term,
-    _invoke_lookup_tags,
     _invoke_update_custom_field_value,
     _invoke_update_governance_roles,
 )
 
 
 def register(mcp: FastMCP) -> None:
-
-    @mcp.tool(description=_DESC_GLOSSARY)
-    async def lookup_glossary_term(
-        object_id: Annotated[
-            int | None,
-            Field(
-                description="Glossary term internal id; omit for name or placement lookup.",
-                default=None,
-            ),
-        ] = None,
-        term_name: Annotated[
-            str | None,
-            Field(
-                description="Term name / label to look up; omit if using object_id or placement.",
-                default=None,
-            ),
-        ] = None,
-        domain_id: Annotated[
-            int | None,
-            Field(
-                description=(
-                    "Global domain id for placement lookup; use with optional category/subcategory."
-                ),
-                default=None,
-            ),
-        ] = None,
-        domain_name: Annotated[
-            str | None,
-            Field(
-                description="Global domain name for placement lookup when domain_id is unknown.",
-                default=None,
-            ),
-        ] = None,
-        category_id: Annotated[
-            int | None,
-            Field(description="Category id (category1Id) for placement lookup.", default=None),
-        ] = None,
-        category_name: Annotated[
-            str | None,
-            Field(
-                description="Category name for placement lookup when category_id is unknown.",
-                default=None,
-            ),
-        ] = None,
-        subcategory_id: Annotated[
-            int | None,
-            Field(description="Subcategory id (category2Id) for placement lookup.", default=None),
-        ] = None,
-        subcategory_name: Annotated[
-            str | None,
-            Field(
-                description="Subcategory name for placement lookup when subcategory_id is unknown.",
-                default=None,
-            ),
-        ] = None,
-        limit: Annotated[
-            int,
-            Field(
-                description=(
-                    f"Max hits to return (default {MCP_GLOSSARY_TAGS_LIMIT_DEFAULT}; "
-                    f"capped at {MCP_GLOSSARY_TAGS_LIMIT_MAX})."
-                ),
-                ge=1,
-            ),
-        ] = MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
-    ) -> dict[str, Any]:
-        """lookup glossary term (see MCP tool description)."""
-        return await _invoke_lookup_glossary_term(
-            object_id=object_id,
-            term_name=term_name,
-            domain_id=domain_id,
-            domain_name=domain_name,
-            category_id=category_id,
-            category_name=category_name,
-            subcategory_id=subcategory_id,
-            subcategory_name=subcategory_name,
-            limit=limit,
-        )
 
     @mcp.tool(description=_DESC_CREATE_GLOSSARY)
     async def create_glossary_term(
@@ -287,56 +201,6 @@ def register(mcp: FastMCP) -> None:
             confirmation_token=confirmation_token,
         )
 
-    @mcp.tool(description=_DESC_TAGS)
-    async def lookup_tags(
-        object_id: Annotated[
-            int | None,
-            Field(description="Tag internal id; omit if using tag_name.", default=None),
-        ] = None,
-        tag_name: Annotated[
-            str | None,
-            Field(description="Tag name to look up; omit if using object_id.", default=None),
-        ] = None,
-        limit: Annotated[
-            int,
-            Field(
-                description=(
-                    f"Max hits to return (default {MCP_GLOSSARY_TAGS_LIMIT_DEFAULT}; "
-                    f"capped at {MCP_GLOSSARY_TAGS_LIMIT_MAX})."
-                ),
-                ge=1,
-            ),
-        ] = MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
-        include_parent: Annotated[
-            bool,
-            Field(
-                description=(
-                    "When true, enrich each hit with parentTag (immediate parent in "
-                    "tagrelationship). Set when the user asks for parent tag details."
-                ),
-                default=False,
-            ),
-        ] = False,
-        include_children: Annotated[
-            bool,
-            Field(
-                description=(
-                    "When true, enrich each hit with childTags. Set when the user asks "
-                    "for child tags (e.g. 'What are the child tags of X?')."
-                ),
-                default=False,
-            ),
-        ] = False,
-    ) -> dict[str, Any]:
-        """lookup tags (see MCP tool description)."""
-        return await _invoke_lookup_tags(
-            object_id=object_id,
-            tag_name=tag_name,
-            limit=limit,
-            include_parent=include_parent,
-            include_children=include_children,
-        )
-
     @mcp.tool(description=_DESC_CREATE_TAG)
     async def create_tag(
         tag_name: Annotated[
@@ -461,65 +325,13 @@ def register(mcp: FastMCP) -> None:
             confirmation_token=confirmation_token,
         )
 
-    @mcp.tool(description=_DESC_DATASTORY)
-    async def lookup_datastory(
-        story_zone_name: Annotated[
-            str | None,
-            Field(
-                description=(
-                    "Optional story zone (globaldomain.domain); use with story_name title lookup "
-                    "or as a filter with content_query."
-                ),
-                default=None,
-            ),
-        ] = None,
-        story_name: Annotated[
-            str | None,
-            Field(
-                description=(
-                    "Story title for name lookup, or optional filter when using content_query."
-                ),
-                default=None,
-            ),
-        ] = None,
-        content_query: Annotated[
-            str | None,
-            Field(
-                description=(
-                    "Search story body text (narrative and indexed sections). "
-                    "Optional story_zone_name and/or story_name narrow results. "
-                    "Omit for object_id or title-only lookup."
-                ),
-                default=None,
-            ),
-        ] = None,
-        object_id: Annotated[
-            int | None,
-            Field(
-                description=(
-                    "Story internal object id (numeric identifier); "
-                    "omit for other modes."
-                ),
-                default=None,
-            ),
-        ] = None,
-    ) -> dict[str, Any]:
-        """lookup datastory (see MCP tool description)."""
-        return await _invoke_lookup_datastory(
-            story_zone_name=story_zone_name,
-            story_name=story_name,
-            content_query=content_query,
-            object_id=object_id,
-        )
-
     @mcp.tool(description=_DESC_UPDATE_GOVERNANCE_ROLES)
     async def update_governance_roles(
         object_id: Annotated[
             int,
             Field(
                 description=(
-                    "Internal object id from search_catalog_assets, lookup_dq_rule, "
-                    "lookup_glossary_term, or lookup_tags."
+                    "Internal object id from asset_explorer or lookup_dq_rule."
                 ),
                 ge=1,
             ),
@@ -530,7 +342,7 @@ def register(mcp: FastMCP) -> None:
                 description=(
                     "OvalEdge objectType: catalog types (oetable, oecolumn, glossary, …) or "
                     "non-catalog governance types (dqrule, dqscheme, dag, policy, …). "
-                    "Use lookup_dq_rule for dqrule — not search_catalog_assets."
+                    "Use lookup_dq_rule for dqrule — not asset_explorer."
                 ),
             ),
         ],
@@ -601,7 +413,7 @@ def register(mcp: FastMCP) -> None:
             int,
             Field(
                 description=(
-                    "Internal object id from search_catalog_assets or governance lookups."
+                    "Internal object id from asset_explorer or governance lookups."
                 ),
                 ge=1,
             ),

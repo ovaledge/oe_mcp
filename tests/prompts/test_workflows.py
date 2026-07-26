@@ -10,25 +10,20 @@ from mcp.types import TextContent
 
 from server.constants import (
     TOOL_ASSESS_CDE_DQ,
+    TOOL_ASSET_DETAILS,
+    TOOL_ASSET_EXPLORER,
     TOOL_ASSET_LINEAGE,
     TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
-    TOOL_CATALOG_ASSET_DETAILS,
-    TOOL_COLUMN_PROFILE,
     TOOL_CREATE_DQ_RULES,
     TOOL_CREATE_GLOSSARY_TERM,
     TOOL_CREATE_SQL_DQ_RULE,
     TOOL_CREATE_TAG,
     TOOL_GENERATE_DQ_QUERIES,
     TOOL_GET_USER_OBJECT_ACCESS,
-    TOOL_LOOKUP_DATASTORY,
+    TOOL_KNOWLEDGE_SEARCH,
     TOOL_LOOKUP_DQ_RULE,
-    TOOL_LOOKUP_GLOSSARY_TERM,
-    TOOL_LOOKUP_TAGS,
     TOOL_METADATA_CHANGES_BETWEEN_CRAWLS,
-    TOOL_SEARCH_CATALOG,
-    TOOL_SEARCH_DOCS,
     TOOL_SOURCE_SYSTEM_ACCESS,
-    TOOL_TABLE_ENTITY_RELATIONSHIPS,
     TOOL_UPDATE_ASSET_DESCRIPTIONS,
     TOOL_UPDATE_GOVERNANCE_ROLES,
     TOOL_VALIDATE_DQ_QUERIES,
@@ -40,75 +35,68 @@ WORKFLOW_PROMPT_NAMES = tuple(sorted(MCP_WORKFLOW_PROMPT_NAMES))
 
 # Each prompt must reference the tools its instruction text tells the model to call.
 _PROMPT_REQUIRED_TOOLS: dict[str, tuple[str, ...]] = {
-    "data_discovery": (TOOL_SEARCH_CATALOG, TOOL_LOOKUP_GLOSSARY_TERM, TOOL_LOOKUP_DATASTORY),
-    "explain_business_term": (TOOL_LOOKUP_GLOSSARY_TERM, TOOL_CATALOG_ASSET_DETAILS),
+    "data_discovery": (TOOL_ASSET_EXPLORER, TOOL_KNOWLEDGE_SEARCH),
+    "explain_business_term": (TOOL_ASSET_EXPLORER, TOOL_ASSET_DETAILS),
     "trust_assessment": (
-        TOOL_SEARCH_CATALOG,
-        TOOL_CATALOG_ASSET_DETAILS,
+        TOOL_ASSET_EXPLORER,
+        TOOL_ASSET_DETAILS,
         TOOL_ASSET_LINEAGE,
-        TOOL_COLUMN_PROFILE,
     ),
     "explore_data_domain": (
-        TOOL_SEARCH_CATALOG,
-        TOOL_LOOKUP_GLOSSARY_TERM,
-        TOOL_LOOKUP_TAGS,
-        TOOL_LOOKUP_DATASTORY,
+        TOOL_ASSET_EXPLORER,
+        TOOL_KNOWLEDGE_SEARCH,
     ),
     "trace_data_lineage": (
-        TOOL_SEARCH_CATALOG,
+        TOOL_ASSET_EXPLORER,
         TOOL_ASSET_LINEAGE,
-        TOOL_CATALOG_ASSET_DETAILS,
+        TOOL_ASSET_DETAILS,
     ),
     "find_related_assets": (
-        TOOL_SEARCH_CATALOG,
-        TOOL_TABLE_ENTITY_RELATIONSHIPS,
-        TOOL_CATALOG_ASSET_DETAILS,
-        TOOL_LOOKUP_GLOSSARY_TERM,
-        TOOL_LOOKUP_TAGS,
+        TOOL_ASSET_EXPLORER,
+        TOOL_ASSET_DETAILS,
     ),
     "organizational_knowledge": (
-        TOOL_LOOKUP_DATASTORY,
-        TOOL_SEARCH_CATALOG,
-        TOOL_SEARCH_DOCS,
+        TOOL_KNOWLEDGE_SEARCH,
+        TOOL_ASSET_EXPLORER,
     ),
     "native_source_access": (TOOL_SOURCE_SYSTEM_ACCESS,),
     "resolve_object_access": (
         TOOL_SOURCE_SYSTEM_ACCESS,
-        TOOL_SEARCH_CATALOG,
+        TOOL_ASSET_EXPLORER,
         TOOL_GET_USER_OBJECT_ACCESS,
     ),
     "dam_object_browse": (TOOL_SOURCE_SYSTEM_ACCESS,),
-    "catalog_object_access": (TOOL_GET_USER_OBJECT_ACCESS, TOOL_SEARCH_CATALOG),
-    "platform_help": (TOOL_SEARCH_DOCS,),
+    "catalog_object_access": (TOOL_GET_USER_OBJECT_ACCESS, TOOL_ASSET_EXPLORER),
+    "platform_help": (TOOL_KNOWLEDGE_SEARCH,),
     "metadata_drift": (
         TOOL_METADATA_CHANGES_BETWEEN_CRAWLS,
-        TOOL_SEARCH_CATALOG,
-        TOOL_CATALOG_ASSET_DETAILS,
+        TOOL_ASSET_EXPLORER,
+        TOOL_ASSET_DETAILS,
     ),
-    "explain_tag": (TOOL_LOOKUP_TAGS, TOOL_SEARCH_CATALOG),
+    "explain_tag": (TOOL_ASSET_EXPLORER,),
     "explain_dq_rule": (TOOL_LOOKUP_DQ_RULE, TOOL_UPDATE_GOVERNANCE_ROLES),
     "create_business_glossary_term": (TOOL_CREATE_GLOSSARY_TERM,),
     "create_governance_tag": (TOOL_CREATE_TAG,),
     "document_asset_descriptions": (
-        TOOL_SEARCH_CATALOG,
-        TOOL_CATALOG_ASSET_DETAILS,
+        TOOL_ASSET_EXPLORER,
+        TOOL_ASSET_DETAILS,
         TOOL_UPDATE_ASSET_DESCRIPTIONS,
     ),
     "assign_governance_roles": (
         TOOL_LOOKUP_DQ_RULE,
-        TOOL_SEARCH_CATALOG,
-        TOOL_CATALOG_ASSET_DETAILS,
+        TOOL_ASSET_EXPLORER,
+        TOOL_ASSET_DETAILS,
         TOOL_UPDATE_GOVERNANCE_ROLES,
     ),
     "assess_cde_dq_coverage": (
-        TOOL_SEARCH_CATALOG,
+        TOOL_ASSET_EXPLORER,
         TOOL_ASSESS_CDE_DQ,
         TOOL_LOOKUP_DQ_RULE,
         TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
         TOOL_CREATE_DQ_RULES,
     ),
     "create_custom_sql_dq_workflow": (
-        TOOL_SEARCH_CATALOG,
+        TOOL_ASSET_EXPLORER,
         TOOL_ASSESS_CDE_DQ,
         TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
         TOOL_CREATE_DQ_RULES,
@@ -204,19 +192,17 @@ class TestMcpServerInstructions:
     def test_instructions_prioritize_data_stories_for_org_knowledge(self) -> None:
         from server.app import MCP_SERVER_INSTRUCTION_TOOL_NAMES, create_mcp
         from server.constants import (
+            TOOL_ASSET_EXPLORER,
             TOOL_GET_USER_OBJECT_ACCESS,
-            TOOL_LOOKUP_DATASTORY,
-            TOOL_SEARCH_CATALOG,
-            TOOL_SEARCH_DOCS,
+            TOOL_KNOWLEDGE_SEARCH,
             TOOL_SOURCE_SYSTEM_ACCESS,
         )
         from server.mcp_surface import MCP_TOOL_NAMES
 
         mcp = create_mcp()
         instructions = (mcp.instructions or "").lower()
-        assert TOOL_LOOKUP_DATASTORY in instructions
-        assert TOOL_SEARCH_DOCS in instructions
-        assert TOOL_SEARCH_CATALOG in instructions
+        assert TOOL_KNOWLEDGE_SEARCH in instructions
+        assert TOOL_ASSET_EXPLORER in instructions
         assert TOOL_SOURCE_SYSTEM_ACCESS in instructions
         assert TOOL_GET_USER_OBJECT_ACCESS in instructions
         assert "write_confirmed_by_user" in instructions

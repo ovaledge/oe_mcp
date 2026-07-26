@@ -82,7 +82,7 @@ def register(mcp: FastMCP) -> None:
         ] = None,
         object_id: Annotated[
             int | None,
-            Field(description="Catalog object id from search_catalog_assets."),
+            Field(description="Catalog object id from asset_explorer."),
         ] = None,
         object_type: Annotated[
             str | None,

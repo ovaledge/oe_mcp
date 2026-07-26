@@ -11,13 +11,10 @@ from server.constants import (
     MCP_CUSTOM_FIELD_OBJECT_TYPES,
     MCP_DOMAIN_METADATA_SEARCH_ON,
     MCP_DOMAIN_METADATA_SIZE_DEFAULT,
-    MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
-    MCP_GLOSSARY_TAGS_LIMIT_MAX,
     MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES,
     MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES_DOC,
     MCP_GOVERNANCE_STEWARD_ONLY_OBJECT_TYPES,
     MCP_PATH_GLOSSARY_TERMS,
-    MCP_PATH_LOOKUP_DATASTORY,
     MCP_PATH_TAGS,
     MCP_PATH_UPDATE_CUSTOM_FIELD_VALUES,
     MCP_PATH_UPDATE_GOVERNANCE_ROLES,
@@ -34,7 +31,6 @@ from server.tools.common import (
 from server.tools.common import (
     map_ovaledge_error,
     ovaledge_client,
-    strip_or_none,
 )
 from server.tools.common.confirm_gate import verify_write_confirmation
 from server.tools.common.tool_logging import logged_tool_invocation
@@ -44,9 +40,6 @@ from server.tools.governance.helpers import (
     _block_llm_parent_selection,
     _consume_parent_picker_shown,
     _enrich_create_tag_response,
-    _enrich_datastory_response,
-    _enrich_glossary_lookup_response,
-    _enrich_tag_lookup_response,
     _enrich_update_custom_field_value_response,
     _enrich_update_governance_roles_response,
     _extract_picker_items,
@@ -79,60 +72,6 @@ from server.tools.governance.helpers import (
     _shape_create_response,
     _shape_picker_response,
 )
-
-
-@logged_tool_invocation
-async def _invoke_lookup_glossary_term(
-    object_id: int | None = None,
-    term_name: str | None = None,
-    domain_id: int | None = None,
-    domain_name: str | None = None,
-    category_id: int | None = None,
-    category_name: str | None = None,
-    subcategory_id: int | None = None,
-    subcategory_name: str | None = None,
-    limit: int = MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
-) -> dict[str, Any]:
-    """Glossary lookup (see MCP tool description)."""
-    has_id = object_id is not None
-    has_name = term_name is not None and str(term_name).strip() != ""
-    has_placement = (
-        (domain_id is not None and domain_id > 0)
-        or strip_or_none(domain_name) is not None
-        or (category_id is not None and category_id > 0)
-        or strip_or_none(category_name) is not None
-        or (subcategory_id is not None and subcategory_id > 0)
-        or strip_or_none(subcategory_name) is not None
-    )
-    mode_count = int(has_id) + int(has_name) + int(has_placement)
-    if mode_count != 1:
-        return {
-            "error": (
-                "Provide exactly one lookup mode: object_id, term_name, or "
-                "domain/category placement filters."
-            ),
-            "status_code": 400,
-        }
-    lim = min(max(limit, 1), MCP_GLOSSARY_TAGS_LIMIT_MAX)
-    try:
-        async with ovaledge_client() as client:
-            params = _q(
-                objectId=object_id,
-                termName=strip_or_none(term_name),
-                domainId=domain_id if domain_id and domain_id > 0 else None,
-                domainName=strip_or_none(domain_name),
-                categoryId=category_id if category_id and category_id > 0 else None,
-                categoryName=strip_or_none(category_name),
-                subCategoryId=subcategory_id if subcategory_id and subcategory_id > 0 else None,
-                subCategoryName=strip_or_none(subcategory_name),
-                limit=lim,
-            )
-            body = await client.get(MCP_PATH_GLOSSARY_TERMS, params=params)
-            if isinstance(body, dict):
-                return _enrich_glossary_lookup_response(body)
-            return body
-    except OvalEdgeError as e:
-        return map_ovaledge_error(e)
 
 
 @logged_tool_invocation
@@ -685,47 +624,6 @@ async def _invoke_create_glossary_term(
 
 
 @logged_tool_invocation
-async def _invoke_lookup_tags(
-    object_id: int | None = None,
-    tag_name: str | None = None,
-    limit: int = MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
-    include_parent: bool = False,
-    include_children: bool = False,
-) -> dict[str, Any]:
-    """Tag lookup (see MCP tool description)."""
-    has_id = object_id is not None
-    has_name = tag_name is not None and str(tag_name).strip() != ""
-    if has_id and has_name:
-        return {
-            "error": "Provide either object_id or tag_name — not both.",
-            "status_code": 400,
-        }
-    if not has_id and not has_name:
-        return {
-            "error": "Provide object_id or tag_name.",
-            "status_code": 400,
-        }
-    lim = min(max(limit, 1), MCP_GLOSSARY_TAGS_LIMIT_MAX)
-    try:
-        async with ovaledge_client() as client:
-            body = await client.get(
-                MCP_PATH_TAGS,
-                params=_q(
-                    objectId=object_id,
-                    tagName=tag_name,
-                    limit=lim,
-                    includeParent=include_parent or None,
-                    includeChildren=include_children or None,
-                ),
-            )
-            if isinstance(body, dict):
-                return _enrich_tag_lookup_response(body)
-            return body
-    except OvalEdgeError as e:
-        return map_ovaledge_error(e)
-
-
-@logged_tool_invocation
 async def _invoke_create_tag(
     tag_name: str,
     description: str | None = None,
@@ -1095,48 +993,6 @@ async def _invoke_create_tag(
 
 
 @logged_tool_invocation
-async def _invoke_lookup_datastory(
-    story_zone_name: str | None = None,
-    story_name: str | None = None,
-    content_query: str | None = None,
-    object_id: int | None = None,
-) -> dict[str, Any]:
-    """Data story lookup (see MCP tool description)."""
-    has_id = object_id is not None and object_id > 0
-    has_name = story_name is not None and str(story_name).strip() != ""
-    has_content = content_query is not None and str(content_query).strip() != ""
-    if has_id and (has_name or has_content):
-        return {
-            "error": "Provide object_id alone, or use story_name and/or content_query.",
-            "status_code": 400,
-        }
-    if not has_id and not has_name and not has_content:
-        return {
-            "error": "Provide object_id, story_name, or content_query.",
-            "status_code": 400,
-        }
-    zone_param = strip_or_none(story_zone_name)
-    name_for_api = strip_or_none(story_name)
-    content_param = strip_or_none(content_query)
-    try:
-        async with ovaledge_client() as client:
-            body = await client.get(
-                MCP_PATH_LOOKUP_DATASTORY,
-                params=_q(
-                    storyZoneName=zone_param,
-                    storyName=name_for_api,
-                    contentQuery=content_param,
-                    objectId=object_id if has_id else None,
-                ),
-            )
-            if isinstance(body, dict):
-                return _enrich_datastory_response(body)
-            return body
-    except OvalEdgeError as e:
-        return map_ovaledge_error(e)
-
-
-@logged_tool_invocation
 async def _invoke_update_governance_roles(
     object_id: int,
     object_type: str,
@@ -1168,7 +1024,7 @@ async def _invoke_update_governance_roles(
         return {
             "error": (
                 f"Unsupported object_type {object_type!r}. Use a catalog objectType from "
-                "search_catalog_assets, or one of: "
+                "asset_explorer, or one of: "
                 f"{MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES_DOC}."
             ),
             "status_code": 400,

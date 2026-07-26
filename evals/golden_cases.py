@@ -23,12 +23,11 @@ from evals import golden_cases_coverage
 from evals.mcp_eval_helpers import ovaledge_eval_mcp_server, tool_call_result
 from server.constants import (
     DOCS_RESOURCE_URI_PREFIX,
+    TOOL_ASSET_DETAILS,
+    TOOL_ASSET_EXPLORER,
     TOOL_ASSET_LINEAGE,
-    TOOL_CATALOG_ASSET_DETAILS,
     TOOL_GET_USER_OBJECT_ACCESS,
-    TOOL_LOOKUP_DATASTORY,
-    TOOL_SEARCH_CATALOG,
-    TOOL_SEARCH_DOCS,
+    TOOL_KNOWLEDGE_SEARCH,
     TOOL_SOURCE_SYSTEM_ACCESS,
     TOOL_UPDATE_ASSET_DESCRIPTIONS,
 )
@@ -37,29 +36,36 @@ from server.tools.common.confirm_gate import compute_confirmation_token
 
 _MCP_WORKFLOWS_RESOURCE_URI = AnyUrl(f"{DOCS_RESOURCE_URI_PREFIX}/mcp_workflows")
 
+# Compatibility variable names keep the golden case structure concise while all
+# expected MCP calls resolve to the consolidated read-tool names.
+TOOL_SEARCH_CATALOG = TOOL_ASSET_EXPLORER
+TOOL_CATALOG_ASSET_DETAILS = TOOL_ASSET_DETAILS
+TOOL_LOOKUP_DATASTORY = TOOL_KNOWLEDGE_SEARCH
+TOOL_SEARCH_DOCS = TOOL_KNOWLEDGE_SEARCH
+
 _DATA_DISCOVERY_PROMPT_TEXT = (
     "Help me find data for: 'churn metrics'\n\n"
     "Please follow this sequence:\n"
     "1. Extract search keywords from the query\n"
-    "2. Call search_catalog_assets with search_terms and context_query set to the query\n"
+    "2. Call asset_explorer with search_terms and context_query set to the query\n"
     "3. Present the top recommended assets with governance context"
 )
 
 _ORG_KNOWLEDGE_PROMPT_TEXT = (
     "Answer using our organization's data stories.\n\n"
     "Steps:\n"
-    "1. Call lookup_datastory(content_query=...) first.\n"
+    "1. Call knowledge_search(query=...) first.\n"
     "2. Present formattedResponse; lead with storyCitation verbatim.\n"
-    "3. Do not use search_platform_docs for org narrative content."
+    "3. Knowledge search covers both corpora."
 )
 
 _PLATFORM_HELP_PROMPT_TEXT = (
     "Help the user with OvalEdge product documentation.\n\n"
     "Question: How do I create a data quality rule in OvalEdge?\n\n"
     "Steps:\n"
-    "1. Call search_platform_docs with the user's question.\n"
+    "1. Call knowledge_search with the user's question.\n"
     "2. Summarize the documentation hits.\n"
-    "3. Do not use lookup_datastory (organizational narratives) or search_catalog_assets."
+    "3. Knowledge search covers product and organizational knowledge."
 )
 
 _CATALOG_OBJECT_ACCESS_PROMPT_TEXT = (
@@ -69,7 +75,7 @@ _CATALOG_OBJECT_ACCESS_PROMPT_TEXT = (
     "Steps:\n"
     "1. Call get_user_object_access with query_direction=user_to_object.\n"
     "2. Do not use source_system_access (native DB grants).\n"
-    "3. Optionally search_catalog_assets only to resolve object_id if needed."
+    "3. Optionally asset_explorer only to resolve object_id if needed."
 )
 
 _DOCUMENT_ASSET_DESCRIPTIONS_PROMPT_TEXT = (
@@ -77,7 +83,7 @@ _DOCUMENT_ASSET_DESCRIPTIONS_PROMPT_TEXT = (
     "Target: customer_revenue_daily (oetable)\n"
     "New business description: Quarterly revenue summary for finance analysts.\n\n"
     "Steps:\n"
-    "1. search_catalog_assets or catalog_asset_details to resolve object_id.\n"
+    "1. asset_explorer or asset_details to resolve object_id.\n"
     "2. Call update_asset_descriptions WITHOUT write_confirmed_by_user for preview.\n"
     "3. Show confirmationToken; wait for explicit user approval.\n"
     "4. Re-call with write_confirmed_by_user=true and confirmation_token from preview."
@@ -102,16 +108,16 @@ def golden_mcp_use_catalog_search() -> LLMTestCase:
         name="mcp_use_catalog_search",
         input="Find certified tables for customer revenue reporting.",
         actual_output=(
-            "I used search_catalog_assets (not lookup_datastory or platform docs) because "
+            "I used asset_explorer (not knowledge_search or platform docs) because "
             "you asked for certified physical tables. I passed search_terms "
             "['customer', 'revenue'], object_type=oetable, and context_query with your "
-            "full sentence for semantic ranking. I did not call catalog_asset_details yet "
+            "full sentence for semantic ranking. I did not call asset_details yet "
             "because search was the correct first step to discover candidates."
         ),
         mcp_servers=[srv],
         mcp_tools_called=[
             MCPToolCall(
-                name="search_catalog_assets",
+                name="asset_explorer",
                 args={
                     "search_terms": ["customer", "revenue"],
                     "object_type": "oetable",
@@ -149,7 +155,7 @@ def golden_task_completion_discovery() -> ConversationalTestCase:
                 content="Searching the catalog for payroll-related tables.",
                 mcp_tools_called=[
                     MCPToolCall(
-                        name="search_catalog_assets",
+                        name="asset_explorer",
                         args={"search_terms": ["payroll"], "object_type": "oetable"},
                         result=tool_call_result(
                             {
@@ -189,7 +195,7 @@ def golden_multi_turn_lineage_followup() -> ConversationalTestCase:
                 content="Running catalog search for customer transaction tables.",
                 mcp_tools_called=[
                     MCPToolCall(
-                        name="search_catalog_assets",
+                        name="asset_explorer",
                         args={
                             "search_terms": ["customer", "transactions"],
                             "object_type": "oetable",
@@ -286,9 +292,9 @@ def golden_mcp_use_prompt_workflow() -> LLMTestCase:
         input="Follow our governance discovery workflow for churn metrics.",
         actual_output=(
             "I invoked the data_discovery MCP prompt first; its instructions require "
-            "search_catalog_assets with search_terms and context_query. I then executed "
+            "asset_explorer with search_terms and context_query. I then executed "
             "that search exactly as the prompt specified (not organizational_knowledge or "
-            "lookup_datastory, which are for narrative content)."
+            "knowledge_search, which are for narrative content)."
         ),
         mcp_servers=[srv],
         mcp_prompts_called=[
@@ -299,7 +305,7 @@ def golden_mcp_use_prompt_workflow() -> LLMTestCase:
         ],
         mcp_tools_called=[
             MCPToolCall(
-                name="search_catalog_assets",
+                name="asset_explorer",
                 args={
                     "search_terms": ["churn", "metrics"],
                     "object_type": "oetable",
@@ -317,22 +323,22 @@ def golden_mcp_use_prompt_workflow() -> LLMTestCase:
 
 
 def golden_mcp_use_datastory() -> LLMTestCase:
-    """Single-turn: organizational knowledge via lookup_datastory."""
+    """Single-turn: organizational knowledge via knowledge_search."""
     srv = ovaledge_eval_mcp_server(tool_names=frozenset({TOOL_LOOKUP_DATASTORY}))
     return LLMTestCase(
         name="mcp_use_datastory",
         input="What is our policy on customer PII retention?",
         actual_output=(
-            "This is organizational narrative content, so I used lookup_datastory with "
-            "content_query (not search_platform_docs, which is for OvalEdge product "
-            "documentation, and not search_catalog_assets). I am presenting "
-            "formattedResponse with storyCitation as the first line."
+            "This is organizational narrative content, so I used knowledge_search with "
+            "query (dual corpus: data stories + platform docs; not asset_explorer for "
+            "tables). I am presenting formattedResponse with storyCitation as the "
+            "first line."
         ),
         mcp_servers=[srv],
         mcp_tools_called=[
             MCPToolCall(
                 name=TOOL_LOOKUP_DATASTORY,
-                args={"content_query": "customer PII retention policy"},
+                args={"query": "customer PII retention policy"},
                 result=tool_call_result(
                     {
                         "ok": True,
@@ -350,7 +356,7 @@ def golden_mcp_use_datastory() -> LLMTestCase:
 
 
 def golden_mcp_use_organizational_knowledge_prompt() -> LLMTestCase:
-    """Agent used organizational_knowledge prompt then lookup_datastory."""
+    """Agent used organizational_knowledge prompt then knowledge_search."""
     srv = ovaledge_eval_mcp_server(
         tool_names=frozenset({TOOL_LOOKUP_DATASTORY}),
         prompt_names=frozenset({"organizational_knowledge"}),
@@ -367,8 +373,8 @@ def golden_mcp_use_organizational_knowledge_prompt() -> LLMTestCase:
         name="mcp_use_organizational_knowledge_prompt",
         input="Summarize our revenue recognition playbook from data stories.",
         actual_output=(
-            "Per the organizational_knowledge prompt I called lookup_datastory with "
-            "content_query='revenue recognition playbook'. The tool returned "
+            "Per the organizational_knowledge prompt I called knowledge_search with "
+            "query='revenue recognition playbook'. The tool returned "
             "formattedResponse and storyCitation; I summarized the ASC 606 playbook "
             "section for the user."
         ),
@@ -379,7 +385,7 @@ def golden_mcp_use_organizational_knowledge_prompt() -> LLMTestCase:
         mcp_tools_called=[
             MCPToolCall(
                 name=TOOL_LOOKUP_DATASTORY,
-                args={"content_query": "revenue recognition playbook"},
+                args={"query": "revenue recognition playbook"},
                 result=tool_call_result(
                     {
                         "ok": True,
@@ -409,7 +415,7 @@ def golden_mcp_use_native_source_access() -> LLMTestCase:
             "source_system_access with source_system=redshift, "
             "query_direction=user_to_objects, username=svc_analytics, "
             "object_path=prod, object_type=database, and connection_id for the Redshift "
-            "connector. I did not use search_catalog_assets, which indexes governance metadata "
+            "connector. I did not use asset_explorer, which indexes governance metadata "
             "rather than Redshift privilege tables."
         ),
         mcp_servers=[srv],
@@ -463,7 +469,7 @@ def golden_mcp_use_routing_guide_resource() -> LLMTestCase:
             "I read docs://ovaledge/mcp_workflows first for RDAM routing, then called "
             "source_system_access with query_direction=object_to_users, source_system=snowflake, "
             "object_path=prod_db.public.orders, and object_type=table. I did not use "
-            "search_catalog_assets or get_user_object_access — native grants are RDAM-only."
+            "asset_explorer or get_user_object_access — native grants are RDAM-only."
         ),
         mcp_servers=[srv],
         mcp_resources_called=[
@@ -497,7 +503,7 @@ def golden_mcp_use_routing_guide_resource() -> LLMTestCase:
 
 
 def golden_mcp_use_platform_help() -> LLMTestCase:
-    """Single-turn: platform_help prompt → search_platform_docs (not data stories)."""
+    """Single-turn: platform_help prompt → knowledge_search (not data stories)."""
     srv = ovaledge_eval_mcp_server(
         tool_names=frozenset({TOOL_SEARCH_DOCS}),
         prompt_names=frozenset({"platform_help"}),
@@ -515,9 +521,8 @@ def golden_mcp_use_platform_help() -> LLMTestCase:
         input="How do I create a data quality rule in OvalEdge?",
         actual_output=(
             "This is OvalEdge product documentation, so I invoked the platform_help MCP "
-            "prompt and called search_platform_docs with query='create data quality rule'. "
-            "I did not use lookup_datastory (organizational narratives) or "
-            "search_catalog_assets (catalog metadata)."
+            "prompt and called knowledge_search with query='create data quality rule'. "
+            "I did not use asset_explorer (catalog metadata) for product how-to."
         ),
         mcp_servers=[srv],
         mcp_prompts_called=[MCPPromptCall(name="platform_help", result=prompt_result)],

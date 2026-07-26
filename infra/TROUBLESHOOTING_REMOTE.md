@@ -118,7 +118,7 @@ Log lines intentionally **omit** credential headers. Tool logs include `tool=<na
 ## Performance notes
 
 - **HTTP API + Lambda** integration timeout is **30 seconds**. Increasing Lambda timeout above 30s does not extend API Gateway’s wait for `/mcp`.
-- **Large responses** (`asset_lineage`, `search_platform_docs`, fat `catalog_asset_details`) need CPU/memory to serialize. Default template memory is now **1024 MB**; raise with `LAMBDA_MEMORY_SIZE=2048` if CloudWatch shows duration near 30s or memory maxed.
+- **Large responses** (`asset_lineage`, `knowledge_search`, fat `asset_details`) need CPU/memory to serialize. Default template memory is now **1024 MB**; raise with `LAMBDA_MEMORY_SIZE=2048` if CloudWatch shows duration near 30s or memory maxed.
 - **Intermittent 500s** with successful retries often indicate OvalEdge upstream slowness or warm/cold Lambda behavior — correlate `mcp_tool duration_ms` with OvalEdge HTTP logs (`OVALEDGE_LOG_HTTP_REQUESTS=true` in Lambda env).
 
 ## Token exchange: INVALID_TOKEN / duplicate JWT issuance

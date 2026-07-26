@@ -4,18 +4,13 @@ Prompts reference tool name constants — rename here, not in prompt strings.
 """
 
 # ── Tool names ───────────────────────────────────────────────────
-TOOL_SEARCH_CATALOG = "search_catalog_assets"
-TOOL_CATALOG_ASSET_DETAILS = "catalog_asset_details"
-TOOL_COLUMN_PROFILE = "column_profile_statistics"
-TOOL_TABLE_ENTITY_RELATIONSHIPS = "table_entity_relationships"
+TOOL_ASSET_EXPLORER = "asset_explorer"
+TOOL_ASSET_DETAILS = "asset_details"
 TOOL_ASSET_LINEAGE = "asset_lineage"
+TOOL_KNOWLEDGE_SEARCH = "knowledge_search"
 TOOL_METADATA_CHANGES_BETWEEN_CRAWLS = "metadata_changes_between_crawls"
-TOOL_LOOKUP_GLOSSARY_TERM = "lookup_glossary_term"
 TOOL_CREATE_GLOSSARY_TERM = "create_glossary_term"
-TOOL_LOOKUP_TAGS = "lookup_tags"
 TOOL_CREATE_TAG = "create_tag"
-TOOL_LOOKUP_DATASTORY = "lookup_datastory"
-TOOL_SEARCH_DOCS = "search_platform_docs"
 TOOL_UPDATE_ASSET_DESCRIPTIONS = "update_asset_descriptions"
 TOOL_UPDATE_CDE_ASSOCIATIONS = "update_cde_associations"
 TOOL_UPDATE_GOVERNANCE_ROLES = "update_governance_roles"
@@ -124,15 +119,14 @@ MCP_UPDATE_CDE_OBJECT_TYPES_DOC = ", ".join(
 )
 
 # ── OvalEdge MCP HTTP paths (appended to OVALEDGE_BASE_URL) ──────
-MCP_PATH_SEARCH_CATALOG = "/api/v1/mcp/search-catalog"
-MCP_PATH_OBJECT_DETAILS = "/api/v1/mcp/object-details"
-MCP_PATH_COLUMN_PROFILE = "/api/v1/mcp/column-profile"
-MCP_PATH_ENTITY_RELATIONSHIPS = "/api/v1/mcp/entity-relationships"
-MCP_PATH_LINEAGE = "/api/v1/mcp/lineage"
+MCP_PATH_ASSET_EXPLORER = "/api/v1/mcp/asset-explorer"
+MCP_PATH_ASSET_DETAILS = "/api/v1/mcp/asset-details"
+MCP_PATH_ASSET_LINEAGE = "/api/v1/mcp/asset-lineage"
+MCP_PATH_KNOWLEDGE_SEARCH = "/api/v1/mcp/knowledge-search"
 MCP_PATH_METADATA_CHANGES_BETWEEN_CRAWLS = (
     "/api/v1/mcp/metadata-changes-between-crawls"
 )
-MCP_PATH_GLOSSARY_TERMS = "/api/v1/mcp/glossary-terms"
+MCP_PATH_GLOSSARY_TERMS = "/api/v1/mcp/glossary-terms"  # POST create only
 MCP_PATH_DOMAIN_METADATA = "/api/v1/mcp/domain-metadata"
 # termCreationTemplate searchOn values (GlobalDomainActivity).
 MCP_DOMAIN_METADATA_SEARCH_ON = frozenset({"oeglobaldomain", "category", "subcategory"})
@@ -140,13 +134,11 @@ MCP_DOMAIN_METADATA_SIZE_DEFAULT = 100
 MCP_DOMAIN_METADATA_SIZE_MAX = 500
 # In-app glossary term route (matches AppConstants.NAV_BUSINESS_GLOSSARY_ID).
 NAV_GLOSSARY_TERM_HASH = "#nav/glossary?id="
-MCP_PATH_TAGS = "/api/v1/mcp/tags"
+MCP_PATH_TAGS = "/api/v1/mcp/tags"  # POST create only
 MCP_PATH_TAGS_CREATE_OPTIONS = "/api/v1/mcp/tags/create-options"
 MCP_PATH_TAGS_PARENT_OPTIONS = "/api/v1/mcp/tags/parent-options"
-MCP_PATH_SEARCH_PLATFORM_DOCS = "/api/v1/mcp/search-platform-docs"
 MCP_PATH_SOURCE_SYSTEM_ACCESS = "/api/v1/mcp/source-system-access"
 MCP_PATH_GET_USER_OBJECT_ACCESS = "/api/v1/mcp/get-user-object-access"
-MCP_PATH_LOOKUP_DATASTORY = "/api/v1/mcp/lookup-datastory"
 
 # Secure-mode create_tag wizard phases (matches OvalEdge UI).
 SELECTION_PHASE_MASTER_REQUIRED = "MASTER_REQUIRED"
@@ -185,7 +177,7 @@ MCP_CUSTOM_FIELD_OBJECT_TYPES = frozenset(
 )
 MCP_CUSTOM_FIELD_OBJECT_TYPES_DOC = ", ".join(sorted(MCP_CUSTOM_FIELD_OBJECT_TYPES))
 
-# objectType values for update_governance_roles that are NOT in search_catalog_assets.
+# objectType values for update_governance_roles that are NOT in asset_explorer.
 MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES = frozenset(
     {
         "dqrule",
@@ -263,7 +255,7 @@ MCP_RDAM_PRIVILEGE_MAP_DOC = (
 # Agents must not fall back to catalog/Elasticsearch when RDAM returns empty or errors.
 MCP_RDAM_NO_CATALOG_FALLBACK_DOC = (
     "**No catalog / Elasticsearch fallback:** `source_system_access` reads RDAM SQL metadata "
-    "only. Never call `search_catalog_assets`, `catalog_asset_details`, or other catalog "
+    "only. Never call `asset_explorer`, `asset_details`, or other catalog "
     "tools as a substitute when RDAM returns empty grants, 4xx/5xx, not-found, or "
     "not-harvested — catalog search cannot answer native Redshift/Snowflake/Tableau grants. "
     "Report the RDAM result (or API error) and suggest RDAM harvest, DAA, object_path / "
@@ -510,7 +502,7 @@ MCP_SOURCE_SYSTEM_DESCENDANTS_CONNECTION_REQUIRED_ERROR = (
     "scope_mode=descendants."
 )
 
-# search-catalog query params (GET /api/v1/mcp/search-catalog).
+# asset-explorer query params (GET /api/v1/mcp/asset-explorer).
 # Some OvalEdge builds return HTTP 500 when limit is very high (e.g. >= 95 on localhost).
 MCP_SEARCH_CATALOG_MAX_LIMIT = 50
 MCP_SEARCH_CONTEXT_QUERY_PARAM = "contextQuery"
@@ -525,8 +517,8 @@ MCP_SEARCH_DOMAIN_ID_PARAM = "domainId"
 MCP_SEARCH_DOMAIN_NAME_PARAM = "domainName"
 MCP_SEARCH_CATEGORY_ID_PARAM = "categoryId"
 MCP_SEARCH_CATEGORY_NAME_PARAM = "categoryName"
-MCP_SEARCH_SUBCATEGORY_ID_PARAM = "subCategoryId"
-MCP_SEARCH_SUBCATEGORY_NAME_PARAM = "subCategoryName"
+MCP_SEARCH_SUBCATEGORY_ID_PARAM = "subcategoryId"
+MCP_SEARCH_SUBCATEGORY_NAME_PARAM = "subcategoryName"
 MCP_SEARCH_CRITICAL_DATA_ELEMENT_PARAM = "criticalDataElement"
 MCP_SEARCH_SERVER_TYPE_PARAM = "serverType"
 

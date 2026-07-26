@@ -19,7 +19,7 @@ _DESC_GET_USER_OBJECT_ACCESS = classify_tool_desc(
     "user_to_object.\n\n"
     "**Asset resolution (one mode):** object_id + object_type (preferred after search), "
     "fully_qualified_name, or object_name (may return matchCandidates).\n\n"
-    "**Connectors:** object_type=connection with object_name; not in search_catalog_assets.\n\n"
+    "**Connectors:** object_type=connection with object_name; not in asset_explorer.\n\n"
     "JDBC-backed types, story-zone inheritance, and resolution workflow: "
     "docs://ovaledge/mcp_workflows (Catalog object access) and workflow prompt "
     "`catalog_object_access`.\n\n"

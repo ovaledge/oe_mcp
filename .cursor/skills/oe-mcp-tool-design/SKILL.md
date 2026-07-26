@@ -147,7 +147,7 @@ In `tests/tools/test_<feature>.py`:
 | Concatenating many `MCP_*_DOC` blocks into tool description | Constants in tier 3 only |
 | Long logic in `register.py` | `helpers.py` / `formatters.py` / `invocations.py` |
 | Hard-coded tool names in prompts | `from server.constants import TOOL_*` |
-| Platform docs for org stories | `lookup_datastory` vs `search_platform_docs` |
+| Knowledge questions | `knowledge_search` searches both data stories and product docs |
 | Catalog search for native DB grants | `source_system_access` |
 | Catalog ACL for native grants | `get_user_object_access` vs `source_system_access` |
 | Skipping `mcp_workflows.md` | Routing table row + section when non-obvious |

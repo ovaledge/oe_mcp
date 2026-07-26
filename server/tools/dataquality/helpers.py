@@ -41,12 +41,12 @@ _DESC_ASSESS_CDE_DQ = classify_tool_desc(
     "reusable rule, association status.\n\n"
     f"Backend: POST {MCP_PATH_ASSESS_CDE_DQ}\n\n"
     "**Not** lookup_dq_rule — that resolves existing DQ rules by name/id.\n\n"
-    "**Not** search_catalog_assets alone — search finds assets; call this with "
+    "**Not** asset_explorer alone — search finds assets; call this with "
     "objectId/objectType (or discover_cde_columns) for DQ rows.\n\n"
     f"**objectType**: {MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC} (aliases normalized).\n\n"
     "**discover_cde_columns**: when true and objects empty, discovers CDE columns.\n\n"
     "**objects**: "
-    '[{"objectId": 123, "objectType": "oecolumn"}, ...] from search_catalog_assets; '
+    '[{"objectId": 123, "objectType": "oecolumn"}, ...] from asset_explorer; '
     "pass only the assets in scope (one column when the user named one). "
     "Pass a real array (not a stringified JSON string).\n\n"
     "Rows include function candidates, all same-function rules, workflow, descriptionSource, "
@@ -110,7 +110,7 @@ _DESC_CREATE_DQ_RULES = classify_tool_desc(
 )
 
 _DESC_LOOKUP_DQ_RULE = classify_tool_desc(
-    "Look up Data Quality rules by name or id (not in search_catalog_assets).\n\n"
+    "Look up Data Quality rules by name or id (not in asset_explorer).\n\n"
     f"Backend: GET {MCP_PATH_LOOKUP_DQ_RULES}\n\n"
     "Provide either rule_name (partial match) or object_id, never both.\n\n"
     "Each hit includes objectId, objectType (dqrule), objectName, steward, redirectUrl. "
@@ -234,7 +234,7 @@ def validate_assess_cde_dq_args(
         return err
     if not refs and not discover_cde_columns:
         return error_payload(
-            "Provide objects from search_catalog_assets, or set discover_cde_columns=true "
+            "Provide objects from asset_explorer, or set discover_cde_columns=true "
             "to discover CDE columns.",
         )
     return None

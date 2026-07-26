@@ -1,16 +1,16 @@
 # Tags (OETAG) via MCP
 
-Tags classify and govern catalog assets. The MCP exposes **lookup** and **guided create** tools; both honor OvalEdge RBAC.
+Tags classify and govern catalog assets. The MCP exposes unified search and **guided create** tools; both honor OvalEdge RBAC.
 
-## Lookup: `lookup_tags`
+## Lookup: `asset_explorer`
 
-Provide **either** `object_id` **or** `tag_name`, not both.
+Use `name` with `object_type=oetag`.
 
 Use when the user asks what a tag means, its hierarchy, or stewardship metadata returned by the API.
 
 ## Resource
 
-`ovaledge://governance/tag/{object_id}` — catalog document (`objectType=oetag`). Prefer `lookup_tags` for hierarchy and enriched display fields.
+`ovaledge://governance/tag/{object_id}` — catalog document (`objectType=oetag`). Prefer `asset_explorer` for tag search and hierarchy.
 
 ## Create: `create_tag`
 

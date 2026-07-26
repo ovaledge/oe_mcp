@@ -6,12 +6,10 @@ from fastmcp import FastMCP
 from server.client import OvalEdgeError
 from server.constants import (
     MCP_DOMAIN_METADATA_SIZE_DEFAULT,
-    MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
-    MCP_GLOSSARY_TAGS_LIMIT_MAX,
+    MCP_PATH_ASSET_EXPLORER,
     MCP_PATH_CUSTOM_FIELDS,
     MCP_PATH_DOMAIN_METADATA,
     MCP_PATH_GLOSSARY_TERMS,
-    MCP_PATH_LOOKUP_DATASTORY,
     MCP_PATH_TAGS,
     MCP_PATH_TAGS_CREATE_OPTIONS,
     MCP_PATH_TAGS_PARENT_OPTIONS,
@@ -20,156 +18,8 @@ from server.constants import (
 )
 from server.tools import governance
 from server.tools.governance import helpers as governance_helpers
-from tests.conftest import MOCK_GLOSSARY_RESULT
 from tests.helpers import get_tool_fn
 from tests.tools.confirm_test_helpers import invoke_write_confirmed
-
-
-class TestLookupGlossaryTerm:
-    async def test_term_name_only(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = MOCK_GLOSSARY_RESULT
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_glossary_term")
-        out = await fn(term_name="churn")
-        assert out == MOCK_GLOSSARY_RESULT
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_GLOSSARY_TERMS,
-            params={"termName": "churn", "limit": MCP_GLOSSARY_TAGS_LIMIT_DEFAULT},
-        )
-
-    async def test_rejects_both_id_and_name(self, mock_oe_client: AsyncMock) -> None:
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_glossary_term")
-        out = await fn(object_id=1, term_name="x")
-        assert out["status_code"] == 400
-        mock_oe_client.get.assert_not_called()
-
-    async def test_object_id_only(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = MOCK_GLOSSARY_RESULT
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_glossary_term")
-        out = await fn(object_id=99)
-        assert out == MOCK_GLOSSARY_RESULT
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_GLOSSARY_TERMS,
-            params={"objectId": 99, "limit": MCP_GLOSSARY_TAGS_LIMIT_DEFAULT},
-        )
-
-    async def test_custom_limit_forwarded(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = MOCK_GLOSSARY_RESULT
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_glossary_term")
-        await fn(term_name="x", limit=5)
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_GLOSSARY_TERMS,
-            params={"termName": "x", "limit": 5},
-        )
-
-    async def test_limit_capped_at_max(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = MOCK_GLOSSARY_RESULT
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_glossary_term")
-        await fn(term_name="x", limit=999)
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_GLOSSARY_TERMS,
-            params={"termName": "x", "limit": MCP_GLOSSARY_TAGS_LIMIT_MAX},
-        )
-
-    async def test_rejects_neither_id_nor_name(self, mock_oe_client: AsyncMock) -> None:
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_glossary_term")
-        out = await fn()
-        assert out["status_code"] == 400
-        mock_oe_client.get.assert_not_called()
-
-    async def test_placement_by_domain_name(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = MOCK_GLOSSARY_RESULT
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_glossary_term")
-        out = await fn(domain_name="PrakashDOmain", category_name="test")
-        assert out == MOCK_GLOSSARY_RESULT
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_GLOSSARY_TERMS,
-            params={
-                "domainName": "PrakashDOmain",
-                "categoryName": "test",
-                "limit": MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
-            },
-        )
-
-    async def test_rejects_mixed_name_and_placement(self, mock_oe_client: AsyncMock) -> None:
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_glossary_term")
-        out = await fn(term_name="x", domain_name="Finance")
-        assert out["status_code"] == 400
-        mock_oe_client.get.assert_not_called()
-
-    async def test_whitespace_term_name_treated_as_missing(self, mock_oe_client: AsyncMock) -> None:
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_glossary_term")
-        out = await fn(term_name="   ")
-        assert out["status_code"] == 400
-        mock_oe_client.get.assert_not_called()
-
-    async def test_oval_edge_error_returns_dict(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.side_effect = OvalEdgeError(403, "Forbidden")
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_glossary_term")
-        out = await fn(term_name="revenue")
-        assert out["status_code"] == 403
-
-    async def test_enriches_absolute_nav_url_from_relative_nav_link(
-        self, mock_oe_client: AsyncMock
-    ) -> None:
-        mock_oe_client.get.return_value = {
-            "ok": True,
-            "data": [
-                {
-                    "objectId": 2468,
-                    "objectName": "Sidheshwar",
-                    "navLink": "#nav/glossary?browse=summary&id=2468",
-                }
-            ],
-        }
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_glossary_term")
-        out = await fn(term_name="Sidheshwar")
-        hit = out["data"][0]
-        assert hit["navLink"] == "#nav/glossary?browse=summary&id=2468"
-        assert hit["redirectUrl"].startswith("https://mock.ovaledge.com/")
-        assert hit["redirectUrl"].endswith("#nav/glossary?browse=summary&id=2468")
-        assert "navUrl" not in hit
-
-    async def test_object_id_lookup_enriches_nav_in_data(
-        self, mock_oe_client: AsyncMock
-    ) -> None:
-        mock_oe_client.get.return_value = {
-            "ok": True,
-            "data": {
-                "objectId": 99,
-                "objectName": "Revenue",
-                "navLink": "#nav/glossary?browse=summary&id=99",
-            },
-        }
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_glossary_term")
-        out = await fn(object_id=99)
-        assert out["data"]["redirectUrl"].endswith("#nav/glossary?browse=summary&id=99")
-        assert "redirectUrl" not in out
-        assert "navUrl" not in out["data"]
-
 
 _MOCK_DOMAIN_PICKER = {
     "ok": True,
@@ -848,176 +698,6 @@ class TestCreateGlossaryTerm:
         assert out["status_code"] == 409
 
 
-class TestLookupTags:
-    async def test_object_id_only(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = {"tag": "t"}
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_tags")
-        await fn(object_id=3)
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_TAGS,
-            params={"objectId": 3, "limit": MCP_GLOSSARY_TAGS_LIMIT_DEFAULT},
-        )
-
-    async def test_custom_limit_forwarded(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = {"tag": "t"}
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_tags")
-        await fn(tag_name="PII", limit=7)
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_TAGS,
-            params={"tagName": "PII", "limit": 7},
-        )
-
-    async def test_rejects_both_id_and_name(self, mock_oe_client: AsyncMock) -> None:
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_tags")
-        out = await fn(object_id=1, tag_name="PII")
-        assert out["status_code"] == 400
-        mock_oe_client.get.assert_not_called()
-
-    async def test_rejects_neither_id_nor_name(self, mock_oe_client: AsyncMock) -> None:
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_tags")
-        out = await fn()
-        assert out["status_code"] == 400
-        mock_oe_client.get.assert_not_called()
-
-    async def test_oval_edge_error_returns_dict(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.side_effect = OvalEdgeError(404, "Not found")
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_tags")
-        out = await fn(tag_name="missing")
-        assert out["status_code"] == 404
-
-    async def test_enriches_absolute_nav_url_from_relative_nav_link(
-        self, mock_oe_client: AsyncMock
-    ) -> None:
-        mock_oe_client.get.return_value = {
-            "ok": True,
-            "data": [
-                {
-                    "objectId": 1519,
-                    "objectName": "deepList",
-                    "navLink": "#nav/tag?id=1519&objectType=oetag&masterTagId=1036",
-                    "parentObjectId": 1036,
-                }
-            ],
-        }
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_tags")
-        out = await fn(tag_name="deepList")
-        hit = out["data"][0]
-        assert hit["navLink"] == "#nav/tag?id=1519&objectType=oetag&masterTagId=1036"
-        assert hit["redirectUrl"].startswith("https://mock.ovaledge.com/")
-        assert hit["redirectUrl"].endswith(
-            "#nav/tag?id=1519&objectType=oetag&masterTagId=1036"
-        )
-        assert "redirectUrl" not in out
-
-    async def test_object_id_lookup_enriches_nav_in_data(
-        self, mock_oe_client: AsyncMock
-    ) -> None:
-        mock_oe_client.get.return_value = {
-            "ok": True,
-            "data": {
-                "objectId": 99,
-                "objectName": "Confidential",
-                "navLink": "#nav/tag?id=99&objectType=oetag&masterTagId=10",
-            },
-        }
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_tags")
-        out = await fn(object_id=99)
-        assert out["data"]["redirectUrl"].endswith(
-            "#nav/tag?id=99&objectType=oetag&masterTagId=10"
-        )
-        assert "redirectUrl" not in out
-
-    async def test_include_children_forwards_param(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = {"ok": True, "data": {"objectId": 1}}
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_tags")
-        await fn(tag_name="Parent", include_children=True)
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_TAGS,
-            params={
-                "tagName": "Parent",
-                "limit": MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
-                "includeChildren": True,
-            },
-        )
-
-    async def test_include_parent_forwards_param(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = {"ok": True, "data": {"objectId": 2}}
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_tags")
-        await fn(object_id=2, include_parent=True)
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_TAGS,
-            params={"objectId": 2, "limit": MCP_GLOSSARY_TAGS_LIMIT_DEFAULT, "includeParent": True},
-        )
-
-    async def test_hierarchy_enriches_formatted_response(
-        self, mock_oe_client: AsyncMock
-    ) -> None:
-        mock_oe_client.get.return_value = {
-            "ok": True,
-            "data": {
-                "objectId": 100,
-                "objectName": "ParentTag",
-                "navLink": "#nav/tag?id=100&objectType=oetag&masterTagId=1",
-                "childTags": [
-                    {
-                        "objectId": 101,
-                        "objectName": "ChildA",
-                        "navLink": "#nav/tag?id=101&objectType=oetag&masterTagId=1",
-                        "hasChildren": False,
-                    }
-                ],
-            },
-        }
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_tags")
-        out = await fn(tag_name="ParentTag", include_children=True)
-        assert "formattedResponse" in out
-        assert "Child tags (1)" in out["formattedResponse"]
-        assert "ChildA" in out["formattedResponse"]
-        child = out["data"]["childTags"][0]
-        assert child["redirectUrl"].startswith("https://mock.ovaledge.com/")
-
-    async def test_parent_tag_enriched_in_response(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = {
-            "ok": True,
-            "data": {
-                "objectId": 201,
-                "objectName": "ChildTag",
-                "navLink": "#nav/tag?id=201&objectType=oetag&masterTagId=1",
-                "parentTag": {
-                    "objectId": 100,
-                    "objectName": "ParentTag",
-                    "navLink": "#nav/tag?id=100&objectType=oetag&masterTagId=1",
-                },
-            },
-        }
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_tags")
-        out = await fn(object_id=201, include_parent=True)
-        assert "Parent tag:" in out["formattedResponse"]
-        assert out["data"]["parentTag"]["redirectUrl"].startswith("https://mock.ovaledge.com/")
-
-
 class TestBuildUserSelectableMasters:
     def test_lists_all_masters_without_parent_truncation(self) -> None:
         choices = [
@@ -1131,8 +811,8 @@ class TestCreateTag:
         )
         assert mock_oe_client.get.call_args_list[0].args == (MCP_PATH_TAGS_CREATE_OPTIONS,)
         mock_oe_client.get.assert_any_call(
-            MCP_PATH_TAGS,
-            params={"objectId": 99, "limit": 1},
+            MCP_PATH_ASSET_EXPLORER,
+            params={"objectId": 99, "objectType": "oetag", "limit": 1},
         )
         assert out["data"]["redirectUrl"].endswith("#nav/tag?id=99")
         assert out["data"]["navLink"].endswith(
@@ -1211,7 +891,7 @@ class TestCreateTag:
         open_opts = {"ok": True, "data": {"tagSecurityMode": "open", "parentTagChoices": []}}
 
         async def open_get(path: str, **kwargs: object) -> dict[str, object]:
-            if path == MCP_PATH_TAGS:
+            if path == MCP_PATH_ASSET_EXPLORER:
                 raise OvalEdgeError(404, "Not found")
             return open_opts
 
@@ -1790,8 +1470,11 @@ class TestCreateTag:
         async def secure_get(path: str, **kwargs: object) -> dict[str, object]:
             if path == MCP_PATH_TAGS_PARENT_OPTIONS:
                 return parent_opts
-            if path == MCP_PATH_TAGS:
-                return {"ok": True, "data": {"objectId": 50, "objectName": "Pouse"}}
+            if path == MCP_PATH_ASSET_EXPLORER:
+                return {
+                    "ok": True,
+                    "data": {"tags": {"objectId": 50, "objectName": "Pouse"}},
+                }
             return secure_opts
 
         mock_oe_client.get.side_effect = secure_get
@@ -1946,187 +1629,6 @@ def _expected_formatted_response() -> str:
         "- **Authorized roles:** OE_STORY_ZONE_READER\n\n"
         f"{_MOCK_DATASTORY_ABS}"
     )
-
-
-class TestLookupDatastory:
-    async def test_passes_through_nav_links_from_api(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = MOCK_DATASTORY_API
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_datastory")
-        out = await fn(object_id=42)
-        assert out["data"]["navLink"] == _MOCK_DATASTORY_REL
-        assert out["data"]["hyperlink"] == _MOCK_DATASTORY_ABS
-        assert out["data"]["navUrl"] == _MOCK_DATASTORY_ABS
-        assert out["data"]["storyTitleLink"] == f"[Sales]({_MOCK_DATASTORY_REL})"
-        assert "formattedResponse" in out
-        assert _MOCK_DATASTORY_ABS in out["formattedResponse"]
-        assert "[Sales]" in out["formattedResponse"]
-        assert "**Scope**" in out["formattedResponse"]
-        assert "**Cadence**" in out["formattedResponse"]
-        assert "| Field | Value |" not in out["formattedResponse"]
-        assert "Open in OvalEdge" not in out["formattedResponse"]
-        assert "openStoryUrl" not in out
-        assert "relativeHyperlink" not in out["data"]
-        assert "navLink" not in out
-
-    async def test_passes_through_backend_hyperlink_unchanged(
-        self, mock_oe_client: AsyncMock
-    ) -> None:
-        bad_api = {
-            **MOCK_DATASTORY_API,
-            "data": {
-                **MOCK_DATASTORY_API["data"],
-                "hyperlink": _MOCK_DATASTORY_BAD_ABS,
-                "navLink": _MOCK_DATASTORY_BAD_ABS,
-                "navUrl": _MOCK_DATASTORY_BAD_ABS,
-            },
-        }
-        mock_oe_client.get.return_value = bad_api
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_datastory")
-        out = await fn(object_id=42)
-        assert out["data"]["hyperlink"] == _MOCK_DATASTORY_BAD_ABS
-        assert out["data"]["navLink"] == _MOCK_DATASTORY_BAD_ABS
-
-    async def test_formatted_response_for_content_query_style(
-        self, mock_oe_client: AsyncMock
-    ) -> None:
-        mock_oe_client.get.return_value = MOCK_DATASTORY_API
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_datastory")
-        out = await fn(
-            content_query="Home Page Welcome View highlighting features onboard users"
-        )
-        assert "formattedResponse" in out
-        assert "**Scope**" in out["formattedResponse"]
-        assert out["data"]["navUrl"] == _MOCK_DATASTORY_ABS
-
-    async def test_story_name_only(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = MOCK_DATASTORY_API
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_datastory")
-        out = await fn(story_name="Sales")
-        assert out["data"]["navUrl"] == _MOCK_DATASTORY_ABS
-        assert out["data"]["metadata"]["storyName"] == "Sales"
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_LOOKUP_DATASTORY,
-            params={"storyName": "Sales"},
-        )
-
-    async def test_zone_and_name(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = MOCK_DATASTORY_API
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_datastory")
-        out = await fn(story_zone_name="Finance", story_name="Sales")
-        assert out["data"]["navUrl"] == _MOCK_DATASTORY_ABS
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_LOOKUP_DATASTORY,
-            params={"storyZoneName": "Finance", "storyName": "Sales"},
-        )
-
-    async def test_object_id_only(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = MOCK_DATASTORY_API
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_datastory")
-        await fn(object_id=42)
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_LOOKUP_DATASTORY,
-            params={"objectId": 42},
-        )
-
-    async def test_object_id_with_optional_zone(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = MOCK_DATASTORY_API
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_datastory")
-        await fn(object_id=42, story_zone_name="Finance")
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_LOOKUP_DATASTORY,
-            params={"objectId": 42, "storyZoneName": "Finance"},
-        )
-
-    async def test_rejects_id_with_name(self, mock_oe_client: AsyncMock) -> None:
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_datastory")
-        out = await fn(object_id=1, story_name="Sales")
-        assert out["status_code"] == 400
-        mock_oe_client.get.assert_not_called()
-
-    async def test_rejects_no_params(self, mock_oe_client: AsyncMock) -> None:
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_datastory")
-        out = await fn()
-        assert out["status_code"] == 400
-        mock_oe_client.get.assert_not_called()
-
-    async def test_content_query_only(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = MOCK_DATASTORY_API
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_datastory")
-        await fn(content_query="revenue forecast")
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_LOOKUP_DATASTORY,
-            params={"contentQuery": "revenue forecast"},
-        )
-
-    async def test_zone_and_content_query(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = MOCK_DATASTORY_API
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_datastory")
-        await fn(story_zone_name="Finance", content_query="revenue forecast")
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_LOOKUP_DATASTORY,
-            params={"storyZoneName": "Finance", "contentQuery": "revenue forecast"},
-        )
-
-    async def test_name_and_content_query(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = MOCK_DATASTORY_API
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_datastory")
-        await fn(story_name="Sales", content_query="revenue")
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_LOOKUP_DATASTORY,
-            params={"storyName": "Sales", "contentQuery": "revenue"},
-        )
-
-    async def test_zone_name_and_content_query(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = MOCK_DATASTORY_API
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_datastory")
-        await fn(
-            story_zone_name="Finance",
-            story_name="Sales",
-            content_query="revenue forecast",
-        )
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_LOOKUP_DATASTORY,
-            params={
-                "storyZoneName": "Finance",
-                "storyName": "Sales",
-                "contentQuery": "revenue forecast",
-            },
-        )
-
-    async def test_oval_edge_error_returns_dict(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.side_effect = OvalEdgeError(503, "Unavailable")
-        mcp = FastMCP(name="test", version="0.0.1")
-        governance.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_datastory")
-        out = await fn(story_name="Sales")
-        assert out["status_code"] == 503
-        assert "503" in out["error"]
 
 
 class TestUpdateGovernanceRoles:

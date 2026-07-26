@@ -63,10 +63,10 @@ class TestToolDescriptionBudget:
         assert MCP_TOOL_CLASSIFICATION_CONFIDENTIAL in _DESC_GET_USER_OBJECT_ACCESS
         assert MCP_TOOL_CLASSIFICATION_CONFIDENTIAL in _DESC_SOURCE_SYSTEM_ACCESS
 
-    def test_internal_classification_on_catalog_search(self) -> None:
-        from server.tools.catalog.helpers import _DESC_SEARCH
+    def test_internal_classification_on_asset_explorer(self) -> None:
+        from server.tools.catalog.helpers import _DESC_ASSET_EXPLORER
 
-        assert MCP_TOOL_CLASSIFICATION_INTERNAL in _DESC_SEARCH
+        assert MCP_TOOL_CLASSIFICATION_INTERNAL in _DESC_ASSET_EXPLORER
 
     def test_source_system_access_description_is_compact(self) -> None:
         from server.tools.rdam.helpers import _DESC_SOURCE_SYSTEM_ACCESS
@@ -74,11 +74,11 @@ class TestToolDescriptionBudget:
         assert len(_DESC_SOURCE_SYSTEM_ACCESS) <= MCP_TOOL_DESC_MAX_CHARS
         assert "docs://ovaledge/rdam_source_access" in _DESC_SOURCE_SYSTEM_ACCESS
 
-    def test_search_catalog_description_points_to_docs_not_inline_allowlist(self) -> None:
-        from server.tools.catalog.helpers import _DESC_SEARCH
+    def test_asset_explorer_description_points_to_docs_not_inline_allowlist(self) -> None:
+        from server.tools.catalog.helpers import _DESC_ASSET_EXPLORER
 
-        assert "docs://ovaledge/asset_types" in _DESC_SEARCH
-        assert "docs://ovaledge/mcp_workflows" in _DESC_SEARCH
+        assert "docs://ovaledge/asset_types" in _DESC_ASSET_EXPLORER
+        assert "docs://ovaledge/mcp_workflows" in _DESC_ASSET_EXPLORER
 
     def test_governed_write_descriptions_point_to_docs(self) -> None:
         from server.tools.catalog.helpers import _DESC_UPDATE_DESCRIPTIONS

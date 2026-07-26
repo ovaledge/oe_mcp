@@ -931,8 +931,8 @@ _DESC_SOURCE_SYSTEM_ACCESS = classify_tool_desc(
     + "Resolve **native** access grants harvested from Redshift, Snowflake, or Tableau (RDAM) — "
     "independent of OvalEdge catalog ACLs.\n\n"
     f"Backend: GET {MCP_PATH_SOURCE_SYSTEM_ACCESS}\n\n"
-    "**Not** `get_user_object_access` or `search_catalog_assets`. Never fall back to "
-    "`search_catalog_assets` when RDAM is empty or errors.\n\n"
+    "**Not** `get_user_object_access` or `asset_explorer`. Never fall back to "
+    "`asset_explorer` when RDAM is empty or errors.\n\n"
     "**Required always:** `source_system` ("
     + MCP_SOURCE_SYSTEMS_DOC
     + "), `query_direction` ("

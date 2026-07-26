@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import os
+from collections.abc import Awaitable, Callable
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -67,21 +69,36 @@ def auth_headers(api_available: bool) -> dict[str, str]:
 
 
 @pytest.fixture
-async def api_get(auth_headers: dict[str, str]):
+async def mcp_get(
+    auth_headers: dict[str, str],
+) -> Callable[[str, dict[str, object] | None], Awaitable[httpx.Response]]:
+    """GET any OvalEdge MCP path under OVALEDGE_BASE_URL."""
     base = settings.ovaledge_base_url.rstrip("/")
-    url = base + MCP_PATH_SOURCE_SYSTEM_ACCESS
 
-    async def _get(params: dict[str, object]) -> httpx.Response:
+    async def _get(path: str, params: dict[str, object] | None = None) -> httpx.Response:
+        url = base + path
         async with httpx.AsyncClient(
             timeout=float(settings.ovaledge_timeout_seconds),
             follow_redirects=True,
         ) as client:
-            return await client.get(url, params=params, headers=auth_headers)
+            return await client.get(url, params=params or {}, headers=auth_headers)
 
     return _get
 
 
-def response_data(response: httpx.Response) -> dict:
+@pytest.fixture
+async def api_get(
+    mcp_get: Callable[[str, dict[str, object] | None], Awaitable[httpx.Response]],
+) -> Callable[[dict[str, object]], Awaitable[httpx.Response]]:
+    """Backward-compatible helper for source-system-access live tests."""
+
+    async def _get(params: dict[str, object]) -> httpx.Response:
+        return await mcp_get(MCP_PATH_SOURCE_SYSTEM_ACCESS, params)
+
+    return _get
+
+
+def response_data(response: httpx.Response) -> dict[str, Any]:
     response.raise_for_status()
     body = response.json()
     assert isinstance(body, dict)

@@ -19,21 +19,17 @@ from server.constants import (
 )
 from server.tools.catalog.cde_helpers import _DESC_UPDATE_CDE
 from server.tools.catalog.helpers import (
-    _DESC_COLUMN,
-    _DESC_DETAILS,
+    _DESC_ASSET_DETAILS,
+    _DESC_ASSET_EXPLORER,
     _DESC_LINEAGE,
     _DESC_METADATA_CHANGES,
-    _DESC_REL,
-    _DESC_SEARCH,
     _DESC_UPDATE_DESCRIPTIONS,
 )
 from server.tools.catalog.invocations import (
+    _invoke_asset_details,
+    _invoke_asset_explorer,
     _invoke_asset_lineage,
-    _invoke_catalog_asset_details,
-    _invoke_column_profile_statistics,
     _invoke_metadata_changes_between_crawls,
-    _invoke_search_catalog_assets,
-    _invoke_table_entity_relationships,
     _invoke_update_asset_descriptions,
     _invoke_update_cde_associations,
 )
@@ -42,8 +38,8 @@ from server.tools.common.confirm_gate import CONFIRMATION_TOKEN_PARAM_DESCRIPTIO
 
 def register(mcp: FastMCP) -> None:
 
-    @mcp.tool(description=_DESC_SEARCH)
-    async def search_catalog_assets(
+    @mcp.tool(description=_DESC_ASSET_EXPLORER)
+    async def asset_explorer(
         search_terms: Annotated[
             list[str] | None,
             Field(
@@ -56,14 +52,20 @@ def register(mcp: FastMCP) -> None:
         tags: Annotated[
             list[str] | None,
             Field(
-                description=f"Governance tag names (wire: {MCP_SEARCH_TAGS_PARAM}).",
+                description=(
+                    f"Exact governance tag names (wire: {MCP_SEARCH_TAGS_PARAM}); "
+                    "case-insensitive match on tag name only."
+                ),
                 default=None,
             ),
         ] = None,
         terms: Annotated[
             list[str] | None,
             Field(
-                description=f"Glossary term names (wire: {MCP_SEARCH_GLOSSARY_TERMS_PARAM}).",
+                description=(
+                    f"Exact glossary term names (wire: {MCP_SEARCH_GLOSSARY_TERMS_PARAM}); "
+                    "case-insensitive match on term name only."
+                ),
                 default=None,
             ),
         ] = None,
@@ -143,7 +145,10 @@ def register(mcp: FastMCP) -> None:
         object_type: Annotated[
             str | None,
             Field(
-                description="Catalog objectType filter; see docs://ovaledge/asset_types.",
+                description=(
+                    "Catalog objectType filter, or glossary|oetag with name/object_id. "
+                    "See docs://ovaledge/asset_types."
+                ),
                 default=None,
             ),
         ] = None,
@@ -174,7 +179,7 @@ def register(mcp: FastMCP) -> None:
         ] = None,
         subcategory_id: Annotated[
             int | None,
-            Field(description="Glossary subcategory id for placement filter.", default=None),
+            Field(description="Glossary subcategory id (wire: subcategoryId).", default=None),
         ] = None,
         subcategory_name: Annotated[
             str | None,
@@ -183,9 +188,42 @@ def register(mcp: FastMCP) -> None:
                 default=None,
             ),
         ] = None,
+        object_id: Annotated[
+            int | None,
+            Field(
+                description=(
+                    "Internal id for glossary/tag lookup; pair with object_type=glossary|oetag."
+                ),
+                default=None,
+            ),
+        ] = None,
+        name: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Term or tag name (replaces termName/tagName); pair with "
+                    "object_type=glossary|oetag."
+                ),
+                default=None,
+            ),
+        ] = None,
+        include_parent: Annotated[
+            bool,
+            Field(
+                description="Tag hierarchy: include parent tag when looking up oetag.",
+                default=False,
+            ),
+        ] = False,
+        include_children: Annotated[
+            bool,
+            Field(
+                description="Tag hierarchy: include child tags when looking up oetag.",
+                default=False,
+            ),
+        ] = False,
     ) -> dict[str, Any]:
-        """search catalog assets (see MCP tool description)."""
-        return await _invoke_search_catalog_assets(
+        """asset explorer (see MCP tool description)."""
+        return await _invoke_asset_explorer(
             search_terms=search_terms,
             tags=tags,
             terms=terms,
@@ -209,63 +247,39 @@ def register(mcp: FastMCP) -> None:
             category_name=category_name,
             subcategory_id=subcategory_id,
             subcategory_name=subcategory_name,
+            object_id=object_id,
+            name=name,
+            include_parent=include_parent,
+            include_children=include_children,
         )
 
-    @mcp.tool(description=_DESC_DETAILS)
-    async def catalog_asset_details(
+    @mcp.tool(description=_DESC_ASSET_DETAILS)
+    async def asset_details(
         object_id: Annotated[
-            int | None,
+            int,
             Field(
-                description="Internal catalog id; must be used with object_type (not with FQN).",
-                default=None,
+                description=(
+                    "Internal catalog id from asset_explorer "
+                    "(required with object_type)."
+                ),
             ),
-        ] = None,
+        ],
         object_type: Annotated[
-            str | None,
+            str,
             Field(
                 description=(
                     "One of: "
                     + MCP_CATALOG_OBJECT_TYPES_DOC
-                    + "; pair with object_id."
+                    + "."
                 ),
-                default=None,
             ),
-        ] = None,
-        fully_qualified_name: Annotated[
-            str | None,
-            Field(
-                description="Fully qualified name alone; do not pass object_id/object_type.",
-                default=None,
-            ),
-        ] = None,
-    ) -> dict[str, Any]:
-        """catalog asset details (see MCP tool description)."""
-        return await _invoke_catalog_asset_details(
-            object_id=object_id,
-            object_type=object_type,
-            fully_qualified_name=fully_qualified_name,
-        )
-
-    @mcp.tool(description=_DESC_COLUMN)
-    async def column_profile_statistics(
-        object_id: Annotated[int, Field(description="Table or file internal object id.")],
-        object_type: Annotated[
-            str,
-            Field(description="Must be oetable or oefile."),
         ],
     ) -> dict[str, Any]:
-        """column profile statistics (see MCP tool description)."""
-        return await _invoke_column_profile_statistics(
+        """asset details (see MCP tool description)."""
+        return await _invoke_asset_details(
             object_id=object_id,
             object_type=object_type,
         )
-
-    @mcp.tool(description=_DESC_REL)
-    async def table_entity_relationships(
-        object_id: Annotated[int, Field(description="oetable internal object id.")],
-    ) -> dict[str, Any]:
-        """table entity relationships (see MCP tool description)."""
-        return await _invoke_table_entity_relationships(object_id=object_id)
 
     @mcp.tool(description=_DESC_LINEAGE)
     async def asset_lineage(
@@ -291,7 +305,7 @@ def register(mcp: FastMCP) -> None:
         object_id: Annotated[
             int,
             Field(
-                description="Internal catalog id from search_catalog_assets items[].objectId.",
+                description="Internal catalog id from asset_explorer items[].objectId.",
                 ge=1,
             ),
         ],

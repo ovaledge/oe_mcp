@@ -15,20 +15,16 @@ from evals.mcp_eval_helpers import ovaledge_eval_mcp_server, tool_call_result
 from server.constants import (
     MCP_DQ_ASSESS_LIMIT_DEFAULT,
     TOOL_ASSESS_CDE_DQ,
+    TOOL_ASSET_DETAILS,
+    TOOL_ASSET_EXPLORER,
     TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
-    TOOL_CATALOG_ASSET_DETAILS,
-    TOOL_COLUMN_PROFILE,
     TOOL_CREATE_DQ_RULES,
     TOOL_CREATE_GLOSSARY_TERM,
     TOOL_CREATE_SQL_DQ_RULE,
     TOOL_CREATE_TAG,
     TOOL_GENERATE_DQ_QUERIES,
     TOOL_LOOKUP_DQ_RULE,
-    TOOL_LOOKUP_GLOSSARY_TERM,
-    TOOL_LOOKUP_TAGS,
     TOOL_METADATA_CHANGES_BETWEEN_CRAWLS,
-    TOOL_SEARCH_CATALOG,
-    TOOL_TABLE_ENTITY_RELATIONSHIPS,
     TOOL_UPDATE_CDE_ASSOCIATIONS,
     TOOL_UPDATE_CUSTOM_FIELD_VALUE,
     TOOL_UPDATE_GOVERNANCE_ROLES,
@@ -36,26 +32,34 @@ from server.constants import (
 )
 from server.tools.common.confirm_gate import compute_confirmation_token
 
+# Consolidated read-tool values used by existing golden case scaffolding.
+TOOL_SEARCH_CATALOG = TOOL_ASSET_EXPLORER
+TOOL_CATALOG_ASSET_DETAILS = TOOL_ASSET_DETAILS
+TOOL_COLUMN_PROFILE = TOOL_ASSET_DETAILS
+TOOL_LOOKUP_GLOSSARY_TERM = TOOL_ASSET_EXPLORER
+TOOL_LOOKUP_TAGS = TOOL_ASSET_EXPLORER
+TOOL_TABLE_ENTITY_RELATIONSHIPS = TOOL_ASSET_DETAILS
+
 _TRUST_ASSESSMENT_PROMPT_TEXT = (
     "Assess trust in a certified table.\n\n"
     "Table: customer_revenue_daily\n\n"
     "Steps:\n"
-    "1. search_catalog_assets to resolve object_id.\n"
-    "2. catalog_asset_details for governance metadata.\n"
-    "3. column_profile_statistics for data quality signals.\n"
-    "4. Do not use lookup_datastory for physical table trust."
+    "1. asset_explorer to resolve object_id.\n"
+    "2. asset_details for governance metadata.\n"
+    "3. asset_details for data quality signals.\n"
+    "4. Do not use knowledge_search for physical table trust."
 )
 
 _EXPLAIN_TERM_PROMPT_TEXT = (
     "Explain a business glossary term.\n\n"
     "Term: Revenue Recognition\n\n"
-    "Call lookup_glossary_term with term_name."
+    "Call asset_explorer with name and object_type=glossary."
 )
 
 _EXPLAIN_TAG_PROMPT_TEXT = (
     "Explain a governance tag.\n\n"
     "Tag: PII\n\n"
-    "Call lookup_tags with tag_name."
+    "Call asset_explorer with name and object_type=oetag."
 )
 
 _EXPLAIN_DQ_RULE_PROMPT_TEXT = (
@@ -73,7 +77,7 @@ _METADATA_DRIFT_PROMPT_TEXT = (
 _FIND_RELATED_PROMPT_TEXT = (
     "Find related catalog assets.\n\n"
     "Table: orders_fact (object_id=88)\n\n"
-    "Call table_entity_relationships, then catalog_asset_details for context."
+    "Call asset_details, then asset_details for context."
 )
 
 _CREATE_GLOSSARY_PROMPT_TEXT = (
@@ -217,9 +221,9 @@ def golden_mcp_use_trust_assessment() -> LLMTestCase:
         name="mcp_use_trust_assessment",
         input="How trustworthy is customer_revenue_daily for executive reporting?",
         actual_output=(
-            "Per trust_assessment I resolved the table via search_catalog_assets, loaded "
-            "governance metadata with catalog_asset_details, then column_profile_statistics "
-            "for column-level stats. I did not use lookup_datastory because this is physical "
+            "Per trust_assessment I resolved the table via asset_explorer, loaded "
+            "governance metadata with asset_details, then asset_details "
+            "for column-level stats. I did not use knowledge_search because this is physical "
             "catalog trust, not organizational narrative."
         ),
         mcp_servers=[srv],
@@ -280,8 +284,8 @@ def golden_mcp_use_explain_business_term() -> LLMTestCase:
         name="mcp_use_explain_business_term",
         input="What does Revenue Recognition mean in our glossary?",
         actual_output=(
-            "I called lookup_glossary_term with term_name='Revenue Recognition' per the "
-            "explain_business_term workflow (not search_catalog_assets)."
+            "I called asset_explorer with name='Revenue Recognition' and "
+            "object_type=glossary per the explain_business_term workflow."
         ),
         mcp_servers=[srv],
         mcp_prompts_called=[
@@ -290,7 +294,7 @@ def golden_mcp_use_explain_business_term() -> LLMTestCase:
         mcp_tools_called=[
             MCPToolCall(
                 name=TOOL_LOOKUP_GLOSSARY_TERM,
-                args={"term_name": "Revenue Recognition"},
+                args={"name": "Revenue Recognition", "object_type": "glossary"},
                 result=tool_call_result(
                     {
                         "termName": "Revenue Recognition",
@@ -319,14 +323,15 @@ def golden_mcp_use_explain_tag() -> LLMTestCase:
         name="mcp_use_explain_tag",
         input="What is our PII tag used for?",
         actual_output=(
-            "I used lookup_tags with tag_name='PII' as directed by explain_tag."
+            "I used asset_explorer with name='PII' and object_type=oetag as directed "
+            "by explain_tag."
         ),
         mcp_servers=[srv],
         mcp_prompts_called=[MCPPromptCall(name="explain_tag", result=prompt_result)],
         mcp_tools_called=[
             MCPToolCall(
                 name=TOOL_LOOKUP_TAGS,
-                args={"tag_name": "PII"},
+                args={"name": "PII", "object_type": "oetag"},
                 result=tool_call_result(
                     {"tagName": "PII", "description": "Personally identifiable information"}
                 ),
@@ -434,8 +439,8 @@ def golden_mcp_use_find_related_assets() -> LLMTestCase:
         name="mcp_use_find_related_assets",
         input="What assets are related to orders_fact?",
         actual_output=(
-            "Per find_related_assets I called table_entity_relationships for graph edges, "
-            "then catalog_asset_details for related object metadata."
+            "Per find_related_assets I called asset_details for graph edges, "
+            "then asset_details for related object metadata."
         ),
         mcp_servers=[srv],
         mcp_prompts_called=[

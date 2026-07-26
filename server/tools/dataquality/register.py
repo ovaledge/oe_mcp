@@ -114,7 +114,7 @@ def register(mcp: FastMCP) -> None:
             list[dict[str, Any]] | dict[str, Any] | str | None,
             Field(
                 description=(
-                    "Catalog objects to assess from search_catalog_assets. objectType: "
+                    "Catalog objects to assess from asset_explorer. objectType: "
                     + MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC
                     + ". Each entry: objectId + objectType (or object_id + object_type)."
                 ),
