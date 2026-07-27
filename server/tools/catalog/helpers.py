@@ -1,5 +1,5 @@
 """
-Catalog and related data tools (search, details, column profile, relationships, lineage).
+Catalog MCP helpers: tool descriptions, search params, description updates.
 """
 
 import json
@@ -35,41 +35,50 @@ _TABLE_FILE_TYPES = frozenset({"oetable", "oefile"})
 
 _DESC_ASSET_EXPLORER = classify_tool_desc(
     MCP_ACCESS_DISAMBIGUATION_SEARCH_GUARD_DOC
-    + "Unified discovery across catalog assets, glossary terms, and tags. Blanket hybrid "
-    "search with optional filters; server deduces glossary/tag modes from name/object_id + "
-    "object_type (glossary|oetag) or placement filters.\n\n"
+    + "**Find data assets** (`asset_explorer`) — search the catalog for tables, files, "
+    "columns, reports, glossary terms, tags, and other governed objects related to a "
+    "business question.\n\n"
+    "How to call: pass keywords in search_terms and the user's full question in "
+    "context_query. Omit object_type, tags, and terms (leave them unset) unless the user "
+    "clearly asks for one kind of asset (e.g. \"tables only\", \"tagged Payments\", a named "
+    "glossary term). Do not default to tables-only. After you shortlist hits, call "
+    "asset_details for full metadata.\n\n"
     f"Backend: GET {MCP_PATH_ASSET_EXPLORER}\n\n"
-    "**Parameters:** Lexical lists (wire as JSON array strings): "
+    "Keyword lists (JSON array strings): "
     f"{MCP_SEARCH_TERMS_PARAM}, {MCP_SEARCH_TAGS_PARAM}, {MCP_SEARCH_GLOSSARY_TERMS_PARAM}, "
     f"{MCP_SEARCH_CUSTOM_FIELDS_PARAM}, {MCP_SEARCH_DATA_PRODUCTS_PARAM}, "
     f"{MCP_SEARCH_CLASSIFICATIONS_PARAM}, {MCP_SEARCH_CRITICAL_DATA_ELEMENT_PARAM}. "
     "Exact filters: connection_name, schema_name, server_type, owner, steward, custodian, "
-    "object_type. Placement: domain_id/domain_name + optional category/subcategory. "
+    "object_type. tags/terms match exact governance names (not loose synonyms). "
     f"Semantic ranking: {MCP_SEARCH_CONTEXT_QUERY_PARAM}. "
-    "Identity: object_id, name (replaces termName/tagName; pair with object_type=glossary|oetag). "
-    "Tag hierarchy: include_parent, include_children.\n\n"
-    "Examples:\n"
-    '1) Catalog: search_terms=["customer"], object_type="oetable".\n'
-    '2) Glossary: name="Revenue", object_type="glossary".\n'
-    '3) Tags: name="Operations", object_type="oetag", include_children=true.\n\n'
-    "object_type allowlist: docs://ovaledge/asset_types. "
-    "Playbooks: docs://ovaledge/mcp_workflows. "
-    "For oestory narrative, call knowledge_search — do not answer from search snippets alone."
+    "Look up one term/tag: name + object_type=glossary|oetag "
+    "(include_parent/children for tags). "
+    "Glossary placement: domain_id|domain_name + optional category/subcategory.\n\n"
+    "Examples: "
+    'search_terms=["payment"] + context_query="Find assets related to payment"; '
+    'tables only → object_type="oetable"; '
+    'glossary name="Revenue" object_type="glossary".\n\n'
+    "Types: docs://ovaledge/asset_types. Playbooks: docs://ovaledge/mcp_workflows. "
+    "Policies and how-tos: knowledge_search — not search snippets alone."
 )
 _DESC_ASSET_DETAILS = classify_tool_desc(
-    "Composite asset metadata by object_id + object_type (no FQN). Always returns details; "
-    "auto-adds column profile for oetable/oefile and entity relationships for oetable.\n\n"
+    "**View asset details** (`asset_details`) — full catalog metadata for one chosen asset "
+    "(object_id + object_type; no fully qualified name). Includes profile stats for tables/"
+    "files and entity relationships for tables when available. Use after asset_explorer "
+    "shortlist — not for open-ended discovery.\n\n"
     f"Backend: GET {MCP_PATH_ASSET_DETAILS}\n\n"
-    "Resolve ids via asset_explorer first. object_type must be one of: "
+    "object_type one of: "
     + MCP_CATALOG_OBJECT_TYPES_DOC
-    + ".\n\n"
-    "Response sections: details (always); profile? (table/file); relationships? (table). "
-    "Includes navLink and redirectUrl when present."
+    + ". Response: details; optional profile and relationships; navLink/redirectUrl when "
+    "present. Playbooks: docs://ovaledge/mcp_workflows."
 )
-_DESC_LINEAGE = classify_tool_desc(
-    "Data lineage graph from the database for a table or file.\n\n"
+_DESC_ASSET_LINEAGE = classify_tool_desc(
+    "**Trace data lineage** (`asset_lineage`) — show where a table or file comes from and "
+    "what depends on it (upstream/downstream). Resolve the asset id with asset_explorer "
+    "first when the user only gives a name.\n\n"
     f"Backend: GET {MCP_PATH_ASSET_LINEAGE}\n\n"
-    "Requires object_id + object_type (oetable or oefile). depth defaults to 2; server may clamp."
+    "Requires object_id + object_type (oetable or oefile only). depth defaults to 2 "
+    "(server may clamp). Playbooks: docs://ovaledge/mcp_workflows; prompt trace_data_lineage."
 )
 _DESC_UPDATE_DESCRIPTIONS = classify_tool_desc(
     "Update description field(s) on a catalog or governance asset (RBAC on server).\n\n"

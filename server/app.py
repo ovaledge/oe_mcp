@@ -7,7 +7,7 @@ from server.config import settings
 from server.constants import (
     DOCS_RESOURCE_URI_PREFIX,
     MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC,
-    MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC,
+    TOOL_ASSET_DETAILS,
     TOOL_ASSET_EXPLORER,
     TOOL_GET_USER_OBJECT_ACCESS,
     TOOL_KNOWLEDGE_SEARCH,
@@ -22,6 +22,7 @@ MCP_SERVER_INSTRUCTION_TOOL_NAMES: frozenset[str] = frozenset(
     {
         TOOL_KNOWLEDGE_SEARCH,
         TOOL_ASSET_EXPLORER,
+        TOOL_ASSET_DETAILS,
         TOOL_SOURCE_SYSTEM_ACCESS,
         TOOL_GET_USER_OBJECT_ACCESS,
     }
@@ -33,10 +34,11 @@ MCP_SERVER_INSTRUCTION_TOOL_NAMES: frozenset[str] = frozenset(
 # the owning tool descriptions.
 _MCP_SERVER_INSTRUCTIONS = (
     "You are connected to the OvalEdge data governance platform. "
+    # MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC already ends with the
+    # platform-names-are-not-signals paragraph — do not append it again here.
     f"{MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC} "
-    f"{MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC} "
-    "Ambiguous who-has-access: invoke resolve_object_access, present the 1/2 choice, and "
-    "call no access tools (including asset_explorer) until the user replies. "
+    "Present the resolve_object_access 1/2 choice and call no access tools (including "
+    f"{TOOL_ASSET_EXPLORER}) until the user replies. "
     "Use MCP tools for catalog discovery, governance lookups, native source access (RDAM), "
     "and governed writes. At session start and before multi-step workflows, governed writes, "
     f"RDAM, catalog ACL, or DQ work, read MCP resource {_MCP_WORKFLOWS_RESOURCE_URI} "
@@ -45,8 +47,12 @@ _MCP_SERVER_INSTRUCTIONS = (
     "Present formattedResponse from tools to the user when provided. "
     "Governed writes require write_confirmed_by_user=true only after the user approves "
     "a confirm_create or confirm_update preview. "
-    f"Org knowledge and OvalEdge product documentation: {TOOL_KNOWLEDGE_SEARCH}. "
-    f"Physical catalog discovery: {TOOL_ASSET_EXPLORER} — not for who-has-access. "
+    f"Org knowledge and OvalEdge product documentation: {TOOL_KNOWLEDGE_SEARCH} "
+    "(Search knowledge & docs). "
+    f"Find data assets in the catalog: {TOOL_ASSET_EXPLORER} "
+    f"(search across types; omit object_type unless the query implies a type); "
+    f"then {TOOL_ASSET_DETAILS} (View asset details) after shortlist — "
+    "not for who-has-access. "
     f"Native DB/BI grants (RDAM): {TOOL_SOURCE_SYSTEM_ACCESS} + access_intent_confirmed=native "
     "— not catalog search or catalog ACL. "
     f"OvalEdge catalog ACL (user/role grants on catalog objects): {TOOL_GET_USER_OBJECT_ACCESS} "

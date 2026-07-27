@@ -20,6 +20,7 @@ from server.tools.access.helpers import (
     validate_get_user_object_access_args,
 )
 from server.tools.common import drop_none, map_ovaledge_error, ovaledge_client
+from server.tools.common.annotations import READ_ONLY
 from server.tools.common.tool_logging import logged_tool_invocation
 
 
@@ -69,7 +70,11 @@ async def _invoke_get_user_object_access(
 
 
 def register(mcp: FastMCP) -> None:
-    @mcp.tool(description=_DESC_GET_USER_OBJECT_ACCESS)
+    @mcp.tool(
+        title="Check catalog access",
+        description=_DESC_GET_USER_OBJECT_ACCESS,
+        annotations=READ_ONLY,
+    )
     async def get_user_object_access(
         query_direction: Annotated[
             Literal["user_to_object", "object_to_principals"],

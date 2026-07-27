@@ -4,56 +4,41 @@ Use these values when filtering catalog search or specifying `object_type` on de
 
 ## MCP catalog `objectType` (lowercase)
 
-`asset_explorer` and `asset_details` (id + type mode) accept the following **lowercase** API values. The canonical set lives in `server.constants.MCP_CATALOG_OBJECT_TYPES`.
+`asset_explorer` and `asset_details` accept the following **lowercase** API values (`server.constants.MCP_CATALOG_OBJECT_TYPES`).
 
 | Value | Typical use |
 |-------|-------------|
-| `oeschema` | Schema containers in the catalog |
+| `oeschema` | Schema containers |
 | `oetable` | Relational tables |
 | `oecolumn` | Table columns |
 | `oefile` | File-based datasets |
-| `filecolumn` | Columns within structured files |
+| `filecolumn` / `oefilecolumn` | Columns within structured files |
 | `oechart` | Charts / dashboards |
 | `chartchild` | Child elements under a chart |
 | `oeapi` | API assets |
 | `oeapicolumn` | Parameters or attributes on APIs |
-| `oequery` | Saved queries / query objects |
-| `dp_product` | Data product catalog entries |
+| `oequery` / `oecode` / `code` | Saved queries / code objects |
+| `dp_product` / `dp_domain` | Data products / data domains |
+| `oedomain` | Report groups |
 | `glossary` | Business glossary terms |
-| `oetag` | Tags |
-| `oestory` | Data stories |
+| `oetag` / `mastertag` | Tags / master tags |
+| `oestory` / `storyzone` | Data stories / story zones |
+| `oeglobaldomain` | Glossary global domains |
 
-`asset_details` automatically includes a profile for **`oetable`** and **`oefile`**, plus relationships for an **`oetable`**. `asset_lineage` accepts **`oetable`** and **`oefile`** only.
-
-## UI / filter labels (uppercase)
-
-Some OvalEdge surfaces use these uppercase type labels (not interchangeable with MCP `objectType` without mapping):
-
-| Value | Typical use |
-|-------|-------------|
-| `TABLE` | Relational tables |
-| `VIEW` | Database views |
-| `COLUMN` | Column-level metadata |
-| `SCHEMA` | Schema containers |
-| `DATABASE` | Database / connection scope |
-| `REPORT` | BI reports and dashboards |
-| `FILE` | File-based datasets |
-| `FILE_COLUMN` | Columns within structured files |
-| `REPORT_COLUMN` | Columns or fields within reports |
-| `API` | API endpoints or services |
-| `API_ATTRIBUTE` | Attributes or parameters on APIs |
-| `CODE` | Code objects (e.g. jobs, notebooks) when catalogued |
+`asset_details` auto-includes profile for **`oetable`** / **`oefile`**, and relationships for **`oetable`**. `asset_lineage` accepts **`oetable`** and **`oefile`** only.
 
 ## Using types as filters
 
-- **Broad discovery** — Start with `oetable`, `oefile`, `oechart`, or domain-specific types (`oeapi`, `oequery`, `dp_product`) depending on the question.
-- **Column-level detail** — Use `oecolumn` or `filecolumn` when the user asks about fields, PII, or masking.
-- **Integration context** — Use `oeapi` / `oeapicolumn` for service-oriented assets.
-- **Governance** — Use `glossary` or `oetag` for business terms and tags; `oestory` for narrative data products.
+- **Default discovery** — Omit `object_type` on `asset_explorer` so all types can match; set it only when the user/query implies a type (“tables”, “columns”, “glossary term”).
+- **Column-level** — `oecolumn` / `filecolumn` for fields, PII, masking.
+- **Governance entities** — `glossary` or `oetag` with `name` (or `object_id`) for term/tag lookup — not a substitute for open catalog search on “find related assets”.
+- **Narratives** — Prefer `knowledge_search` for story content; `object_type=oestory` only for story metadata discovery.
+
+## UI / filter labels (uppercase)
+
+Some OvalEdge surfaces use uppercase labels (`TABLE`, `COLUMN`, `SCHEMA`, …). Map to MCP lowercase `objectType` before calling tools.
 
 ## MCP resources by type
-
-When you already have a numeric `object_id`, MCP resources fetch the object-details JSON:
 
 | objectType | Resource URI |
 |------------|----------------|
@@ -63,4 +48,4 @@ When you already have a numeric `object_id`, MCP resources fetch the object-deta
 | `oestory` | `ovaledge://governance/data-story/{object_id}` |
 | `oetag` | `ovaledge://governance/tag/{object_id}` |
 
-Always pair `object_id` with the correct `object_type` when calling asset detail APIs so OvalEdge resolves the right entity.
+Always pair `object_id` with the correct `object_type`.

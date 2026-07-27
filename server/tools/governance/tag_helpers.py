@@ -43,7 +43,7 @@ _DESC_CREATE_TAG = classify_tool_desc(
     "SECURE: master required, parent optional. OPEN: parent optional, no master step.\n\n"
     "Complete placement steps → confirm_create preview → POST only after "
     "write_confirmed_by_user=true.\n\n"
-    "Full OPEN/SECURE steps: docs://ovaledge/tags_guide and workflow prompt "
+    "Full OPEN/SECURE steps: docs://ovaledge/governance and workflow prompt "
     "`create_governance_tag`."
 )
 def _tag_nav_from_item(item: dict[str, Any]) -> str:

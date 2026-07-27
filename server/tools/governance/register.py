@@ -13,6 +13,7 @@ from server.constants import (
     MCP_DOMAIN_METADATA_SIZE_MAX,
     TOOL_UPDATE_CUSTOM_FIELD_VALUE,
 )
+from server.tools.common.annotations import GOVERNED_CREATE, GOVERNED_UPDATE
 from server.tools.common.confirm_gate import CONFIRMATION_TOKEN_PARAM_DESCRIPTION
 from server.tools.governance.helpers import (
     _DESC_CREATE_GLOSSARY,
@@ -30,7 +31,11 @@ from server.tools.governance.invocations import (
 
 def register(mcp: FastMCP) -> None:
 
-    @mcp.tool(description=_DESC_CREATE_GLOSSARY)
+    @mcp.tool(
+        title="Create glossary term",
+        description=_DESC_CREATE_GLOSSARY,
+        annotations=GOVERNED_CREATE,
+    )
     async def create_glossary_term(
         search_on: Annotated[
             str | None,
@@ -201,7 +206,11 @@ def register(mcp: FastMCP) -> None:
             confirmation_token=confirmation_token,
         )
 
-    @mcp.tool(description=_DESC_CREATE_TAG)
+    @mcp.tool(
+        title="Create governance tag",
+        description=_DESC_CREATE_TAG,
+        annotations=GOVERNED_CREATE,
+    )
     async def create_tag(
         tag_name: Annotated[
             str,
@@ -325,7 +334,11 @@ def register(mcp: FastMCP) -> None:
             confirmation_token=confirmation_token,
         )
 
-    @mcp.tool(description=_DESC_UPDATE_GOVERNANCE_ROLES)
+    @mcp.tool(
+        title="Assign governance roles",
+        description=_DESC_UPDATE_GOVERNANCE_ROLES,
+        annotations=GOVERNED_UPDATE,
+    )
     async def update_governance_roles(
         object_id: Annotated[
             int,
@@ -407,7 +420,12 @@ def register(mcp: FastMCP) -> None:
             confirmation_token=confirmation_token,
         )
 
-    @mcp.tool(description=_DESC_UPDATE_CUSTOM_FIELD_VALUE, name=TOOL_UPDATE_CUSTOM_FIELD_VALUE)
+    @mcp.tool(
+        title="Update custom field",
+        description=_DESC_UPDATE_CUSTOM_FIELD_VALUE,
+        annotations=GOVERNED_UPDATE,
+        name=TOOL_UPDATE_CUSTOM_FIELD_VALUE,
+    )
     async def update_custom_field_value(
         object_id: Annotated[
             int,

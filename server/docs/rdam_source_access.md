@@ -1,6 +1,6 @@
 # RDAM native source access (`source_system_access`)
 
-Deep routing reference for **`source_system_access`** — native Redshift, Snowflake, and Tableau grants harvested in RDAM SQL metadata. For workflow steps and a parameter cheat sheet, see [mcp_workflows](mcp_workflows#native-source-access-rdam). For DAA enforcement, see [governance_model](governance_model#data-access-admin-daa).
+Deep routing reference for **`source_system_access`** — native Redshift, Snowflake, and Tableau grants harvested in RDAM SQL metadata. For workflow steps and a parameter cheat sheet, see [mcp_workflows](mcp_workflows#native-source-access-rdam). For DAA enforcement, see [governance](governance#data-access-admin-daa).
 
 ## Why this tool exists
 

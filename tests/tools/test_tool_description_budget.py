@@ -85,8 +85,10 @@ class TestToolDescriptionBudget:
         from server.tools.governance.glossary_helpers import _DESC_CREATE_GLOSSARY
         from server.tools.governance.tag_helpers import _DESC_CREATE_TAG
 
-        assert "docs://ovaledge/glossary_guide" in _DESC_CREATE_GLOSSARY
-        assert "docs://ovaledge/tags_guide" in _DESC_CREATE_TAG
+        assert "docs://ovaledge/glossary_guide" not in _DESC_CREATE_GLOSSARY
+        assert "docs://ovaledge/governance" in _DESC_CREATE_GLOSSARY
+        assert "docs://ovaledge/tags_guide" not in _DESC_CREATE_TAG
+        assert "docs://ovaledge/governance" in _DESC_CREATE_TAG
         assert "docs://ovaledge/mcp_workflows" in _DESC_UPDATE_DESCRIPTIONS
         assert len(_DESC_CREATE_GLOSSARY) <= MCP_TOOL_DESC_MAX_CHARS
         assert len(_DESC_CREATE_TAG) <= MCP_TOOL_DESC_MAX_CHARS

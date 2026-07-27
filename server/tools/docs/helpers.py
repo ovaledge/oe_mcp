@@ -1,4 +1,4 @@
-"""Helpers for knowledge search MCP tool (data stories + platform docs)."""
+"""Helpers for knowledge_search MCP tool (data stories + platform docs)."""
 
 from __future__ import annotations
 
@@ -8,20 +8,17 @@ from server.constants import MCP_PATH_KNOWLEDGE_SEARCH
 from server.tools.common.descriptions import classify_tool_desc
 
 _DESC_KNOWLEDGE_SEARCH = classify_tool_desc(
-    "Search organizational knowledge and OvalEdge product documentation together. "
-    "Fans out to data stories and platform docs; returns whatever matches "
-    "(dataStories and/or platformDocs sections).\n\n"
+    "**Search knowledge & docs** (`knowledge_search`) — find organizational policies, "
+    "playbooks, and data stories, plus OvalEdge product how-to documentation, in one "
+    "search. Not for finding physical tables or files — use asset_explorer for catalog "
+    "discovery.\n\n"
     f"Backend: GET {MCP_PATH_KNOWLEDGE_SEARCH}\n\n"
-    "**Prefer query** as the shared text for both corpora. content_query is an optional "
-    "story alias (if only query is set, stories use query too). "
-    "Story targeting: story_zone_name, story_name, object_id. "
+    "Prefer query as the shared question text. content_query is an optional story-content "
+    "alias. Narrow stories with story_zone_name, story_name, or object_id. "
     "Docs tuning: limit, num_candidates (client ensures numCandidates >= limit).\n\n"
-    "Present formattedResponse when provided. For story answers, keep storyCitation as the "
-    "first line. Not a catalog discovery tool — use asset_explorer for tables/terms/tags."
+    "Present formattedResponse when provided; for story answers keep storyCitation as the "
+    "first line. Playbooks: docs://ovaledge/mcp_workflows; guide: docs://ovaledge/governance."
 )
-
-# Backward-compatible alias used by older imports/tests during cutover.
-_DESC_DOCS = _DESC_KNOWLEDGE_SEARCH
 
 
 def knowledge_search_params(
@@ -33,6 +30,7 @@ def knowledge_search_params(
     limit: int | None,
     num_candidates: int | None,
 ) -> dict[str, Any]:
+    """Build GET /knowledge-search query params (omit empties)."""
     params: dict[str, Any] = {}
     if query is not None and str(query).strip():
         params["query"] = str(query).strip()
@@ -54,20 +52,3 @@ def knowledge_search_params(
     elif num_candidates is not None:
         params["numCandidates"] = min(512, max(1, num_candidates))
     return params
-
-
-def search_platform_docs_params(
-    query: str,
-    limit: int | None,
-    num_candidates: int | None,
-) -> dict[str, Any]:
-    """Legacy helper name — maps to knowledge_search docs params."""
-    return knowledge_search_params(
-        query=query,
-        content_query=None,
-        story_zone_name=None,
-        story_name=None,
-        object_id=None,
-        limit=limit,
-        num_candidates=num_candidates,
-    )

@@ -80,6 +80,7 @@ async def _invoke_asset_explorer(
     include_parent: bool = False,
     include_children: bool = False,
 ) -> dict[str, Any]:
+    """GET asset-explorer — find related catalog assets; omit object_type unless inferred."""
     if object_type is not None and object_type not in MCP_CATALOG_OBJECT_TYPES:
         return {
             "error": (
@@ -152,6 +153,7 @@ async def _invoke_asset_details(
     object_id: int,
     object_type: str,
 ) -> dict[str, Any]:
+    """GET asset-details — full metadata for one chosen object_id + object_type."""
     if object_type not in MCP_CATALOG_OBJECT_TYPES:
         return {
             "error": (
@@ -179,6 +181,7 @@ async def _invoke_asset_lineage(
     object_type: str,
     depth: int = 2,
 ) -> dict[str, Any]:
+    """GET asset-lineage — graph for oetable/oefile only."""
     if object_type not in _TABLE_FILE_TYPES:
         return {
             "error": f"object_type must be oetable or oefile, got {object_type!r}",

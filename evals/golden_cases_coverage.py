@@ -32,14 +32,6 @@ from server.constants import (
 )
 from server.tools.common.confirm_gate import compute_confirmation_token
 
-# Consolidated read-tool values used by existing golden case scaffolding.
-TOOL_SEARCH_CATALOG = TOOL_ASSET_EXPLORER
-TOOL_CATALOG_ASSET_DETAILS = TOOL_ASSET_DETAILS
-TOOL_COLUMN_PROFILE = TOOL_ASSET_DETAILS
-TOOL_LOOKUP_GLOSSARY_TERM = TOOL_ASSET_EXPLORER
-TOOL_LOOKUP_TAGS = TOOL_ASSET_EXPLORER
-TOOL_TABLE_ENTITY_RELATIONSHIPS = TOOL_ASSET_DETAILS
-
 _TRUST_ASSESSMENT_PROMPT_TEXT = (
     "Assess trust in a certified table.\n\n"
     "Table: customer_revenue_daily\n\n"
@@ -203,9 +195,9 @@ _CREATE_SQL_DQ_RULE_CONFIRM_TOKEN = compute_confirmation_token(
 def golden_mcp_use_trust_assessment() -> LLMTestCase:
     srv = ovaledge_eval_mcp_server(
         tool_names=frozenset({
-            TOOL_SEARCH_CATALOG,
-            TOOL_CATALOG_ASSET_DETAILS,
-            TOOL_COLUMN_PROFILE,
+            TOOL_ASSET_EXPLORER,
+            TOOL_ASSET_DETAILS,
+            TOOL_ASSET_DETAILS,
         }),
         prompt_names=frozenset({"trust_assessment"}),
     )
@@ -230,7 +222,7 @@ def golden_mcp_use_trust_assessment() -> LLMTestCase:
         mcp_prompts_called=[MCPPromptCall(name="trust_assessment", result=prompt_result)],
         mcp_tools_called=[
             MCPToolCall(
-                name=TOOL_SEARCH_CATALOG,
+                name=TOOL_ASSET_EXPLORER,
                 args={
                     "search_terms": ["customer", "revenue", "daily"],
                     "object_type": "oetable",
@@ -245,7 +237,7 @@ def golden_mcp_use_trust_assessment() -> LLMTestCase:
                 ),
             ),
             MCPToolCall(
-                name=TOOL_CATALOG_ASSET_DETAILS,
+                name=TOOL_ASSET_DETAILS,
                 args={"object_id": 42, "object_type": "oetable"},
                 result=tool_call_result(
                     {
@@ -257,7 +249,7 @@ def golden_mcp_use_trust_assessment() -> LLMTestCase:
                 ),
             ),
             MCPToolCall(
-                name=TOOL_COLUMN_PROFILE,
+                name=TOOL_ASSET_DETAILS,
                 args={"object_id": 42, "object_type": "oetable"},
                 result=tool_call_result(
                     {"columns": [{"name": "revenue_amt", "nullPct": 0.01}]}
@@ -269,7 +261,7 @@ def golden_mcp_use_trust_assessment() -> LLMTestCase:
 
 def golden_mcp_use_explain_business_term() -> LLMTestCase:
     srv = ovaledge_eval_mcp_server(
-        tool_names=frozenset({TOOL_LOOKUP_GLOSSARY_TERM}),
+        tool_names=frozenset({TOOL_ASSET_EXPLORER}),
         prompt_names=frozenset({"explain_business_term"}),
     )
     prompt_result = GetPromptResult(
@@ -293,7 +285,7 @@ def golden_mcp_use_explain_business_term() -> LLMTestCase:
         ],
         mcp_tools_called=[
             MCPToolCall(
-                name=TOOL_LOOKUP_GLOSSARY_TERM,
+                name=TOOL_ASSET_EXPLORER,
                 args={"name": "Revenue Recognition", "object_type": "glossary"},
                 result=tool_call_result(
                     {
@@ -308,7 +300,7 @@ def golden_mcp_use_explain_business_term() -> LLMTestCase:
 
 def golden_mcp_use_explain_tag() -> LLMTestCase:
     srv = ovaledge_eval_mcp_server(
-        tool_names=frozenset({TOOL_LOOKUP_TAGS, TOOL_SEARCH_CATALOG}),
+        tool_names=frozenset({TOOL_ASSET_EXPLORER, TOOL_ASSET_EXPLORER}),
         prompt_names=frozenset({"explain_tag"}),
     )
     prompt_result = GetPromptResult(
@@ -330,7 +322,7 @@ def golden_mcp_use_explain_tag() -> LLMTestCase:
         mcp_prompts_called=[MCPPromptCall(name="explain_tag", result=prompt_result)],
         mcp_tools_called=[
             MCPToolCall(
-                name=TOOL_LOOKUP_TAGS,
+                name=TOOL_ASSET_EXPLORER,
                 args={"name": "PII", "object_type": "oetag"},
                 result=tool_call_result(
                     {"tagName": "PII", "description": "Personally identifiable information"}
@@ -382,7 +374,7 @@ def golden_mcp_use_metadata_drift() -> LLMTestCase:
     srv = ovaledge_eval_mcp_server(
         tool_names=frozenset({
             TOOL_METADATA_CHANGES_BETWEEN_CRAWLS,
-            TOOL_SEARCH_CATALOG,
+            TOOL_ASSET_EXPLORER,
         }),
         prompt_names=frozenset({"metadata_drift"}),
     )
@@ -421,9 +413,9 @@ def golden_mcp_use_metadata_drift() -> LLMTestCase:
 def golden_mcp_use_find_related_assets() -> LLMTestCase:
     srv = ovaledge_eval_mcp_server(
         tool_names=frozenset({
-            TOOL_TABLE_ENTITY_RELATIONSHIPS,
-            TOOL_CATALOG_ASSET_DETAILS,
-            TOOL_SEARCH_CATALOG,
+            TOOL_ASSET_DETAILS,
+            TOOL_ASSET_DETAILS,
+            TOOL_ASSET_EXPLORER,
         }),
         prompt_names=frozenset({"find_related_assets"}),
     )
@@ -448,7 +440,7 @@ def golden_mcp_use_find_related_assets() -> LLMTestCase:
         ],
         mcp_tools_called=[
             MCPToolCall(
-                name=TOOL_TABLE_ENTITY_RELATIONSHIPS,
+                name=TOOL_ASSET_DETAILS,
                 args={"object_id": 88},
                 result=tool_call_result(
                     {
@@ -459,7 +451,7 @@ def golden_mcp_use_find_related_assets() -> LLMTestCase:
                 ),
             ),
             MCPToolCall(
-                name=TOOL_CATALOG_ASSET_DETAILS,
+                name=TOOL_ASSET_DETAILS,
                 args={"object_id": 90, "object_type": "oetable"},
                 result=tool_call_result(
                     {"objectId": 90, "name": "customers_dim", "objectType": "oetable"},
@@ -868,7 +860,7 @@ def golden_governed_custom_field_confirm_two_step() -> ConversationalTestCase:
 def golden_dq_coverage_workflow() -> ConversationalTestCase:
     srv = ovaledge_eval_mcp_server(
         tool_names=frozenset({
-            TOOL_SEARCH_CATALOG,
+            TOOL_ASSET_EXPLORER,
             TOOL_ASSESS_CDE_DQ,
             TOOL_LOOKUP_DQ_RULE,
             TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
@@ -905,7 +897,7 @@ def golden_dq_coverage_workflow() -> ConversationalTestCase:
                 ],
                 mcp_tools_called=[
                     MCPToolCall(
-                        name=TOOL_SEARCH_CATALOG,
+                        name=TOOL_ASSET_EXPLORER,
                         args={
                             "search_terms": ["customer", "profile"],
                             "object_type": "oetable",

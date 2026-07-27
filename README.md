@@ -96,15 +96,15 @@ Canonical inventory: `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 
 **`create_glossary_term` workflow:** (1) `term_name` → domain picker; (2) `term_name` + `domain_id` → category picker when categories exist (skip only after user says skip: `skip_category=true` + `category_skip_confirmed=true`); (3) subcategory picker when applicable; (4) non-blank `description` required; (5) `confirm_create` preview; (6) POST with `write_confirmed_by_user=true`. Manual pickers: `search_on=oeglobaldomain|category|subcategory`.
 
-**`create_tag` workflow:** OPEN or SECURE mode from create-options; master/parent pickers with user confirmation flags; `confirm_create` preview; POST with `write_confirmed_by_user=true`. See [server/docs/tags_guide.md](server/docs/tags_guide.md).
+**`create_tag` workflow:** OPEN or SECURE mode from create-options; master/parent pickers with user confirmation flags; `confirm_create` preview; POST with `write_confirmed_by_user=true`. See [server/docs/governance.md](server/docs/governance.md).
 
 **`update_asset_descriptions` / `update_governance_roles` / `update_cde_associations` / `update_custom_field_value`:** Same confirm gate (`confirm_update`, `write_confirmed_by_user=true`) before POST; `dry_run=true` validates without confirm.
 
 **DQ governed writes (`associate_dq_rule_objects`, `create_dq_rules`, `validate_dq_queries`, `create_sql_dq_rule`):** Same confirm gate before POST. `generate_dq_queries` is read-only (no confirm). Workflow prompts: `assess_cde_dq_coverage`, `create_custom_sql_dq_workflow`.
 
-**Knowledge:** Use `knowledge_search` for organizational knowledge and OvalEdge product documentation; it searches both corpora. See [server/docs/data_stories.md](server/docs/data_stories.md).
+**Knowledge:** Use `knowledge_search` for organizational knowledge and OvalEdge product documentation; it searches both corpora. See [server/docs/governance.md](server/docs/governance.md).
 
-**Agent guides (static MCP doc resources):** [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md) (tools, resources, prompts index), [glossary_guide.md](server/docs/glossary_guide.md), [governance_model.md](server/docs/governance_model.md), [asset_types.md](server/docs/asset_types.md). Exposed as `docs://ovaledge/{name}` (e.g. `docs://ovaledge/mcp_workflows`).
+**Agent guides (static MCP doc resources):** [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md) (tools, resources, prompts index), [governance.md](server/docs/governance.md), [asset_types.md](server/docs/asset_types.md), [overview.md](server/docs/overview.md). Exposed as `docs://ovaledge/{name}` (e.g. `docs://ovaledge/mcp_workflows`).
 
 ### Resources (`server/resources/`)
 
@@ -114,9 +114,9 @@ Canonical inventory: `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 - `ovaledge://governance/data-story/{object_id}` — data story (prefer `knowledge_search` for narrative)
 - `ovaledge://governance/tag/{object_id}` — tag (prefer `asset_explorer` for hierarchy)
 
-Static product docs: `docs://ovaledge/...` (all `server/docs/*.md`, including `mcp_workflows`, `data_stories`, `tags_guide`).
+Static product docs: `docs://ovaledge/...` (all `server/docs/*.md`, including `mcp_workflows`, `governance`, `asset_types`).
 
-### Prompts (`server/prompts/workflows/`) — 20 prompts
+### Prompts (`server/prompts/workflows/`) — 21 prompts
 
 Full list: [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md#workflow-prompts). Inventory: `server/mcp_surface.py` (`MCP_WORKFLOW_PROMPT_NAMES`).
 

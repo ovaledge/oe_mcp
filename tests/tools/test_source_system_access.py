@@ -42,7 +42,7 @@ _REQ = {
 
 class TestGetSourceSystemAccess:
     def test_tool_description_documents_daa_scope(self) -> None:
-        governance_doc = read_doc_markdown("governance_model")
+        governance_doc = read_doc_markdown("governance")
         assert "Data Access Admin" in _DESC_SOURCE_SYSTEM_ACCESS
         assert "Instance Data Access Admin" in governance_doc
         assert "Connector Data Access Admin" in governance_doc

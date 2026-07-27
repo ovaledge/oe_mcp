@@ -7,9 +7,9 @@ Five tests per tool (20 total):
   - asset_lineage    → GET /api/v1/mcp/asset-lineage
   - knowledge_search → GET /api/v1/mcp/knowledge-search
 
-Fixtures are discovered dynamically from the live catalog (real crawled objects
-stored in the OvalEdge backend MySQL schema, e.g. `askedgidev`), so the tests do
-not depend on hard-coded object ids. Override discovery hints with OE_IT_* env vars.
+Fixtures are discovered dynamically via the live MCP APIs (asset_explorer and
+related endpoints), so the tests do not depend on hard-coded object ids or direct
+database access. Override discovery hints with OE_IT_* env vars.
 
 Run:
   poetry run pytest -c tests/integration/pytest.ini \
@@ -25,15 +25,16 @@ import json
 import os
 from typing import Any
 
-import httpx
 import pytest
 
 from server.constants import (
     MCP_PATH_ASSET_DETAILS,
-    MCP_PATH_ASSET_EXPLORER,
     MCP_PATH_ASSET_LINEAGE,
     MCP_PATH_KNOWLEDGE_SEARCH,
 )
+from tests.integration.helpers import data as _data
+from tests.integration.helpers import explore as _explore
+from tests.integration.helpers import items as _items
 
 pytestmark = pytest.mark.integration
 
@@ -44,7 +45,7 @@ TABLE_SEARCH_TERM = os.environ.get("OE_IT_TABLE_SEARCH_TERM", "customer")
 COLUMN_SEARCH_TERM = os.environ.get("OE_IT_COLUMN_SEARCH_TERM", "email")
 FILE_SEARCH_TERM = os.environ.get("OE_IT_FILE_SEARCH_TERM", "customer")
 GLOSSARY_TERM = os.environ.get("OE_IT_GLOSSARY_TERM", "Revenue")
-TAG_NAME = os.environ.get("OE_IT_TAG_NAME", "PII")
+TAG_NAME = os.environ.get("OE_IT_TAG_NAME", "Finance & Economics")
 KNOWLEDGE_QUERY = os.environ.get("OE_IT_KNOWLEDGE_QUERY", "data quality policy")
 PLATFORM_HELP_QUERY = os.environ.get(
     "OE_IT_PLATFORM_HELP_QUERY", "how do I create a governance tag"
@@ -56,29 +57,6 @@ _DISCOVERED: dict[str, dict[str, Any] | None] = {}
 
 
 # ── Helpers ──────────────────────────────────────────────────────
-def _body(response: httpx.Response) -> dict[str, Any]:
-    body = response.json()
-    assert isinstance(body, dict), f"Expected JSON object, got {body!r}"
-    assert body.get("ok") is not False, f"API ok=false: {body}"
-    return body
-
-
-def _data(response: httpx.Response) -> Any:
-    return _body(response).get("data")
-
-
-def _items(response: httpx.Response) -> list[dict[str, Any]]:
-    data = _data(response)
-    items = data.get("items") if isinstance(data, dict) else None
-    return items if isinstance(items, list) else []
-
-
-async def _explore(mcp_get, **params: Any) -> httpx.Response:
-    payload: dict[str, Any] = {"page": 1, "limit": 10}
-    payload.update({k: v for k, v in params.items() if v is not None})
-    return await mcp_get(MCP_PATH_ASSET_EXPLORER, payload)
-
-
 async def _discover(
     mcp_get, kind: str, object_type: str, search_term: str
 ) -> dict[str, Any] | None:
@@ -112,7 +90,7 @@ async def _discover(
 # asset_explorer (5)
 # ══════════════════════════════════════════════════════════════════
 @pytest.mark.asyncio
-async def test_explorer_blanket_lexical_search(mcp_get) -> None:
+async def test_explorer_open_catalog_search(mcp_get) -> None:
     r = await _explore(mcp_get, searchTerms=json.dumps([TABLE_SEARCH_TERM]))
     assert r.status_code == 200, r.text[:500]
     items = _items(r)

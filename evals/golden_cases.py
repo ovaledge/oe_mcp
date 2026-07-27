@@ -36,13 +36,6 @@ from server.tools.common.confirm_gate import compute_confirmation_token
 
 _MCP_WORKFLOWS_RESOURCE_URI = AnyUrl(f"{DOCS_RESOURCE_URI_PREFIX}/mcp_workflows")
 
-# Compatibility variable names keep the golden case structure concise while all
-# expected MCP calls resolve to the consolidated read-tool names.
-TOOL_SEARCH_CATALOG = TOOL_ASSET_EXPLORER
-TOOL_CATALOG_ASSET_DETAILS = TOOL_ASSET_DETAILS
-TOOL_LOOKUP_DATASTORY = TOOL_KNOWLEDGE_SEARCH
-TOOL_SEARCH_DOCS = TOOL_KNOWLEDGE_SEARCH
-
 _DATA_DISCOVERY_PROMPT_TEXT = (
     "Help me find data for: 'churn metrics'\n\n"
     "Please follow this sequence:\n"
@@ -102,7 +95,7 @@ _GOVERNED_WRITE_CONFIRMATION_TOKEN = compute_confirmation_token(_GOVERNED_WRITE_
 def golden_mcp_use_catalog_search() -> LLMTestCase:
     """Single-turn: agent used catalog search with structured args."""
     srv = ovaledge_eval_mcp_server(
-        tool_names=frozenset({TOOL_SEARCH_CATALOG, TOOL_CATALOG_ASSET_DETAILS}),
+        tool_names=frozenset({TOOL_ASSET_EXPLORER, TOOL_ASSET_DETAILS}),
     )
     return LLMTestCase(
         name="mcp_use_catalog_search",
@@ -139,7 +132,7 @@ def golden_mcp_use_catalog_search() -> LLMTestCase:
 
 def golden_task_completion_discovery() -> ConversationalTestCase:
     """Multi-turn unit ending in assistant: search then summary."""
-    srv = ovaledge_eval_mcp_server(tool_names=frozenset({TOOL_SEARCH_CATALOG}))
+    srv = ovaledge_eval_mcp_server(tool_names=frozenset({TOOL_ASSET_EXPLORER}))
     return ConversationalTestCase(
         name="task_completion_discovery",
         scenario="Analyst discovers a certified payroll table.",
@@ -177,7 +170,7 @@ def golden_task_completion_discovery() -> ConversationalTestCase:
 def golden_multi_turn_lineage_followup() -> ConversationalTestCase:
     """User follow-up: search, then asset_lineage tool for upstream context."""
     srv = ovaledge_eval_mcp_server(
-        tool_names=frozenset({TOOL_SEARCH_CATALOG, TOOL_ASSET_LINEAGE}),
+        tool_names=frozenset({TOOL_ASSET_EXPLORER, TOOL_ASSET_LINEAGE}),
     )
     table_uri = AnyUrl("ovaledge://catalog/table/1")
     return ConversationalTestCase(
@@ -273,10 +266,272 @@ def golden_multi_turn_lineage_followup() -> ConversationalTestCase:
     )
 
 
+def golden_multi_turn_explore_details_lineage() -> ConversationalTestCase:
+    """Full consolidated read chain: open search → details on a shortlisted id → lineage."""
+    srv = ovaledge_eval_mcp_server(
+        tool_names=frozenset(
+            {TOOL_ASSET_EXPLORER, TOOL_ASSET_DETAILS, TOOL_ASSET_LINEAGE}
+        ),
+    )
+    return ConversationalTestCase(
+        name="multi_turn_explore_details_lineage",
+        scenario="Analyst narrows an open catalog question down to one asset and its origin.",
+        expected_outcome=(
+            "Agent starts with an open asset_explorer search (no object_type), shortlists a "
+            "hit, calls asset_details for that id, then asset_lineage for its upstream "
+            "sources — never calling details or lineage before an id is known."
+        ),
+        mcp_servers=[srv],
+        turns=[
+            Turn(role="user", content="What do we hold on customer churn?"),
+            Turn(
+                role="assistant",
+                content=(
+                    "Searching the catalog with search_terms ['customer', 'churn'] and your "
+                    "question as context_query. I am leaving object_type unset so reports and "
+                    "glossary terms can match too."
+                ),
+                mcp_tools_called=[
+                    MCPToolCall(
+                        name=TOOL_ASSET_EXPLORER,
+                        args={
+                            "search_terms": ["customer", "churn"],
+                            "context_query": "What do we hold on customer churn?",
+                        },
+                        result=tool_call_result(
+                            {
+                                "total": 2,
+                                "items": [
+                                    {
+                                        "objectId": 900,
+                                        "objectType": "oetable",
+                                        "objectName": "customer_churn_monthly",
+                                    },
+                                    {
+                                        "objectId": 901,
+                                        "objectType": "glossary",
+                                        "objectName": "Churn Rate",
+                                    },
+                                ],
+                            }
+                        ),
+                    ),
+                ],
+            ),
+            Turn(
+                role="user",
+                content="Tell me more about customer_churn_monthly.",
+            ),
+            Turn(
+                role="assistant",
+                content=(
+                    "Calling asset_details with object_id=900 and object_type=oetable — the "
+                    "id from the search hit you picked."
+                ),
+                mcp_tools_called=[
+                    MCPToolCall(
+                        name=TOOL_ASSET_DETAILS,
+                        args={"object_id": 900, "object_type": "oetable"},
+                        result=tool_call_result(
+                            {
+                                "details": {
+                                    "objectId": 900,
+                                    "objectType": "oetable",
+                                    "objectName": "customer_churn_monthly",
+                                    "steward": "john.smith",
+                                    "certificationStatus": "certified",
+                                },
+                                "profile": {"columns": [{"name": "churn_rate", "nulls": 0}]},
+                            }
+                        ),
+                    ),
+                ],
+            ),
+            Turn(role="user", content="Where does that data come from?"),
+            Turn(
+                role="assistant",
+                content=(
+                    "Calling asset_lineage for object_id=900 (oetable) to trace upstream "
+                    "sources."
+                ),
+                mcp_tools_called=[
+                    MCPToolCall(
+                        name=TOOL_ASSET_LINEAGE,
+                        args={"object_id": 900, "object_type": "oetable", "depth": 2},
+                        result=tool_call_result(
+                            {
+                                "objectId": 900,
+                                "nodes": [
+                                    {"objectId": 880, "objectName": "customer_events"},
+                                    {"objectId": 900, "objectName": "customer_churn_monthly"},
+                                ],
+                                "edges": [{"from": 880, "to": 900}],
+                            }
+                        ),
+                    ),
+                ],
+            ),
+            Turn(
+                role="assistant",
+                content=(
+                    "customer_churn_monthly is certified, stewarded by john.smith, and is "
+                    "built upstream from customer_events."
+                ),
+            ),
+        ],
+    )
+
+
+def golden_mcp_use_open_catalog_search() -> LLMTestCase:
+    """Single-turn: a question that names no asset type must not be narrowed to tables."""
+    srv = ovaledge_eval_mcp_server(
+        tool_names=frozenset({TOOL_ASSET_EXPLORER, TOOL_ASSET_DETAILS}),
+    )
+    return LLMTestCase(
+        name="mcp_use_open_catalog_search",
+        input="What do we have related to payments?",
+        actual_output=(
+            "I called asset_explorer with search_terms ['payment'] and context_query set to "
+            "your full question. I deliberately left object_type unset because you did not "
+            "ask for one kind of asset — narrowing to oetable would have hidden the reports, "
+            "columns and glossary terms that matched. The results span several object types, "
+            "so I am presenting them grouped by objectType rather than as a flat table list."
+        ),
+        mcp_servers=[srv],
+        mcp_tools_called=[
+            MCPToolCall(
+                name=TOOL_ASSET_EXPLORER,
+                args={
+                    "search_terms": ["payment"],
+                    "context_query": "What do we have related to payments?",
+                },
+                result=tool_call_result(
+                    {
+                        "total": 4,
+                        "items": [
+                            {
+                                "objectId": 501,
+                                "objectType": "oetable",
+                                "objectName": "payment_fact",
+                            },
+                            {
+                                "objectId": 502,
+                                "objectType": "oecolumn",
+                                "objectName": "payment_method",
+                            },
+                            {
+                                "objectId": 503,
+                                "objectType": "oechart",
+                                "objectName": "Payments Dashboard",
+                            },
+                            {
+                                "objectId": 504,
+                                "objectType": "glossary",
+                                "objectName": "Payment Terms",
+                            },
+                        ],
+                    }
+                ),
+            ),
+        ],
+    )
+
+
+def golden_mcp_use_asset_details_after_shortlist() -> LLMTestCase:
+    """Single-turn: asset_details is called only for a shortlisted id, never to discover."""
+    srv = ovaledge_eval_mcp_server(
+        tool_names=frozenset({TOOL_ASSET_EXPLORER, TOOL_ASSET_DETAILS}),
+    )
+    return LLMTestCase(
+        name="mcp_use_asset_details_after_shortlist",
+        input="Tell me everything about the payment_fact table.",
+        actual_output=(
+            "I first called asset_explorer to resolve the name 'payment_fact' to a catalog "
+            "id, because asset_details needs object_id plus object_type and does not accept "
+            "a fully qualified name. With object_id=501 shortlisted I called asset_details, "
+            "which returned the governance metadata plus the column profile and table "
+            "relationships. I did not call asset_details before the search — there was no id "
+            "to call it with."
+        ),
+        mcp_servers=[srv],
+        mcp_tools_called=[
+            MCPToolCall(
+                name=TOOL_ASSET_EXPLORER,
+                args={"search_terms": ["payment_fact"], "object_type": "oetable"},
+                result=tool_call_result(
+                    {
+                        "total": 1,
+                        "items": [
+                            {
+                                "objectId": 501,
+                                "objectType": "oetable",
+                                "objectName": "payment_fact",
+                            }
+                        ],
+                    }
+                ),
+            ),
+            MCPToolCall(
+                name=TOOL_ASSET_DETAILS,
+                args={"object_id": 501, "object_type": "oetable"},
+                result=tool_call_result(
+                    {
+                        "details": {
+                            "objectId": 501,
+                            "objectType": "oetable",
+                            "objectName": "payment_fact",
+                            "owner": "jane.doe",
+                            "certificationStatus": "certified",
+                        },
+                        "profile": {"columns": [{"name": "amount", "nulls": 0}]},
+                        "relationships": [{"from": "payment_fact", "to": "customer", "type": "FK"}],
+                    }
+                ),
+            ),
+        ],
+    )
+
+
+def golden_mcp_use_knowledge_not_catalog_for_policy() -> LLMTestCase:
+    """Single-turn: a policy question routes to knowledge_search, never to catalog search."""
+    srv = ovaledge_eval_mcp_server(
+        tool_names=frozenset({TOOL_ASSET_EXPLORER, TOOL_KNOWLEDGE_SEARCH}),
+    )
+    return LLMTestCase(
+        name="mcp_use_knowledge_not_catalog_for_policy",
+        input="What is our retention policy for customer PII?",
+        actual_output=(
+            "This asks for an organizational policy, not for physical datasets, so I called "
+            "knowledge_search — it covers both our data stories and OvalEdge product "
+            "documentation. I did not call asset_explorer: catalog search returns table and "
+            "column metadata, which cannot answer what our retention policy says. I led the "
+            "answer with the storyCitation verbatim so the source is attributable."
+        ),
+        mcp_servers=[srv],
+        mcp_tools_called=[
+            MCPToolCall(
+                name=TOOL_KNOWLEDGE_SEARCH,
+                args={"query": "What is our retention policy for customer PII?"},
+                result=tool_call_result(
+                    {
+                        "dataStories": {
+                            "metadata": {"storyName": "PII Retention Policy"},
+                            "storyCitation": "Source: PII Retention Policy (Governance)",
+                            "content": {
+                                "story": "Customer PII is retained for 7 years after closure."
+                            },
+                        }
+                    }
+                ),
+            ),
+        ],
+    )
+
+
 def golden_mcp_use_prompt_workflow() -> LLMTestCase:
     """Agent fetched the packaged discovery prompt then searched."""
     srv = ovaledge_eval_mcp_server(
-        tool_names=frozenset({TOOL_SEARCH_CATALOG}),
+        tool_names=frozenset({TOOL_ASSET_EXPLORER}),
         prompt_names=frozenset({"data_discovery"}),
     )
     prompt_result = GetPromptResult(
@@ -324,7 +579,7 @@ def golden_mcp_use_prompt_workflow() -> LLMTestCase:
 
 def golden_mcp_use_datastory() -> LLMTestCase:
     """Single-turn: organizational knowledge via knowledge_search."""
-    srv = ovaledge_eval_mcp_server(tool_names=frozenset({TOOL_LOOKUP_DATASTORY}))
+    srv = ovaledge_eval_mcp_server(tool_names=frozenset({TOOL_KNOWLEDGE_SEARCH}))
     return LLMTestCase(
         name="mcp_use_datastory",
         input="What is our policy on customer PII retention?",
@@ -337,7 +592,7 @@ def golden_mcp_use_datastory() -> LLMTestCase:
         mcp_servers=[srv],
         mcp_tools_called=[
             MCPToolCall(
-                name=TOOL_LOOKUP_DATASTORY,
+                name=TOOL_KNOWLEDGE_SEARCH,
                 args={"query": "customer PII retention policy"},
                 result=tool_call_result(
                     {
@@ -358,7 +613,7 @@ def golden_mcp_use_datastory() -> LLMTestCase:
 def golden_mcp_use_organizational_knowledge_prompt() -> LLMTestCase:
     """Agent used organizational_knowledge prompt then knowledge_search."""
     srv = ovaledge_eval_mcp_server(
-        tool_names=frozenset({TOOL_LOOKUP_DATASTORY}),
+        tool_names=frozenset({TOOL_KNOWLEDGE_SEARCH}),
         prompt_names=frozenset({"organizational_knowledge"}),
     )
     prompt_result = GetPromptResult(
@@ -384,7 +639,7 @@ def golden_mcp_use_organizational_knowledge_prompt() -> LLMTestCase:
         ],
         mcp_tools_called=[
             MCPToolCall(
-                name=TOOL_LOOKUP_DATASTORY,
+                name=TOOL_KNOWLEDGE_SEARCH,
                 args={"query": "revenue recognition playbook"},
                 result=tool_call_result(
                     {
@@ -505,7 +760,7 @@ def golden_mcp_use_routing_guide_resource() -> LLMTestCase:
 def golden_mcp_use_platform_help() -> LLMTestCase:
     """Single-turn: platform_help prompt → knowledge_search (not data stories)."""
     srv = ovaledge_eval_mcp_server(
-        tool_names=frozenset({TOOL_SEARCH_DOCS}),
+        tool_names=frozenset({TOOL_KNOWLEDGE_SEARCH}),
         prompt_names=frozenset({"platform_help"}),
     )
     prompt_result = GetPromptResult(
@@ -528,7 +783,7 @@ def golden_mcp_use_platform_help() -> LLMTestCase:
         mcp_prompts_called=[MCPPromptCall(name="platform_help", result=prompt_result)],
         mcp_tools_called=[
             MCPToolCall(
-                name=TOOL_SEARCH_DOCS,
+                name=TOOL_KNOWLEDGE_SEARCH,
                 args={"query": "create data quality rule", "limit": 7},
                 result=tool_call_result(
                     {
@@ -550,7 +805,7 @@ def golden_mcp_use_platform_help() -> LLMTestCase:
 def golden_mcp_use_catalog_object_access() -> LLMTestCase:
     """Single-turn: catalog_object_access prompt → get_user_object_access."""
     srv = ovaledge_eval_mcp_server(
-        tool_names=frozenset({TOOL_GET_USER_OBJECT_ACCESS, TOOL_SEARCH_CATALOG}),
+        tool_names=frozenset({TOOL_GET_USER_OBJECT_ACCESS, TOOL_ASSET_EXPLORER}),
         prompt_names=frozenset({"catalog_object_access"}),
     )
     prompt_result = GetPromptResult(
@@ -604,8 +859,8 @@ def golden_governed_write_confirm_two_step() -> ConversationalTestCase:
     """Multi-turn: preview update_asset_descriptions, then confirm with bound token."""
     srv = ovaledge_eval_mcp_server(
         tool_names=frozenset({
-            TOOL_SEARCH_CATALOG,
-            TOOL_CATALOG_ASSET_DETAILS,
+            TOOL_ASSET_EXPLORER,
+            TOOL_ASSET_DETAILS,
             TOOL_UPDATE_ASSET_DESCRIPTIONS,
         }),
         prompt_names=frozenset({"document_asset_descriptions"}),
@@ -676,7 +931,7 @@ def golden_governed_write_confirm_two_step() -> ConversationalTestCase:
                 ],
                 mcp_tools_called=[
                     MCPToolCall(
-                        name=TOOL_SEARCH_CATALOG,
+                        name=TOOL_ASSET_EXPLORER,
                         args={
                             "search_terms": ["customer", "revenue", "daily"],
                             "object_type": "oetable",
@@ -765,6 +1020,9 @@ def all_mcp_use_golden_fns() -> list[str]:
     """Names of single-turn LLMTestCase goldens for MCPUseMetric."""
     return [
         "golden_mcp_use_catalog_search",
+        "golden_mcp_use_open_catalog_search",
+        "golden_mcp_use_asset_details_after_shortlist",
+        "golden_mcp_use_knowledge_not_catalog_for_policy",
         "golden_mcp_use_prompt_workflow",
         "golden_mcp_use_datastory",
         "golden_mcp_use_organizational_knowledge_prompt",
@@ -781,6 +1039,7 @@ def all_conversational_golden_fns() -> list[str]:
     return [
         "golden_task_completion_discovery",
         "golden_multi_turn_lineage_followup",
+        "golden_multi_turn_explore_details_lineage",
         "golden_governed_write_confirm_two_step",
         *COVERAGE_CONVERSATIONAL_GOLDEN_FNS,
     ]
@@ -799,14 +1058,18 @@ __all__ = [
     "all_mcp_use_golden_fns",
     "all_multi_turn_mcp_use_golden_fns",
     "golden_governed_write_confirm_two_step",
+    "golden_mcp_use_asset_details_after_shortlist",
     "golden_mcp_use_catalog_object_access",
     "golden_mcp_use_catalog_search",
     "golden_mcp_use_datastory",
+    "golden_mcp_use_knowledge_not_catalog_for_policy",
     "golden_mcp_use_native_source_access",
+    "golden_mcp_use_open_catalog_search",
     "golden_mcp_use_organizational_knowledge_prompt",
     "golden_mcp_use_platform_help",
     "golden_mcp_use_routing_guide_resource",
     "golden_mcp_use_prompt_workflow",
+    "golden_multi_turn_explore_details_lineage",
     "golden_multi_turn_lineage_followup",
     "golden_task_completion_discovery",
     *COVERAGE_MCP_USE_GOLDEN_FNS,

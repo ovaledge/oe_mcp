@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from fastmcp import FastMCP
 from fastmcp.client import Client
@@ -35,7 +37,7 @@ WORKFLOW_PROMPT_NAMES = tuple(sorted(MCP_WORKFLOW_PROMPT_NAMES))
 
 # Each prompt must reference the tools its instruction text tells the model to call.
 _PROMPT_REQUIRED_TOOLS: dict[str, tuple[str, ...]] = {
-    "data_discovery": (TOOL_ASSET_EXPLORER, TOOL_KNOWLEDGE_SEARCH),
+    "data_discovery": (TOOL_ASSET_EXPLORER, TOOL_ASSET_DETAILS, TOOL_KNOWLEDGE_SEARCH),
     "explain_business_term": (TOOL_ASSET_EXPLORER, TOOL_ASSET_DETAILS),
     "trust_assessment": (
         TOOL_ASSET_EXPLORER,
@@ -44,6 +46,7 @@ _PROMPT_REQUIRED_TOOLS: dict[str, tuple[str, ...]] = {
     ),
     "explore_data_domain": (
         TOOL_ASSET_EXPLORER,
+        TOOL_ASSET_DETAILS,
         TOOL_KNOWLEDGE_SEARCH,
     ),
     "trace_data_lineage": (
@@ -192,6 +195,7 @@ class TestMcpServerInstructions:
     def test_instructions_prioritize_data_stories_for_org_knowledge(self) -> None:
         from server.app import MCP_SERVER_INSTRUCTION_TOOL_NAMES, create_mcp
         from server.constants import (
+            TOOL_ASSET_DETAILS,
             TOOL_ASSET_EXPLORER,
             TOOL_GET_USER_OBJECT_ACCESS,
             TOOL_KNOWLEDGE_SEARCH,
@@ -203,10 +207,14 @@ class TestMcpServerInstructions:
         instructions = (mcp.instructions or "").lower()
         assert TOOL_KNOWLEDGE_SEARCH in instructions
         assert TOOL_ASSET_EXPLORER in instructions
+        assert TOOL_ASSET_DETAILS in instructions
         assert TOOL_SOURCE_SYSTEM_ACCESS in instructions
         assert TOOL_GET_USER_OBJECT_ACCESS in instructions
         assert "write_confirmed_by_user" in instructions
         assert "never show ovaledge://" in instructions
+        assert "find data assets" in instructions
+        assert "omit object_type" in instructions
+        assert "blanket" not in instructions
         navlink = "navlink" in instructions or "redirecturl" in instructions
         assert navlink
         assert MCP_SERVER_INSTRUCTION_TOOL_NAMES <= MCP_TOOL_NAMES
@@ -221,6 +229,19 @@ class TestMcpServerInstructions:
         assert "redshift" in instructions
         assert "1" in instructions and "2" in instructions
 
+    def test_instructions_have_no_duplicated_guidance(self) -> None:
+        """Always-on instructions are pure context cost — no sentence may repeat."""
+        from server.app import create_mcp
+
+        mcp = create_mcp()
+        sentences = [
+            s.strip().lower()
+            for s in re.split(r"(?<=[.!?])\s+", mcp.instructions or "")
+            if len(s.strip()) > 25
+        ]
+        repeated = sorted({s for s in sentences if sentences.count(s) > 1})
+        assert not repeated, f"duplicated instruction sentences: {repeated}"
+
     def test_instructions_require_mcp_workflows_resource(self) -> None:
         from server.app import create_mcp
         from server.constants import DOCS_RESOURCE_URI_PREFIX
@@ -230,6 +251,33 @@ class TestMcpServerInstructions:
         assert f"{DOCS_RESOURCE_URI_PREFIX}/mcp_workflows" in instructions
         assert "session start" in instructions
         assert "routing guide" in instructions
+
+
+class TestDiscoveryPromptsOpenCatalogSearch:
+    async def test_data_discovery_omits_object_type_by_default(self) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        register_workflow_prompts(mcp)
+        prompt = await mcp.get_prompt("data_discovery")
+        assert prompt is not None
+        assert isinstance(prompt, FunctionPrompt)
+        text = prompt.fn("Find all assets related to payment")[0].content.text.lower()
+        assert "find related assets" in text
+        assert "omit object_type" in text
+        assert TOOL_ASSET_DETAILS in text
+        assert "blanket" not in text
+
+    async def test_find_related_assets_starts_with_open_catalog_search(self) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        register_workflow_prompts(mcp)
+        prompt = await mcp.get_prompt("find_related_assets")
+        assert prompt is not None
+        assert isinstance(prompt, FunctionPrompt)
+        text = prompt.fn("payment")[0].content.text.lower()
+        assert "find related assets" in text
+        assert "omit object_type" in text
+        assert "blanket" not in text
+        assert "oetable-only" in text
+        assert TOOL_ASSET_DETAILS in text
 
 
 class TestResolveObjectAccessPrompt:

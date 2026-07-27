@@ -21,7 +21,7 @@ from server.tools.catalog.cde_helpers import _DESC_UPDATE_CDE
 from server.tools.catalog.helpers import (
     _DESC_ASSET_DETAILS,
     _DESC_ASSET_EXPLORER,
-    _DESC_LINEAGE,
+    _DESC_ASSET_LINEAGE,
     _DESC_METADATA_CHANGES,
     _DESC_UPDATE_DESCRIPTIONS,
 )
@@ -33,18 +33,20 @@ from server.tools.catalog.invocations import (
     _invoke_update_asset_descriptions,
     _invoke_update_cde_associations,
 )
+from server.tools.common.annotations import GOVERNED_UPDATE, READ_ONLY
 from server.tools.common.confirm_gate import CONFIRMATION_TOKEN_PARAM_DESCRIPTION
 
 
 def register(mcp: FastMCP) -> None:
 
-    @mcp.tool(description=_DESC_ASSET_EXPLORER)
+    @mcp.tool(title="Find data assets", description=_DESC_ASSET_EXPLORER, annotations=READ_ONLY)
     async def asset_explorer(
         search_terms: Annotated[
             list[str] | None,
             Field(
                 description=(
-                    f"Lexical keywords (wire: {MCP_SEARCH_TERMS_PARAM}). Not for tag names."
+                    "Business keywords to search (e.g. payment, customer). "
+                    f"Wire: {MCP_SEARCH_TERMS_PARAM}. Not for exact tag names."
                 ),
                 default=None,
             ),
@@ -53,8 +55,8 @@ def register(mcp: FastMCP) -> None:
             list[str] | None,
             Field(
                 description=(
-                    f"Exact governance tag names (wire: {MCP_SEARCH_TAGS_PARAM}); "
-                    "case-insensitive match on tag name only."
+                    "Exact tag names already defined in OvalEdge "
+                    f"(wire: {MCP_SEARCH_TAGS_PARAM}); case-insensitive."
                 ),
                 default=None,
             ),
@@ -63,8 +65,8 @@ def register(mcp: FastMCP) -> None:
             list[str] | None,
             Field(
                 description=(
-                    f"Exact glossary term names (wire: {MCP_SEARCH_GLOSSARY_TERMS_PARAM}); "
-                    "case-insensitive match on term name only."
+                    "Exact glossary term names "
+                    f"(wire: {MCP_SEARCH_GLOSSARY_TERMS_PARAM}); case-insensitive."
                 ),
                 default=None,
             ),
@@ -72,28 +74,37 @@ def register(mcp: FastMCP) -> None:
         custom_fields: Annotated[
             list[str] | None,
             Field(
-                description=f"Custom field values (wire: {MCP_SEARCH_CUSTOM_FIELDS_PARAM}).",
+                description=(
+                    "Custom field values to match "
+                    f"(wire: {MCP_SEARCH_CUSTOM_FIELDS_PARAM})."
+                ),
                 default=None,
             ),
         ] = None,
         data_products: Annotated[
             list[str] | None,
             Field(
-                description=f"Data product names (wire: {MCP_SEARCH_DATA_PRODUCTS_PARAM}).",
+                description=(
+                    "Data product names "
+                    f"(wire: {MCP_SEARCH_DATA_PRODUCTS_PARAM})."
+                ),
                 default=None,
             ),
         ] = None,
         classifications: Annotated[
             list[str] | None,
             Field(
-                description=f"Classification labels (wire: {MCP_SEARCH_CLASSIFICATIONS_PARAM}).",
+                description=(
+                    "Classification labels (e.g. PII) "
+                    f"(wire: {MCP_SEARCH_CLASSIFICATIONS_PARAM})."
+                ),
                 default=None,
             ),
         ] = None,
         critical_data_element: Annotated[
             list[str] | None,
             Field(
-                description='CDE flag values (wire: criticalDataElement), e.g. ["Yes"].',
+                description='Critical Data Element flags, e.g. ["Yes"].',
                 default=None,
             ),
         ] = None,
@@ -101,7 +112,7 @@ def register(mcp: FastMCP) -> None:
             str | None,
             Field(
                 description=(
-                    "Verbatim user question for semantic ranking "
+                    "User's full question in plain language (improves ranking) "
                     f"(wire: {MCP_SEARCH_CONTEXT_QUERY_PARAM})."
                 ),
                 default=None,
@@ -109,44 +120,45 @@ def register(mcp: FastMCP) -> None:
         ] = None,
         page: Annotated[
             int,
-            Field(description="1-based page index (default 1).", ge=1),
+            Field(description="Results page number (starts at 1).", ge=1),
         ] = 1,
         limit: Annotated[
             int,
-            Field(description="Page size (default 20; capped at 50 for this client).", ge=1),
+            Field(description="How many results per page (default 20; max 50).", ge=1),
         ] = 20,
         connection_name: Annotated[
             str | None,
-            Field(description="Exact connection name filter (API connectionName).", default=None),
+            Field(description="Limit to one connection/source name.", default=None),
         ] = None,
         server_type: Annotated[
             str | None,
             Field(
-                description="Connector technology filter (API serverType); omit if not implied.",
+                description="Limit to a connector technology (e.g. snowflake); omit if unknown.",
                 default=None,
             ),
         ] = None,
         schema_name: Annotated[
             str | None,
-            Field(description="Exact schema name filter (API schemaName).", default=None),
+            Field(description="Limit to one schema name.", default=None),
         ] = None,
         owner: Annotated[
             str | None,
-            Field(description="Owner login or display name filter.", default=None),
+            Field(description="Filter by owner login or display name.", default=None),
         ] = None,
         steward: Annotated[
             str | None,
-            Field(description="Steward login or display name filter.", default=None),
+            Field(description="Filter by steward login or display name.", default=None),
         ] = None,
         custodian: Annotated[
             str | None,
-            Field(description="Custodian login or display name filter.", default=None),
+            Field(description="Filter by custodian login or display name.", default=None),
         ] = None,
         object_type: Annotated[
             str | None,
             Field(
                 description=(
-                    "Catalog objectType filter, or glossary|oetag with name/object_id. "
+                    "Leave empty to search all asset types. Set only when the user asks "
+                    "for one kind (table, column, glossary, tag, …). "
                     "See docs://ovaledge/asset_types."
                 ),
                 default=None,
@@ -156,8 +168,7 @@ def register(mcp: FastMCP) -> None:
             int | None,
             Field(
                 description=(
-                    "Glossary global domain id for placement filter; pair with optional "
-                    "category/subcategory."
+                    "Glossary domain id when filtering or looking up terms by placement."
                 ),
                 default=None,
             ),
@@ -179,7 +190,7 @@ def register(mcp: FastMCP) -> None:
         ] = None,
         subcategory_id: Annotated[
             int | None,
-            Field(description="Glossary subcategory id (wire: subcategoryId).", default=None),
+            Field(description="Glossary subcategory id.", default=None),
         ] = None,
         subcategory_name: Annotated[
             str | None,
@@ -192,7 +203,7 @@ def register(mcp: FastMCP) -> None:
             int | None,
             Field(
                 description=(
-                    "Internal id for glossary/tag lookup; pair with object_type=glossary|oetag."
+                    "Known glossary or tag id; pair with object_type=glossary or oetag."
                 ),
                 default=None,
             ),
@@ -201,8 +212,7 @@ def register(mcp: FastMCP) -> None:
             str | None,
             Field(
                 description=(
-                    "Term or tag name (replaces termName/tagName); pair with "
-                    "object_type=glossary|oetag."
+                    "Exact glossary term or tag name; pair with object_type=glossary or oetag."
                 ),
                 default=None,
             ),
@@ -210,19 +220,19 @@ def register(mcp: FastMCP) -> None:
         include_parent: Annotated[
             bool,
             Field(
-                description="Tag hierarchy: include parent tag when looking up oetag.",
+                description="When looking up a tag, also return its parent tag.",
                 default=False,
             ),
         ] = False,
         include_children: Annotated[
             bool,
             Field(
-                description="Tag hierarchy: include child tags when looking up oetag.",
+                description="When looking up a tag, also return child tags.",
                 default=False,
             ),
         ] = False,
     ) -> dict[str, Any]:
-        """asset explorer (see MCP tool description)."""
+        """Find data assets related to a business question (catalog search)."""
         return await _invoke_asset_explorer(
             search_terms=search_terms,
             tags=tags,
@@ -253,14 +263,13 @@ def register(mcp: FastMCP) -> None:
             include_children=include_children,
         )
 
-    @mcp.tool(description=_DESC_ASSET_DETAILS)
+    @mcp.tool(title="View asset details", description=_DESC_ASSET_DETAILS, annotations=READ_ONLY)
     async def asset_details(
         object_id: Annotated[
             int,
             Field(
                 description=(
-                    "Internal catalog id from asset_explorer "
-                    "(required with object_type)."
+                    "Asset id from Find data assets (asset_explorer); required with object_type."
                 ),
             ),
         ],
@@ -268,39 +277,46 @@ def register(mcp: FastMCP) -> None:
             str,
             Field(
                 description=(
-                    "One of: "
+                    "Asset type from search results. One of: "
                     + MCP_CATALOG_OBJECT_TYPES_DOC
                     + "."
                 ),
             ),
         ],
     ) -> dict[str, Any]:
-        """asset details (see MCP tool description)."""
+        """View full metadata for one chosen catalog asset."""
         return await _invoke_asset_details(
             object_id=object_id,
             object_type=object_type,
         )
 
-    @mcp.tool(description=_DESC_LINEAGE)
+    @mcp.tool(title="Trace data lineage", description=_DESC_ASSET_LINEAGE, annotations=READ_ONLY)
     async def asset_lineage(
-        object_id: Annotated[int, Field(description="Table or file internal object id.")],
+        object_id: Annotated[
+            int,
+            Field(description="Table or file id from Find data assets."),
+        ],
         object_type: Annotated[
             str,
-            Field(description="oetable or oefile."),
+            Field(description="Must be oetable (table) or oefile (file)."),
         ],
         depth: Annotated[
             int,
-            Field(description="Lineage depth (default 2); server may clamp.", ge=0),
+            Field(description="How many hops to include (default 2).", ge=0),
         ] = 2,
     ) -> dict[str, Any]:
-        """asset lineage (see MCP tool description)."""
+        """Trace where a table or file comes from and what uses it."""
         return await _invoke_asset_lineage(
             object_id=object_id,
             object_type=object_type,
             depth=depth,
         )
 
-    @mcp.tool(description=_DESC_UPDATE_DESCRIPTIONS)
+    @mcp.tool(
+        title="Update asset descriptions",
+        description=_DESC_UPDATE_DESCRIPTIONS,
+        annotations=GOVERNED_UPDATE,
+    )
     async def update_asset_descriptions(
         object_id: Annotated[
             int,
@@ -433,7 +449,11 @@ def register(mcp: FastMCP) -> None:
             confirmation_token=confirmation_token,
         )
 
-    @mcp.tool(description=_DESC_UPDATE_CDE)
+    @mcp.tool(
+        title="Mark critical data elements",
+        description=_DESC_UPDATE_CDE,
+        annotations=GOVERNED_UPDATE,
+    )
     async def update_cde_associations(
         targets: Annotated[
             list[dict[str, Any]],
@@ -501,7 +521,11 @@ def register(mcp: FastMCP) -> None:
             confirmation_token=confirmation_token,
         )
 
-    @mcp.tool(description=_DESC_METADATA_CHANGES)
+    @mcp.tool(
+        title="Compare metadata changes",
+        description=_DESC_METADATA_CHANGES,
+        annotations=READ_ONLY,
+    )
     async def metadata_changes_between_crawls(
         question: Annotated[
             str | None,

@@ -22,6 +22,7 @@ from server.constants import (
 )
 from server.tools.access.disambiguation import validate_access_intent_confirmed
 from server.tools.common import drop_none, map_ovaledge_error, ovaledge_client
+from server.tools.common.annotations import READ_ONLY
 from server.tools.common.tool_logging import logged_tool_invocation
 from server.tools.rdam.helpers import (
     _DESC_SOURCE_SYSTEM_ACCESS,
@@ -203,7 +204,11 @@ async def _invoke_source_system_access(
 
 def register(mcp: FastMCP) -> None:
 
-    @mcp.tool(description=_DESC_SOURCE_SYSTEM_ACCESS)
+    @mcp.tool(
+        title="Check native source access",
+        description=_DESC_SOURCE_SYSTEM_ACCESS,
+        annotations=READ_ONLY,
+    )
     async def source_system_access(
         source_system: Annotated[
             Literal["redshift", "snowflake", "tableau"],

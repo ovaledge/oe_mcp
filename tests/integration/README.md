@@ -22,6 +22,9 @@ cd oe_mcp
 poetry run pytest -c tests/integration/pytest.ini tests/integration -m integration
 ```
 
+Integration tests call **MCP tools / OvalEdge MCP HTTP APIs only**. There is no direct
+database access and no MySQL fixture module.
+
 ---
 
 ## Consolidated read tools
@@ -34,9 +37,8 @@ File: `test_consolidated_read_tools_live.py` — **5 tests per tool (20 total)**
 - `GET /api/v1/mcp/knowledge-search`
 
 Fixtures (table/column/file/glossary/tag object ids) are **discovered dynamically**
-from the live catalog, so no object ids are hard-coded. `askedgidev` is the OvalEdge
-backend MySQL database that stores this crawled catalog metadata; the tests target the
-real crawled objects it holds. Tune discovery with these hints:
+via `asset_explorer` (and related APIs), so no object ids are hard-coded. Tune discovery
+with these hints:
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
@@ -56,6 +58,25 @@ Tests skip cleanly when no matching object exists for a discovery hint.
 ```bash
 poetry run pytest -c tests/integration/pytest.ini \
   tests/integration/test_consolidated_read_tools_live.py -m integration
+```
+
+### Extended coverage
+
+File: `test_consolidated_read_tools_extended_live.py` — **15 tests per tool (60 total)**.
+
+Where the smoke suite asserts response *shape*, this suite also asserts response
+*correctness* via API round-trips (explorer → details / lineage / knowledge_search):
+
+| Area | Covered |
+|------|---------|
+| `asset_explorer` | `context_query` ranking, multi-term search, owner/steward filters, connection and server-type scoping, CDE flag, exact glossary/tag filters, pagination disjointness, page-size cap, `oecolumn` type filter, tag hierarchy, no-match empties, navigation links |
+| `asset_details` | Name/schema round-trips from explorer hits, VIEW handling, glossary and file details, id echo, nav links, column parent reference, profile presence, unknown/negative/non-numeric ids, invalid type, explorer→details round-trip |
+| `asset_lineage` | Lineage-bearing table (API-probed), depth 0/1/3/999/negative, graph shape, depth monotonicity, table with no edges, file lineage, unknown/negative/non-numeric ids, rejected `oeschema` and `glossary` types, object identity in graph |
+| `knowledge_search` | `content_query` alias, story lookup by name and id, story-zone filter, `num_candidates` above/below limit, large limit, empty-params rejection, story citations, corpus sections, product-help and org-policy queries, special-character/long/unicode queries |
+
+```bash
+poetry run pytest -c tests/integration/pytest.ini \
+  tests/integration/test_consolidated_read_tools_extended_live.py -m integration
 ```
 
 ---

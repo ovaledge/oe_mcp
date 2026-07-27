@@ -33,7 +33,7 @@ _DESC_CREATE_GLOSSARY = classify_tool_desc(
     "Flow: term_name → domain (or domain_name on first call) → optional category/subcategory "
     "pickers → required description → confirm_create preview → POST only after "
     "write_confirmed_by_user=true.\n\n"
-    "Full step-by-step: docs://ovaledge/glossary_guide and workflow prompt "
+    "Full step-by-step: docs://ovaledge/governance and workflow prompt "
     "`create_business_glossary_term`."
 )
 def _glossary_nav_from_item(item: dict[str, Any]) -> str:
