@@ -127,6 +127,17 @@ class TestWorkflowPromptRegistration:
         for name in WORKFLOW_PROMPT_NAMES:
             assert await mcp.get_prompt(name) is not None
 
+    async def test_custom_sql_prompt_preserves_set_membership_function(self) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        register_workflow_prompts(mcp)
+        prompt = await mcp.get_prompt("create_custom_sql_dq_workflow")
+        assert isinstance(prompt, FunctionPrompt)
+
+        text = prompt.fn("version must be in (2,3,4,5)")[0].content.text
+
+        assert "Copy recommendedFunction verbatim" in text
+        assert "IN/NOT IN set-membership is SQL Values Contains" in text
+
 
 @pytest.mark.parametrize("prompt_name", WORKFLOW_PROMPT_NAMES)
 class TestWorkflowPromptBodies:

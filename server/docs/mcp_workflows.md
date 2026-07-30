@@ -28,7 +28,7 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 | Data quality rule lookup | `lookup_dq_rule`; prompt `explain_dq_rule` |
 | CDE assets / DQ function & rule recommendations | `assess_cde_dq` (after `search_catalog_assets` or `discover_cde_columns=true`) |
 | Associate objects to existing data quality rule | `associate_dq_rule_objects` (after `assess_cde_dq` / `lookup_dq_rule`; confirm gate) |
-| Auto-create or associate data quality rules (default: reuse existing) | `create_dq_rules` with `prefer_existing_rule=true` (default) |
+| Find same-function rules before creating | `create_dq_rules` with `prefer_existing_rule=true` (default); user chooses a returned rule ID or explicitly requests new |
 | Create a **new** data quality rule (second rule / explicit new) | `create_dq_rules` with `prefer_existing_rule=false`; often `skip_duplicate_function_on_object=false` |
 | Mark object as CDE before auto-create | `update_cde_associations` (confirm gate) → then `create_dq_rules` |
 | Generate custom SQL data quality queries | `generate_dq_queries` (after `assess_cde_dq` when workflow is `custom_sql`) |
@@ -328,7 +328,7 @@ End-to-end routing for function-based and custom-SQL data quality workflows.
 ### Read-only path
 
 1. `search_catalog_assets` with `critical_data_element=Yes` (types: `oetable`, `oecolumn`, `oefile`, `oefilecolumn`), **or** pass known `objects` to `assess_cde_dq`.
-2. `assess_cde_dq` — recommended function, reusable rule, criteria gaps, `associatedToDqRule`.
+2. `assess_cde_dq` — recommended function and `existingRulesForFunction` (all active rules using that function, purpose-ranked but never filtered by purpose).
 3. Optional: `lookup_dq_rule` when the user names an existing rule (rules are not in catalog search).
 
 ### Write path (function-based auto-create / associate)
@@ -336,21 +336,35 @@ End-to-end routing for function-based and custom-SQL data quality workflows.
 | Step | Tool | Notes |
 |------|------|--------|
 | Mark CDE (prerequisite) | `update_cde_associations` | Object must be **CDE=Yes** before auto-create; tables, columns, files, schemas, charts, APIs, queries; **confirm gate** |
-| Create or associate | `create_dq_rules` | Re-assesses internally; **confirm gate** |
+| Select or create | `create_dq_rules` | Re-assesses internally; same-function rules require user selection; new create has **confirm gate** |
 | Link to known rule only | `associate_dq_rule_objects` | When `dqrule_id` is known; does not auto-create; **confirm gate** |
 
 **`create_dq_rules` routing (agent):**
 
 | User intent | Parameters |
 |-------------|------------|
-| “Create data quality rule” / from business description (default) | `prefer_existing_rule=true` (default), `skip_duplicate_function_on_object=true` (default) |
+| One named column/table (after reading its description) | `objects=[{"objectId": <id>, "objectType": "oecolumn"}]`, `discover_cde_columns=false` — **do not** discover-all |
+| List / assess all CDE columns in a domain | `discover_cde_columns=true` (or explicit multi-object `objects`) |
+| “Create data quality rule” / from business description (default) | `prefer_existing_rule=true` lists every same-function rule; ask user to select an ID or explicitly choose new |
 | “Create **new** rule” / second rule / different purpose on same object | `prefer_existing_rule=false`; often `skip_duplicate_function_on_object=false` |
 | Criteria only in user message, not in catalog | `supplemental_criteria_text` |
+| Pick a function from assess candidates | `preferred_function_name` |
+| Rejected top matches — try next-closest | `excluded_function_names` (then re-assess / create) |
 
-**`prefer_existing_rule` behavior (backend):**
+**Scope rule:** If the user asked about one asset (e.g. only `createdate`), pass **only** that object. Never widen to every CDE on the table because validation failed or args looked wrong — fix `objects` shape instead (`[{objectId, objectType}]`, not a JSON string).
 
-- **`true` (default):** Associate to recommended existing rule when one matches; skip with message if already linked to that rule.
-- **`false`:** Auto-create a **new** data quality rule even when already linked to the recommended rule (supports multiple rules per object).
+**Function recommendation (assess):**
+
+1. Match business metadata (description / rule / term text) against catalog DQ function **names and definitions** → ranked `recommendedFunctionCandidates` (top also in `recommendedFunction`).
+2. Present candidates to the user. If they reject them, re-call `assess_cde_dq` with `excluded_function_names` for the next-closest set.
+3. Only when **no** strong catalog function candidates remain → `recommendedWorkflow=custom_sql` (last resort) with the **best-match OEQUERY SQL function** when available (e.g. **SQL Exact Value** for “equal to X”, **SQL Values Contains** for `IN` / `NOT IN` or allowed-value sets, **SQL Value Range** for ranges) → `generate_dq_queries` / `create_sql_dq_rule` using that `recommendedFunction` verbatim.
+4. Weak catalog matches (low score) do **not** block the custom-SQL last resort. Preserve the returned function family through create; do not replace Values Contains or Value Range with Exact Value.
+
+**`prefer_existing_rule` behavior:**
+
+- **`true` (default):** Assessment returns every active rule with the recommended function in `existingRulesForFunction`. Purpose similarity only sorts the list; it never removes a same-function rule. The MCP preview returns `select_existing_rule` without a create token. Ask the user to choose a `dqruleId`, then use `associate_dq_rule_objects`.
+- **`false`:** Explicitly request a **new** data quality rule. The normal create confirmation gate applies.
+- Criteria are parsed from business metadata first. A create response reports `criteriaSource=business_metadata`, `business_metadata_with_defaults`, `function_default`, `not_required`, or `unresolved`; `criteriaMessage` explains partial/failed parsing, defaults applied, or required manual review.
 
 **Skip / fail messages (per-row `message` — never silent):**
 
@@ -359,12 +373,13 @@ End-to-end routing for function-based and custom-SQL data quality workflows.
 | Not CDE | Mark object as CDE (Yes) before auto-create |
 | Already linked (prefer existing) | Already associated to recommended rule |
 | Duplicate function (skip dup on) | Object already has a rule for this function type |
-| Criteria missing | Insufficient business rule/description for auto-create |
 | Function not identified / not found | Cannot map business metadata to a DQ function |
 | Associate failed | Could not link to recommended rule |
 | Rule name exists / insert failed | Create collision or server error |
 
-Present skipped/failed rows and `message` to the user; fix prerequisites (CDE, criteria, flags) before re-calling.
+Missing success/input criteria do **not** block create — function defaults are applied when metadata has none.
+
+Present skipped/failed rows and `message` to the user; fix prerequisites (CDE, flags) before re-calling.
 
 ### Custom SQL path
 
