@@ -4,7 +4,6 @@ from typing import Any
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from jose import jwt as jose_jwt
 from starlette.responses import Response
 from starlette.types import Receive, Send
 
@@ -16,6 +15,7 @@ from server.auth.context import (
     current_oe_user_token,
 )
 from server.auth.credentials_cache import credential_cache_key
+from server.auth.jwt_util import get_unverified_claims
 from server.auth.oauth_discovery import OAuthDiscoveryError
 from server.auth.remote_credentials_parse import (
     parse_remote_user_credentials,
@@ -198,7 +198,7 @@ async def _auth_response_or_none(request: Request) -> Response | None:
             )
 
         try:
-            jose_jwt.get_unverified_claims(oe_jwt)
+            get_unverified_claims(oe_jwt)
         except Exception:
             return JSONResponse(
                 {

@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from jose import jwt as jose_jwt
 
+from server.auth.jwt_util import encode_hs256
 from server.auth.middleware import AuthMiddleware
 from server.auth.remote_credentials_discovery import router as remote_credentials_discovery_router
 from server.auth.token_exchange import TokenExchangeError
@@ -139,7 +139,7 @@ def test_bad_credentials_401(rc_app: FastAPI) -> None:
 
 
 def test_success_with_valid_oe_jwt(rc_app: FastAPI) -> None:
-    valid = jose_jwt.encode({"exp": int(time.time()) + 3600, "sub": "s"}, "k", algorithm="HS256")
+    valid = encode_hs256({"exp": int(time.time()) + 3600, "sub": "s"})
     with (
         TestClient(rc_app) as client,
         patch(
@@ -184,7 +184,7 @@ def test_whitespace_inside_header_value_401(rc_app: FastAPI) -> None:
 
 
 def test_combined_credentials_header_success(rc_app: FastAPI) -> None:
-    valid = jose_jwt.encode({"exp": int(time.time()) + 3600, "sub": "s"}, "k", algorithm="HS256")
+    valid = encode_hs256({"exp": int(time.time()) + 3600, "sub": "s"})
     with (
         TestClient(rc_app) as client,
         patch(

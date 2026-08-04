@@ -3,10 +3,14 @@ from collections import OrderedDict
 from typing import Any
 
 import httpx
-from jose import jwt
 
 from server.auth.cache_keys import opaque_cache_key
 from server.auth.issuer_allowlist import assert_issuer_allowed, normalize_issuer
+from server.auth.jwt_util import (
+    DEFAULT_RS_ALGORITHMS,
+    decode_rs_jwt,
+    get_unverified_claims,
+)
 from server.auth.oauth_discovery import (
     OAuthDiscoveryError,
     get_authorization_server_metadata_for_base,
@@ -138,7 +142,7 @@ async def _verify_jwt_access_token(token: str) -> dict[str, Any]:
     signature + issuer are still verified (typical for Okta default AS JWTs).
     """
     try:
-        unverified: dict[str, Any] = jwt.get_unverified_claims(token)
+        unverified: dict[str, Any] = get_unverified_claims(token)
     except Exception as e:
         raise ValueError(f"Not a readable JWT: {e}") from e
 
@@ -155,16 +159,14 @@ async def _verify_jwt_access_token(token: str) -> dict[str, Any]:
     jwks_uri = meta["jwks_uri"]
     jwks = await _get_jwks(jwks_uri)
 
-    decode_kwargs: dict[str, Any] = {
-        "algorithms": ["RS256", "RS384", "RS512"],
-        "issuer": issuer,
-    }
-    audience = (settings.oauth_audience or "").strip()
-    if audience:
-        decode_kwargs["audience"] = audience
-
-    claims: dict[str, Any] = jwt.decode(token, jwks, **decode_kwargs)
-    return claims
+    audience = (settings.oauth_audience or "").strip() or None
+    return decode_rs_jwt(
+        token,
+        jwks,
+        issuer=issuer,
+        algorithms=DEFAULT_RS_ALGORITHMS,
+        audience=audience,
+    )
 
 
 async def _verify_opaque_access_token(token: str) -> dict[str, Any]:

@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
-from jose import jwt as jose_jwt
 
 from server.auth import context as auth_context
 from server.auth.credentials_cache import (
@@ -15,6 +14,7 @@ from server.auth.credentials_cache import (
     get_default_credentials_cache,
     reset_default_credentials_cache,
 )
+from server.auth.jwt_util import encode_hs256
 from server.client import OvalEdgeClient, OvalEdgeError
 from server.config import settings
 
@@ -37,7 +37,7 @@ def _ctx(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
 
 @pytest.mark.asyncio
 async def test_remote_credentials_401_invalidates_cache() -> None:
-    stale = jose_jwt.encode({"exp": int(time.time()) + 5000, "sub": "a"}, "k", algorithm="HS256")
+    stale = encode_hs256({"exp": int(time.time()) + 5000, "sub": "a"})
     cache_key = credential_cache_key("ut", "us")
     cache = get_default_credentials_cache()
     await cache.set_entry(
@@ -66,8 +66,8 @@ async def test_remote_credentials_401_invalidates_cache() -> None:
 
 @pytest.mark.asyncio
 async def test_remote_credentials_400_invalid_token_retries_after_refresh() -> None:
-    stale = jose_jwt.encode({"exp": int(time.time()) + 5000, "sub": "a"}, "k", algorithm="HS256")
-    fresh = jose_jwt.encode({"exp": int(time.time()) + 5000, "sub": "b"}, "k", algorithm="HS256")
+    stale = encode_hs256({"exp": int(time.time()) + 5000, "sub": "a"})
+    fresh = encode_hs256({"exp": int(time.time()) + 5000, "sub": "b"})
     cache_key = credential_cache_key("utok", "usec")
     cache = get_default_credentials_cache()
     await cache.set_entry(
@@ -114,7 +114,7 @@ async def test_remote_credentials_400_invalid_token_retries_after_refresh() -> N
 
 @pytest.mark.asyncio
 async def test_remote_credentials_other_400_does_not_evict_cache() -> None:
-    stale = jose_jwt.encode({"exp": int(time.time()) + 5000, "sub": "a"}, "k", algorithm="HS256")
+    stale = encode_hs256({"exp": int(time.time()) + 5000, "sub": "a"})
     cache_key = credential_cache_key("utok", "usec")
     cache = get_default_credentials_cache()
     await cache.set_entry(

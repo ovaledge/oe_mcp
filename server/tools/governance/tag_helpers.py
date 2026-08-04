@@ -641,12 +641,16 @@ def _format_open_parent_list_for_user(parents: list[dict[str, Any]]) -> str:
         "",
         "Ask the human which option they want BEFORE creating the tag.",
         "",
-        "  - **No parent** (root/open tag) → call create_tag again with "
-        "create_directly_under_master=true and parent_step_completed_by_user=true "
-        "(do not set masterTagId).",
-        "  - **Under a parent** → call create_tag with parent_tag_id, "
-        "parent_tag_id_confirmed_by_user=true, and parent_step_completed_by_user=true "
-        "(pick from list below; root/master rows use parent_tag_id only).",
+        (
+            "  - **No parent** (root/open tag) → call create_tag again with "
+            "create_directly_under_master=true and parent_step_completed_by_user=true "
+            "(do not set masterTagId)."
+        ),
+        (
+            "  - **Under a parent** → call create_tag with parent_tag_id, "
+            "parent_tag_id_confirmed_by_user=true, and parent_step_completed_by_user=true "
+            "(pick from list below; root/master rows use parent_tag_id only)."
+        ),
         "",
     ]
     if not parents:
@@ -707,11 +711,15 @@ def _format_parent_list_for_user(
         f"    (keep master_tag_id={master_tag_id}, master_tag_id_confirmed_by_user=true)",
         "",
         "  - **Under a parent tag** (pick parentTagId from list below):",
-        "    parent_tag_id + parent_tag_id_confirmed_by_user=true + "
-        "parent_step_completed_by_user=true",
+        (
+            "    parent_tag_id + parent_tag_id_confirmed_by_user=true + "
+            "parent_step_completed_by_user=true"
+        ),
         "",
-        "  - **Browse deeper** (when a row shows has children): call create_tag again with "
-        "browse_parent_tag_id=<that parentTagId> (same master_tag_id + confirmations).",
+        (
+            "  - **Browse deeper** (when a row shows has children): call create_tag again with "
+            "browse_parent_tag_id=<that parentTagId> (same master_tag_id + confirmations)."
+        ),
         "",
     ])
     if not parents:
@@ -973,8 +981,10 @@ def _format_open_parent_selection_guidance(
     lines.extend([
         _format_open_parent_list_for_user(parents),
         "",
-        "Ask the human: use a parent from the list, browse deeper with "
-        "browse_parent_tag_id when hasChildren=true, or no parent.",
+        (
+            "Ask the human: use a parent from the list, browse deeper with "
+            "browse_parent_tag_id when hasChildren=true, or no parent."
+        ),
         "Next create_tag call: parent_step_completed_by_user=true plus their choice.",
     ])
     extra: dict[str, Any] = {
@@ -1290,8 +1300,11 @@ def _block_llm_master_selection(
 ) -> dict[str, Any]:
     lines = [
         "master_tag_id was sent without master_tag_id_confirmed_by_user=true.",
-        "The LLM must not choose the master tag — ask the human to pick from "
-        "masterTagChoices, then retry with their id and master_tag_id_confirmed_by_user=true.",
+        (
+            "The LLM must not choose the master tag — ask the human to pick from "
+            "masterTagChoices, then retry with their id and "
+            "master_tag_id_confirmed_by_user=true."
+        ),
     ]
     if master_tag_id is not None and master_tag_id > 0:
         lines.insert(0, f"Rejected master_tag_id={master_tag_id} (not human-confirmed).")

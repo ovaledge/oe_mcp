@@ -1,13 +1,13 @@
 import asyncio
 import json
 import time
-from typing import Any, cast
+from typing import Any
 
 import httpx
-from jose import jwt
 
 from server.auth import context as auth_context
 from server.auth.cache_keys import opaque_cache_key
+from server.auth.jwt_util import get_unverified_claims
 from server.config import settings
 from server.constants import (
     CREDENTIALS_REFRESH_LEEWAY_SECONDS,
@@ -34,7 +34,7 @@ class TokenExchangeError(Exception):
 def jwt_exp_epoch(token: str) -> int:
     """Unix seconds from JWT ``exp`` claim, or 0 if missing / unparsable."""
     try:
-        claims = cast(dict[str, Any], jwt.get_unverified_claims(token))
+        claims = get_unverified_claims(token)
         exp = claims.get("exp")
         if exp is None:
             return 0
@@ -125,7 +125,7 @@ def is_token_expiring(token: str, leeway_seconds: int = JWT_REFRESH_LEEWAY_SECON
     call token/generate on every tool invocation. If parsing fails, refresh to be safe.
     """
     try:
-        claims = cast(dict[str, Any], jwt.get_unverified_claims(token))
+        claims = get_unverified_claims(token)
     except Exception:
         return True
     if "exp" not in claims:

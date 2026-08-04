@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from server.client import OvalEdgeError
 from server.config import resolve_client_timezone
@@ -277,7 +277,8 @@ async def _invoke_create_glossary_term(
                 data = _as_dict(body.get("data"))
                 category_items = _extract_picker_items(data, "category")
                 if category_items:
-                    if cat_create <= 0 and effective_category_name:
+                    # cat_create is already <= 0 in this branch (see outer guard).
+                    if effective_category_name:
                         (
                             resolved_category_id,
                             resolved_category_name,
@@ -361,7 +362,8 @@ async def _invoke_create_glossary_term(
                 data = _as_dict(body.get("data"))
                 subcategory_items = _extract_picker_items(data, "subcategory")
                 if subcategory_items:
-                    if effective_subcategory_name and sub_create <= 0:
+                    # sub_create is already <= 0 in this branch (see outer guard).
+                    if effective_subcategory_name:
                         # Resolve subcategory by provided name and skip picker when unique.
                         (
                             resolved_subcategory_id,
@@ -867,13 +869,7 @@ async def _invoke_create_tag(
                         master_tag_name=master_name_for_desc,
                         parent_tag_name=parent_name_for_desc,
                     ),
-                    masterTagId=(
-                        master_tag_id
-                        if secure_mode
-                        and master_tag_id is not None
-                        and master_tag_id > 0
-                        else None
-                    ),
+                    masterTagId=master_tag_id if secure_mode else None,
                     parentTagId=(
                         parent_tag_id if parent_tag_id is not None and parent_tag_id > 0 else None
                     ),
@@ -891,17 +887,8 @@ async def _invoke_create_tag(
                 )
             if not _consume_parent_picker_shown(name):
                 if secure_mode:
-                    if master_tag_id is None or master_tag_id <= 0:
-                        return {
-                            "ok": False,
-                            "status_code": 422,
-                            "message": (
-                                "Secure mode requires master_tag_id for parent "
-                                "picker replay."
-                            ),
-                            "doNotCreateTag": True,
-                        }
-                    resolved_master_id = master_tag_id
+                    # master_tag_id was validated (> 0) in the secure_mode block above.
+                    resolved_master_id = cast(int, master_tag_id)
                     master_name, parents, browse_meta = (
                         await _fetch_parent_choices_for_master(
                             client,
@@ -940,13 +927,7 @@ async def _invoke_create_tag(
                     master_tag_name=master_name_for_desc,
                     parent_tag_name=parent_name_for_desc,
                 ),
-                masterTagId=(
-                    master_tag_id
-                    if secure_mode
-                    and master_tag_id is not None
-                    and master_tag_id > 0
-                    else None
-                ),
+                masterTagId=master_tag_id if secure_mode else None,
                 parentTagId=(
                     parent_tag_id if parent_tag_id is not None and parent_tag_id > 0 else None
                 ),
