@@ -3,8 +3,9 @@ Remote MCP entrypoint — Streamable HTTP via Mangum.
 
 Auth depends on ``AUTH_MODE``:
 
-- ``remote``: OAuth 2.x / OIDC ``Authorization: Bearer`` → OvalEdge JWT (per request).
-  Registers OAuth discovery + dynamic registration routes.
+- ``remote``: OAuth 2.x / OIDC ``Authorization: Bearer`` → validate (JWT or opaque
+  introspect) → forward to OvalEdge (default) or exchange via token/generate.
+  Registers OAuth discovery + registration routes.
 
 - ``remote_credentials``: ``X-OvalEdge-Credentials`` (``token::secret``) or
   ``X-OvalEdge-Token`` + ``X-OvalEdge-Secret`` → cached OvalEdge JWT.
@@ -15,7 +16,9 @@ Auth depends on ``AUTH_MODE``:
 Routes:
     GET  /.well-known/oauth-authorization-server  → IdP metadata (``remote``) or discovery stub
                                                       (``remote_credentials``)
-    POST /register                                 → Dynamic client registration (remote only)
+    GET  /.well-known/openid-configuration        → OIDC discovery (``remote``)
+    GET  /.well-known/oauth-protected-resource*   → RFC 9728 (``remote``)
+    POST /register                                 → Returns configured OAUTH_CLIENT_ID (remote)
     GET  /health                                   → Health check
     POST /mcp                                      → MCP (protected)
 
@@ -54,7 +57,7 @@ from server.auth.remote_credentials_discovery import router as remote_credential
 from server.branding import MCP_BRAND_ICON_ROUTE, brand_icon_file, mcp_server_icons
 from server.config import settings
 from server.constants import HEADER_OE_USER_SECRET, HEADER_OE_USER_TOKEN
-from server.logging_config import configure_stderr_logging
+from server.logging_config import configure_runtime_observability
 
 logger = logging.getLogger(__name__)
 
@@ -77,20 +80,23 @@ def _running_on_aws_lambda() -> bool:
 
 @asynccontextmanager
 async def _fastapi_lifespan(_app: object) -> AsyncIterator[dict[str, Any]]:
-    configure_stderr_logging()
+    configure_runtime_observability()
     yield {}
 
 
 # Uvicorn: one process lifespan runs both. Lambda: Mangum would start/stop every invoke and break
 # StreamableHTTPSessionManager — MCP sub-app lifespan is pinned separately (see handler).
 def _uvicorn_lifespans() -> tuple[Any, ...]:
-    parts: list[Any] = [_fastapi_lifespan, mcp_http.lifespan]
+    parts: list[Any] = [_fastapi_lifespan]
     if (
         settings.auth_mode == "local"
         and settings.ovaledge_user_token.strip()
         and settings.ovaledge_user_secret.strip()
     ):
+        # Exchange JWT before MCP HTTP accepts traffic — avoids racing the first
+        # tool call and issuing a second token/generate (single-active-JWT).
         parts.append(local_oe_jwt_lifespan)
+    parts.append(mcp_http.lifespan)
     return tuple(parts)
 
 
@@ -324,3 +330,6 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
 
 _eager_bootstrap_lambda_mcp_lifespan_at_import()
+
+# Mangum uses lifespan="off" on Lambda, so FastAPI lifespan never runs — bootstrap here.
+configure_runtime_observability()

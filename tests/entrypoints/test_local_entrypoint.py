@@ -18,11 +18,11 @@ class TestLocalEntrypoint:
 
     def test_main_runs_stdio_transport(self) -> None:
         with (
-            patch("entrypoints.local.configure_stderr_logging") as log_cfg,
+            patch("entrypoints.local.configure_runtime_observability") as obs_cfg,
             patch("entrypoints.local.mcp.run") as run,
         ):
             from entrypoints.local import main
 
             main()
-        log_cfg.assert_called_once()
+        obs_cfg.assert_called_once()
         run.assert_called_once_with(transport="stdio")

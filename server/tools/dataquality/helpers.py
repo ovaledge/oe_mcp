@@ -1,5 +1,9 @@
 """Helpers for Data Quality MCP tools."""
 
+from __future__ import annotations
+
+import ast
+import json
 from typing import Any
 
 from server.constants import (
@@ -33,32 +37,27 @@ _DQ_CREATE_CONFIRM_INSTRUCTION = (
 )
 
 _DESC_ASSESS_CDE_DQ = classify_tool_desc(
-    "Assess Critical Data Element (CDE) columns and DQ-applicable assets for coverage: "
-    "business metadata, recommended DQ function, reusable DQ rule, and whether the "
-    "object is already associated to the recommended rule.\n\n"
+    "Assess CDE / DQ-applicable assets: business metadata, ranked DQ function candidates, "
+    "reusable rule, association status.\n\n"
     f"Backend: POST {MCP_PATH_ASSESS_CDE_DQ}\n\n"
-    "**Not** lookup_dq_rule — that resolves existing DQ rules by name/id; use this tool "
-    "for CDE column intelligence and function/rule recommendations.\n\n"
-    "**Not** search_catalog_assets alone — search finds assets; call this tool with "
-    "items[].objectId/objectType (or discover_cde_columns) for DQ assessment rows.\n\n"
-    f"**objectType** (per object): {MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC} only "
-    "(aliases such as table, column, filecolumn are normalized).\n\n"
-    "**discover_cde_columns** (optional): when true and objects is empty, discovers "
-    "table/file columns marked CDE (criticalDataElement=Yes) via catalog search.\n\n"
-    "**objects** (optional): "
-    '[{"objectId": 123, "objectType": "oecolumn"}, ...] from search_catalog_assets.\n\n'
-    "Each row includes tableColumnName, businessDescription, businessRule, "
-    "descriptionSource, descriptionMessage (when none), availableCustomFields, "
-    "associatedTermDescriptions, recommendedFunction (or Not Identified), "
-    "recommendedRule (or Not Available), associatedToDqRule, objectRedirectUrl, "
-    "and dqRuleRedirectUrl.\n\n"
-    "Description routing (server): default object/catalog description; pass "
+    "**Not** lookup_dq_rule — that resolves existing DQ rules by name/id.\n\n"
+    "**Not** search_catalog_assets alone — search finds assets; call this with "
+    "objectId/objectType (or discover_cde_columns) for DQ rows.\n\n"
+    f"**objectType**: {MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC} (aliases normalized).\n\n"
+    "**discover_cde_columns**: when true and objects empty, discovers CDE columns.\n\n"
+    "**objects**: "
+    '[{"objectId": 123, "objectType": "oecolumn"}, ...] from search_catalog_assets; '
+    "pass only the assets in scope (one column when the user named one). "
+    "Pass a real array (not a stringified JSON string).\n\n"
+    "Rows include function candidates, all same-function rules, workflow, descriptionSource, "
+    "association state, and links.\n\n"
+    "**preferred_function_name** / **excluded_function_names**: pick or reject candidates; "
+    "re-call for next-closest matches.\n\n"
+    "Description routing: default object/catalog description; pass "
     "description_term_name or description_custom_field_name only when the user names "
     "a term or field (no automatic glossary/custom-field fallback).\n\n"
-    "**Not** associate_dq_rule_objects or create_dq_rules — those write data quality rules; "
-    "use this tool first for read-only recommendations, then writes only after user approval.\n\n"
-    "Read-only. Returns validation errors when objects is empty and discover is false; "
-    "RBAC applies server-side on catalog reads."
+    "**Not** associate_dq_rule_objects or create_dq_rules — writes after user approval.\n\n"
+    "Read-only. Validation when objects empty and discover false; RBAC on catalog reads."
 )
 
 _DESC_ASSOCIATE_DQ_RULE_OBJECTS = classify_tool_desc(
@@ -86,24 +85,27 @@ _DESC_ASSOCIATE_DQ_RULE_OBJECTS = classify_tool_desc(
 )
 
 _DESC_CREATE_DQ_RULES = classify_tool_desc(
-    "Assess CDE/DQ objects then associate or auto-create data quality rules when "
-    "function and business criteria are sufficient.\n\n"
+    "Assess CDE/DQ objects then associate or auto-create data quality rules.\n\n"
     f"Backend: POST {MCP_PATH_CREATE_DQ_RULES}\n\n"
     "**Not** assess_cde_dq — read-only only; use create_dq_rules when the user wants "
     "data quality rules created or associated in one step.\n\n"
     "**Not** associate_dq_rule_objects — use that when the data quality rule id "
     "is already known.\n\n"
+    "**Scope:** when the user names one column/asset, pass only that object in "
+    "**objects** (discover_cde_columns=false). Use discover_cde_columns only to list "
+    "all CDE columns — never broaden a single-column request.\n\n"
     "**discover_cde_columns** / **objects** / **limit** / "
     "**description_term_name** / **description_custom_field_name**: same as assess_cde_dq.\n\n"
-    "**prefer_existing_rule** (default true): associate when recommended rule exists; "
-    "false creates new rule even if linked.\n\n"
+    "**prefer_existing_rule**: true lists same-function rules for user choice; "
+    "false creates new.\n\n"
     "**skip_duplicate_function_on_object** (default true): skip duplicate function on object.\n\n"
-    "**supplemental_criteria_text** (optional): user prompt criteria when not in "
-    "catalog metadata.\n\n"
-    "Criteria priority: metadata or supplemental_criteria_text, then function defaults.\n\n"
+    "**supplemental_criteria_text** (optional): prompt criteria when not in metadata.\n\n"
+    "**preferred_function_name** / **excluded_function_names**: same as assess_cde_dq.\n\n"
+    "Criteria priority: metadata or supplemental_criteria_text, then function defaults. "
+    "Missing success/input criteria do not block create.\n\n"
     "Object validation and row statuses: same as associate_dq_rule_objects.\n\n"
-    "**Confirm gate:** preview → user approval → write_confirmed_by_user=true + "
-    "confirmation_token from preview.\n\n"
+    "**Confirm:** select_existing_rule requires user choice; new create uses preview, approval, "
+    "write_confirmed_by_user=true, and confirmation_token.\n\n"
     "Routing: docs://ovaledge/mcp_workflows (CDE / DQ intelligence). Audit source OE-MCP."
 )
 
@@ -142,12 +144,61 @@ def normalize_dq_object_type(object_type: str | None) -> str | None:
     return MCP_DQ_OBJECT_TYPE_ALIASES.get(key)
 
 
+def _coerce_dq_objects_arg(
+    objects: Any,
+) -> tuple[list[Any] | None, dict[str, Any] | None]:
+    """
+    Normalize agent/transport shapes for ``objects`` into a Python list.
+
+    Hosts sometimes pass a JSON *string* (or a bare dict). Iterating a string would
+    treat each character as an entry and fail with a misleading objects[0] error.
+    """
+    if objects is None:
+        return [], None
+    if isinstance(objects, dict):
+        return [objects], None
+    if isinstance(objects, list):
+        return objects, None
+    if isinstance(objects, str):
+        text = objects.strip()
+        if not text:
+            return [], None
+        parsed: Any = None
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            try:
+                parsed = ast.literal_eval(text)
+            except (ValueError, SyntaxError):
+                parsed = None
+        if isinstance(parsed, dict):
+            return [parsed], None
+        if isinstance(parsed, list):
+            return parsed, None
+        return None, error_payload(
+            "objects must be a JSON array of {objectId, objectType} "
+            '(e.g. [{"objectId": 123, "objectType": "oecolumn"}]), '
+            "not a plain string. If you pass JSON, pass it as an array value — "
+            "do not stringify the array.",
+            error_code="validation_objects_shape",
+        )
+    return None, error_payload(
+        "objects must be a list of {objectId, objectType} "
+        f"(got {type(objects).__name__}).",
+        error_code="validation_objects_shape",
+    )
+
+
 def _normalize_dq_api_objects(
-    objects: list[dict[str, Any]],
+    objects: Any,
 ) -> tuple[list[dict[str, Any]] | None, dict[str, Any] | None]:
     """Validate and normalize catalog object refs for DQ assess/create payloads."""
+    refs, coerce_err = _coerce_dq_objects_arg(objects)
+    if coerce_err is not None:
+        return None, coerce_err
+    assert refs is not None
     api_objects: list[dict[str, Any]] = []
-    for idx, raw in enumerate(objects):
+    for idx, raw in enumerate(refs):
         if not isinstance(raw, dict):
             return None, error_payload(
                 f"objects[{idx}] must be an object with objectId and objectType."
@@ -176,27 +227,27 @@ def _normalize_dq_api_objects(
 
 def validate_assess_cde_dq_args(
     discover_cde_columns: bool,
-    objects: list[dict[str, Any]] | None,
+    objects: Any,
 ) -> dict[str, Any] | None:
-    refs = objects or []
+    refs, err = _normalize_dq_api_objects(objects)
+    if err is not None:
+        return err
     if not refs and not discover_cde_columns:
         return error_payload(
             "Provide objects from search_catalog_assets, or set discover_cde_columns=true "
             "to discover CDE columns.",
         )
-    if refs:
-        _, err = _normalize_dq_api_objects(refs)
-        if err is not None:
-            return err
     return None
 
 
 def build_assess_cde_dq_payload(
     discover_cde_columns: bool,
-    objects: list[dict[str, Any]] | None,
+    objects: Any,
     limit: int,
     description_custom_field_name: str | None = None,
     description_term_name: str | None = None,
+    preferred_function_name: str | None = None,
+    excluded_function_names: list[str] | None = None,
 ) -> dict[str, Any]:
     capped = min(max(limit, 1), MCP_DQ_ASSESS_LIMIT_MAX)
     payload: dict[str, Any] = {
@@ -209,13 +260,37 @@ def build_assess_cde_dq_payload(
     term_name = strip_or_none_description_field(description_term_name)
     if term_name is not None:
         payload["descriptionTermName"] = term_name
-    if not objects:
-        return payload
+    preferred = strip_or_none_description_field(preferred_function_name)
+    if preferred is not None:
+        payload["preferredFunctionName"] = preferred
+    excluded = _normalize_excluded_function_names(excluded_function_names)
+    if excluded:
+        payload["excludedFunctionNames"] = excluded
     api_objects, err = _normalize_dq_api_objects(objects)
     if err is not None:
         return err
-    payload["objects"] = api_objects
+    if api_objects:
+        payload["objects"] = api_objects
     return payload
+
+
+def _normalize_excluded_function_names(
+    excluded_function_names: list[str] | None,
+) -> list[str]:
+    if not excluded_function_names:
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for name in excluded_function_names:
+        trimmed = strip_or_none_description_field(name if isinstance(name, str) else None)
+        if trimmed is None:
+            continue
+        key = trimmed.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(trimmed)
+    return out
 
 
 def strip_or_none_description_field(value: str | None) -> str | None:
@@ -226,7 +301,7 @@ def strip_or_none_description_field(value: str | None) -> str | None:
 
 
 def format_assess_cde_dq_response(body: dict[str, Any]) -> str:
-    """Human-readable summary highlighting description gaps."""
+    """Human-readable summary highlighting description gaps and function candidates."""
     data = body.get("data") if isinstance(body.get("data"), dict) else body
     if not isinstance(data, dict):
         return "CDE DQ assessment completed."
@@ -247,21 +322,82 @@ def format_assess_cde_dq_response(body: dict[str, Any]) -> str:
         lines.append(f"- {name} ({otype}, id={oid}): descriptionSource={source}")
         message = row.get("descriptionMessage")
         if isinstance(message, str) and message.strip():
-            lines.append(message.strip())
+            lines.append(f"  {message.strip()}")
         elif source == "none":
             fields = row.get("availableCustomFields")
             if isinstance(fields, list) and fields:
                 lines.append(f"  Available custom fields: {', '.join(str(f) for f in fields)}")
+        rec_fn = row.get("recommendedFunction")
+        workflow = row.get("recommendedWorkflow")
+        if isinstance(rec_fn, str) and rec_fn.strip():
+            wf = f" [{workflow}]" if isinstance(workflow, str) and workflow.strip() else ""
+            lines.append(f"  Recommended function: `{rec_fn}`{wf}")
+        candidates = row.get("recommendedFunctionCandidates")
+        if isinstance(candidates, list) and candidates:
+            lines.append("  Function candidates (pick one, or exclude to get alternatives):")
+            for cand in candidates[:5]:
+                if not isinstance(cand, dict):
+                    continue
+                cname = cand.get("functionName", "?")
+                score = cand.get("score")
+                reason = cand.get("matchReason", "")
+                score_bit = f", score={score}" if score is not None else ""
+                reason_bit = f", {reason}" if isinstance(reason, str) and reason.strip() else ""
+                lines.append(f"    - `{cname}`{score_bit}{reason_bit}")
+            if isinstance(workflow, str) and workflow.strip().lower() == "custom_sql":
+                lines.append(
+                    "  Custom SQL path: use the returned recommendedFunction verbatim with "
+                    "generate_dq_queries → validate_dq_queries → create_sql_dq_rule. "
+                    "Do not call create_dq_rules for an OEQUERY SQL function. IN/NOT IN or "
+                    "allowed-value sets use SQL Values Contains, not SQL Exact Value."
+                )
+            else:
+                lines.append(
+                    "  Use create_dq_rules with preferred_function_name set to one of these "
+                    "exact catalog names (e.g. Date Validation). Do not invent names like "
+                    "'Date Range Check'. If none fit: re-call assess with "
+                    "excluded_function_names."
+                )
+        elif (
+            isinstance(rec_fn, str)
+            and rec_fn.strip().lower() == "not identified"
+        ) or (
+            isinstance(workflow, str) and workflow.strip().lower() == "custom_sql"
+        ):
+            if (
+                isinstance(rec_fn, str)
+                and rec_fn.strip()
+                and rec_fn.strip().lower() != "not identified"
+            ):
+                lines.append(
+                    f"  Custom SQL path: use recommendedFunction `{rec_fn}` with "
+                    "generate_dq_queries → validate_dq_queries → create_sql_dq_rule "
+                    "(do not invent a different function name)."
+                )
+            else:
+                lines.append(
+                    "  No catalog function candidate was returned. Confirm with the user before "
+                    "custom SQL; do not invent a built-in function name."
+                )
+        existing_rules = row.get("existingRulesForFunction")
+        if isinstance(existing_rules, list) and existing_rules:
+            lines.append("  Existing rules using this function (user must choose):")
+            for rule in existing_rules:
+                if not isinstance(rule, dict):
+                    continue
+                lines.append(f"    {_format_existing_rule_choice(rule)}")
     return "\n".join(lines)
 
 
 def validate_associate_dq_rule_objects_args(
     dqrule_id: int | None,
-    objects: list[dict[str, Any]] | None,
+    objects: Any,
 ) -> dict[str, Any] | None:
     if dqrule_id is None or int(dqrule_id) <= 0:
         return error_payload("dqrule_id must be a positive integer.")
-    refs = objects or []
+    refs, err = _normalize_dq_api_objects(objects)
+    if err is not None:
+        return err
     if not refs:
         return error_payload("At least one object with objectId and objectType is required.")
     return None
@@ -333,6 +469,12 @@ def format_create_dq_rules_response(body: dict[str, Any]) -> str:
                 parts.append(f"dqruleId={dqrule_id}")
             if object_linked is True or status == "created":
                 parts.append("object linked")
+            criteria_source = row.get("criteriaSource")
+            if isinstance(criteria_source, str) and criteria_source.strip():
+                parts.append(f"criteriaSource={criteria_source.strip()}")
+            criteria_message = row.get("criteriaMessage")
+            if isinstance(criteria_message, str) and criteria_message.strip():
+                parts.append(f"— Warning: {criteria_message.strip()}")
             message = row.get("message")
             if isinstance(message, str) and message.strip():
                 parts.append(f"— {message.strip()}")
@@ -379,7 +521,10 @@ def format_associate_dq_rule_confirmation_preview(body: dict[str, Any]) -> dict[
     return attach_confirmation_token(preview, body)
 
 
-def format_create_dq_rules_confirmation_preview(body: dict[str, Any]) -> dict[str, Any]:
+def format_create_dq_rules_confirmation_preview(
+    body: dict[str, Any],
+    assessment: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     discover = body.get("discoverCdeColumns")
     prefer = body.get("preferExistingRule")
     skip_dup = body.get("skipDuplicateFunctionOnObject")
@@ -393,6 +538,67 @@ def format_create_dq_rules_confirmation_preview(body: dict[str, Any]) -> dict[st
         field_line = f"\n- **description_custom_field_name:** {field_name.strip()}"
     if isinstance(term_name, str) and term_name.strip():
         field_line += f"\n- **description_term_name:** {term_name.strip()}"
+    assessment_data = assessment.get("data", assessment) if isinstance(assessment, dict) else {}
+    assessment_rows = (
+        assessment_data.get("rows", []) if isinstance(assessment_data, dict) else []
+    )
+    action_lines: list[str] = []
+    selection_lines: list[str] = []
+    selection_choices: list[dict[str, Any]] = []
+    for row in assessment_rows if isinstance(assessment_rows, list) else []:
+        if not isinstance(row, dict):
+            continue
+        object_id = row.get("objectId")
+        object_type = row.get("objectType")
+        existing_rules = row.get("existingRulesForFunction")
+        if prefer and isinstance(existing_rules, list) and existing_rules:
+            selection_lines.append(f"- `{object_type}:{object_id}`:")
+            selection_choices.append(
+                {
+                    "objectId": object_id,
+                    "objectType": object_type,
+                    "rules": [rule for rule in existing_rules if isinstance(rule, dict)],
+                }
+            )
+            selection_lines.extend(
+                f"  {_format_existing_rule_choice(rule)}"
+                for rule in existing_rules
+                if isinstance(rule, dict)
+            )
+            continue
+        action_lines.append(
+            f"- `{object_type}:{object_id}`: create a new rule "
+            "(no existing rule uses the recommended function)"
+        )
+    if selection_lines:
+        return {
+            "ok": True,
+            "awaitingUserConfirmation": True,
+            "workflowPhase": "select_existing_rule",
+            "doNotCreate": True,
+            "requiresRuleSelection": True,
+            "writeConfirmedByUser": False,
+            "formattedResponse": (
+                "**Choose an existing DQ rule or explicitly request a new rule**\n\n"
+                "The following active rules use the recommended function:\n"
+                f"{chr(10).join(selection_lines)}\n\n"
+                "Ask the user to choose a DQ rule ID. For a selected rule, call "
+                "`associate_dq_rule_objects` and use its confirmation flow. If the user "
+                "explicitly wants a new rule instead, re-call `create_dq_rules` with "
+                "`prefer_existing_rule=false` to receive a create confirmation preview."
+            ),
+            "agentInstruction": (
+                "Do not create or auto-select. Present every same-function rule and wait for "
+                "the user to choose a dqruleId, or explicitly choose creation."
+            ),
+            "existingRuleChoices": selection_choices,
+            "pendingCreate": body,
+        }
+    planned_actions = (
+        "\n".join(action_lines)
+        if action_lines
+        else "- Assessment returned no actionable objects."
+    )
     preview = {
         "ok": True,
         "awaitingUserConfirmation": True,
@@ -407,6 +613,7 @@ def format_create_dq_rules_confirmation_preview(body: dict[str, Any]) -> dict[st
             f"- **limit:** {limit}"
             f"{field_line}\n"
             f"**Objects:**\n{objects_block}\n\n"
+            f"**Planned actions:**\n{planned_actions}\n\n"
             "Ask the user to confirm. After they approve, call again with "
             "`write_confirmed_by_user=true`, `confirmation_token` from this preview, "
             "and the same discover_cde_columns, objects, limit, flags, and optional "
@@ -418,9 +625,47 @@ def format_create_dq_rules_confirmation_preview(body: dict[str, Any]) -> dict[st
     return attach_confirmation_token(preview, body)
 
 
+def _format_existing_rule_choice(rule: dict[str, Any]) -> str:
+    rule_id = rule.get("dqruleId", "?")
+    name = rule.get("name", "?")
+    purpose = rule.get("purpose")
+    similarity = rule.get("purposeSimilarity")
+    associated = rule.get("associatedToObject")
+    success_op = rule.get("successOperator")
+    success_values = [
+        str(value)
+        for value in (rule.get("successValue1"), rule.get("successValue2"))
+        if value not in (None, "")
+    ]
+    input_op = rule.get("inputOperator")
+    input_values = [
+        str(value)
+        for value in (rule.get("inputValue1"), rule.get("inputValue2"))
+        if value not in (None, "")
+    ]
+    details = [f"ID {rule_id}: **{name}**"]
+    if isinstance(purpose, str) and purpose.strip():
+        details.append(f"purpose={purpose.strip()}")
+    if success_op or success_values:
+        details.append(
+            f"success={success_op or '?'}"
+            + (f" ({', '.join(success_values)})" if success_values else "")
+        )
+    if input_op or input_values:
+        details.append(
+            f"input={input_op or '?'}"
+            + (f" ({', '.join(input_values)})" if input_values else "")
+        )
+    if similarity is not None:
+        details.append(f"purposeSimilarity={similarity}")
+    if associated is True:
+        details.append("already associated")
+    return " — ".join(details)
+
+
 def build_associate_dq_rule_objects_payload(
     dqrule_id: int,
-    objects: list[dict[str, Any]] | None,
+    objects: Any,
     skip_already_associated: bool,
 ) -> dict[str, Any]:
     built = build_assess_cde_dq_payload(False, objects, 1)
@@ -437,20 +682,22 @@ def build_associate_dq_rule_objects_payload(
 
 def validate_create_dq_rules_args(
     discover_cde_columns: bool,
-    objects: list[dict[str, Any]] | None,
+    objects: Any,
 ) -> dict[str, Any] | None:
     return validate_assess_cde_dq_args(discover_cde_columns, objects)
 
 
 def build_create_dq_rules_payload(
     discover_cde_columns: bool,
-    objects: list[dict[str, Any]] | None,
+    objects: Any,
     limit: int,
     prefer_existing_rule: bool,
     skip_duplicate_function_on_object: bool,
     description_custom_field_name: str | None = None,
     description_term_name: str | None = None,
     supplemental_criteria_text: str | None = None,
+    preferred_function_name: str | None = None,
+    excluded_function_names: list[str] | None = None,
 ) -> dict[str, Any]:
     built = build_assess_cde_dq_payload(
         discover_cde_columns,
@@ -458,6 +705,8 @@ def build_create_dq_rules_payload(
         limit,
         description_custom_field_name,
         description_term_name,
+        preferred_function_name,
+        excluded_function_names,
     )
     if "error" in built:
         return built
@@ -471,6 +720,10 @@ def build_create_dq_rules_payload(
         payload["descriptionCustomFieldName"] = built["descriptionCustomFieldName"]
     if built.get("descriptionTermName"):
         payload["descriptionTermName"] = built["descriptionTermName"]
+    if built.get("preferredFunctionName"):
+        payload["preferredFunctionName"] = built["preferredFunctionName"]
+    if built.get("excludedFunctionNames"):
+        payload["excludedFunctionNames"] = built["excludedFunctionNames"]
     supplemental = strip_or_none_description_field(supplemental_criteria_text)
     if supplemental is not None:
         payload["supplementalCriteriaText"] = supplemental
@@ -611,19 +864,20 @@ def _agent_instruction_for_code_found(data: dict[str, Any]) -> str:
 
 
 def validate_generate_dq_queries_args(
-    objects: list[dict[str, Any]] | None,
+    objects: Any,
 ) -> dict[str, Any] | None:
-    refs = objects or []
+    refs, err = _normalize_dq_api_objects(objects)
+    if err is not None:
+        return err
     if not refs:
         return error_payload(
             "At least one object with objectId and objectType is required.",
         )
-    _, err = _normalize_dq_api_objects(refs)
-    return err
+    return None
 
 
 def build_generate_dq_queries_payload(
-    objects: list[dict[str, Any]] | None,
+    objects: Any,
     business_rule: str | None,
     business_description: str | None,
 ) -> dict[str, Any]:
@@ -849,14 +1103,16 @@ def format_validate_dq_queries_response(body: dict[str, Any]) -> dict[str, Any]:
 
 
 def validate_create_sql_dq_rule_args(
-    objects: list[dict[str, Any]] | None,
+    objects: Any,
     rule_name: str | None,
     rule_query: str | None,
     stats_query: str | None,
     failed_values_query: str | None,
     code_object_id: int | None,
 ) -> dict[str, Any] | None:
-    refs = objects or []
+    refs, err = _normalize_dq_api_objects(objects)
+    if err is not None:
+        return err
     if not refs:
         return error_payload(
             "At least one object with objectId and objectType is required.",
@@ -874,12 +1130,11 @@ def validate_create_sql_dq_rule_args(
             return error_payload(
                 "failed_values_query is required when rule_query is provided."
             )
-    _, err = _normalize_dq_api_objects(refs)
-    return err
+    return None
 
 
 def build_create_sql_dq_rule_payload(
-    objects: list[dict[str, Any]] | None,
+    objects: Any,
     rule_name: str,
     rule_query: str | None,
     stats_query: str | None,

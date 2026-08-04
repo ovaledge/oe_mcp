@@ -46,6 +46,13 @@ We may request additional information and will coordinate disclosure after a fix
 
 Repository admins should enable **Private vulnerability reporting** under **Settings** → **Security** → **Code security and analysis** so reporters can use **Security** → **Report a vulnerability**.
 
+## Code scanning (CodeQL)
+
+- **Local (every commit):** pre-commit runs `scripts/run_codeql.sh` (CLI required by default). Install with `./scripts/install_codeql_cli.sh`.
+- **CI (advanced setup):** [`.github/workflows/codeql.yml`](.github/workflows/codeql.yml) analyzes Python on PRs and pushes to `main`/`dev` using [`.github/codeql/codeql-config.yml`](.github/codeql/codeql-config.yml).
+- **Disable CodeQL default setup** in **Settings → Code security → Code scanning** when using this workflow. Running default + advanced together often produces the PR check *Code scanning results / CodeQL* failing in a few seconds with *Error when processing the SARIF file*.
+- Findings such as `py/weak-sensitive-data-hashing` should be fixed or justified before merge; do not rely on post-merge Security-tab discovery alone.
+
 ## Automated dependency updates
 
 Dependabot is configured in [`.github/dependabot.yml`](.github/dependabot.yml) for:
@@ -55,24 +62,3 @@ Dependabot is configured in [`.github/dependabot.yml`](.github/dependabot.yml) f
 - Docker base image (`Dockerfile`)
 
 Review and merge Dependabot pull requests after CI passes. Regenerate `poetry.lock` locally when applying major dependency upgrades.
-
-## Credentials and data handling
-
-- **Never commit** `.env`, API keys, OvalEdge user tokens/secrets, or IdP client secrets. `.gitignore` excludes `.env`.
-- **`remote_credentials`:** `X-OvalEdge-Credentials` and/or `X-OvalEdge-Token` / `X-OvalEdge-Secret` are sensitive. Terminate TLS at the edge (API Gateway, ALB). Do not log header values or full outbound URLs that embed secrets.
-- **`remote` (OAuth WIP):** Treat Bearer tokens like secrets in transit; validate `aud` / issuer configuration before production use.
-
-## Deployment surface
-
-- HTTP API in `infra/template.yaml` has **no API Gateway authorizer** by design; authorization is enforced in **`AuthMiddleware`**. Add WAF, IP restrictions, or a JWT authorizer for production hardening as your risk model requires.
-- Default **throttle** limits on the HTTP API reduce accidental or abusive load; tune `RouteSettings` / `DefaultRouteSettings` in the template for your traffic profile.
-
-## Dependencies
-
-- Lockfile: `poetry.lock` is committed. Regenerate after dependency changes and review release notes for `fastmcp`, `mcp`, `starlette`, and `httpx`.
-- Run `poetry run pip audit` (or your org’s scanner) before production releases when upgrading dependencies.
-
-## Security advisories and Dependabot alerts
-
-- **Dependabot alerts** and **Dependabot security updates** can be enabled under **Settings** → **Security** → **Code security and analysis** (organization policy may apply).
-- Published fixes for this repo appear under **Security** → **Advisories** when coordinated disclosures are released.

@@ -1,0 +1,52 @@
+# Advanced CodeQL setup (Python). Complements local scripts/run_codeql.sh.
+#
+# REQUIRED: CodeQL *default setup* must be disabled for this repo, or analyze
+# fails with:
+#   "CodeQL analyses from advanced configurations cannot be processed when
+#    the default setup is enabled"
+# Disable via UI: Settings → Code security → CodeQL analysis → Disable
+# Or API: gh api -X PATCH repos/OWNER/REPO/code-scanning/default-setup \
+#            -f state=not-configured
+name: CodeQL
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  schedule:
+    - cron: "17 5 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+      packages: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Python needs no compile step; build-mode none avoids empty/broken SARIF
+      # from a failed or no-op autobuild.
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: python
+          build-mode: none
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          # Distinct from CodeQL default-setup's "/language:python" so uploads
+          # do not overwrite / collide when default setup is still enabled.
+          category: "/language:python-advanced"

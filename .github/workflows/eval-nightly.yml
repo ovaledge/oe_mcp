@@ -18,7 +18,7 @@ jobs:
     name: DeepEval golden MCP metrics
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v6
         with:
@@ -27,10 +27,10 @@ jobs:
       - name: Install Poetry
         run: pip install poetry
 
-      - uses: actions/cache@v5
+      - uses: actions/cache@v6
         with:
           path: ~/.cache/pypoetry
-          key: ${{ runner.os }}-poetry-${{ hashFiles('poetry.lock') }}
+          key: ${{ runner.os }}-poetry-v2-${{ hashFiles('poetry.lock') }}
           restore-keys: ${{ runner.os }}-poetry-
 
       - name: Install dependencies (with eval)
@@ -39,22 +39,59 @@ jobs:
       - name: Unit tests (Tier 1)
         run: bash scripts/run_tests.sh --no-cov -q
 
-      - name: Dry-run golden case construction
+      - name: Eval structural gates (goldens + JSON + red-team, no LLM)
+        run: |
+          poetry run pytest \
+            evals/test_golden_cases_construct.py \
+            evals/test_golden_cases_tool_coverage.py \
+            evals/test_golden_cases_rigor.py \
+            evals/test_json_cases_loader.py \
+            evals/test_red_team_cases.py \
+            -q
+
+      - name: Dry-run golden + example JSON construction
         run: poetry run python -m evals.run_evals --dry-run
 
-      - name: LLM eval — pytest + DeepEval (skipped if no API key)
+      - name: LLM eval — golden MCP metrics (skipped if no API key)
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           DEEPEVAL_JUDGE_MODEL: ${{ vars.DEEPEVAL_JUDGE_MODEL }}
         run: |
           mkdir -p evals/out
-          poetry run pytest evals/test_mcp_deepeval.py -v --junit-xml=evals/out/eval-pytest.xml
+          poetry run pytest evals/test_mcp_deepeval.py -v \
+            --junit-xml=evals/out/eval-pytest.xml
         continue-on-error: true
 
-      - name: Upload eval report artifact
-        uses: actions/upload-artifact@v4
+      - name: LLM eval — red-team pytest (skipped if no API key)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DEEPEVAL_JUDGE_MODEL: ${{ vars.DEEPEVAL_JUDGE_MODEL }}
+          DEEPEVAL_MCP_USE_CASES_JSON: evals/examples/mcp_red_team_cases.example.json
+        run: |
+          mkdir -p evals/out
+          poetry run pytest \
+            evals/test_mcp_deepeval.py::test_mcp_use_metric_from_user_json_file -v \
+            --junit-xml=evals/out/red-team-pytest.xml
+        continue-on-error: true
+
+      - name: LLM eval — red-team JSON report (skipped if no API key)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DEEPEVAL_JUDGE_MODEL: ${{ vars.DEEPEVAL_JUDGE_MODEL }}
+        run: |
+          mkdir -p evals/out
+          poetry run python -m evals.run_evals \
+            --cases-json evals/examples/mcp_red_team_cases.example.json \
+            --output evals/out/red-team-report.json
+        continue-on-error: true
+
+      - name: Upload eval report artifacts
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: deepeval-mcp-report
-          path: evals/out/eval-pytest.xml
+          path: |
+            evals/out/eval-pytest.xml
+            evals/out/red-team-pytest.xml
+            evals/out/red-team-report.json
           if-no-files-found: ignore

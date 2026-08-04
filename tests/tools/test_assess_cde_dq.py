@@ -81,6 +81,7 @@ class TestAssessCdeDq:
         assert "never used as automatic fallbacks" in desc or "no automatic glossary" in desc
         assert "Read-only" in desc
         assert MCP_PATH_ASSESS_CDE_DQ in desc
+        assert "pass only the assets in scope" in desc
 
     def test_build_payload_includes_description_term_name(self) -> None:
         payload = dataquality_helpers.build_assess_cde_dq_payload(
@@ -91,3 +92,152 @@ class TestAssessCdeDq:
         )
         assert payload["descriptionTermName"] == "Net Revenue"
         assert "descriptionCustomFieldName" not in payload
+
+    async def test_description_term_name_forwarded_on_invoke(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {"rows": [], "assessedCount": 0}
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ASSESS_CDE_DQ)
+        await fn(discover_cde_columns=True, description_term_name=" Net Revenue ")
+        mock_oe_client.post.assert_called_once_with(
+            MCP_PATH_ASSESS_CDE_DQ,
+            {
+                "discoverCdeColumns": True,
+                "limit": MCP_DQ_ASSESS_LIMIT_DEFAULT,
+                "descriptionTermName": "Net Revenue",
+            },
+        )
+
+    async def test_limit_capped_at_max(self, mock_oe_client: AsyncMock) -> None:
+        from server.constants import MCP_DQ_ASSESS_LIMIT_MAX
+
+        mock_oe_client.post.return_value = {"rows": [], "assessedCount": 0}
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ASSESS_CDE_DQ)
+        await fn(discover_cde_columns=True, limit=999)
+        body = mock_oe_client.post.call_args[0][1]
+        assert body["limit"] == MCP_DQ_ASSESS_LIMIT_MAX
+
+    async def test_rejects_missing_object_id(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ASSESS_CDE_DQ)
+        out = await fn(objects=[{"objectType": "oecolumn"}])
+        assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
+    async def test_rejects_non_positive_object_id(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ASSESS_CDE_DQ)
+        out = await fn(objects=[{"objectId": 0, "objectType": "oecolumn"}])
+        assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
+    async def test_happy_path_sets_formatted_response(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {
+            "assessedCount": 1,
+            "rows": [
+                {
+                    "tableColumnName": "film.rating",
+                    "objectId": 11,
+                    "objectType": "oecolumn",
+                    "descriptionSource": "none",
+                    "descriptionMessage": "No description found",
+                }
+            ],
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ASSESS_CDE_DQ)
+        out = await fn(objects=[{"objectId": 11, "objectType": "oecolumn"}])
+        assert "formattedResponse" in out
+        assert "film.rating" in out["formattedResponse"]
+        assert "descriptionSource=none" in out["formattedResponse"]
+
+    def test_build_payload_includes_preferred_and_excluded_functions(self) -> None:
+        payload = dataquality_helpers.build_assess_cde_dq_payload(
+            False,
+            [{"objectId": 1, "objectType": "oecolumn"}],
+            10,
+            preferred_function_name=" Non-Null Validation ",
+            excluded_function_names=["Average", " Average ", ""],
+        )
+        assert payload["preferredFunctionName"] == "Non-Null Validation"
+        assert payload["excludedFunctionNames"] == ["Average"]
+
+    def test_format_assess_includes_function_candidates(self) -> None:
+        text = dataquality_helpers.format_assess_cde_dq_response(
+            {
+                "assessedCount": 1,
+                "rows": [
+                    {
+                        "tableColumnName": "stockquantity",
+                        "objectId": 1,
+                        "objectType": "oecolumn",
+                        "descriptionSource": "object_description",
+                        "recommendedFunction": "Non-Empty and Non-Null Validation",
+                        "recommendedWorkflow": "function_based",
+                        "recommendedFunctionCandidates": [
+                            {
+                                "functionName": "Non-Empty and Non-Null Validation",
+                                "score": 0.72,
+                                "matchReason": "keyword_match",
+                            },
+                            {
+                                "functionName": "Non-Null Validation",
+                                "score": 0.41,
+                                "matchReason": "keyword_match",
+                            },
+                        ],
+                        "existingRulesForFunction": [
+                            {
+                                "dqruleId": 1618,
+                                "name": "DESCRIPTION_datalengthrange",
+                                "purpose": "Description must be more than 50 characters",
+                                "purposeSimilarity": 0.0,
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+        assert "Function candidates" in text
+        assert "Non-Empty and Non-Null Validation" in text
+        assert "excluded_function_names" in text
+        assert "Existing rules using this function" in text
+        assert "DESCRIPTION_datalengthrange" in text
+        assert "ID 1618" in text
+
+    def test_format_assess_routes_sql_candidates_only_to_custom_sql_workflow(self) -> None:
+        text = dataquality_helpers.format_assess_cde_dq_response(
+            {
+                "assessedCount": 1,
+                "rows": [
+                    {
+                        "tableColumnName": "version",
+                        "objectId": 1,
+                        "objectType": "oecolumn",
+                        "recommendedFunction": "SQL Values Contains",
+                        "recommendedWorkflow": "custom_sql",
+                        "recommendedFunctionCandidates": [
+                            {
+                                "functionName": "SQL Values Contains",
+                                "score": 0.85,
+                                "matchReason": "structured_sql_intent",
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+
+        assert "Custom SQL path" in text
+        assert "Do not call create_dq_rules for an OEQUERY SQL function" in text
+        assert "IN/NOT IN or allowed-value sets use SQL Values Contains" in text
+        assert "Use create_dq_rules with preferred_function_name" not in text

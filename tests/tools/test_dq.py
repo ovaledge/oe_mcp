@@ -128,6 +128,96 @@ class TestGenerateDqQueries:
         assert out["status_code"] == 400
         mock_oe_client.post.assert_not_called()
 
+    async def test_generate_rejects_invalid_object_type(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_GENERATE_DQ_QUERIES)
+        out = await fn(objects=[{"objectId": 1, "objectType": "dqrule"}])
+        assert out["status_code"] == 400
+        assert "objectType" in out["error"]
+        mock_oe_client.post.assert_not_called()
+
+    async def test_generate_rejects_missing_object_id(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_GENERATE_DQ_QUERIES)
+        out = await fn(objects=[{"objectType": "oecolumn"}])
+        assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
+    async def test_generate_forwards_business_rule_and_description(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {
+            "ok": True,
+            "data": {"status": "generated", "ruleQuery": "SELECT 1"},
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_GENERATE_DQ_QUERIES)
+        await fn(
+            objects=[{"objectId": 101, "objectType": "oecolumn"}],
+            business_rule="  values must be non-null  ",
+            business_description="  email column  ",
+        )
+        mock_oe_client.post.assert_called_once_with(
+            MCP_PATH_GENERATE_DQ_QUERIES,
+            {
+                "objectId": 101,
+                "objectType": "oecolumn",
+                "businessRule": "values must be non-null",
+                "businessDescription": "email column",
+            },
+        )
+
+    async def test_generate_cross_schema_blocked_instruction(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {
+            "ok": True,
+            "data": {
+                "status": "cross_schema_blocked",
+                "message": "Cross-schema dependent rules cannot be created.",
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_GENERATE_DQ_QUERIES)
+        out = await fn(objects=[{"objectId": 101, "objectType": "oecolumn"}])
+        assert "Do not call" in out["agentInstruction"]
+        assert TOOL_VALIDATE_DQ_QUERIES in out["agentInstruction"]
+        assert TOOL_CREATE_SQL_DQ_RULE in out["agentInstruction"]
+
+    async def test_generate_function_not_identified_instruction(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {
+            "ok": True,
+            "data": {"status": "function_not_identified"},
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_GENERATE_DQ_QUERIES)
+        out = await fn(objects=[{"objectId": 101, "objectType": "oecolumn"}])
+        assert "clarify" in out["agentInstruction"].lower()
+
+    async def test_generate_oval_edge_error_returns_structured_dict(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        from server.client import OvalEdgeError
+
+        mock_oe_client.post.side_effect = OvalEdgeError(500, "Internal error")
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_GENERATE_DQ_QUERIES)
+        out = await fn(objects=[{"objectId": 101, "objectType": "oecolumn"}])
+        assert out["status_code"] == 500
+        assert "500" in out["error"]
+
 
 class TestValidateDqQueries:
     async def test_validate_preview_before_post(self, mock_oe_client: AsyncMock) -> None:
@@ -197,6 +287,75 @@ class TestValidateDqQueries:
         assert out["status_code"] == 400
         assert out.get("error_code") == "confirmation_token_mismatch"
         mock_oe_client.post.assert_not_called()
+
+    async def test_validate_rejects_missing_connection_or_schema(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_VALIDATE_DQ_QUERIES)
+        out = await fn(
+            connection_id=0,
+            schema_id=2,
+            rule_query="SELECT 1",
+            stats_query="SELECT 2",
+            failed_values_query="SELECT 3",
+        )
+        assert out["status_code"] == 400
+        assert "connection_id" in out["error"]
+        mock_oe_client.post.assert_not_called()
+
+    async def test_validate_rejects_blank_queries(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_VALIDATE_DQ_QUERIES)
+        out = await fn(
+            connection_id=1,
+            schema_id=2,
+            rule_query="   ",
+            stats_query="SELECT 2",
+            failed_values_query="SELECT 3",
+        )
+        assert out["status_code"] == 400
+        assert "rule_query" in out["error"]
+        mock_oe_client.post.assert_not_called()
+
+    async def test_validate_rejects_missing_stats_query(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_VALIDATE_DQ_QUERIES)
+        out = await fn(
+            connection_id=1,
+            schema_id=2,
+            rule_query="SELECT 1",
+            stats_query=None,
+            failed_values_query="SELECT 3",
+        )
+        assert out["status_code"] == 400
+        assert "stats_query" in out["error"]
+        mock_oe_client.post.assert_not_called()
+
+    async def test_validate_oval_edge_error_returns_structured_dict(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        from server.client import OvalEdgeError
+
+        mock_oe_client.post.side_effect = OvalEdgeError(502, "Bad gateway")
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_VALIDATE_DQ_QUERIES)
+        out = await invoke_write_confirmed(
+            fn,
+            connection_id=1,
+            schema_id=2,
+            rule_query="SELECT 1",
+            stats_query="SELECT 2",
+            failed_values_query="SELECT 3",
+        )
+        assert out["status_code"] == 502
+        assert "502" in out["error"]
 
 
 class TestCreateSqlDqRule:
@@ -300,3 +459,131 @@ class TestCreateSqlDqRule:
         assert out["status_code"] == 400
         assert out.get("error_code") == "confirmation_token_mismatch"
         mock_oe_client.post.assert_not_called()
+
+    async def test_create_sql_rejects_empty_objects(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_SQL_DQ_RULE)
+        out = await fn(
+            objects=[],
+            rule_name="mcp_rule",
+            rule_query="SELECT 1",
+            stats_query="SELECT 2",
+            failed_values_query="SELECT 3",
+        )
+        assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
+    async def test_create_sql_rejects_blank_rule_name(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_SQL_DQ_RULE)
+        out = await fn(
+            objects=[{"objectId": 101, "objectType": "oecolumn"}],
+            rule_name="  ",
+            rule_query="SELECT 1",
+            stats_query="SELECT 2",
+            failed_values_query="SELECT 3",
+        )
+        assert out["status_code"] == 400
+        assert "rule_name" in out["error"]
+        mock_oe_client.post.assert_not_called()
+
+    async def test_create_sql_rejects_neither_query_nor_code(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_SQL_DQ_RULE)
+        out = await fn(
+            objects=[{"objectId": 101, "objectType": "oecolumn"}],
+            rule_name="mcp_rule",
+        )
+        assert out["status_code"] == 400
+        assert "rule_query or code_object_id" in out["error"]
+        mock_oe_client.post.assert_not_called()
+
+    async def test_create_sql_rejects_rule_query_without_stats(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_SQL_DQ_RULE)
+        out = await fn(
+            objects=[{"objectId": 101, "objectType": "oecolumn"}],
+            rule_name="mcp_rule",
+            rule_query="SELECT 1",
+            failed_values_query="SELECT 3",
+        )
+        assert out["status_code"] == 400
+        assert "stats_query" in out["error"]
+        mock_oe_client.post.assert_not_called()
+
+    async def test_create_sql_rejects_invalid_object_type(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_SQL_DQ_RULE)
+        out = await fn(
+            objects=[{"objectId": 101, "objectType": "glossary"}],
+            rule_name="mcp_rule",
+            code_object_id=555,
+        )
+        assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
+    async def test_create_sql_additional_objects_and_purpose_forwarded(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {
+            "ok": True,
+            "data": {"status": "created", "dqruleId": 91, "ruleName": "mcp_multi"},
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_SQL_DQ_RULE)
+        out = await invoke_write_confirmed(
+            fn,
+            objects=[
+                {"objectId": 101, "objectType": "oecolumn"},
+                {"objectId": 202, "objectType": "oecolumn"},
+            ],
+            rule_name="mcp_multi",
+            rule_query="SELECT 1",
+            stats_query="SELECT 2",
+            failed_values_query="SELECT 3",
+            purpose="  detect nulls  ",
+            recommended_function=" Non-Null Validation ",
+            connection_id=5,
+            schema_id=6,
+        )
+        assert out["workflowPhase"] == "create_sql_rule"
+        body = mock_oe_client.post.call_args[0][1]
+        assert body["additionalObjects"] == [
+            {"objectId": 202, "objectType": "oecolumn"}
+        ]
+        assert body["purpose"] == "detect nulls"
+        assert body["recommendedFunction"] == "Non-Null Validation"
+
+    async def test_create_sql_oval_edge_error_returns_structured_dict(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        from server.client import OvalEdgeError
+
+        mock_oe_client.post.side_effect = OvalEdgeError(403, "Forbidden")
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_SQL_DQ_RULE)
+        out = await invoke_write_confirmed(
+            fn,
+            objects=[{"objectId": 101, "objectType": "oecolumn"}],
+            rule_name="mcp_rule",
+            code_object_id=555,
+            connection_id=5,
+            schema_id=6,
+        )
+        assert out["status_code"] == 403
+        assert "403" in out["error"]

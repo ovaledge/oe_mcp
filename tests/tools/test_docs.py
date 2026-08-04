@@ -60,3 +60,40 @@ class TestSearchPlatformDocs:
         out = await fn("failure query")
         assert out["status_code"] == 500
         assert "500" in out["error"]
+
+    async def test_query_only_omits_limit_and_num_candidates(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = MOCK_DOCS_SEARCH
+        mcp = FastMCP(name="test", version="0.0.1")
+        docs_tools.register(mcp)
+        fn = await get_tool_fn(mcp, "search_platform_docs")
+        out = await fn("how to crawl")
+        assert out == MOCK_DOCS_SEARCH
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_SEARCH_PLATFORM_DOCS,
+            params={"query": "how to crawl"},
+        )
+
+    async def test_num_candidates_only_without_limit(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = MOCK_DOCS_SEARCH
+        mcp = FastMCP(name="test", version="0.0.1")
+        docs_tools.register(mcp)
+        fn = await get_tool_fn(mcp, "search_platform_docs")
+        await fn("dq rules", num_candidates=64)
+        params = mock_oe_client.get.call_args[1]["params"]
+        assert params == {"query": "dq rules", "numCandidates": 64}
+        assert "limit" not in params
+
+    async def test_num_candidates_only_clamped(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = MOCK_DOCS_SEARCH
+        mcp = FastMCP(name="test", version="0.0.1")
+        docs_tools.register(mcp)
+        fn = await get_tool_fn(mcp, "search_platform_docs")
+        await fn("x", num_candidates=0)
+        params = mock_oe_client.get.call_args[1]["params"]
+        assert params["numCandidates"] == 1
+        await fn("x", num_candidates=9999)
+        assert mock_oe_client.get.call_args[1]["params"]["numCandidates"] == 512

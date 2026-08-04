@@ -44,6 +44,18 @@ def _tool_call_from_obj(obj: Any, *, ctx: str) -> MCPToolCall:
     return MCPToolCall(name=name, args=args_dict, result=tool_call_result(result_raw))
 
 
+def _case_wants_llm_score(obj: dict[str, Any]) -> bool:
+    """Optional JSON flag ``llm_score`` (default true).
+
+    Set ``false`` for structural-only fixtures (e.g. intentional invalid args) that
+    MCPUseMetric will always fail because the judge treats bad arguments as incorrect use.
+    """
+    flag = obj.get("llm_score", True)
+    if not isinstance(flag, bool):
+        raise ValueError("llm_score must be a boolean if present")
+    return flag
+
+
 def _case_from_obj(obj: Any, index: int) -> LLMTestCase:
     ctx = f"mcp_use_cases[{index}]"
     if not isinstance(obj, dict):
@@ -51,6 +63,8 @@ def _case_from_obj(obj: Any, index: int) -> LLMTestCase:
     name = obj.get("name")
     if name is not None and not isinstance(name, str):
         raise ValueError(f"{ctx}: name must be a string if present")
+    # Validate optional flag early (even when loading all cases for structural tests).
+    _case_wants_llm_score(obj)
     input_text = _require_str(obj, "input", ctx=ctx)
     actual = _require_str(obj, "actual_output", ctx=ctx)
     tools_raw = obj.get("mcp_tools_called", [])
@@ -70,7 +84,11 @@ def _case_from_obj(obj: Any, index: int) -> LLMTestCase:
     )
 
 
-def load_mcp_use_cases_from_json(path: Path) -> list[LLMTestCase]:
+def load_mcp_use_cases_from_json(
+    path: Path,
+    *,
+    llm_only: bool = False,
+) -> list[LLMTestCase]:
     """Parse JSON into `LLMTestCase` instances for `MCPUseMetric`.
 
     **Root shape** (either):
@@ -85,6 +103,8 @@ def load_mcp_use_cases_from_json(path: Path) -> list[LLMTestCase]:
     - ``actual_output`` (required) — assistant reply text
     - ``mcp_tools_called`` (array) — objects with ``name``, optional ``args`` (object), optional
       ``result`` (object; becomes the structured tool payload, same as in ``golden_cases.py``)
+    - ``llm_score`` (optional bool, default true) — when false, case is structural-only and
+      omitted if ``llm_only=True`` (used by ``run_evals`` / DeepEval pytest).
     """
     text = path.read_text(encoding="utf-8")
     raw: Any = json.loads(text)
@@ -105,7 +125,13 @@ def load_mcp_use_cases_from_json(path: Path) -> list[LLMTestCase]:
     if not isinstance(items, list):
         raise ValueError("mcp_use_cases (or cases) must be a JSON array")
 
-    return [_case_from_obj(item, i) for i, item in enumerate(items)]
+    selected: list[Any] = []
+    for item in items:
+        if llm_only and isinstance(item, dict) and not _case_wants_llm_score(item):
+            continue
+        selected.append(item)
+
+    return [_case_from_obj(item, i) for i, item in enumerate(selected)]
 
 
 __all__ = ["load_mcp_use_cases_from_json"]

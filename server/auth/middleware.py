@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from jose import jwt as jose_jwt  # type: ignore[import-untyped]
+from jose import jwt as jose_jwt
 from starlette.responses import Response
 from starlette.types import Receive, Send
 
@@ -23,7 +23,7 @@ from server.auth.remote_credentials_parse import (
 )
 from server.auth.token_exchange import (
     TokenExchangeError,
-    exchange_oauth_access_token,
+    get_or_refresh_oauth_exchanged_token,
     get_or_refresh_user_token,
 )
 from server.branding import MCP_BRAND_ICON_ROUTE
@@ -40,6 +40,38 @@ logger = logging.getLogger(__name__)
 def _is_mcp_mount_root(path: str) -> bool:
     """True for mount root ``/mcp`` or canonical ``/mcp/`` (trailing slash normalization)."""
     return path == "/mcp" or path == "/mcp/"
+
+
+def _resource_metadata_url(request: Request) -> str:
+    configured = (settings.mcp_public_base_url or "").strip().rstrip("/")
+    base = configured or str(request.base_url).rstrip("/")
+    return f"{base}/.well-known/oauth-protected-resource/mcp"
+
+
+def _bearer_www_authenticate(request: Request, error: str, description: str) -> str:
+    """RFC 6750 + RFC 9728 resource_metadata hint for MCP OAuth clients."""
+    meta = _resource_metadata_url(request)
+    desc = description.replace("\\", "\\\\").replace('"', '\\"')
+    return (
+        f'Bearer error="{error}", error_description="{desc}", '
+        f'resource_metadata="{meta}"'
+    )
+
+
+def _json_unauthorized(
+    request: Request,
+    *,
+    error: str,
+    error_description: str,
+    status_code: int = 401,
+) -> JSONResponse:
+    return JSONResponse(
+        {"error": error, "error_description": error_description},
+        status_code=status_code,
+        headers={
+            "WWW-Authenticate": _bearer_www_authenticate(request, error, error_description),
+        },
+    )
 
 
 # Paths that never require authentication
@@ -142,10 +174,16 @@ async def _auth_response_or_none(request: Request) -> Response | None:
         except TokenExchangeError as e:
             status = 401 if e.status_code == 401 else 502
             body_key = "invalid_credentials" if status == 401 else "server_error"
+            client_desc = (
+                "Invalid credentials"
+                if status == 401
+                else "Token exchange failed"
+            )
+            logger.warning("OvalEdge token exchange failed: %s", e)
             return JSONResponse(
                 {
                     "error": body_key,
-                    "error_description": str(e),
+                    "error_description": client_desc,
                 },
                 status_code=status,
             )
@@ -154,7 +192,7 @@ async def _auth_response_or_none(request: Request) -> Response | None:
             return JSONResponse(
                 {
                     "error": "server_error",
-                    "error_description": str(e),
+                    "error_description": "Token exchange failed",
                 },
                 status_code=502,
             )
@@ -207,12 +245,10 @@ async def _auth_response_or_none(request: Request) -> Response | None:
         )
 
     if not auth_header.startswith("Bearer "):
-        return JSONResponse(
-            {
-                "error": "unauthorized",
-                "error_description": "Bearer token required",
-            },
-            status_code=401,
+        return _json_unauthorized(
+            request,
+            error="unauthorized",
+            error_description="Bearer token required",
         )
 
     access_token = auth_header.removeprefix("Bearer ")
@@ -220,33 +256,33 @@ async def _auth_response_or_none(request: Request) -> Response | None:
     try:
         await verify_oauth_access_token(access_token)
     except OAuthDiscoveryError as e:
+        logger.warning("OAuth discovery unavailable: %s", e)
         return JSONResponse(
             {
                 "error": "server_error",
-                "error_description": str(e),
+                "error_description": "OAuth discovery unavailable",
             },
             status_code=503,
         )
     except Exception as e:
         logger.warning("OAuth access token rejected: %s", e)
-        return JSONResponse(
-            {
-                "error": "invalid_token",
-                "error_description": str(e),
-            },
-            status_code=401,
+        return _json_unauthorized(
+            request,
+            error="invalid_token",
+            error_description="Invalid or expired access token",
         )
 
     if settings.ovaledge_remote_forward_idp_token:
         current_oe_jwt.set(access_token)
     else:
         try:
-            oe_jwt = await exchange_oauth_access_token(access_token)
+            oe_jwt = await get_or_refresh_oauth_exchanged_token(access_token)
         except TokenExchangeError as e:
+            logger.warning("OAuth access token exchange failed: %s", e)
             return JSONResponse(
                 {
                     "error": "server_error",
-                    "error_description": str(e),
+                    "error_description": "Token exchange failed",
                 },
                 status_code=502,
             )
@@ -260,9 +296,9 @@ class AuthMiddleware:
     Handles auth for MCP modes.
 
     Remote (auth_mode=remote):
-        1. Validate OAuth access token (JWT) via IdP JWKS from discovery
-        2. Either forward that token to OvalEdge (ovaledge_remote_forward_idp_token) or
-           exchange via OvalEdge token/generate, then set current_oe_jwt ContextVar
+        1. Validate OAuth access token (JWT via JWKS, or opaque via IdP introspect)
+        2. Forward that token to OvalEdge (default) or exchange via token/generate when
+           ovaledge_remote_forward_idp_token is False; set current_oe_jwt ContextVar
 
     Remote credentials (auth_mode=remote_credentials):
         X-OvalEdge-Credentials (token::secret) or X-OvalEdge-Token + X-OvalEdge-Secret

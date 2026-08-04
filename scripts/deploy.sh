@@ -40,8 +40,16 @@ Optional env:
   STACK_NAME, AWS_REGION, AUTH_MODE, ENVIRONMENT, ECR_REPO, MCP_HTTP_STATELESS,
   OVALEDGE_HTTP_AUTH_SCHEME, CREDENTIALS_CACHE_MAX_ENTRIES,
   SAM_USE_CONTAINER, SAM_BUILD_NO_CACHED, SAM_SKIP_DOCKER_PULL_BASE,
-  OE_MCP_SAM_BUILD_DIR, IMAGE_REPOSITORY, SAM_OAUTH_ISSUER, SAM_OAUTH_AUDIENCE, ALLOWED_SOURCE_CIDRS,
-  LAMBDA_ARCHITECTURE, LAMBDA_MEMORY_SIZE, LAMBDA_TIMEOUT
+  OE_MCP_SAM_BUILD_DIR, IMAGE_REPOSITORY, SAM_OAUTH_ISSUER, SAM_OAUTH_AUDIENCE,
+  OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, OAUTH_INTROSPECTION_URL, OAUTH_SCOPES,
+  OVALEDGE_REMOTE_FORWARD_IDP_TOKEN, ALLOWED_SOURCE_CIDRS,
+  LAMBDA_ARCHITECTURE, LAMBDA_MEMORY_SIZE, LAMBDA_TIMEOUT,
+  TELEMETRY_BACKEND, TELEMETRY_SERVICE_NAME, TELEMETRY_PROJECT_NAME,
+  PHOENIX_HOST, PHOENIX_API_KEY, LANGFUSE_HOST, LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY,
+  TELEMETRY_OTLP_ENDPOINT, TELEMETRY_API_KEY
+
+  Lambda function name (container): {STACK_NAME}-{ENVIRONMENT}
+  Lambda function name (--zip):     {STACK_NAME}-{ENVIRONMENT}-lambda
 
 Optional CLI flags (override env for this invocation):
   --oval-edge-auth-scheme <scheme>
@@ -130,6 +138,44 @@ MCP_HTTP_STATELESS="${MCP_HTTP_STATELESS:-true}"
 LAMBDA_ARCHITECTURE="${LAMBDA_ARCHITECTURE:-x86_64}"
 LAMBDA_MEMORY_SIZE="${LAMBDA_MEMORY_SIZE:-1024}"
 LAMBDA_TIMEOUT="${LAMBDA_TIMEOUT:-30}"
+TELEMETRY_BACKEND="${TELEMETRY_BACKEND:-none}"
+TELEMETRY_SERVICE_NAME="${TELEMETRY_SERVICE_NAME:-oe-mcp}"
+TELEMETRY_PROJECT_NAME="${TELEMETRY_PROJECT_NAME:-}"
+PHOENIX_HOST="${PHOENIX_HOST:-}"
+PHOENIX_API_KEY="${PHOENIX_API_KEY:-}"
+LANGFUSE_HOST="${LANGFUSE_HOST:-}"
+LANGFUSE_PUBLIC_KEY="${LANGFUSE_PUBLIC_KEY:-}"
+LANGFUSE_SECRET_KEY="${LANGFUSE_SECRET_KEY:-}"
+TELEMETRY_OTLP_ENDPOINT="${TELEMETRY_OTLP_ENDPOINT:-}"
+TELEMETRY_API_KEY="${TELEMETRY_API_KEY:-}"
+
+read_mcp_server_version() {
+  if [[ -n "${MCP_SERVER_VERSION:-}" ]]; then
+    echo "$MCP_SERVER_VERSION"
+    return 0
+  fi
+  if command -v poetry >/dev/null 2>&1; then
+    local from_poetry
+    from_poetry="$(poetry version -s 2>/dev/null || true)"
+    if [[ -n "$from_poetry" ]]; then
+      echo "$from_poetry"
+      return 0
+    fi
+  fi
+  local from_toml
+  from_toml="$(
+    grep -E '^version[[:space:]]*=' pyproject.toml 2>/dev/null | head -1 |
+      sed -E 's/^version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/'
+  )"
+  if [[ -n "$from_toml" ]]; then
+    echo "$from_toml"
+    return 0
+  fi
+  echo "0.0.0-dev"
+}
+
+MCP_SERVER_VERSION="$(read_mcp_server_version)"
+echo "==> MCP server version: $MCP_SERVER_VERSION" >&2
 
 if [[ "$DEPLOY_ZIP" == true ]]; then
   BASE_TEMPLATE="infra/template-zip.yaml"
@@ -158,7 +204,7 @@ prepare_zip_stage() {
   rm -rf "$ZIP_STAGE_DIR"
   mkdir -p "$ZIP_STAGE_DIR/infra"
   cp -r server entrypoints "$ZIP_STAGE_DIR/"
-  cp requirements.txt "$ZIP_STAGE_DIR/"
+  cp requirements.txt pyproject.toml "$ZIP_STAGE_DIR/"
   cp infra/lambda-requirements.txt "$ZIP_STAGE_DIR/infra/"
   echo "==> Staged ZIP source at $ZIP_STAGE_DIR" >&2
 }
@@ -277,18 +323,42 @@ OVERRIDES=(
   "CredentialsCacheMaxEntries=${CREDENTIALS_CACHE_MAX_ENTRIES}"
   "LambdaMemorySize=${LAMBDA_MEMORY_SIZE}"
   "LambdaTimeout=${LAMBDA_TIMEOUT}"
+  "McpServerVersion=${MCP_SERVER_VERSION}"
+  "TelemetryBackend=${TELEMETRY_BACKEND}"
+  "TelemetryServiceName=${TELEMETRY_SERVICE_NAME}"
 )
+# SAM rejects ParameterKey= with an empty value — omit optional telemetry params (template defaults apply).
+append_override_if_set() {
+  local key="$1"
+  local value="${2:-}"
+  if [[ -n "$value" ]]; then
+    OVERRIDES+=("${key}=${value}")
+  fi
+}
+append_override_if_set TelemetryProjectName "$TELEMETRY_PROJECT_NAME"
+append_override_if_set PhoenixHost "$PHOENIX_HOST"
+append_override_if_set PhoenixApiKey "$PHOENIX_API_KEY"
+append_override_if_set LangfuseHost "$LANGFUSE_HOST"
+append_override_if_set LangfusePublicKey "$LANGFUSE_PUBLIC_KEY"
+append_override_if_set LangfuseSecretKey "$LANGFUSE_SECRET_KEY"
+append_override_if_set TelemetryOtlpEndpoint "$TELEMETRY_OTLP_ENDPOINT"
+append_override_if_set TelemetryApiKey "$TELEMETRY_API_KEY"
 if [[ "$ENABLE_WAF" == true ]]; then
   OVERRIDES+=("EnableWaf=true" "AllowedSourceCidrs=${ALLOWED_SOURCE_CIDRS}")
 else
   OVERRIDES+=("EnableWaf=false")
 fi
-if [[ -n "${SAM_OAUTH_ISSUER:-}" ]]; then
-  OVERRIDES+=("OAuthIssuer=${SAM_OAUTH_ISSUER}")
+if [[ -n "${SAM_OAUTH_ISSUER:-${OAUTH_ISSUER:-}}" ]]; then
+  OVERRIDES+=("OAuthIssuer=${SAM_OAUTH_ISSUER:-$OAUTH_ISSUER}")
 fi
-if [[ -n "${SAM_OAUTH_AUDIENCE:-}" ]]; then
-  OVERRIDES+=("OAuthAudience=${SAM_OAUTH_AUDIENCE}")
+if [[ -n "${SAM_OAUTH_AUDIENCE:-${OAUTH_AUDIENCE:-}}" ]]; then
+  OVERRIDES+=("OAuthAudience=${SAM_OAUTH_AUDIENCE:-$OAUTH_AUDIENCE}")
 fi
+append_override_if_set OAuthClientId "${OAUTH_CLIENT_ID:-}"
+append_override_if_set OAuthClientSecret "${OAUTH_CLIENT_SECRET:-}"
+append_override_if_set OAuthIntrospectionUrl "${OAUTH_INTROSPECTION_URL:-}"
+append_override_if_set OAuthScopes "${OAUTH_SCOPES:-}"
+OVERRIDES+=("OvalEdgeForwardIdpToken=${OVALEDGE_REMOTE_FORWARD_IDP_TOKEN:-true}")
 
 DEPLOY_ARGS=(
   -t "$BUILT_TEMPLATE"
@@ -318,6 +388,7 @@ aws cloudformation describe-stacks \
 echo ""
 echo "Tip: point MCP clients at MCPEndpointUrl (https). API Gateway has no authorizer; auth is in the app."
 echo "Branding: set Lambda env MCP_PUBLIC_BASE_URL to output MCPPublicBaseUrl (no /mcp suffix)."
+echo "Telemetry: default disabled (TELEMETRY_BACKEND=none). See infra/DEPLOY.md#telemetry-opentelemetry."
 echo "Guide: infra/DEPLOY.md"
 if [[ "$ENABLE_WAF" == true ]]; then
   echo ""

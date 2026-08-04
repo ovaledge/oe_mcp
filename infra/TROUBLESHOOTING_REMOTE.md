@@ -49,6 +49,7 @@ After deploy:
 | Client / log symptom | Likely cause | What to check |
 | -------------------- | ------------ | ------------- |
 | **502** `token exchange returned an empty body (HTTP 200)` | OvalEdge `POST /api/user/token/generate` returned no JWT | Credentials, `OVALEDGE_BASE_URL`, OvalEdge pod health; run `validate_remote_mcp.py --credentials` |
+| **502** / **401** `INVALID_TOKEN` after parallel requests or local HTTP startup | Multiple `token/generate` calls for the same credentials | See [Token exchange: INVALID_TOKEN](#token-exchange-invalid_token--duplicate-jwt-issuance) |
 | **502** `user-cred exchange failed: 503` | OvalEdge temporarily unavailable | Retry; check OvalEdge load balancer / app logs |
 | **502** on first `initialize` only | Auth middleware before MCP | Same as token exchange; not an MCP tool bug |
 | **500** `{"message":"Internal Server Error"}` on `tools/call` | Lambda exception, timeout, or MCP lifespan | CloudWatch (below); `/health` `mcp_lifespan_ready`; redeploy latest code |
@@ -119,6 +120,52 @@ Log lines intentionally **omit** credential headers. Tool logs include `tool=<na
 - **HTTP API + Lambda** integration timeout is **30 seconds**. Increasing Lambda timeout above 30s does not extend API Gateway’s wait for `/mcp`.
 - **Large responses** (`asset_lineage`, `search_platform_docs`, fat `catalog_asset_details`) need CPU/memory to serialize. Default template memory is now **1024 MB**; raise with `LAMBDA_MEMORY_SIZE=2048` if CloudWatch shows duration near 30s or memory maxed.
 - **Intermittent 500s** with successful retries often indicate OvalEdge upstream slowness or warm/cold Lambda behavior — correlate `mcp_tool duration_ms` with OvalEdge HTTP logs (`OVALEDGE_LOG_HTTP_REQUESTS=true` in Lambda env).
+
+## Token exchange: INVALID_TOKEN / duplicate JWT issuance
+
+OvalEdge typically allows **one active JWT** per user token+secret pair. A second `POST /api/user/token/generate` **invalidates** the previous JWT.
+
+**Symptoms:** `INVALID_TOKEN` on tool calls, intermittent 401/502, or auth that works once then fails under load.
+
+**Common causes:**
+
+| Scenario | Fix |
+| -------- | --- |
+| **Local HTTP** with `AUTH_MODE=remote_credentials` in `.env` | Use `./scripts/run_local_mcp_http.sh` or `poetry run oe-mcp-http` — both force **`AUTH_MODE=local`** (single exchange at startup). |
+| **Parallel MCP requests** at startup before JWT is cached | Ensure JWT lifespan runs before MCP HTTP accepts traffic (current `lambda_handler` / `oe-mcp-http` ordering). Restart the server. |
+| **Stale credentials** after `.env` change | Restart the MCP process. |
+| **`remote_credentials` on Lambda** after downstream 401 | Client should **retry the same request** (headers unchanged); server drops the cached JWT and re-exchanges. |
+
+**Local stdio:** `get_or_refresh_local_token()` uses an async lock so concurrent tool calls share one in-flight exchange.
+
+## OTLP telemetry (Phoenix / Langfuse)
+
+When `TELEMETRY_BACKEND` is not `none`, each tool call exports an OTLP span. Span attributes may include **argument summaries** (search terms, object ids, queries) — not credential headers.
+
+- Confirm Lambda can reach your OTLP host (VPC/NAT, security groups, or public HTTPS).
+- Prefer **NoEcho** SAM parameters or Secrets Manager for Langfuse/Phoenix API keys in production.
+- Disable export (`TELEMETRY_BACKEND=none`) if your backend is not approved for governance metadata.
+
+Deploy parameters: [DEPLOY.md](DEPLOY.md#telemetry-opentelemetry).
+
+## Okta Connect (`AUTH_MODE=remote`)
+
+| Symptom | Likely cause | Fix |
+| ------- | ------------ | --- |
+| *redirect_uri must be a Login redirect URI* | Client callback not on Okta app | Add URIs from [README_REMOTE_MCP.md — all clients](../README_REMOTE_MCP.md#okta-redirect-uris-all-clients) |
+| Okta `E0000005` / `Invalid session` during Connect | Client tried Okta Dynamic Client Registration | Redeploy MCP that sets `authorization_servers` to the MCP host; disconnect and Connect again |
+| Claude Code redirect mismatch | Ephemeral localhost port | Register fixed port **8788** in Okta; `claude mcp add … --callback-port 8788` |
+| VS Code / GitHub Copilot redirect mismatch | Ephemeral localhost port | Register **8790**; set `"oauth":{"callbackPort":8790}` in `.vscode/mcp.json` |
+| Microsoft Copilot Studio redirect mismatch | Wizard slug / missing URI | Copy exact URI from error or Studio (often `global.consent.azure-apim.net/redirect/…`) into Okta |
+| Connect OK, tools 302 → `/login` or 401 *Full authentication is required* | OvalEdge ignored Okta Bearer (wrong introspect client/org, or no `oauth2` profile) | Align `api.introspection.uri` + `api.clientid` with token issuer; enable `oauth2` on OE; curl `/api/...` with same Bearer. **Do not** set `OVALEDGE_REMOTE_FORWARD_IDP_TOKEN=false` — stock `token/generate` cannot exchange Okta→OE JWT. |
+| Connect OK, tools 401 *user … doesnot exist* | Okta principal not in OvalEdge user table | Create/link OE user with matching email/username |
+| *Client authentication failed* on token exchange | Confidential Okta Web app + public client (auth none) | Set `OAUTH_CLIENT_ID` + `OAUTH_CLIENT_SECRET` on **server** and redeploy (`/register` supplies secret). Do **not** put secrets in `mcp.json`. Or use Okta Native/SPA app. |
+| *oauth_audience is not set* | Old build requiring audience for JWT | Redeploy current code (audience optional; introspect preferred when client id is set) |
+| Cursor `fetch failed` / cannot connect | Wrong `MCPEndpointUrl`, DNS, or laptop network | `curl /health` from the same machine; URL must be `https://…/mcp` |
+
+Client guides: [SETUP_CURSOR.md](../docs/client-setup/SETUP_CURSOR.md#remote-oauth-auth_moderremote) · [SETUP_CLAUDE.md](../docs/client-setup/SETUP_CLAUDE.md#remote-oauth-auth_moderremote) · [SETUP_VSCODE_GITHUB_COPILOT.md](../docs/client-setup/SETUP_VSCODE_GITHUB_COPILOT.md#remote-oauth-auth_moderremote) · [SETUP_MICROSOFT_COPILOT.md](../docs/client-setup/SETUP_MICROSOFT_COPILOT.md#remote-oauth-auth_moderremote).
+
+Deploy ZIP Okta: [DEPLOY.md — Okta Connect Lambda ZIP](DEPLOY.md#okta-connect-lambda-zip).
 
 ## Client config (`mcp-remote` + Claude)
 

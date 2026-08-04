@@ -1,4 +1,154 @@
-# Deploy to AWS (Lambda + HTTP API)
+# Deploy OvalEdge MCP
+
+How to run **oe_mcp** for clients (Cursor, Claude, GitHub Copilot, Microsoft Copilot Studio). Pick a path from the matrix below.
+
+## Deployment options
+
+| Option | Where it runs | Auth | Credentials | Script / entry |
+|--------|---------------|------|-------------|----------------|
+| **Local stdio** | Laptop (Cursor subprocess) | `AUTH_MODE=local` | `.env` or mcp.json `env` | `poetry run oe-mcp-local` — [README_LOCAL_MCP.md](../README_LOCAL_MCP.md) |
+| **Local HTTP** | Laptop uvicorn (`127.0.0.1`) | `AUTH_MODE=local` | Server `.env` (JWT at startup) | [`scripts/run_local_mcp_http.sh`](../scripts/run_local_mcp_http.sh) |
+| **Remote host HTTP** | EC2 / VM uvicorn (`0.0.0.0`) | `AUTH_MODE=remote_credentials` **or** `remote` (Okta) | Headers **or** Connect/Bearer | [`run_remote_mcp_http.sh`](../scripts/run_remote_mcp_http.sh) / [`run_remote_oauth_mcp_http.sh`](../scripts/run_remote_oauth_mcp_http.sh) — [below](#remote-host-http-ec2--vm) |
+| **AWS ECS Fargate** | ALB + Fargate (uvicorn image) | `remote_credentials` (default) or `remote` (Okta) | Client headers / Bearer | [`scripts/deploy_ecs.sh`](../scripts/deploy_ecs.sh) — [below](#aws-ecs-fargate--alb) |
+| **AWS Lambda (container)** | API Gateway + Lambda image | `remote_credentials` (default) or `remote` (Okta) | Client headers / Bearer | [`scripts/deploy.sh`](../scripts/deploy.sh) — default |
+| **AWS Lambda (ZIP)** | API Gateway + Lambda ZIP | same | same | `./scripts/deploy.sh --zip` |
+
+**Client setup:** [docs/client-setup/README.md](../docs/client-setup/README.md) · Cursor snippets: [.cursor/mcp.json.example](../.cursor/mcp.json.example)
+
+**Remote auth / TLS / laptop testing:** [README_REMOTE_MCP.md](../README_REMOTE_MCP.md) · Troubleshooting: [TROUBLESHOOTING_REMOTE.md](TROUBLESHOOTING_REMOTE.md)
+
+---
+
+## Remote host HTTP (EC2 / VM)
+
+### Header auth (`remote_credentials`)
+
+Use when you want a long-lived HTTP MCP on a server **without** Lambda. Clients send OvalEdge token+secret in **mcp.json headers**; the server `.env` needs only **`OVALEDGE_BASE_URL`**.
+
+```bash
+cd /path/to/oe_mcp
+poetry install
+# .env must include OVALEDGE_BASE_URL=https://your-ovaledge-host
+# Do NOT put OVALEDGE_USER_TOKEN / OVALEDGE_USER_SECRET on the server for this mode
+
+./scripts/run_remote_mcp_http.sh          # starts detached (nohup); survives SSH disconnect
+./scripts/run_remote_mcp_http.sh --status
+./scripts/run_remote_mcp_http.sh --stop
+```
+
+### Okta Connect (`remote`)
+
+Clients use the MCP **Connect** button (OAuth). Server needs `OAUTH_ISSUER`, `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, and `OVALEDGE_BASE_URL`. See [README_REMOTE_MCP.md](../README_REMOTE_MCP.md#auth_moderremote-okta--oidc-connect).
+
+Before Connect works, register client **Sign-in redirect URIs** on the Okta app for every IDE you use: [Okta redirect URIs (all clients)](../README_REMOTE_MCP.md#okta-redirect-uris-all-clients).
+
+```bash
+./scripts/run_remote_oauth_mcp_http.sh
+# Lambda ZIP:  see [Okta Connect Lambda ZIP](#okta-connect-lambda-zip) below
+# Lambda ECR:  AUTH_MODE=remote ./scripts/deploy.sh   (use a unique STACK_NAME)
+```
+
+Optional env: `HOST` (default `0.0.0.0`), `PORT` (default `8000`), `MCP_PUBLIC_BASE_URL` (URL clients use).
+
+Logs (credentials mode): `/tmp/oe-mcp-remote-http.log` · PID: `/tmp/oe-mcp-remote-http.pid`  
+Logs (OAuth mode): `/tmp/oe-mcp-remote-oauth-http.log` · PID: `/tmp/oe-mcp-remote-oauth-http.pid`
+
+Open **port 8000** (or your `PORT`) in the security group / firewall. Prefer a TLS reverse proxy (nginx/Caddy) in production.
+
+### Cursor mcp.json (header auth)
+
+```json
+{
+  "mcpServers": {
+    "ovaledge-remote-http": {
+      "url": "http://YOUR_HOST_OR_IP:8000/mcp",
+      "headers": {
+        "X-Forwarded-Proto": "https",
+        "X-OvalEdge-Token": "${env:OVALEDGE_USER_TOKEN}",
+        "X-OvalEdge-Secret": "${env:OVALEDGE_USER_SECRET}"
+      }
+    }
+  }
+}
+```
+
+`X-Forwarded-Proto: https` is required when the client URL is plain `http://` (app TLS check). With real HTTPS at the proxy, you can omit that spoof.
+
+Foreground debug: `./scripts/run_remote_mcp_http.sh --foreground`
+
+---
+
+## AWS ECS Fargate + ALB
+
+Long-running container behind an Application Load Balancer. Uses **`Dockerfile.ecs`** (uvicorn) — **not** the Lambda `Dockerfile` (RIC / Mangum).
+
+| Artifact | Purpose |
+|----------|---------|
+| [../Dockerfile.ecs](../Dockerfile.ecs) | `python:3.12-slim-bookworm` + Poetry + uvicorn on `:8000` |
+| [ecs/template.yaml](ecs/template.yaml) | CloudFormation: cluster, Fargate service, ALB, security groups, logs |
+| [../scripts/deploy_ecs.sh](../scripts/deploy_ecs.sh) | Build → ECR push → stack deploy |
+
+### Prerequisites
+
+- Existing **VPC** with **at least two subnets in different AZs** (ALB requirement)
+- Docker, AWS CLI, IAM for ECR + CloudFormation + ECS + ELB + IAM roles
+- For public tasks without NAT: use **public subnets** and `ASSIGN_PUBLIC_IP=ENABLED` (default)
+- For private tasks: private subnets + NAT, set `ASSIGN_PUBLIC_IP=DISABLED`
+
+### Deploy
+
+```bash
+export OVALEDGE_BASE_URL=https://your-oval-edge-host.example.com
+export VPC_ID=vpc-xxxxxxxx
+export SUBNET_IDS=subnet-aaaa,subnet-bbbb   # two AZs
+export AWS_REGION=ap-south-1
+export STACK_NAME=oe-mcp-ecs
+export ENVIRONMENT=dev
+
+# Optional HTTPS (same-region ACM cert):
+# export CERTIFICATE_ARN=arn:aws:acm:ap-south-1:123456789012:certificate/...
+
+./scripts/deploy_ecs.sh
+```
+
+Outputs include **`McpEndpointUrl`**, **`McpPublicBaseUrl`**, **`HealthUrl`**, **`BrandIconUrl`**.
+
+### Client mcp.json
+
+```json
+{
+  "mcpServers": {
+    "ovaledge-ecs": {
+      "url": "https://YOUR_ALB_DNS/mcp",
+      "headers": {
+        "X-OvalEdge-Token": "${env:OVALEDGE_USER_TOKEN}",
+        "X-OvalEdge-Secret": "${env:OVALEDGE_USER_SECRET}"
+      }
+    }
+  }
+}
+```
+
+If the ALB is **HTTP only**, add `"X-Forwarded-Proto": "https"` (app TLS check). Prefer **`CERTIFICATE_ARN`** so clients use real HTTPS.
+
+Default `MCP_HTTP_STATELESS=false` (Cursor GET/SSE). Set `MCP_HTTP_STATELESS=true` for stricter stateless behavior.
+
+### Image note (Lambda vs ECS)
+
+| File | Base | Entrypoint |
+|------|------|------------|
+| `Dockerfile` | `public.ecr.aws/lambda/python` | Mangum Lambda handler |
+| `Dockerfile.ecs` | `python:3.12-slim-bookworm` | `uvicorn entrypoints.lambda_handler:app` |
+
+Do not run the Lambda image on ECS (or vice versa).
+
+### Update after code change
+
+Re-run `./scripts/deploy_ecs.sh` (rebuilds image, updates stack `ImageUri`). ECS rolls the service.
+
+---
+
+## AWS Lambda + HTTP API
 
 Guide for deploying **oe_mcp** to AWS Lambda behind API Gateway HTTP API.
 
@@ -24,7 +174,7 @@ The deploy script does not prompt for credentials; configure AWS CLI before runn
 
 **Mangum + Streamable HTTP:** The Lambda entrypoint uses `Mangum(..., lifespan="off")` and pins FastMCP’s `mcp_http` lifespan on a background task. Default Mangum `lifespan=auto` runs full ASGI startup/shutdown **every** invocation, which exits `StreamableHTTPSessionManager.run()` and causes `RuntimeError: ... can only be called once per instance` on the next request (500 from API Gateway). See `entrypoints/lambda_handler.py`.
 
-**GitHub Actions deploy (`.github/workflows/ci.yml`):** Configure repository secret **`OVALEDGE_BASE_URL`**. Optional repo variables: **`SAM_AUTH_MODE`**, **`SAM_ENVIRONMENT`**.
+**GitHub Actions (`.github/workflows/ci.yml`):** CI runs lint/tests. **Deploy is disabled** in the workflow — releases use **`./scripts/deploy.sh`** (Lambda) or **`./scripts/deploy_ecs.sh`** (ECS) manually. Optional repo variables `SAM_AUTH_MODE` / `SAM_ENVIRONMENT` apply only if you re-enable the commented deploy job.
 
 **CloudWatch log retention:** The SAM template does not declare a `LogGroup` (avoids conflicts with log groups Lambda already created). Set retention in the console or extend the template once per environment.
 
@@ -44,7 +194,7 @@ First run creates ECR repository `oe-mcp` (override with `ECR_REPO`) if missing.
 ```bash
 export STACK_NAME=oe-mcp-prod
 export AWS_REGION=ap-south-1
-export AUTH_MODE=remote_credentials   # or remote (OAuth WIP)
+export AUTH_MODE=remote_credentials   # or remote (Okta Connect)
 export ENVIRONMENT=prod
 export MCP_HTTP_STATELESS=true        # false if your MCP client needs GET/SSE on /mcp
 ```
@@ -81,6 +231,63 @@ Runtime dependencies: [lambda-requirements.txt](lambda-requirements.txt) (also r
 
 Switching **image ↔ ZIP** on the same stack changes Lambda `PackageType`; prefer a new `STACK_NAME` or plan a deliberate stack update.
 
+## Okta Connect Lambda ZIP
+
+Deploy **`AUTH_MODE=remote`** (browser Connect → Okta → Bearer forward to OvalEdge) with a ZIP package.
+
+### Prerequisites
+
+1. OvalEdge accepts Okta Bearer on `/api/**` (`spring.profiles.active` includes `oauth2`; `api.introspection.uri` / `api.clientid` / `api.clientsecret` match the same Okta org as `OAUTH_*`).
+2. Okta OIDC app: Authorization Code + PKCE; redirect URIs for Cursor / Claude / GitHub Copilot / Microsoft Copilot — [allowlist](../README_REMOTE_MCP.md#okta-redirect-uris-all-clients).
+3. `OVALEDGE_BASE_URL` reachable **from Lambda** (public HTTPS or VPC — not `127.0.0.1`).
+4. Unique `STACK_NAME` if another `oe-mcp*` stack already exists in the account/region.
+
+### Deploy
+
+```bash
+export STACK_NAME=oe-mcp-oauth-zip
+export ENVIRONMENT=dev
+export AWS_REGION=ap-south-1
+
+export AUTH_MODE=remote
+export OVALEDGE_BASE_URL=https://your-oval-edge-host.example.com/ovaledge
+
+export OAUTH_ISSUER=https://YOUR_OKTA_ORG.okta.com/oauth2/default
+export OAUTH_CLIENT_ID=0oa...
+export OAUTH_CLIENT_SECRET='...'
+export OAUTH_INTROSPECTION_URL=https://YOUR_OKTA_ORG.okta.com/oauth2/default/v1/introspect
+export OAUTH_SCOPES="openid profile email"
+# OAUTH_AUDIENCE optional — leave unset for Okta default AS / opaque tokens
+
+export OVALEDGE_REMOTE_FORWARD_IDP_TOKEN=true
+export MCP_HTTP_STATELESS=true
+
+./scripts/deploy.sh --zip
+```
+
+### After deploy
+
+1. Note outputs **`MCPEndpointUrl`**, **`MCPPublicBaseUrl`**, **`HealthUrl`**.
+2. Set Lambda environment **`MCP_PUBLIC_BASE_URL`** = `MCPPublicBaseUrl` (host only, **no** `/mcp`).
+3. Verify:
+
+```bash
+curl -sS "$(aws cloudformation describe-stacks --stack-name oe-mcp-oauth-zip \
+  --query "Stacks[0].Outputs[?OutputKey=='HealthUrl'].OutputValue" --output text)"
+# expect: "auth_mode":"remote","mcp_lifespan_ready":true
+```
+
+4. Point clients at **`MCPEndpointUrl`** (URL only for Connect — no secrets in `mcp.json`):
+
+| Client | Config |
+|--------|--------|
+| Cursor | `"url": "<MCPEndpointUrl>"` |
+| Claude Code | `claude mcp add --transport http --callback-port 8788 … <MCPEndpointUrl>` |
+| VS Code / GitHub Copilot | `"type":"http"`, `"url":"<MCPEndpointUrl>"`, `"oauth":{"callbackPort":8790}` |
+| Microsoft Copilot Studio | Prefer API key + `remote_credentials`, or OAuth wizard — [SETUP_MICROSOFT_COPILOT.md](../docs/client-setup/SETUP_MICROSOFT_COPILOT.md) |
+
+Details: [README_REMOTE_MCP.md](../README_REMOTE_MCP.md#lambda-zip-okta-connect-auth_moderremote).
+
 ## WAF IP allowlist (`--waf`)
 
 Both templates support optional **regional AWS WAF** via CloudFormation parameters `EnableWaf` and `AllowedSourceCidrs`.
@@ -111,13 +318,59 @@ Key parameters (full list in [template.yaml](template.yaml)):
 
 | Parameter | Default | Notes |
 |-----------|---------|-------|
-| `AuthMode` | `remote_credentials` | `remote` for OAuth (WIP) |
+| `AuthMode` | `remote_credentials` | `remote` for Okta/OIDC Connect |
 | `OvalEdgeBaseUrl` | *(required)* | From `OVALEDGE_BASE_URL` |
-| `Environment` | `dev` | Suffixes resource names |
+| `Environment` | `dev` | Combined with stack name for Lambda: `{STACK_NAME}-{ENVIRONMENT}` |
 | `McpHttpStateless` | `true` | Set `false` for GET/SSE clients |
 | `LambdaArchitecture` | `x86_64` | `arm64` for Graviton |
 | `EnableWaf` | `false` | Set via `--waf` |
 | `AllowedSourceCidrs` | `127.0.0.1/32` | Ignored when WAF disabled |
+| `TelemetryBackend` | `none` | `phoenix` or `langfuse` to enable OTLP export |
+| `TelemetryServiceName` | `oe-mcp` | OTLP `service.name` |
+| `TelemetryProjectName` | *(empty)* | Phoenix/Langfuse project routing; defaults to service name |
+| `PhoenixHost` / `PhoenixApiKey` | *(empty)* | When `TelemetryBackend=phoenix` |
+| `LangfuseHost` / keys | *(empty)* | When `TelemetryBackend=langfuse` (NoEcho in console) |
+
+## Telemetry (OpenTelemetry)
+
+The server can export MCP tool traces to **Phoenix** or **Langfuse** over OTLP HTTP. Default deploy: **disabled** (`TELEMETRY_BACKEND=none`).
+
+### Enable at deploy time
+
+Set the same env vars before **`./scripts/deploy.sh`** (Lambda SAM) or **`./scripts/deploy_ecs.sh`** (ECS task env):
+
+```bash
+export TELEMETRY_BACKEND=langfuse
+export TELEMETRY_PROJECT_NAME=oe-mcp-prod
+export LANGFUSE_HOST=https://langfuse.example.com
+export LANGFUSE_PUBLIC_KEY=pk-lf-...
+export LANGFUSE_SECRET_KEY=sk-lf-...
+./scripts/deploy.sh          # or ./scripts/deploy_ecs.sh
+```
+
+Phoenix example:
+
+```bash
+export TELEMETRY_BACKEND=phoenix
+export TELEMETRY_PROJECT_NAME=oe-mcp-prod
+export PHOENIX_HOST=https://phoenix.example.com
+export PHOENIX_API_KEY=...   # when Phoenix auth is enabled
+./scripts/deploy.sh          # or ./scripts/deploy_ecs.sh
+```
+
+Equivalent parameters: `TelemetryBackend`, `TelemetryProjectName`, `PhoenixHost`, `LangfuseHost`, etc. in [template.yaml](template.yaml) / [ecs/template.yaml](ecs/template.yaml). API keys use **NoEcho** in the CloudFormation console.
+
+### After deploy
+
+1. Confirm task/function env shows `TELEMETRY_BACKEND` and backend host/keys (Lambda Console → Configuration, or ECS task definition).
+2. Ensure the runtime can reach the OTLP endpoint (public HTTPS, VPC endpoint, or NAT as appropriate).
+3. Invoke a tool; check Phoenix/Langfuse for `mcp.tool.*` spans.
+
+### Privacy
+
+Exported spans may include **tool argument summaries** (search terms, object ids). Do not enable export to a third-party backend without reviewing your data-classification policy. Credentials are not included in spans.
+
+Variable reference for local dev: [.env.example](../.env.example). Troubleshooting: [TROUBLESHOOTING_REMOTE.md](TROUBLESHOOTING_REMOTE.md#otlp-telemetry-phoenix--langfuse).
 
 ## Manual SAM (equivalent to default container deploy)
 
@@ -141,7 +394,12 @@ sam deploy -t .aws-sam/build/template.yaml \
 
 ## GitHub Actions
 
-Workflow [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) deploys on push to `main` using `infra/template.yaml`. Configure secret **`OVALEDGE_BASE_URL`**. Optional variables: **`SAM_AUTH_MODE`**, **`SAM_ENVIRONMENT`**.
+Workflow [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs lint and tests. The **SAM deploy job is commented out** (“Deploy is disabled — releases are deployed manually via `scripts/deploy.sh`”). To ship:
+
+- Lambda: `./scripts/deploy.sh` or `./scripts/deploy.sh --zip`
+- ECS: `./scripts/deploy_ecs.sh`
+
+If you re-enable the deploy job, configure secret **`OVALEDGE_BASE_URL`** and optional variables **`SAM_AUTH_MODE`**, **`SAM_ENVIRONMENT`**.
 
 ## Lambda architecture (`x86_64` vs `arm64`)
 
@@ -186,6 +444,7 @@ Last resort: `docker builder prune -af` then rerun `./scripts/deploy.sh`.
 3. Verify **`MCPBrandIconUrl`** returns 200 (`image/png`).
 4. HTTP API has **no gateway authorizer**; **`AuthMiddleware`** enforces credentials or Bearer tokens on the function.
 5. For production hardening, use `./scripts/deploy.sh --waf` or add throttling / JWT authorizer.
+6. Optional: enable OTLP telemetry via deploy env or SAM parameters — [Telemetry (OpenTelemetry)](#telemetry-opentelemetry).
 
 ## MCP branding icon (`/brand/ovaledge-mcp-icon.png`)
 

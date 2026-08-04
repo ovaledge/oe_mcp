@@ -17,7 +17,7 @@ jobs:
     name: Lint, Type Check, Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v6
         with:
@@ -27,10 +27,10 @@ jobs:
         run: pip install poetry
 
       - name: Cache dependencies
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pypoetry
-          key: ${{ runner.os }}-poetry-${{ hashFiles('poetry.lock') }}
+          key: ${{ runner.os }}-poetry-v2-${{ hashFiles('poetry.lock') }}
           restore-keys: ${{ runner.os }}-poetry-
 
       - name: Install dependencies
@@ -52,71 +52,75 @@ jobs:
             --cov-fail-under=0
 
       - name: Upload coverage to Codecov (optional)
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         if: always()
         with:
           files: coverage.xml
           fail_ci_if_error: false
 
-  deploy:
-    name: Build and Deploy
-    needs: test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: us-east-1
-
-      - uses: aws-actions/amazon-ecr-login@v2
-        id: ecr-login
-
-      - name: Build, tag, push Docker image
-        env:
-          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
-          ECR_REPO: oe-mcp
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG .
-          docker tag $ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPO:latest
-          docker push $ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPO:latest
-
-      - uses: aws-actions/setup-sam@v2
-
-      # OvalEdgeBaseUrl is required by infra/template.yaml (no default). Set repository secret
-      # OVALEDGE_BASE_URL to your production OvalEdge origin, e.g. https://tenant.example.com
-      - name: SAM Deploy
-        env:
-          OVALEDGE_BASE_URL: ${{ secrets.OVALEDGE_BASE_URL }}
-          SAM_AUTH_MODE: ${{ vars.SAM_AUTH_MODE }}
-          SAM_ENVIRONMENT: ${{ vars.SAM_ENVIRONMENT }}
-        run: |
-          set -euo pipefail
-          if [ -z "${OVALEDGE_BASE_URL:-}" ]; then
-            echo "::error::Secret OVALEDGE_BASE_URL must be set for deploy (required CloudFormation parameter OvalEdgeBaseUrl)."
-            exit 1
-          fi
-          AUTH_MODE="${SAM_AUTH_MODE:-remote_credentials}"
-          ENVIRONMENT="${SAM_ENVIRONMENT:-prod}"
-          sam build --template-file infra/template.yaml --use-container
-          sam deploy \
-            --template-file .aws-sam/build/template.yaml \
-            --stack-name oe-mcp \
-            --region us-east-1 \
-            --capabilities CAPABILITY_IAM \
-            --resolve-s3 \
-            --no-confirm-changeset \
-            --no-fail-on-empty-changeset \
-            --image-repository "${{ steps.ecr-login.outputs.registry }}/oe-mcp" \
-            --parameter-overrides \
-              "AuthMode=${AUTH_MODE}" \
-              "OvalEdgeBaseUrl=${OVALEDGE_BASE_URL}" \
-              "Environment=${ENVIRONMENT}" \
-              "LambdaArchitecture=x86_64"
+  # Deploy is disabled — releases are deployed manually via scripts/deploy.sh.
+  # Re-enable when GitHub Actions should push to AWS on main.
+  # deploy:
+  #   name: Build and Deploy
+  #   needs: test
+  #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     id-token: write
+  #     contents: read
+  #   steps:
+  #     - uses: actions/checkout@v7
+  #
+  #     - uses: aws-actions/configure-aws-credentials@v6
+  #       with:
+  #         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+  #         aws-region: us-east-1
+  #
+  #     - uses: aws-actions/amazon-ecr-login@v2
+  #       id: ecr-login
+  #
+  #     - name: Build, tag, push Docker image
+  #       env:
+  #         ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+  #         ECR_REPO: oe-mcp
+  #         IMAGE_TAG: ${{ github.sha }}
+  #       run: |
+  #         docker build -t $ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG .
+  #         docker tag $ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPO:latest
+  #         docker push $ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG
+  #         docker push $ECR_REGISTRY/$ECR_REPO:latest
+  #
+  #     - uses: aws-actions/setup-sam@v3
+  #
+  #     # OvalEdgeBaseUrl is required by infra/template.yaml (no default). Set repository secret
+  #     # OVALEDGE_BASE_URL to your production OvalEdge origin, e.g. https://tenant.example.com
+  #     - name: SAM Deploy
+  #       env:
+  #         OVALEDGE_BASE_URL: ${{ secrets.OVALEDGE_BASE_URL }}
+  #         SAM_AUTH_MODE: ${{ vars.SAM_AUTH_MODE }}
+  #         SAM_ENVIRONMENT: ${{ vars.SAM_ENVIRONMENT }}
+  #       run: |
+  #         set -euo pipefail
+  #         if [ -z "${OVALEDGE_BASE_URL:-}" ]; then
+  #           echo "::error::Secret OVALEDGE_BASE_URL must be set for deploy (required CloudFormation parameter OvalEdgeBaseUrl)."
+  #           exit 1
+  #         fi
+  #         AUTH_MODE="${SAM_AUTH_MODE:-remote_credentials}"
+  #         ENVIRONMENT="${SAM_ENVIRONMENT:-prod}"
+  #         MCP_SERVER_VERSION="$(poetry version -s)"
+  #         sam build --template-file infra/template.yaml --use-container
+  #         sam deploy \
+  #           --template-file .aws-sam/build/template.yaml \
+  #           --stack-name oe-mcp \
+  #           --region us-east-1 \
+  #           --capabilities CAPABILITY_IAM \
+  #           --resolve-s3 \
+  #           --no-confirm-changeset \
+  #           --no-fail-on-empty-changeset \
+  #           --image-repository "${{ steps.ecr-login.outputs.registry }}/oe-mcp" \
+  #           --parameter-overrides \
+  #             "AuthMode=${AUTH_MODE}" \
+  #             "OvalEdgeBaseUrl=${OVALEDGE_BASE_URL}" \
+  #             "Environment=${ENVIRONMENT}" \
+  #             "LambdaArchitecture=x86_64" \
+  #             "McpServerVersion=${MCP_SERVER_VERSION}"

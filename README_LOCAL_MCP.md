@@ -2,7 +2,7 @@
 
 Run the OvalEdge MCP server as a **stdio** subprocess with **`AUTH_MODE=local`**. The MCP client (Cursor, Claude Desktop, etc.) starts `poetry run oe-mcp-local` and talks JSON-RPC over stdin/stdout.
 
-← [Back to main README](README.md) · [Remote MCP (HTTP)](README_REMOTE_MCP.md) (OAuth 2.x **`remote`** mode: **WIP**)
+← [Back to main README](README.md) · [Remote MCP (HTTP)](README_REMOTE_MCP.md) (`remote` = Okta Connect; `remote_credentials` = headers)
 
 ## Runtime architecture
 
@@ -16,6 +16,8 @@ Local mode uses machine credentials (`OVALEDGE_USER_TOKEN`, `OVALEDGE_USER_SECRE
 6. Tools use `OvalEdgeClient` for outbound API calls
 7. Before requests, local token freshness is checked and refreshed when needed
 8. On one-time local 401, cache is invalidated and request is retried once
+
+**Local HTTP** (`poetry run oe-mcp-http` / `./scripts/run_local_mcp_http.sh`) uses the same cached-JWT model with **`AUTH_MODE=local`**. See [.cursor/README.md](.cursor/README.md). Auth troubleshooting: [infra/TROUBLESHOOTING_REMOTE.md](infra/TROUBLESHOOTING_REMOTE.md#token-exchange-invalid_token--duplicate-jwt-issuance).
 
 ## Key code (local)
 
@@ -33,6 +35,8 @@ Local mode uses machine credentials (`OVALEDGE_USER_TOKEN`, `OVALEDGE_USER_SECRE
 ### Configuration
 
 - `server/config.py` — loads `.env` from repo root; `AUTH_MODE`, base URL, credentials, HTTP auth scheme, retries
+
+Optional telemetry: see [.env.example](.env.example) and [README.md](README.md#observability-telemetry).
 
 ## One-shot setup (macOS + Linux)
 
@@ -83,6 +87,15 @@ Copy-paste **`mcp.json` / `mcpServers`** examples and paths per editor: **[docs/
 poetry -C /absolute/path/to/oe_mcp run oe-mcp-local
 ```
 
+**Local HTTP** (Cursor logo, Streamable HTTP — same tools, `AUTH_MODE=local`):
+
+```bash
+./scripts/run_local_mcp_http.sh
+# or: poetry run oe-mcp-http
+```
+
+Connect Cursor via **`ovaledge-local-http`** in `mcp.json`; credentials come from repo `.env` (no per-request headers). See [.cursor/README.md](.cursor/README.md).
+
 ## Troubleshooting
 
 ### `TokenExchangeError` with HTTP 200 empty body
@@ -106,6 +119,8 @@ poetry -C /absolute/path/to/oe_mcp run oe-mcp-local
 - Absolute repo path in `-C`
 - `AUTH_MODE=local` and `poetry install` completed
 
+Token exchange failures (`INVALID_TOKEN`, duplicate issuance): [infra/TROUBLESHOOTING_REMOTE.md](infra/TROUBLESHOOTING_REMOTE.md#token-exchange-invalid_token--duplicate-jwt-issuance).
+
 ## Security (local)
 
 - Never commit real `OVALEDGE_USER_TOKEN` / `OVALEDGE_USER_SECRET`
@@ -115,6 +130,7 @@ poetry -C /absolute/path/to/oe_mcp run oe-mcp-local
 ## Layout (local-relevant paths)
 
 - `entrypoints/local.py` — stdio entrypoint
+- `entrypoints/http_local.py` — local HTTP wrapper (`oe-mcp-http`)
 - `server/app.py` — MCP assembly
 - `server/auth/*` — token exchange and context
 - `server/client.py` — outbound OvalEdge HTTP client

@@ -62,6 +62,10 @@ from server.tools.dataquality.helpers import (
     validate_validate_dq_queries_args,
 )
 
+# FastMCP may pass objects as JSON list, single dict, or JSON string.
+type _DqObjectsArg = list[dict[str, Any]] | dict[str, Any] | str
+type _DqObjectsArgOpt = _DqObjectsArg | None
+
 
 def register(mcp: FastMCP) -> None:
 
@@ -107,7 +111,7 @@ def register(mcp: FastMCP) -> None:
             ),
         ] = False,
         objects: Annotated[
-            list[dict[str, Any]] | None,
+            list[dict[str, Any]] | dict[str, Any] | str | None,
             Field(
                 description=(
                     "Catalog objects to assess from search_catalog_assets. objectType: "
@@ -148,6 +152,26 @@ def register(mcp: FastMCP) -> None:
                 default=None,
             ),
         ] = None,
+        preferred_function_name: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "User-selected function from recommendedFunctionCandidates "
+                    "(overrides automatic top-rank)."
+                ),
+                default=None,
+            ),
+        ] = None,
+        excluded_function_names: Annotated[
+            list[str] | None,
+            Field(
+                description=(
+                    "Function names the user rejected; returns next-closest catalog matches. "
+                    "custom_sql only when no matches remain."
+                ),
+                default=None,
+            ),
+        ] = None,
     ) -> dict[str, Any]:
         """CDE / column DQ assessment (see MCP tool description)."""
         return await _invoke_assess_cde_dq(
@@ -156,6 +180,8 @@ def register(mcp: FastMCP) -> None:
             limit=limit,
             description_custom_field_name=description_custom_field_name,
             description_term_name=description_term_name,
+            preferred_function_name=preferred_function_name,
+            excluded_function_names=excluded_function_names,
         )
 
     @mcp.tool(description=_DESC_ASSOCIATE_DQ_RULE_OBJECTS)
@@ -165,7 +191,7 @@ def register(mcp: FastMCP) -> None:
             Field(description="Data Quality rule id to link objects to."),
         ],
         objects: Annotated[
-            list[dict[str, Any]],
+            list[dict[str, Any]] | dict[str, Any] | str,
             Field(
                 description=(
                     "Catalog objects to associate. objectType: "
@@ -217,10 +243,11 @@ def register(mcp: FastMCP) -> None:
             ),
         ] = False,
         objects: Annotated[
-            list[dict[str, Any]] | None,
+            list[dict[str, Any]] | dict[str, Any] | str | None,
             Field(
                 description=(
-                    "Objects to assess and create/associate rules for. objectType: "
+                    "Target objects only (array of {objectId, objectType}); e.g. one "
+                    "oecolumn when the user named a single column. objectType: "
                     + MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC
                 ),
                 default=None,
@@ -281,6 +308,24 @@ def register(mcp: FastMCP) -> None:
                 default=None,
             ),
         ] = None,
+        preferred_function_name: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "User-selected function from assess recommendedFunctionCandidates."
+                ),
+                default=None,
+            ),
+        ] = None,
+        excluded_function_names: Annotated[
+            list[str] | None,
+            Field(
+                description=(
+                    "Rejected function names from assess; creates with next-closest match."
+                ),
+                default=None,
+            ),
+        ] = None,
         write_confirmed_by_user: Annotated[
             bool,
             Field(
@@ -308,6 +353,8 @@ def register(mcp: FastMCP) -> None:
             description_custom_field_name=description_custom_field_name,
             description_term_name=description_term_name,
             supplemental_criteria_text=supplemental_criteria_text,
+            preferred_function_name=preferred_function_name,
+            excluded_function_names=excluded_function_names,
             write_confirmed_by_user=write_confirmed_by_user,
             confirmation_token=confirmation_token,
         )
@@ -315,7 +362,7 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool(description=_DESC_GENERATE_DQ_QUERIES)
     async def generate_dq_queries(
         objects: Annotated[
-            list[dict[str, Any]],
+            list[dict[str, Any]] | dict[str, Any] | str,
             Field(
                 description=(
                     "Catalog object to generate SQL for. objectType: "
@@ -384,7 +431,7 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool(description=_DESC_CREATE_SQL_DQ_RULE)
     async def create_sql_dq_rule(
         objects: Annotated[
-            list[dict[str, Any]],
+            list[dict[str, Any]] | dict[str, Any] | str,
             Field(
                 description=(
                     "Catalog objects (first is primary). objectType: "
@@ -419,7 +466,13 @@ def register(mcp: FastMCP) -> None:
         ] = None,
         recommended_function: Annotated[
             str | None,
-            Field(description="DQ function from assess/generate.", default=None),
+            Field(
+                description=(
+                    "Copy recommendedFunction verbatim from assess/generate; "
+                    "IN/NOT IN set membership uses SQL Values Contains, not SQL Exact Value."
+                ),
+                default=None,
+            ),
         ] = None,
         code_object_id: Annotated[
             int | None,
@@ -487,10 +540,12 @@ async def _invoke_lookup_dq_rule(
 @logged_tool_invocation
 async def _invoke_assess_cde_dq(
     discover_cde_columns: bool,
-    objects: list[dict[str, Any]] | None,
+    objects: _DqObjectsArgOpt,
     limit: int,
     description_custom_field_name: str | None = None,
     description_term_name: str | None = None,
+    preferred_function_name: str | None = None,
+    excluded_function_names: list[str] | None = None,
 ) -> dict[str, Any]:
     err = validate_assess_cde_dq_args(discover_cde_columns, objects)
     if err is not None:
@@ -501,6 +556,8 @@ async def _invoke_assess_cde_dq(
         limit,
         description_custom_field_name,
         description_term_name,
+        preferred_function_name,
+        excluded_function_names,
     )
     if "error" in payload:
         return payload
@@ -517,7 +574,7 @@ async def _invoke_assess_cde_dq(
 @logged_tool_invocation
 async def _invoke_associate_dq_rule_objects(
     dqrule_id: int,
-    objects: list[dict[str, Any]],
+    objects: _DqObjectsArg,
     skip_already_associated: bool,
     write_confirmed_by_user: bool = False,
     confirmation_token: str | None = None,
@@ -552,13 +609,15 @@ async def _invoke_associate_dq_rule_objects(
 @logged_tool_invocation
 async def _invoke_create_dq_rules(
     discover_cde_columns: bool,
-    objects: list[dict[str, Any]] | None,
+    objects: _DqObjectsArgOpt,
     limit: int,
     prefer_existing_rule: bool,
     skip_duplicate_function_on_object: bool,
     description_custom_field_name: str | None = None,
     description_term_name: str | None = None,
     supplemental_criteria_text: str | None = None,
+    preferred_function_name: str | None = None,
+    excluded_function_names: list[str] | None = None,
     write_confirmed_by_user: bool = False,
     confirmation_token: str | None = None,
 ) -> dict[str, Any]:
@@ -574,11 +633,38 @@ async def _invoke_create_dq_rules(
         description_custom_field_name,
         description_term_name,
         supplemental_criteria_text,
+        preferred_function_name,
+        excluded_function_names,
     )
     if "error" in payload:
         return payload
     if not write_confirmed_by_user:
-        return format_create_dq_rules_confirmation_preview(payload)
+        assessment: dict[str, Any] | None = None
+        if prefer_existing_rule:
+            assess_payload = {
+                key: value
+                for key, value in payload.items()
+                if key
+                in {
+                    "discoverCdeColumns",
+                    "objects",
+                    "limit",
+                    "descriptionCustomFieldName",
+                    "descriptionTermName",
+                    "supplementalCriteriaText",
+                    "preferredFunctionName",
+                    "excludedFunctionNames",
+                }
+            }
+            try:
+                async with ovaledge_client() as client:
+                    assess_body = await client.post(MCP_PATH_ASSESS_CDE_DQ, assess_payload)
+                    assessment = (
+                        assess_body if isinstance(assess_body, dict) else {"data": assess_body}
+                    )
+            except OvalEdgeError as e:
+                return map_ovaledge_error(e)
+        return format_create_dq_rules_confirmation_preview(payload, assessment)
     confirm_err = verify_write_confirmation(
         payload,
         write_confirmed_by_user=write_confirmed_by_user,
@@ -598,7 +684,7 @@ async def _invoke_create_dq_rules(
 
 @logged_tool_invocation
 async def _invoke_generate_dq_queries(
-    objects: list[dict[str, Any]] | None,
+    objects: _DqObjectsArgOpt,
     business_rule: str | None,
     business_description: str | None,
 ) -> dict[str, Any]:
@@ -655,7 +741,7 @@ async def _invoke_validate_dq_queries(
 
 @logged_tool_invocation
 async def _invoke_create_sql_dq_rule(
-    objects: list[dict[str, Any]] | None,
+    objects: _DqObjectsArgOpt,
     rule_name: str,
     rule_query: str | None,
     stats_query: str | None,

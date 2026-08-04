@@ -2,16 +2,21 @@
 
 OvalEdge governance and catalog MCP server for MCP clients (Cursor, Claude Desktop, etc.): catalog discovery, lineage, glossary and tags, **data stories** for organizational knowledge, metadata drift, native source-system access previews, product docs, workflow prompts, and governed writes (glossary terms, tags, descriptions, roles) — all subject to OvalEdge RBAC. Server instructions in `server/app.py` tell agents to prefer **`lookup_datastory`** for internal policy/playbook questions and **`search_platform_docs`** only for OvalEdge product how-to.
 
-## How to run
+## How to run / deploy
 
 | Mode | Transport | Doc |
 | ---- | ----------- | --- |
-| **Local** | stdio (`poetry run oe-mcp-local`) | [README_LOCAL_MCP.md](README_LOCAL_MCP.md) |
-| **Remote (HTTP)** | `uvicorn entrypoints.lambda_handler:app` or AWS Lambda (Mangum) | [README_REMOTE_MCP.md](README_REMOTE_MCP.md) — use **`remote_credentials`** for supported header auth; **OAuth 2.x / OIDC (`AUTH_MODE=remote`) is WIP** |
+| **Local stdio** | `poetry run oe-mcp-local` | [README_LOCAL_MCP.md](README_LOCAL_MCP.md) |
+| **Local HTTP** | `./scripts/run_local_mcp_http.sh` (`AUTH_MODE=local`) | [README_LOCAL_MCP.md](README_LOCAL_MCP.md) · Cursor: `ovaledge-local-http` |
+| **Remote host HTTP** | `./scripts/run_remote_mcp_http.sh` (`remote_credentials`) or `./scripts/run_remote_oauth_mcp_http.sh` (`remote` / Okta) | [README_REMOTE_MCP.md](README_REMOTE_MCP.md) · [infra/DEPLOY.md](infra/DEPLOY.md#remote-host-http-ec2--vm) |
+| **AWS ECS Fargate** | ALB + uvicorn image (`Dockerfile.ecs`) | [infra/DEPLOY.md](infra/DEPLOY.md#aws-ecs-fargate--alb) |
+| **AWS Lambda** | Container or ZIP (`./scripts/deploy.sh`) | [README_REMOTE_MCP.md](README_REMOTE_MCP.md) · [infra/DEPLOY.md](infra/DEPLOY.md#aws-lambda--http-api) |
 
-**Editor / assistant connection:** [docs/client-setup/README.md](docs/client-setup/README.md) (Cursor, Kiro, Claude, GitHub Copilot in VS Code, Microsoft Copilot in Studio — separate guides).
+Full deployment matrix (auth, credentials, scripts): **[infra/DEPLOY.md](infra/DEPLOY.md)**.
 
-**`AUTH_MODE`** in `.env` (or process env) selects behavior: `local`, **`remote` (OAuth 2.x remote MCP — WIP)**, or `remote_credentials`. Full variable reference: [.env.example](.env.example).
+**Editor / assistant connection:** [docs/client-setup/README.md](docs/client-setup/README.md) (Cursor, Kiro, Claude, GitHub Copilot in VS Code, Microsoft Copilot Studio / M365 — separate guides; last reviewed July 2026).
+
+**`AUTH_MODE`** in `.env` (or process env): `local`, **`remote`** (Okta/OIDC Connect — forward Bearer), or `remote_credentials` (header token+secret). Full variable reference: [.env.example](.env.example).
 
 **`.env` is not committed.** Copy the example, then edit:
 
@@ -21,13 +26,15 @@ cp .env.example .env
 
 Setup scripts (`scripts/setup_local_mcp.sh`, `scripts/setup_local_mcp.ps1`) create `.env` from `.env.example` only if `.env` is missing; they do not overwrite an existing file.
 
-## OAuth 2.x remote MCP — work in progress
+## Observability (telemetry)
 
-**`AUTH_MODE=remote` (OAuth 2.x / OIDC Bearer for remote HTTP MCP) is WIP** and not fully validated end-to-end with real IdPs and MCP clients. Prefer **`remote_credentials`** (HTTP headers to OvalEdge) or **`local`** (stdio) until OAuth remote MCP is stable. Details: [README_REMOTE_MCP.md](README_REMOTE_MCP.md#work-in-progress-oauth-remote-mode).
+Optional OpenTelemetry trace export to [Phoenix](https://arize.com/docs/phoenix) or [Langfuse](https://langfuse.com/docs) via `TELEMETRY_BACKEND` (default `none`). Variable reference: [.env.example](.env.example). Lambda deploy: [infra/DEPLOY.md](infra/DEPLOY.md#telemetry-opentelemetry).
+
+**Privacy:** enabled export sends tool spans that may include argument summaries (search terms, object ids) to your OTLP backend — review before pointing at a third-party host.
 
 ## What this server provides
 
-- Catalog search and asset details (`search_catalog_assets`, `catalog_asset_details`)
+- Catalog search and asset details (`search_catalog_assets`, `catalog_asset_details`) — paginate with `page` when results exceed one page
 - Column profile, entity relationships, lineage, metadata drift (`metadata_changes_between_crawls`)
 - Glossary lookup and guided term creation (`lookup_glossary_term`, `create_glossary_term`)
 - Tag lookup and guided creation (`lookup_tags`, `create_tag`)
@@ -138,12 +145,15 @@ Use `./scripts/run_tests.sh` on macOS and Linux so tests always run in the proje
 
 Unit tests measure coverage for `server/` and `entrypoints/` (report-only threshold for now; see `[tool.coverage.*]` in `pyproject.toml`). HTML report: `./scripts/run_tests.sh --cov-report=html` then open `htmlcov/index.html`.
 
-Git hooks (**ruff**, **mypy**, and **pytest** on each **commit** only) are installed automatically when you run `./scripts/setup_local_mcp.sh` in a git clone. To install or refresh hooks only:
+Git hooks (**ruff**, **mypy**, **pytest**, and **CodeQL** on each **commit**) are installed automatically when you run `./scripts/setup_local_mcp.sh` in a git clone. CodeQL is **required** locally by default (`scripts/run_codeql.sh`); install the CLI once, then refresh hooks:
 
 ```bash
-chmod +x scripts/setup_git_hooks.sh   # once, if needed
+./scripts/install_codeql_cli.sh        # one-time (~CodeQL bundle download)
+export PATH="$HOME/.local/bin:$PATH"   # if needed
 ./scripts/setup_git_hooks.sh
 ```
+
+Skip CodeQL for a single commit with `CODEQL_SKIP=1`, or set `CODEQL_REQUIRED=0` if the CLI is unavailable. Local/CI analysis uses [`.github/codeql/codeql-config.yml`](.github/codeql/codeql-config.yml) so `.aws-sam/` build trees and venvs are **not** scanned (those copies of `server/` and vendored deps make scans slow and noisy). GitHub Actions runs [`.github/workflows/codeql.yml`](.github/workflows/codeql.yml) on PRs/pushes to `main`/`dev`.
 
 See `.pre-commit-config.yaml` for hook definitions.
 
@@ -170,9 +180,10 @@ See **[SECURITY.md](SECURITY.md)** for the GitHub security policy (supported ver
 | `entrypoints/lambda_handler.py` | HTTP MCP (Mangum) |
 | `server/app.py` | FastMCP app assembly |
 | `server/auth/` | Auth, token exchange, middleware |
+| `server/telemetry/` | OpenTelemetry OTLP export (Phoenix / Langfuse) |
 | `server/client.py` | OvalEdge HTTP client |
 | `server/tools/`, `server/resources/`, `server/prompts/` | MCP surface |
-| `infra/template.yaml` | SAM sample for remote HTTP (`AuthMode`: `remote_credentials` or OAuth **`remote` (WIP)**) |
+| `infra/template.yaml` | SAM sample for remote HTTP (`AuthMode`: `remote_credentials` or Okta **`remote`**) |
 | `scripts/` | Setup and validation helpers |
 
 More detail: [README_LOCAL_MCP.md](README_LOCAL_MCP.md#layout-local-relevant-paths) · [README_REMOTE_MCP.md](README_REMOTE_MCP.md#layout-remote-relevant-paths)

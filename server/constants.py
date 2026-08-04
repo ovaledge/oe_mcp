@@ -511,6 +511,8 @@ MCP_SOURCE_SYSTEM_DESCENDANTS_CONNECTION_REQUIRED_ERROR = (
 )
 
 # search-catalog query params (GET /api/v1/mcp/search-catalog).
+# Some OvalEdge builds return HTTP 500 when limit is very high (e.g. >= 95 on localhost).
+MCP_SEARCH_CATALOG_MAX_LIMIT = 50
 MCP_SEARCH_CONTEXT_QUERY_PARAM = "contextQuery"
 # Lexical search — each value is a JSON array string on the wire.
 MCP_SEARCH_TERMS_PARAM = "searchTerms"
@@ -717,6 +719,14 @@ HEADER_OE_USER_COMBINED = "X-OvalEdge-Credentials"
 CREDENTIALS_COMBINED_SEPARATOR = "::"
 CREDENTIALS_REFRESH_LEEWAY_SECONDS = 60
 CREDENTIALS_CACHE_MAX_ENTRIES = 10_000
+
+# ── AUTH_MODE=remote (OAuth) per-request validation cache ────────
+# Bounds the in-process cache of validated access-token claims so repeated MCP calls
+# in a short burst do not re-introspect / re-verify on every request. TTL is always
+# capped by the token's own ``exp`` (minus the leeway below); see OAUTH validation cache
+# TTL setting in server.config.
+OAUTH_VALIDATION_CACHE_MAX_ENTRIES = 10_000
+OAUTH_VALIDATION_REFRESH_LEEWAY_SECONDS = 30
 NEGATIVE_CREDENTIALS_CACHE_TTL_SECONDS = 30
 NEGATIVE_CREDENTIALS_CACHE_MAX_ENTRIES = 10_000
 CREDENTIALS_CACHE_POST_EXP_GRACE_SECONDS = 0

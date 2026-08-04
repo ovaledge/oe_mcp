@@ -2119,6 +2119,15 @@ class TestLookupDatastory:
             },
         )
 
+    async def test_oval_edge_error_returns_dict(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.side_effect = OvalEdgeError(503, "Unavailable")
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "lookup_datastory")
+        out = await fn(story_name="Sales")
+        assert out["status_code"] == 503
+        assert "503" in out["error"]
+
 
 class TestUpdateGovernanceRoles:
     async def test_rejects_unsupported_object_type(self, mock_oe_client: AsyncMock) -> None:
@@ -2336,6 +2345,47 @@ class TestUpdateCustomFieldValue:
         assert out["status_code"] == 400
         mock_oe_client.post.assert_not_called()
 
+    async def test_rejects_malformed_field_updates(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_custom_field_value")
+        out = await fn(
+            object_id=1,
+            object_type="oetable",
+            field_updates=["not-a-dict"],  # type: ignore[list-item]
+        )
+        assert out["status_code"] == 400
+        assert "object" in out["error"].lower()
+        mock_oe_client.post.assert_not_called()
+
+        out = await fn(
+            object_id=1,
+            object_type="oetable",
+            field_updates=[{"field_name": "Owner"}],
+        )
+        assert out["status_code"] == 400
+        assert "value" in out["error"].lower()
+
+        out = await fn(
+            object_id=1,
+            object_type="oetable",
+            field_updates=[{"value": "x"}],
+        )
+        assert out["status_code"] == 400
+        assert "field_name" in out["error"] or "field_key" in out["error"]
+
+    async def test_rejects_empty_object_type(self, mock_oe_client: AsyncMock) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_custom_field_value")
+        out = await fn(
+            object_id=1,
+            object_type="  ",
+            field_updates=[{"field_name": "Owner", "value": "a"}],
+        )
+        assert out["status_code"] == 400
+        mock_oe_client.post.assert_not_called()
+
     async def test_rejects_unsupported_object_type(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
@@ -2436,6 +2486,39 @@ class TestUpdateCustomFieldValue:
                 "clientContext": {"prompt": "Update Data Owner to John Smith"},
             },
         )
+
+    async def test_oval_edge_error_returns_dict(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "fields": [
+                    {
+                        "fieldName": "Data Owner",
+                        "fieldKey": "gtcf1",
+                        "type": "text",
+                        "allowMultiple": False,
+                        "currentValue": "",
+                        "options": [],
+                    }
+                ]
+            },
+        }
+        mock_oe_client.post.side_effect = OvalEdgeError(502, "Bad gateway")
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "update_custom_field_value")
+        with patch(
+            "server.tools.governance.invocations.resolve_client_timezone",
+            return_value="Asia/Kolkata",
+        ):
+            out = await invoke_write_confirmed(
+                fn,
+                object_id=99,
+                object_type="oetable",
+                field_updates=[{"field_name": "Data Owner", "value": "John Smith"}],
+            )
+        assert out["status_code"] == 502
+        assert "502" in out["error"]
 
     async def test_single_value_text_field_reaches_confirm(
         self, mock_oe_client: AsyncMock

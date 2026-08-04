@@ -68,17 +68,29 @@ def _append_metric_report(
     )
 
 
+_EVALS_DIR = Path(__file__).resolve().parent
+_DEFAULT_EXAMPLE_JSON = (
+    _EVALS_DIR / "examples" / "mcp_use_cases.example.json",
+    _EVALS_DIR / "examples" / "mcp_red_team_cases.example.json",
+)
+
+
 def dry_run(cases_json: str | None) -> int:
     import evals.golden_cases as golden_cases
+    from evals.json_cases import load_mcp_use_cases_from_json
 
     for fn_name in golden_cases.all_mcp_use_golden_fns():
         getattr(golden_cases, fn_name)()
     for fn_name in golden_cases.all_conversational_golden_fns():
         getattr(golden_cases, fn_name)()
-    if cases_json:
-        from evals.json_cases import load_mcp_use_cases_from_json
 
-        path = Path(cases_json)
+    paths: list[Path] = []
+    if cases_json:
+        paths.append(Path(cases_json))
+    else:
+        paths.extend(p for p in _DEFAULT_EXAMPLE_JSON if p.is_file())
+
+    for path in paths:
         loaded = load_mcp_use_cases_from_json(path)
         print(f"dry-run: loaded {len(loaded)} MCP-use case(s) from {path}")
     print("dry-run: golden case objects construct OK")
@@ -95,7 +107,8 @@ def run_metrics(threshold: float, cases_json: str | None) -> tuple[int, list[Met
     reports: list[MetricReport] = []
 
     if cases_json:
-        mcp_use_cases = load_mcp_use_cases_from_json(Path(cases_json))
+        # Skip structural-only rows (llm_score: false), e.g. intentional invalid-arg fixtures.
+        mcp_use_cases = load_mcp_use_cases_from_json(Path(cases_json), llm_only=True)
     else:
         mcp_use_cases = [
             getattr(golden_cases, fn_name)() for fn_name in golden_cases.all_mcp_use_golden_fns()

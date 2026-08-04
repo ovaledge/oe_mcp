@@ -15,6 +15,7 @@ from server.constants import (
     MCP_PATH_SEARCH_CATALOG,
     MCP_PATH_UPDATE_ASSET_DESCRIPTIONS,
     MCP_PATH_UPDATE_CDE_ASSOCIATIONS,
+    MCP_SEARCH_CATALOG_MAX_LIMIT,
     MCP_SEARCH_CATEGORY_ID_PARAM,
     MCP_SEARCH_CATEGORY_NAME_PARAM,
     MCP_SEARCH_CONTEXT_QUERY_PARAM,
@@ -98,7 +99,7 @@ async def _invoke_search_catalog_assets(
         params: dict[str, object] = _q(
             **{MCP_SEARCH_CONTEXT_QUERY_PARAM: context_query},
             page=max(page, 1),
-            limit=min(max(limit, 1), 100),
+            limit=min(max(limit, 1), MCP_SEARCH_CATALOG_MAX_LIMIT),
             connectionName=connection_name,
             **{MCP_SEARCH_SERVER_TYPE_PARAM: resolved_server_type},
             schemaName=schema_name,

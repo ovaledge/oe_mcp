@@ -42,6 +42,21 @@ _STRING_DESCRIPTION_KEYS = frozenset(
     }
 )
 
+# Agent-facing narrative / markdown blocks — must not be chopped by the last-resort
+# aggressive cap (e.g. metadata_changes Top row-count adds lives in formattedResponse).
+_PROTECTED_FROM_AGGRESSIVE_STRING_CAP = frozenset(
+    {
+        "formattedresponse",
+        "summarytablemarkdown",
+        "rolluptablemarkdown",
+        "toplargerowcountaddstablemarkdown",
+        "usefullinkstablemarkdown",
+        "requiredinfomarkdown",
+    }
+)
+# Generous ceiling still kept so a runaway string cannot blow the 900KB budget alone.
+_PROTECTED_STRING_MAX_CHARS = 24_000
+
 
 def _truncate_text(text: str, max_chars: int, label: str) -> tuple[str, bool]:
     if len(text) <= max_chars:
@@ -104,9 +119,17 @@ def _aggressive_string_cap(node: Any, max_chars: int = 2_000) -> None:
     """Last resort: cap any remaining long strings before returning to MCP clients."""
     if isinstance(node, dict):
         for key, value in list(node.items()):
-            if isinstance(value, str) and len(value) > max_chars:
-                node[key], _ = _truncate_text(value, max_chars, str(key))
-                node["_mcpResponseTruncated"] = True
+            if isinstance(value, str):
+                key_lower = str(key).lower()
+                if key_lower in _PROTECTED_FROM_AGGRESSIVE_STRING_CAP:
+                    if len(value) > _PROTECTED_STRING_MAX_CHARS:
+                        node[key], _ = _truncate_text(
+                            value, _PROTECTED_STRING_MAX_CHARS, str(key)
+                        )
+                        node["_mcpResponseTruncated"] = True
+                elif len(value) > max_chars:
+                    node[key], _ = _truncate_text(value, max_chars, str(key))
+                    node["_mcpResponseTruncated"] = True
             elif isinstance(value, (dict, list)):
                 _aggressive_string_cap(value, max_chars)
     elif isinstance(node, list):

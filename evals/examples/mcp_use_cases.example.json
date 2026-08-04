@@ -8,12 +8,19 @@
         {
           "name": "search_catalog_assets",
           "args": {
-            "search_terms": ["revenue"],
+            "search_terms": [
+              "revenue"
+            ],
             "object_type": "oetable"
           },
           "result": {
             "total": 1,
-            "results": [{ "objectId": "obj-1", "name": "revenue_daily" }]
+            "results": [
+              {
+                "objectId": "obj-1",
+                "name": "revenue_daily"
+              }
+            ]
           }
         }
       ]
@@ -26,11 +33,17 @@
         {
           "name": "search_catalog_assets",
           "args": {
-            "search_terms": ["dark", "matter"],
+            "search_terms": [
+              "dark",
+              "matter"
+            ],
             "object_type": "oetable",
             "context_query": "Are there any oetables tagged for dark matter experiments?"
           },
-          "result": { "total": 0, "results": [] }
+          "result": {
+            "total": 0,
+            "results": []
+          }
         }
       ]
     },
@@ -41,7 +54,9 @@
       "mcp_tools_called": [
         {
           "name": "lookup_glossary_term",
-          "args": { "term_name": "PII" },
+          "args": {
+            "term_name": "PII"
+          },
           "result": {
             "term": "PII",
             "definition": "Personally identifiable information subject to policy X."
@@ -56,7 +71,9 @@
       "mcp_tools_called": [
         {
           "name": "lookup_datastory",
-          "args": { "content_query": "customer PII retention policy" },
+          "args": {
+            "content_query": "customer PII retention policy"
+          },
           "result": {
             "ok": true,
             "storyCitation": "[PII Policy](#nav/story?id=1)",
@@ -77,7 +94,12 @@
             "query_direction": "user_to_objects",
             "username": "svc_analytics"
           },
-          "result": { "grants": [], "summary": { "totalGrants": 0 } }
+          "result": {
+            "grants": [],
+            "summary": {
+              "totalGrants": 0
+            }
+          }
         }
       ]
     },
@@ -90,9 +112,16 @@
           "name": "metadata_changes_between_crawls",
           "args": {
             "question": "What changed in the CUSTOMER schema after the latest crawl?",
-            "schema_names": ["CUSTOMER"]
+            "schema_names": [
+              "CUSTOMER"
+            ]
           },
-          "result": { "ok": true, "data": { "changeSummary": "2 tables added" } }
+          "result": {
+            "ok": true,
+            "data": {
+              "changeSummary": "2 tables added"
+            }
+          }
         }
       ]
     },
@@ -103,8 +132,18 @@
       "mcp_tools_called": [
         {
           "name": "search_platform_docs",
-          "args": { "query": "create data quality rule", "limit": 7 },
-          "result": { "hits": [{ "title": "DQ rules", "url": "https://docs.ovaledge.com/" }] }
+          "args": {
+            "query": "create data quality rule",
+            "limit": 7
+          },
+          "result": {
+            "hits": [
+              {
+                "title": "DQ rules",
+                "url": "https://docs.ovaledge.com/"
+              }
+            ]
+          }
         }
       ]
     },
@@ -116,21 +155,36 @@
         {
           "name": "search_catalog_assets",
           "args": {
-            "search_terms": ["payroll"],
+            "search_terms": [
+              "payroll"
+            ],
             "object_type": "oetable"
           },
           "result": {
             "total": 1,
-            "results": [{ "objectId": "obj-pay-1", "name": "payroll_fact" }]
+            "results": [
+              {
+                "objectId": "obj-pay-1",
+                "name": "payroll_fact"
+              }
+            ]
           }
         },
         {
           "name": "catalog_asset_details",
-          "args": { "object_id": 1, "object_type": "oetable" },
+          "args": {
+            "object_id": 1,
+            "object_type": "oetable"
+          },
           "result": {
             "objectId": "obj-pay-1",
             "name": "payroll_fact",
-            "columns": [{ "name": "employee_id", "type": "string" }]
+            "columns": [
+              {
+                "name": "employee_id",
+                "type": "string"
+              }
+            ]
           }
         }
       ]
@@ -143,15 +197,25 @@
         {
           "name": "search_catalog_assets",
           "args": {
-            "search_terms": ["customer", "churn", "certified"],
+            "search_terms": [
+              "customer",
+              "churn",
+              "certified"
+            ],
             "object_type": "oetable",
             "context_query": "executive dashboards"
           },
           "result": {
             "total": 2,
             "results": [
-              { "objectId": "obj-a", "name": "churn_scores" },
-              { "objectId": "obj-b", "name": "customer_360" }
+              {
+                "objectId": "obj-a",
+                "name": "churn_scores"
+              },
+              {
+                "objectId": "obj-b",
+                "name": "customer_360"
+              }
             ]
           }
         }
@@ -172,7 +236,11 @@
           "result": {
             "rootObjectId": "1",
             "nodes": [
-              { "id": "raw_events", "name": "raw_events", "direction": "UPSTREAM" }
+              {
+                "id": "raw_events",
+                "name": "raw_events",
+                "direction": "UPSTREAM"
+              }
             ]
           }
         }
@@ -185,10 +253,17 @@
       "mcp_tools_called": [
         {
           "name": "column_profile_statistics",
-          "args": { "object_id": 42, "object_type": "oetable" },
+          "args": {
+            "object_id": 42,
+            "object_type": "oetable"
+          },
           "result": {
             "columns": [
-              { "name": "revenue_amt", "nullPct": 0.01, "distinctCount": 1200 }
+              {
+                "name": "revenue_amt",
+                "nullPct": 0.01,
+                "distinctCount": 1200
+              }
             ]
           }
         }
@@ -201,10 +276,16 @@
       "mcp_tools_called": [
         {
           "name": "table_entity_relationships",
-          "args": { "object_id": 88 },
+          "args": {
+            "object_id": 88
+          },
           "result": {
             "relationships": [
-              { "relatedObjectId": 90, "name": "customers_dim", "relationshipType": "FK" }
+              {
+                "relatedObjectId": 90,
+                "name": "customers_dim",
+                "relationshipType": "FK"
+              }
             ]
           }
         }
@@ -217,7 +298,9 @@
       "mcp_tools_called": [
         {
           "name": "lookup_tags",
-          "args": { "tag_name": "Confidential" },
+          "args": {
+            "tag_name": "Confidential"
+          },
           "result": {
             "tagName": "Confidential",
             "description": "Restricted to authorized finance and legal users."
@@ -257,7 +340,9 @@
       "mcp_tools_called": [
         {
           "name": "lookup_dq_rule",
-          "args": { "rule_name": "Null Data Density Check" },
+          "args": {
+            "rule_name": "Null Data Density Check"
+          },
           "result": {
             "ok": true,
             "data": [
@@ -279,12 +364,23 @@
         {
           "name": "assess_cde_dq",
           "args": {
-            "objects": [{ "object_id": 10, "object_type": "oetable" }],
+            "objects": [
+              {
+                "object_id": 10,
+                "object_type": "oetable"
+              }
+            ],
             "limit": 50
           },
           "result": {
             "assessedCount": 3,
-            "rows": [{ "objectId": 101, "objectType": "oecolumn", "cdeStatus": "Yes" }]
+            "rows": [
+              {
+                "objectId": 101,
+                "objectType": "oecolumn",
+                "cdeStatus": "Yes"
+              }
+            ]
           }
         }
       ]
@@ -298,7 +394,12 @@
           "name": "associate_dq_rule_objects",
           "args": {
             "dqrule_id": 42,
-            "objects": [{ "object_id": 101, "object_type": "oecolumn" }],
+            "objects": [
+              {
+                "object_id": 101,
+                "object_type": "oecolumn"
+              }
+            ],
             "write_confirmed_by_user": false
           },
           "result": {
@@ -331,7 +432,7 @@
     },
     {
       "name": "example_update_descriptions_preview",
-      "input": "Update the business description on table 42 — show me a preview first.",
+      "input": "Update the business description on table 42 \u2014 show me a preview first.",
       "actual_output": "I called update_asset_descriptions with write_confirmed_by_user=false for confirm_update preview only.",
       "mcp_tools_called": [
         {
@@ -354,13 +455,18 @@
     },
     {
       "name": "example_update_cde_preview",
-      "input": "Mark schema 3337 as a CDE — preview before applying.",
+      "input": "Mark schema 3337 as a CDE \u2014 preview before applying.",
       "actual_output": "I previewed update_cde_associations without POST (write_confirmed_by_user=false).",
       "mcp_tools_called": [
         {
           "name": "update_cde_associations",
           "args": {
-            "targets": [{ "object_id": 3337, "object_type": "oeschema" }],
+            "targets": [
+              {
+                "object_id": 3337,
+                "object_type": "oeschema"
+              }
+            ],
             "action": "Yes",
             "cde_justification": "Critical data element for finance reporting",
             "write_confirmed_by_user": false
@@ -376,7 +482,7 @@
     },
     {
       "name": "example_update_governance_roles_preview",
-      "input": "Assign Mike as Owner on table 99 — preview the role change.",
+      "input": "Assign Mike as Owner on table 99 \u2014 preview the role change.",
       "actual_output": "I previewed update_governance_roles and waited for explicit user confirmation.",
       "mcp_tools_called": [
         {
@@ -384,7 +490,9 @@
           "args": {
             "object_id": 99,
             "object_type": "oetable",
-            "role_updates": { "owner": "mike" },
+            "role_updates": {
+              "owner": "mike"
+            },
             "write_confirmed_by_user": false
           },
           "result": {
@@ -398,7 +506,7 @@
     },
     {
       "name": "example_update_custom_field_preview",
-      "input": "Set Data Owner to John Smith on table 99 — preview only.",
+      "input": "Set Data Owner to John Smith on table 99 \u2014 preview only.",
       "actual_output": "I called update_custom_field_value for a confirm_update preview, not an immediate POST.",
       "mcp_tools_called": [
         {
@@ -406,7 +514,12 @@
           "args": {
             "object_id": 99,
             "object_type": "oetable",
-            "field_updates": [{ "field_name": "Data Owner", "value": "John Smith" }],
+            "field_updates": [
+              {
+                "field_name": "Data Owner",
+                "value": "John Smith"
+              }
+            ],
             "write_confirmed_by_user": false
           },
           "result": {
@@ -420,7 +533,7 @@
     },
     {
       "name": "example_create_glossary_term_preview",
-      "input": "Create glossary term Revenue Recognition under domain 12 — preview first.",
+      "input": "Create glossary term Revenue Recognition under domain 12 \u2014 preview first.",
       "actual_output": "I previewed create_glossary_term (confirm_create, doNotCreate=true) before any POST.",
       "mcp_tools_called": [
         {
@@ -444,7 +557,7 @@
     },
     {
       "name": "example_create_tag_preview",
-      "input": "Create tag Logistics in open mode — show confirm preview.",
+      "input": "Create tag Logistics in open mode \u2014 show confirm preview.",
       "actual_output": "I previewed create_tag after parent step; no POST until user confirms with confirmation_token.",
       "mcp_tools_called": [
         {
@@ -472,17 +585,29 @@
         {
           "name": "search_catalog_assets",
           "args": {
-            "search_terms": ["customer", "revenue", "daily"],
+            "search_terms": [
+              "customer",
+              "revenue",
+              "daily"
+            ],
             "object_type": "oetable"
           },
           "result": {
             "total": 1,
-            "results": [{ "objectId": 42, "name": "customer_revenue_daily" }]
+            "results": [
+              {
+                "objectId": 42,
+                "name": "customer_revenue_daily"
+              }
+            ]
           }
         },
         {
           "name": "catalog_asset_details",
-          "args": { "object_id": 42, "object_type": "oetable" },
+          "args": {
+            "object_id": 42,
+            "object_type": "oetable"
+          },
           "result": {
             "objectId": 42,
             "name": "customer_revenue_daily",
@@ -492,12 +617,803 @@
         },
         {
           "name": "column_profile_statistics",
-          "args": { "object_id": 42, "object_type": "oetable" },
+          "args": {
+            "object_id": 42,
+            "object_type": "oetable"
+          },
           "result": {
-            "columns": [{ "name": "revenue_amt", "nullPct": 0.01 }]
+            "columns": [
+              {
+                "name": "revenue_amt",
+                "nullPct": 0.01
+              }
+            ]
           }
         }
       ]
+    },
+    {
+      "name": "example_generate_dq_queries_happy",
+      "input": "Generate custom SQL DQ queries for column revenue_amt.",
+      "actual_output": "I called generate_dq_queries and received rule/stats/failed-values SQL plus connection context.",
+      "mcp_tools_called": [
+        {
+          "name": "generate_dq_queries",
+          "args": {
+            "objects": [
+              {
+                "objectId": 101,
+                "objectType": "oecolumn"
+              }
+            ],
+            "business_rule": "values must be non-null"
+          },
+          "result": {
+            "ok": true,
+            "workflowPhase": "generate_queries",
+            "connectionId": 1,
+            "schemaId": 2,
+            "data": {
+              "status": "generated",
+              "ruleQuery": "SELECT 1",
+              "statsQuery": "SELECT 2",
+              "failedValuesQuery": "SELECT 3"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_generate_dq_queries_invalid_object",
+      "input": "Generate DQ SQL for a glossary term object.",
+      "actual_output": "generate_dq_queries rejected the invalid objectType before POST; I asked for an oecolumn/oetable ref.",
+      "mcp_tools_called": [
+        {
+          "name": "generate_dq_queries",
+          "args": {
+            "objects": [
+              {
+                "objectId": 1,
+                "objectType": "glossary"
+              }
+            ]
+          },
+          "result": {
+            "error": "objects[0].objectType must be one of oecolumn, oetable, \u2026, got 'glossary'.",
+            "status_code": 400
+          }
+        }
+      ],
+      "llm_score": false
+    },
+    {
+      "name": "example_validate_dq_queries_preview",
+      "input": "Validate these three DQ SQL queries on connection 1 / schema 2 \u2014 preview first.",
+      "actual_output": "I previewed validate_dq_queries (confirm_create) and waited for user approval before executing SQL.",
+      "mcp_tools_called": [
+        {
+          "name": "validate_dq_queries",
+          "args": {
+            "connection_id": 1,
+            "schema_id": 2,
+            "rule_query": "SELECT 1",
+            "stats_query": "SELECT 2",
+            "failed_values_query": "SELECT 3",
+            "write_confirmed_by_user": false
+          },
+          "result": {
+            "workflowPhase": "confirm_create",
+            "doNotCreate": true,
+            "confirmationToken": "preview-token-placeholder",
+            "formattedResponse": "**Confirm DQ SQL validation**"
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_validate_dq_queries_happy",
+      "input": "User approved \u2014 run validate_dq_queries for connection 1 / schema 2.",
+      "actual_output": "After confirmation I POSTed validate_dq_queries; canCreateRule was true.",
+      "mcp_tools_called": [
+        {
+          "name": "validate_dq_queries",
+          "args": {
+            "connection_id": 1,
+            "schema_id": 2,
+            "rule_query": "SELECT 1",
+            "stats_query": "SELECT 2",
+            "failed_values_query": "SELECT 3",
+            "write_confirmed_by_user": true,
+            "confirmation_token": "preview-token-placeholder"
+          },
+          "result": {
+            "ok": true,
+            "workflowPhase": "validate_queries",
+            "canCreateRule": true,
+            "data": {
+              "ruleQueryValid": true,
+              "canCreateRule": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_validate_dq_queries_missing_connection",
+      "input": "Validate DQ SQL without a connection id.",
+      "actual_output": "validate_dq_queries returned 400 because connection_id and schema_id are required.",
+      "mcp_tools_called": [
+        {
+          "name": "validate_dq_queries",
+          "args": {
+            "connection_id": 0,
+            "schema_id": 2,
+            "rule_query": "SELECT 1",
+            "stats_query": "SELECT 2",
+            "failed_values_query": "SELECT 3"
+          },
+          "result": {
+            "error": "connection_id and schema_id are required.",
+            "status_code": 400
+          }
+        }
+      ],
+      "llm_score": false
+    },
+    {
+      "name": "example_create_sql_dq_rule_preview",
+      "input": "Create custom SQL DQ rule mcp_null_check on column 101 \u2014 preview first.",
+      "actual_output": "I previewed create_sql_dq_rule (confirm_create) and did not POST until the user approved.",
+      "mcp_tools_called": [
+        {
+          "name": "create_sql_dq_rule",
+          "args": {
+            "objects": [
+              {
+                "objectId": 101,
+                "objectType": "oecolumn"
+              }
+            ],
+            "rule_name": "mcp_null_check",
+            "rule_query": "SELECT 1",
+            "stats_query": "SELECT 2",
+            "failed_values_query": "SELECT 3",
+            "write_confirmed_by_user": false
+          },
+          "result": {
+            "workflowPhase": "confirm_create",
+            "doNotCreate": true,
+            "confirmationToken": "preview-token-placeholder"
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_create_sql_dq_rule_happy",
+      "input": "User confirmed \u2014 create the SQL DQ rule mcp_null_check.",
+      "actual_output": "I POSTed create_sql_dq_rule with write_confirmed_by_user=true and reported dqruleId 88.",
+      "mcp_tools_called": [
+        {
+          "name": "create_sql_dq_rule",
+          "args": {
+            "objects": [
+              {
+                "objectId": 101,
+                "objectType": "oecolumn"
+              }
+            ],
+            "rule_name": "mcp_null_check",
+            "rule_query": "SELECT 1",
+            "stats_query": "SELECT 2",
+            "failed_values_query": "SELECT 3",
+            "connection_id": 5,
+            "schema_id": 6,
+            "write_confirmed_by_user": true,
+            "confirmation_token": "preview-token-placeholder"
+          },
+          "result": {
+            "ok": true,
+            "workflowPhase": "create_sql_rule",
+            "data": {
+              "status": "created",
+              "dqruleId": 88,
+              "ruleName": "mcp_null_check"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_create_sql_dq_rule_missing_queries",
+      "input": "Create a SQL DQ rule named mcp_rule with no queries and no code_object_id.",
+      "actual_output": "create_sql_dq_rule returned 400 \u2014 rule_query or code_object_id is required.",
+      "mcp_tools_called": [
+        {
+          "name": "create_sql_dq_rule",
+          "args": {
+            "objects": [
+              {
+                "objectId": 101,
+                "objectType": "oecolumn"
+              }
+            ],
+            "rule_name": "mcp_rule"
+          },
+          "result": {
+            "error": "rule_query or code_object_id is required.",
+            "status_code": 400
+          }
+        }
+      ],
+      "llm_score": false
+    },
+    {
+      "name": "example_catalog_details_not_found",
+      "input": "Show catalog details for missing.table.",
+      "actual_output": "catalog_asset_details returned 404; I told the user the FQN was not found.",
+      "mcp_tools_called": [
+        {
+          "name": "catalog_asset_details",
+          "args": {
+            "fully_qualified_name": "missing.table"
+          },
+          "result": {
+            "error": "OvalEdge API error 404: Not found",
+            "status_code": 404
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_catalog_details_rejects_mixed_lookup",
+      "input": "Get details with both FQN and object_id.",
+      "actual_output": "catalog_asset_details returned 400 \u2014 use FQN alone or object_id+object_type, not both.",
+      "mcp_tools_called": [
+        {
+          "name": "catalog_asset_details",
+          "args": {
+            "fully_qualified_name": "db.schema.t",
+            "object_id": 1,
+            "object_type": "oetable"
+          },
+          "result": {
+            "error": "Use either fully_qualified_name alone, or object_id + object_type \u2014 not both.",
+            "status_code": 400
+          }
+        }
+      ],
+      "llm_score": false
+    },
+    {
+      "name": "example_lineage_rejects_schema",
+      "input": "Show lineage for schema sakila.",
+      "actual_output": "asset_lineage requires oetable or oefile; I did not call it with oeschema.",
+      "mcp_tools_called": [
+        {
+          "name": "asset_lineage",
+          "args": {
+            "object_id": 1004,
+            "object_type": "oeschema"
+          },
+          "result": {
+            "error": "object_type must be oetable or oefile, got 'oeschema'",
+            "status_code": 400
+          }
+        }
+      ],
+      "llm_score": false
+    },
+    {
+      "name": "example_column_profile_rejects_glossary",
+      "input": "Profile columns for a glossary term.",
+      "actual_output": "column_profile_statistics rejected glossary; only oetable/oefile are supported.",
+      "mcp_tools_called": [
+        {
+          "name": "column_profile_statistics",
+          "args": {
+            "object_id": 1,
+            "object_type": "glossary"
+          },
+          "result": {
+            "error": "object_type must be oetable or oefile, got 'glossary'",
+            "status_code": 400
+          }
+        }
+      ],
+      "llm_score": false
+    },
+    {
+      "name": "example_entity_relationships_unauthorized",
+      "input": "Show entity relationships for table 99.",
+      "actual_output": "table_entity_relationships returned 401; I reported authorization failure.",
+      "mcp_tools_called": [
+        {
+          "name": "table_entity_relationships",
+          "args": {
+            "object_id": 99
+          },
+          "result": {
+            "error": "OvalEdge API error 401: Unauthorized",
+            "status_code": 401
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_metadata_drift_rejects_days_and_weeks",
+      "input": "Show metadata changes for last 2 days and last 1 week together.",
+      "actual_output": "metadata_changes_between_crawls returned 400 \u2014 provide last_n_days or last_n_weeks, not both.",
+      "mcp_tools_called": [
+        {
+          "name": "metadata_changes_between_crawls",
+          "args": {
+            "last_n_days": 2,
+            "last_n_weeks": 1
+          },
+          "result": {
+            "error": "Provide either last_n_days or last_n_weeks, not both.",
+            "status_code": 400
+          }
+        }
+      ],
+      "llm_score": false
+    },
+    {
+      "name": "example_metadata_drift_deep_analysis_fallback",
+      "input": "What changed in CUSTOMER after the latest crawl?",
+      "actual_output": "The tool returned a Deep Analysis fallback message; I asked the user to run Deep Analysis first.",
+      "mcp_tools_called": [
+        {
+          "name": "metadata_changes_between_crawls",
+          "args": {
+            "question": "What changed in CUSTOMER after the latest crawl?",
+            "schema_names": [
+              "CUSTOMER"
+            ]
+          },
+          "result": {
+            "ok": true,
+            "formattedResponse": "Run Deep Analysis under Advance Tools, then ask again.",
+            "data": {
+              "fallback": {
+                "show": true,
+                "message": "Run Deep Analysis under Advance Tools, then ask again."
+              },
+              "rollup": {
+                "totalChanges": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_glossary_lookup_not_found",
+      "input": "What does ZzzUnknownTerm mean in the glossary?",
+      "actual_output": "lookup_glossary_term returned no match / 404; I said the term was not found.",
+      "mcp_tools_called": [
+        {
+          "name": "lookup_glossary_term",
+          "args": {
+            "term_name": "ZzzUnknownTerm"
+          },
+          "result": {
+            "error": "OvalEdge API error 404: Not found",
+            "status_code": 404
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_lookup_tags_neither_id_nor_name",
+      "input": "Look up a tag without providing name or id.",
+      "actual_output": "lookup_tags returned 400 \u2014 provide tag_name or object_id.",
+      "mcp_tools_called": [
+        {
+          "name": "lookup_tags",
+          "args": {},
+          "result": {
+            "error": "Provide tag_name or object_id.",
+            "status_code": 400
+          }
+        }
+      ],
+      "llm_score": false
+    },
+    {
+      "name": "example_datastory_not_found",
+      "input": "Find a data story about fictional unicorns.",
+      "actual_output": "lookup_datastory returned 404; I reported no matching organizational story.",
+      "mcp_tools_called": [
+        {
+          "name": "lookup_datastory",
+          "args": {
+            "content_query": "fictional unicorns"
+          },
+          "result": {
+            "error": "OvalEdge API error 404: Not found",
+            "status_code": 404
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_platform_docs_server_error",
+      "input": "How do I configure crawlers?",
+      "actual_output": "search_platform_docs failed with 500; I reported the docs search error.",
+      "mcp_tools_called": [
+        {
+          "name": "search_platform_docs",
+          "args": {
+            "query": "configure crawlers"
+          },
+          "result": {
+            "error": "OvalEdge API error 500: Internal error",
+            "status_code": 500
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_lookup_dq_rule_neither",
+      "input": "Look up a DQ rule without name or id.",
+      "actual_output": "lookup_dq_rule returned 400 \u2014 provide rule_name or object_id.",
+      "mcp_tools_called": [
+        {
+          "name": "lookup_dq_rule",
+          "args": {},
+          "result": {
+            "error": "Provide rule_name or object_id.",
+            "status_code": 400,
+            "error_code": "validation_required"
+          }
+        }
+      ],
+      "llm_score": false
+    },
+    {
+      "name": "example_assess_cde_dq_rejects_empty",
+      "input": "Assess CDE DQ with no objects and discover off.",
+      "actual_output": "assess_cde_dq returned 400 \u2014 provide objects or discover_cde_columns=true.",
+      "mcp_tools_called": [
+        {
+          "name": "assess_cde_dq",
+          "args": {},
+          "result": {
+            "error": "Provide objects from search_catalog_assets, or set discover_cde_columns=true to discover CDE columns.",
+            "status_code": 400
+          }
+        }
+      ],
+      "llm_score": false
+    },
+    {
+      "name": "example_associate_dq_rule_happy",
+      "input": "User approved linking rule 42 to column 101.",
+      "actual_output": "I POSTed associate_dq_rule_objects with write_confirmed_by_user=true; association succeeded.",
+      "mcp_tools_called": [
+        {
+          "name": "associate_dq_rule_objects",
+          "args": {
+            "dqrule_id": 42,
+            "objects": [
+              {
+                "object_id": 101,
+                "object_type": "oecolumn"
+              }
+            ],
+            "write_confirmed_by_user": true,
+            "confirmation_token": "preview-token-placeholder"
+          },
+          "result": {
+            "data": {
+              "dqruleId": 42,
+              "associatedCount": 1,
+              "skippedCount": 0,
+              "failedCount": 0,
+              "statusMessage": "Added 1 out of 1 object(s)."
+            },
+            "formattedResponse": "1 associated, 0 skipped, 0 failed."
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_create_dq_rules_happy",
+      "input": "User approved discover-and-create DQ rules.",
+      "actual_output": "I POSTed create_dq_rules with confirmation and reported created/associated counts.",
+      "mcp_tools_called": [
+        {
+          "name": "create_dq_rules",
+          "args": {
+            "discover_cde_columns": true,
+            "write_confirmed_by_user": true,
+            "confirmation_token": "preview-token-placeholder"
+          },
+          "result": {
+            "data": {
+              "createdCount": 2,
+              "associatedCount": 2,
+              "skippedCount": 0,
+              "failedCount": 0
+            },
+            "formattedResponse": "2 created, 2 associated."
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_get_user_object_access_intent_required",
+      "input": "Who has access to payroll_fact?",
+      "actual_output": "get_user_object_access required ACCESS_INTENT_REQUIRED for object_to_principals; I asked the user to pick catalog ACL vs native.",
+      "mcp_tools_called": [
+        {
+          "name": "get_user_object_access",
+          "args": {
+            "query_direction": "object_to_principals",
+            "object_id": 101,
+            "object_type": "oetable"
+          },
+          "result": {
+            "error": "Who-has-access requires disambiguation before calling this tool.",
+            "status_code": 400,
+            "error_code": "ACCESS_INTENT_REQUIRED",
+            "accessIntentRequired": "catalog_acl"
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_source_system_access_intent_required",
+      "input": "Who has access to BUSINESS.BANKING in Redshift?",
+      "actual_output": "source_system_access object_to_users needs access_intent_confirmed=native after disambiguation; I presented the 1/2 choice.",
+      "mcp_tools_called": [
+        {
+          "name": "source_system_access",
+          "args": {
+            "source_system": "redshift",
+            "query_direction": "object_to_users",
+            "object_path": "BUSINESS.BANKING",
+            "object_type": "schema",
+            "connection_id": 1000
+          },
+          "result": {
+            "error": "Who-has-access requires disambiguation before calling this tool.",
+            "status_code": 400,
+            "error_code": "ACCESS_INTENT_REQUIRED",
+            "accessIntentRequired": "native"
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_update_descriptions_happy",
+      "input": "User approved the business description update on table 42.",
+      "actual_output": "I POSTed update_asset_descriptions with write_confirmed_by_user=true and confirmation_token.",
+      "mcp_tools_called": [
+        {
+          "name": "update_asset_descriptions",
+          "args": {
+            "object_id": 42,
+            "object_type": "oetable",
+            "description_field": "business_description",
+            "description_text": "Quarterly revenue summary for finance analysts.",
+            "write_confirmed_by_user": true,
+            "confirmation_token": "preview-token-placeholder"
+          },
+          "result": {
+            "status": "success",
+            "formattedResponse": "Business description updated."
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_update_descriptions_rejects_no_fields",
+      "input": "Update descriptions on table 42 with no description text.",
+      "actual_output": "update_asset_descriptions returned 400 \u2014 provide description fields.",
+      "mcp_tools_called": [
+        {
+          "name": "update_asset_descriptions",
+          "args": {
+            "object_id": 42,
+            "object_type": "oetable"
+          },
+          "result": {
+            "error": "Provide description_field + description_text, or one typed description field.",
+            "status_code": 400
+          }
+        }
+      ],
+      "llm_score": false
+    },
+    {
+      "name": "example_update_cde_happy",
+      "input": "User approved marking schema 3337 as CDE.",
+      "actual_output": "I POSTed update_cde_associations with confirmation; status success.",
+      "mcp_tools_called": [
+        {
+          "name": "update_cde_associations",
+          "args": {
+            "targets": [
+              {
+                "object_id": 3337,
+                "object_type": "oeschema"
+              }
+            ],
+            "action": "Yes",
+            "cde_justification": "Critical data element for finance reporting",
+            "write_confirmed_by_user": true,
+            "confirmation_token": "preview-token-placeholder"
+          },
+          "result": {
+            "status": "success",
+            "formattedResponse": "CDE updated."
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_update_cde_rejects_empty_targets",
+      "input": "Mark CDE with empty targets.",
+      "actual_output": "update_cde_associations returned 400 \u2014 targets must include at least one object.",
+      "mcp_tools_called": [
+        {
+          "name": "update_cde_associations",
+          "args": {
+            "targets": [],
+            "action": "Yes"
+          },
+          "result": {
+            "error": "targets must include at least one {object_id, object_type}.",
+            "status_code": 400
+          }
+        }
+      ],
+      "llm_score": false
+    },
+    {
+      "name": "example_update_governance_roles_happy",
+      "input": "User approved assigning Mike as Owner on table 99.",
+      "actual_output": "I POSTed update_governance_roles with confirmation; roles updated.",
+      "mcp_tools_called": [
+        {
+          "name": "update_governance_roles",
+          "args": {
+            "object_id": 99,
+            "object_type": "oetable",
+            "role_updates": {
+              "owner": "mike"
+            },
+            "write_confirmed_by_user": true,
+            "confirmation_token": "preview-token-placeholder"
+          },
+          "result": {
+            "status": "success",
+            "formattedResponse": "Owner set to mike."
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_update_custom_field_happy",
+      "input": "User approved setting Data Owner to John Smith on table 99.",
+      "actual_output": "I POSTed update_custom_field_value with confirmation; field updated.",
+      "mcp_tools_called": [
+        {
+          "name": "update_custom_field_value",
+          "args": {
+            "object_id": 99,
+            "object_type": "oetable",
+            "field_updates": [
+              {
+                "field_name": "Data Owner",
+                "value": "John Smith"
+              }
+            ],
+            "write_confirmed_by_user": true,
+            "confirmation_token": "preview-token-placeholder"
+          },
+          "result": {
+            "status": "success",
+            "updatedFields": [
+              "Data Owner"
+            ],
+            "formattedResponse": "Data Owner updated."
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_update_custom_field_malformed",
+      "input": "Update a custom field without a value.",
+      "actual_output": "update_custom_field_value returned 400 \u2014 each field_updates entry requires a value.",
+      "mcp_tools_called": [
+        {
+          "name": "update_custom_field_value",
+          "args": {
+            "object_id": 99,
+            "object_type": "oetable",
+            "field_updates": [
+              {
+                "field_name": "Data Owner"
+              }
+            ]
+          },
+          "result": {
+            "error": "Each field_updates entry requires a value.",
+            "status_code": 400
+          }
+        }
+      ],
+      "llm_score": false
+    },
+    {
+      "name": "example_create_glossary_term_happy",
+      "input": "User approved creating glossary term Revenue Recognition.",
+      "actual_output": "I POSTed create_glossary_term with confirmation; term created.",
+      "mcp_tools_called": [
+        {
+          "name": "create_glossary_term",
+          "args": {
+            "term_name": "Revenue Recognition",
+            "domain_id": 12,
+            "description": "ASC 606 revenue recognition policy.",
+            "skip_category": true,
+            "category_skip_confirmed": true,
+            "write_confirmed_by_user": true,
+            "confirmation_token": "preview-token-placeholder"
+          },
+          "result": {
+            "status": "success",
+            "termId": 501,
+            "formattedResponse": "Term Revenue Recognition created."
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_create_tag_happy",
+      "input": "User approved creating tag Logistics.",
+      "actual_output": "I POSTed create_tag with confirmation; tag created.",
+      "mcp_tools_called": [
+        {
+          "name": "create_tag",
+          "args": {
+            "tag_name": "Logistics",
+            "create_directly_under_master": true,
+            "parent_step_completed_by_user": true,
+            "write_confirmed_by_user": true,
+            "confirmation_token": "preview-token-placeholder"
+          },
+          "result": {
+            "status": "success",
+            "tagId": 77,
+            "formattedResponse": "Tag Logistics created."
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_search_rejects_invalid_object_type",
+      "input": "Search catalog with object_type=not_a_real_type.",
+      "actual_output": "search_catalog_assets returned 400 for invalid object_type.",
+      "mcp_tools_called": [
+        {
+          "name": "search_catalog_assets",
+          "args": {
+            "search_terms": [
+              "x"
+            ],
+            "object_type": "not_a_real_type"
+          },
+          "result": {
+            "error": "object_type must be one of \u2026, got 'not_a_real_type'",
+            "status_code": 400
+          }
+        }
+      ],
+      "llm_score": false
     }
   ]
 }

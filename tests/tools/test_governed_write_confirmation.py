@@ -172,6 +172,7 @@ class TestGovernedWriteStaleConfirmationToken:
             f"{case.tool_name} preview missing confirmationToken"
         )
         assert preview.get("workflowPhase", "").startswith("confirm_")
+        mock_oe_client.post.reset_mock()
 
         confirm_kwargs = {**case.preview_kwargs, **case.tamper_kwargs}
         out = await fn(
@@ -202,6 +203,7 @@ class TestGovernedWriteStaleConfirmationToken:
                 await fn(tag_name="Logistics")
 
         await fn(**case.preview_kwargs)
+        mock_oe_client.post.reset_mock()
         out = await fn(
             **case.preview_kwargs,
             write_confirmed_by_user=True,

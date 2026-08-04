@@ -129,7 +129,7 @@ def test_mcp_use_metric_from_user_json_file(
     from evals.json_cases import load_mcp_use_cases_from_json
 
     path = Path(path_str)
-    for case in load_mcp_use_cases_from_json(path):
+    for case in load_mcp_use_cases_from_json(path, llm_only=True):
         metric: BaseMetric = MCPUseMetric(
             threshold=deepeval_threshold(),
             model=judge_model(),

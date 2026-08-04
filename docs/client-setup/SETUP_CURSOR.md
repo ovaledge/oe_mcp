@@ -1,8 +1,12 @@
 # Cursor + OvalEdge MCP
 
-[Official MCP docs](https://docs.cursor.com/context/model-context-protocol) · Cursor reads **`~/.cursor/mcp.json`** (user) or project-level **`.cursor/mcp.json`** depending on your Cursor version and settings.
+**Last reviewed:** July 2026.
+
+[Cursor MCP docs](https://cursor.com/docs) · Cursor reads **`~/.cursor/mcp.json`** (user) and/or project **`.cursor/mcp.json`** depending on version and settings.
 
 **Project template:** copy [`.cursor/mcp.json.example`](../../.cursor/mcp.json.example) → `.cursor/mcp.json` (see [`.cursor/README.md`](../../.cursor/README.md)).
+
+This guide is for **Cursor** only. Microsoft Copilot Studio is [SETUP_MICROSOFT_COPILOT.md](SETUP_MICROSOFT_COPILOT.md); VS Code GitHub Copilot is [SETUP_VSCODE_GITHUB_COPILOT.md](SETUP_VSCODE_GITHUB_COPILOT.md).
 
 ---
 
@@ -95,6 +99,47 @@ The path may be **`/mcp`** or **`/mcp/`** — the server normalizes slashless **
 
 ---
 
+## Remote OAuth (`AUTH_MODE=remote`)
+
+Use when the server is deployed with **Okta Connect** (no `X-OvalEdge-*` headers). Full server setup: [README_REMOTE_MCP.md](../../README_REMOTE_MCP.md#auth_moderremote-okta--oidc-connect). Lambda ZIP: [infra/DEPLOY.md — Okta Connect Lambda ZIP](../../infra/DEPLOY.md#okta-connect-lambda-zip).
+
+### Okta Sign-in redirect URIs (required)
+
+In the Okta OIDC app used as `OAUTH_CLIENT_ID`, add Cursor’s URIs (and any other clients you use):
+
+```text
+http://localhost:8787/callback
+https://www.cursor.com/agents/mcp/oauth/callback
+cursor://anysphere.cursor-mcp/oauth/callback
+```
+
+| Surface | URI |
+|---------|-----|
+| Desktop (default) | `http://localhost:8787/callback` |
+| Desktop (fallback) | `cursor://anysphere.cursor-mcp/oauth/callback` |
+| Web / Cursor Agents | `https://www.cursor.com/agents/mcp/oauth/callback` |
+
+Full allowlist (Claude, GitHub Copilot, Microsoft Copilot): [README_REMOTE_MCP.md — Okta redirect URIs (all clients)](../../README_REMOTE_MCP.md#okta-redirect-uris-all-clients).
+
+Also enable **Authorization Code + PKCE** on that Okta app.
+
+### `mcp.json`
+
+```json
+{
+  "mcpServers": {
+    "ovaledge-remote-oauth": {
+      "url": "https://YOUR_PUBLIC_MCP_BASE_URL/mcp"
+    }
+  }
+}
+```
+
+Use Cursor’s **Connect** button (URL only — **do not** put Okta client id/secret in `mcp.json`). If you see *redirect_uri must be a Login redirect URI*, add the URIs above in Okta. If token exchange fails with *Client authentication failed*, ensure Lambda has `OAUTH_CLIENT_SECRET` and redeploy so `/register` can supply it. See [README_REMOTE_MCP.md](../../README_REMOTE_MCP.md#confidential-okta-apps-client-secret).
+
+If Cursor logs **`fetch failed`**, the URL is wrong or unreachable from your laptop — curl `https://YOUR_PUBLIC_MCP_BASE_URL/health` first (expect `"auth_mode":"remote"`).
+---
+
 ## Workflow prompts and docs
 
 With the server connected, Cursor can list **MCP prompts**, **resources**, and **doc resources**:
@@ -109,6 +154,16 @@ With the server connected, Cursor can list **MCP prompts**, **resources**, and *
 | Deep link by id | `ovaledge://catalog/table/{id}`, `ovaledge://governance/data-story/{id}`, … |
 
 Full index: [server/docs/mcp_workflows.md](../../server/docs/mcp_workflows.md) (`docs://ovaledge/mcp_workflows`). Agent rules: [README.md](../../README.md#agent-guidance-mirrors-serverapppy-instructions).
+
+## Troubleshooting
+
+| Symptom | Action |
+| ------- | ------ |
+| Tools missing after edit | Restart Cursor / toggle MCP server off→on |
+| `fetch failed` on remote URL | `curl` `…/health`; confirm URL ends with `/mcp` |
+| OAuth redirect rejected | Add Cursor URIs in Okta (above); retry Connect |
+| Token exchange / client auth failed | Ensure Lambda has `OAUTH_CLIENT_SECRET`; redeploy |
+| Duplicate tools | Disable stdio **or** HTTP entry, not both |
 
 ## Security
 

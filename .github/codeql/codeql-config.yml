@@ -1,0 +1,24 @@
+# Shared by local scripts/run_codeql.sh and .github/workflows/codeql.yml
+#
+# Keep this Python-only. Do not list .github/workflows here (that is Actions YAML,
+# not Python) — mixed/empty artifact URIs can make GitHub reject the SARIF upload
+# with "Error when processing the SARIF file".
+name: oe-mcp CodeQL
+
+queries:
+  - uses: security-extended
+
+# First-party Python only — exclude SAM/Lambda build trees and venvs.
+paths:
+  - server
+  - entrypoints
+  - evals
+
+paths-ignore:
+  - .aws-sam
+  - .venv
+  - .codeql
+  - .tools
+  - htmlcov
+  - "**/__pycache__"
+  - "**/.pytest_cache"

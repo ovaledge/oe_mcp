@@ -1,8 +1,12 @@
 # Kiro + OvalEdge MCP
 
+**Last reviewed:** July 2026.
+
 [Kiro MCP configuration](https://kiro.dev/docs/mcp/configuration/) · [MCP security (Kiro)](https://kiro.dev/docs/mcp/security)
 
 Kiro uses the same **`mcpServers`** JSON shape as many other clients: **local** servers use `command` + `args`; **remote** servers use `url` + optional `headers`.
+
+This guide covers **local stdio** and **remote HTTP** (`remote_credentials`). Kiro does **not** currently have a documented Okta Connect / OAuth browser flow in this repo — for Okta Connect use [SETUP_CURSOR.md](SETUP_CURSOR.md#remote-oauth-auth_moderremote) or [SETUP_CLAUDE.md](SETUP_CLAUDE.md#remote-oauth-auth_moderremote). Microsoft Copilot is [SETUP_MICROSOFT_COPILOT.md](SETUP_MICROSOFT_COPILOT.md).
 
 **Config file locations**
 
@@ -68,8 +72,35 @@ Use **`url`** plus **`headers`** for **`remote_credentials`** ([README_REMOTE_MC
 
 Replace **`YOUR_PUBLIC_MCP_BASE_URL`** with your real host (e.g. an API Gateway execute-api hostname). Kiro documents **HTTPS** for remote URLs. If you use plain **`http://`** and see **`tls_required`**, set **`MCP_HTTP_STATELESS=false`** on the server and add **`X-Forwarded-Proto: https`** to `headers`, or terminate TLS in front of the app.
 
+Optional combined header (same as Copilot Studio / some gateways):
+
+```json
+"headers": {
+  "X-OvalEdge-Credentials": "${OVALEDGE_USER_TOKEN}::${OVALEDGE_USER_SECRET}"
+}
+```
+
+Only if your environment expansion supports that pattern; otherwise set a single env var to `token::secret`.
+
+---
+
+## Troubleshooting
+
+| Symptom | Action |
+| ------- | ------ |
+| Server not starting | Confirm Poetry on PATH; absolute `-C` path; save MCP config / restart Kiro |
+| Remote 401 | Verify token/secret env vars expanded; server `AUTH_MODE=remote_credentials` |
+| Wrong host | `url` is MCP **`MCPEndpointUrl`**, not OvalEdge app URL |
+
 ---
 
 ## Security
 
 Do not commit `mcp.json` with hard-coded secrets. Prefer environment variable references. Use HTTPS in production.
+
+## References
+
+- [README_REMOTE_MCP.md](../../README_REMOTE_MCP.md)
+- [README_LOCAL_MCP.md](../../README_LOCAL_MCP.md)
+- [SETUP_CURSOR.md](SETUP_CURSOR.md) — parallel Cursor patterns
+- [docs/client-setup/README.md](README.md)

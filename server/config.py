@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import tomllib
 from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -12,6 +13,28 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # ".env" would then be missed and OVALEDGE_BASE_URL falls back to the mock default.
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _ENV_FILE = _REPO_ROOT / ".env"
+
+
+def version_from_pyproject(repo_root: Path | None = None) -> str | None:
+    """Read ``[tool.poetry].version`` from pyproject.toml (Lambda ZIP has no package metadata)."""
+    path = (repo_root or _REPO_ROOT) / "pyproject.toml"
+    if not path.is_file():
+        return None
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return None
+    poetry = data.get("tool", {}).get("poetry", {})
+    if isinstance(poetry, dict):
+        version = poetry.get("version")
+        if isinstance(version, str) and version.strip():
+            return version.strip()
+    project = data.get("project", {})
+    if isinstance(project, dict):
+        version = project.get("version")
+        if isinstance(version, str) and version.strip():
+            return version.strip()
+    return None
 
 
 class Settings(BaseSettings):
@@ -36,6 +59,23 @@ class Settings(BaseSettings):
     # Log full outbound URL (method + resolved URL with query) to stderr for tracing.
     ovaledge_log_http_requests: bool = True
 
+    # ── Telemetry (OpenTelemetry → Phoenix or Langfuse) ────────
+    # none = disabled (default). phoenix | langfuse = OTLP HTTP export.
+    telemetry_backend: Literal["none", "phoenix", "langfuse"] = "none"
+    telemetry_service_name: str = "oe-mcp"
+    # Optional full OTLP traces URL override (skips backend-specific path building).
+    telemetry_otlp_endpoint: str = ""
+    # Optional Bearer token (Phoenix when auth is enabled).
+    telemetry_api_key: str = ""
+    phoenix_host: str = "http://localhost:6006"
+    phoenix_api_key: str = ""
+    # OTLP project name (Phoenix x-project-name header; Langfuse resource grouping).
+    # Defaults to telemetry_service_name when empty.
+    telemetry_project_name: str = ""
+    langfuse_host: str = "http://localhost:3000"
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+
     # Retry config for transient OvalEdge errors
     ovaledge_max_retries: int = 3
     ovaledge_retry_backoff_seconds: float = 0.5
@@ -48,6 +88,12 @@ class Settings(BaseSettings):
 
     # remote_credentials only: max distinct credential-key JWT entries in memory
     credentials_cache_max_entries: int = 10_000
+
+    # remote (OAuth) only: seconds to cache a validated access token's claims (and the
+    # OvalEdge JWT it exchanges to) so a burst of MCP calls does not re-introspect /
+    # re-exchange on every request. Always bounded by the token's own ``exp``. Set 0 to
+    # validate on every request (tightest revocation window, highest per-call latency).
+    oauth_validation_cache_ttl_seconds: int = 60
 
     # Streamable HTTP: ``True`` = POST/DELETE only per request (good for Lambda). ``False`` =
     # enables GET on ``/mcp`` for long-lived sessions — required for Cursor (and similar)
@@ -66,17 +112,27 @@ class Settings(BaseSettings):
     # Comma-separated trusted JWT iss values (in addition to oauth_issuer). Include every
     # issuer your IdP may emit — e.g. Auth0 custom domain and canonical *.auth0.com.
     oauth_allowed_issuers: str = ""
-    # Resource identifier expected as JWT ``aud`` (API audience).
+    # Resource identifier expected as JWT ``aud`` (API audience). Optional — when empty,
+    # JWT signature+issuer are still checked; introspection skips aud unless set.
     oauth_audience: str = ""
+    # Pre-registered Okta (or other IdP) OAuth app — returned by POST /register (not a random id).
+    oauth_client_id: str = ""
+    # Used for opaque-token introspection (and confidential clients). Public PKCE
+    # apps may leave empty for authorize; Okta introspect typically needs id+secret.
+    oauth_client_secret: str = ""
+    # RFC 7662 introspection URL. Empty → ``{oauth_issuer}/v1/introspect`` (Okta AS pattern).
+    oauth_introspection_url: str = ""
+    # Space-separated scopes advertised in discovery / registration (Okta: openid profile email).
+    oauth_scopes: str = "openid profile email"
     mcp_public_base_url: str = ""
     # Optional HTTPS base for MCP ``initialize`` icon URL only (``GET /brand/...``).
     # Use when MCP runs on localhost but Cursor must fetch the icon from a public URL.
     mcp_brand_icon_base_url: str = ""
     aws_region: str = "us-east-1"
     # Remote only: if True, skip POST /api/user/token/generate and send the validated IdP
-    # access token to OvalEdge as Authorization (see ovaledge_http_auth_scheme). If False,
-    # exchange IdP token for an OvalEdge-issued JWT first (legacy).
-    ovaledge_remote_forward_idp_token: bool = False
+    # access token to OvalEdge as Authorization (see ovaledge_http_auth_scheme). Default True for
+    # Okta resource-server pods (opaque introspect on /api/**). Set False only for legacy exchange.
+    ovaledge_remote_forward_idp_token: bool = True
 
     # When create_tag omits description, MCP builds wiki HTML from tag name (+ hierarchy).
     # Set false to preserve legacy behavior (POST with no description field).
@@ -101,6 +157,9 @@ class Settings(BaseSettings):
 
             return version("oe-mcp")
         except PackageNotFoundError:
+            from_pyproject = version_from_pyproject()
+            if from_pyproject:
+                return from_pyproject
             return "0.0.0-dev"
 
     @field_validator("auth_mode", mode="before")
@@ -111,6 +170,15 @@ class Settings(BaseSettings):
             if s in ("local", "remote", "remote_credentials"):
                 return s
         return v if isinstance(v, str) else "local"
+
+    @field_validator("telemetry_backend", mode="before")
+    @classmethod
+    def normalize_telemetry_backend(cls, v: object) -> str:
+        if isinstance(v, str):
+            s = v.strip().lower()
+            if s in ("none", "phoenix", "langfuse"):
+                return s
+        return v if isinstance(v, str) else "none"
 
 _settings = Settings()
 

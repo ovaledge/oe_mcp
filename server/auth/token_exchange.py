@@ -1,17 +1,28 @@
+import asyncio
 import json
 import time
 from typing import Any, cast
 
 import httpx
-from jose import jwt  # type: ignore[import-untyped]
+from jose import jwt
 
 from server.auth import context as auth_context
+from server.auth.cache_keys import opaque_cache_key
 from server.config import settings
 from server.constants import (
     CREDENTIALS_REFRESH_LEEWAY_SECONDS,
     JWT_REFRESH_LEEWAY_SECONDS,
     OVALEDGE_TOKEN_EXCHANGE_PATH,
 )
+
+_local_token_lock: asyncio.Lock | None = None
+
+
+def _get_local_token_lock() -> asyncio.Lock:
+    global _local_token_lock
+    if _local_token_lock is None:
+        _local_token_lock = asyncio.Lock()
+    return _local_token_lock
 
 
 class TokenExchangeError(Exception):
@@ -147,6 +158,8 @@ async def exchange_oauth_access_token(oauth_access_token: str) -> str:
             headers={
                 "Content-Type": "application/json",
                 "Accept": "application/json",
+                "User-Agent": "OvalEdge-MCP",
+                "X-OvalEdge-Client": "MCP",
             },
         )
         if response.status_code != 200:
@@ -156,6 +169,48 @@ async def exchange_oauth_access_token(oauth_access_token: str) -> str:
             )
         payload = _payload_from_token_exchange_response(response)
         return _extract_token(payload)
+
+
+def _oauth_exchange_cache_key(oauth_access_token: str) -> str:
+    """Stable cache key for the OAuth->OvalEdge JWT exchange; never logged."""
+    return opaque_cache_key("oauth-exchange", oauth_access_token)
+
+
+async def get_or_refresh_oauth_exchanged_token(oauth_access_token: str) -> str:
+    """
+    Remote OAuth path: return a cached OvalEdge JWT for this IdP access token when still
+    fresh, otherwise exchange via ``POST /api/user/token/generate`` and cache the result.
+
+    Removes a token/generate round-trip on every MCP request when
+    ``ovaledge_remote_forward_idp_token`` is False. The cache key is a digest of the
+    access token (never logged); entries expire with the OvalEdge JWT's own ``exp``.
+    """
+    from server.auth.credentials_cache import (
+        CachedJwtEntry,
+        get_default_credentials_cache,
+    )
+
+    key = _oauth_exchange_cache_key(oauth_access_token)
+    cache = get_default_credentials_cache()
+
+    entry = await cache.get_entry(key)
+    if entry and not is_token_expiring(
+        entry.jwt, leeway_seconds=CREDENTIALS_REFRESH_LEEWAY_SECONDS
+    ):
+        return entry.jwt
+
+    async with cache.refresh_lock(key):
+        entry = await cache.get_entry(key)
+        if entry and not is_token_expiring(
+            entry.jwt, leeway_seconds=CREDENTIALS_REFRESH_LEEWAY_SECONDS
+        ):
+            return entry.jwt
+        new_jwt = await exchange_oauth_access_token(oauth_access_token)
+        await cache.set_entry(
+            key,
+            CachedJwtEntry(jwt=new_jwt, exp_epoch=jwt_exp_epoch(new_jwt)),
+        )
+        return new_jwt
 
 
 async def exchange_client_credentials() -> str:
@@ -179,6 +234,8 @@ async def exchange_client_credentials() -> str:
             headers={
                 "Content-Type": "application/json",
                 "Accept": "application/json",
+                "User-Agent": "OvalEdge-MCP",
+                "X-OvalEdge-Client": "MCP",
             },
         )
         if response.status_code != 200:
@@ -224,6 +281,8 @@ async def exchange_user_credentials(user_token: str, user_secret: str) -> str:
             headers={
                 "Content-Type": "application/json",
                 "Accept": "application/json",
+                "User-Agent": "OvalEdge-MCP",
+                "X-OvalEdge-Client": "MCP",
             },
         )
         if response.status_code == 401:
@@ -299,13 +358,20 @@ async def get_or_refresh_user_token(user_token: str, user_secret: str) -> str:
 async def get_or_refresh_local_token() -> str:
     """
     Return cached local JWT if still valid, otherwise exchange for a new one.
-    Cache is process-memory only.
+    Cache is process-memory only. A refresh lock prevents concurrent token/generate
+    stampedes (OvalEdge allows one active JWT per user token+secret).
     """
     cached = auth_context.local_cached_oe_jwt
     if cached and not is_token_expiring(cached):
         auth_context.current_oe_jwt.set(cached)
         return cached
-    token = await exchange_client_credentials()
-    auth_context.local_cached_oe_jwt = token
-    auth_context.current_oe_jwt.set(token)
-    return token
+
+    async with _get_local_token_lock():
+        cached = auth_context.local_cached_oe_jwt
+        if cached and not is_token_expiring(cached):
+            auth_context.current_oe_jwt.set(cached)
+            return cached
+        token = await exchange_client_credentials()
+        auth_context.local_cached_oe_jwt = token
+        auth_context.current_oe_jwt.set(token)
+        return token
