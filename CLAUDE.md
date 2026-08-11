@@ -74,8 +74,8 @@ Consolidated read family: `asset_explorer`, `asset_details`, `asset_lineage`, `k
 |--------|------|
 | Org knowledge / product how-to | `knowledge_search` |
 | Find physical / catalog assets | `asset_explorer` → `asset_details` |
-| Native DB/BI grants (RDAM) | `source_system_access` only — never fall back to explorer |
-| Catalog ACL (OE user/role grants) | `get_user_object_access` — not RDAM |
+| Native DB/BI grants (RDAM) | `access_explorer` operation=source_system_access only — never fall back to explorer |
+| Catalog permissions (OE user/role grants) | `access_explorer` operation=catalog_access — not RDAM |
 | User-facing links | `navLink` / `redirectUrl` — never show `ovaledge://` URIs to users |
 
 Full playbooks: `server/docs/mcp_workflows.md`.

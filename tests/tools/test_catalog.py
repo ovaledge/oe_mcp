@@ -62,6 +62,7 @@ class TestAssetExplorer:
         assert "navUrl" not in hit
 
     def test_explorer_description_rejects_native_grant_fallback(self) -> None:
+        assert "access_explorer" in _DESC_ASSET_EXPLORER
         assert "source_system_access" in _DESC_ASSET_EXPLORER
 
     def test_explorer_description_defaults_to_open_catalog_search(self) -> None:
@@ -72,6 +73,12 @@ class TestAssetExplorer:
         assert "exact governance names" in _DESC_ASSET_EXPLORER.lower()
         assert "find data assets" in _DESC_ASSET_EXPLORER.lower()
         assert "blanket" not in _DESC_ASSET_EXPLORER.lower()
+
+    def test_explorer_description_routes_first_person_inventory(self) -> None:
+        desc = _DESC_ASSET_EXPLORER.lower()
+        assert "what tables can i see/access" in desc
+        assert "not `access_explorer`" in _DESC_ASSET_EXPLORER or "not access_explorer" in desc
+        assert "named principal" in desc
 
     async def test_search_get_params(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE

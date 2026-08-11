@@ -57,22 +57,23 @@ class TestToolDescriptionBudget:
             assert "Data classification:" in text, f"missing classification on {key}"
 
     def test_confidential_classification_on_access_tools(self) -> None:
-        from server.tools.access.helpers import _DESC_GET_USER_OBJECT_ACCESS
-        from server.tools.rdam.helpers import _DESC_SOURCE_SYSTEM_ACCESS
+        from server.tools.access.helpers import _DESC_ACCESS_EXPLORER
 
-        assert MCP_TOOL_CLASSIFICATION_CONFIDENTIAL in _DESC_GET_USER_OBJECT_ACCESS
-        assert MCP_TOOL_CLASSIFICATION_CONFIDENTIAL in _DESC_SOURCE_SYSTEM_ACCESS
+        assert MCP_TOOL_CLASSIFICATION_CONFIDENTIAL in _DESC_ACCESS_EXPLORER
 
     def test_internal_classification_on_asset_explorer(self) -> None:
         from server.tools.catalog.helpers import _DESC_ASSET_EXPLORER
 
         assert MCP_TOOL_CLASSIFICATION_INTERNAL in _DESC_ASSET_EXPLORER
 
-    def test_source_system_access_description_is_compact(self) -> None:
-        from server.tools.rdam.helpers import _DESC_SOURCE_SYSTEM_ACCESS
+    def test_access_explorer_description_is_compact(self) -> None:
+        from server.tools.access.helpers import _DESC_ACCESS_EXPLORER
 
-        assert len(_DESC_SOURCE_SYSTEM_ACCESS) <= MCP_TOOL_DESC_MAX_CHARS
-        assert "docs://ovaledge/rdam_source_access" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert len(_DESC_ACCESS_EXPLORER) <= MCP_TOOL_DESC_MAX_CHARS
+        assert "docs://ovaledge/mcp_workflows" in _DESC_ACCESS_EXPLORER
+        assert "docs://ovaledge/rdam_source_access" in _DESC_ACCESS_EXPLORER
+        assert "never fall back to `asset_explorer`" in _DESC_ACCESS_EXPLORER.lower()
+        assert "Data Access Admin" in _DESC_ACCESS_EXPLORER
 
     def test_asset_explorer_description_points_to_docs_not_inline_allowlist(self) -> None:
         from server.tools.catalog.helpers import _DESC_ASSET_EXPLORER

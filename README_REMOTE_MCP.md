@@ -27,7 +27,7 @@ Use for remote deployments where OvalEdge APIs are an **OAuth2 resource server**
 4. Client calls `POST /mcp` with `Authorization: Bearer <access_token>`.
 5. MCP validates the token (**JWT via JWKS** or **opaque via introspect**).
 6. MCP forwards the same Bearer token to OvalEdge APIs (`OVALEDGE_REMOTE_FORWARD_IDP_TOKEN=true`, default).
-7. OvalEdge introspects the token and maps the principal to an **existing OvalEdge user** (email/username) and that user’s roles/ACL.
+7. OvalEdge introspects the token and maps the principal to an **existing OvalEdge user** (email/username) and that user’s roles/permissions.
 
 **There is no hop through `/api/user/token/generate` in this path.** That endpoint is for OvalEdge userToken+secret → internal JWT (`local` / `remote_credentials`). Stock OvalEdge **cannot** turn an Okta access token into an OE JWT via `token/generate` (it decrypts `userToken` as an OvalEdge credential). Forwarding the Okta Bearer token is the correct path when the pod runs the **`oauth2`** Spring profile.
 

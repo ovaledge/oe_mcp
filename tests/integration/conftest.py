@@ -31,7 +31,7 @@ _load_dotenv()
 # Import after .env is applied (do not use tests/conftest mock URLs).
 from server.auth.token_exchange import get_or_refresh_local_token  # noqa: E402
 from server.config import settings  # noqa: E402
-from server.constants import MCP_PATH_SOURCE_SYSTEM_ACCESS  # noqa: E402
+from server.constants import MCP_PATH_ACCESS_EXPLORER  # noqa: E402
 
 
 @pytest.fixture(scope="session")
@@ -90,10 +90,11 @@ async def mcp_get(
 async def api_get(
     mcp_get: Callable[[str, dict[str, object] | None], Awaitable[httpx.Response]],
 ) -> Callable[[dict[str, object]], Awaitable[httpx.Response]]:
-    """Backward-compatible helper for source-system-access live tests."""
+    """Backward-compatible helper for access_explorer source_system_access live tests."""
 
     async def _get(params: dict[str, object]) -> httpx.Response:
-        return await mcp_get(MCP_PATH_SOURCE_SYSTEM_ACCESS, params)
+        merged = {"operation": "source_system_access", **params}
+        return await mcp_get(MCP_PATH_ACCESS_EXPLORER, merged)
 
     return _get
 

@@ -1,4 +1,4 @@
-"""Validation and response shaping for get_user_object_access."""
+"""Validation and response shaping for access_explorer (catalog permissions branch)."""
 
 from __future__ import annotations
 
@@ -6,25 +6,47 @@ from typing import Any
 
 from server.constants import (
     MCP_ACCESS_DISAMBIGUATION_TOOL_LEAD_DOC,
-    MCP_PATH_GET_USER_OBJECT_ACCESS,
+    MCP_ACCESS_OPERATIONS_DOC,
+    MCP_OPERATION_CATALOG_ACCESS,
+    MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
+    MCP_PATH_ACCESS_EXPLORER,
+    MCP_QUERY_DIRECTIONS_DOC,
+    MCP_RDAM_SCOPE_MODE_EXACT,
+    MCP_RDAM_SCOPE_MODES_DOC,
+    MCP_SOURCE_SYSTEMS_DOC,
 )
 from server.tools.common.descriptions import classify_tool_desc
 
-_DESC_GET_USER_OBJECT_ACCESS = classify_tool_desc(
+_DESC_ACCESS_EXPLORER = classify_tool_desc(
     MCP_ACCESS_DISAMBIGUATION_TOOL_LEAD_DOC
-    + "Discover effective OvalEdge **catalog ACL** permissions (user and role grants). "
-    "Not native Redshift/Snowflake/Tableau grants — use source_system_access for those.\n\n"
-    f"Backend: GET {MCP_PATH_GET_USER_OBJECT_ACCESS}\n\n"
-    "**Directions:** user_to_object | object_to_principals — username required for "
-    "user_to_object.\n\n"
-    "**Asset resolution (one mode):** object_id + object_type (preferred after search), "
-    "fully_qualified_name, or object_name (may return matchCandidates).\n\n"
-    "**Connectors:** object_type=connection with object_name; not in asset_explorer.\n\n"
-    "JDBC-backed types, story-zone inheritance, and resolution workflow: "
-    "docs://ovaledge/mcp_workflows (Catalog object access) and workflow prompt "
-    "`catalog_object_access`.\n\n"
-    "Present effectiveAccess or principals, grantSources, contributingRoles, inheritedFrom, "
-    "redirectUrl."
+    + "Explore access permissions: OvalEdge **catalog permissions** or **native** RDAM "
+    "grants (Redshift/Snowflake/Tableau). Say **catalog permissions** to users (not ACL).\n\n"
+    f"Backend: GET {MCP_PATH_ACCESS_EXPLORER}\n\n"
+    f"**Required:** `operation` ({MCP_ACCESS_OPERATIONS_DOC}).\n\n"
+    f"**`operation={MCP_OPERATION_CATALOG_ACCESS}`** — catalog permissions (user/role grants). "
+    "Directions: user_to_object | object_to_principals (username required for "
+    "user_to_object). Asset resolution (one mode): object_id+object_type, "
+    "fully_qualified_name, or object_name. Present effectiveAccess/principals, "
+    "redirectUrl. Prompt: `catalog_object_access`.\n\n"
+    f"**`operation={MCP_OPERATION_SOURCE_SYSTEM_ACCESS}`** — native RDAM grants / DAM browse. "
+    "Required: `source_system` ("
+    + MCP_SOURCE_SYSTEMS_DOC
+    + "), `query_direction` ("
+    + MCP_QUERY_DIRECTIONS_DOC
+    + "). **Not** catalog permissions or `asset_explorer` — never fall back to "
+    "`asset_explorer` when RDAM is empty or errors. Do not probe `connection_id` — ask "
+    "the user. "
+    "**browse:** connection_id + object_type. **user_to_objects:** username required; "
+    "with connection_id + object_type=table, omit `object_path` to list tables. "
+    "**object_to_users:** object_path + object_type. Optional object_name composes path. "
+    "**scope_mode:** "
+    + MCP_RDAM_SCOPE_MODES_DOC
+    + f" (default {MCP_RDAM_SCOPE_MODE_EXACT}); descendants roll up under schema/database. "
+    "Partial paths may return matchCandidates or requiresSchemaSelection. "
+    "Grant rows include grant_mechanism (direct / contributing_role/group) and privileges. "
+    "docs://ovaledge/rdam_source_access; prompt `native_source_access`.\n\n"
+    "docs://ovaledge/mcp_workflows (Who has access?). Read-only. "
+    "RBAC / Instance-Connector **Data Access Admin** enforced server-side."
 ,
     confidential=True,
 )
@@ -89,6 +111,6 @@ def enrich_get_user_object_access_response(result: dict[str, Any]) -> dict[str, 
         if zone_name and not data.get("advisoryMessage"):
             data["advisoryMessage"] = (
                 f"Data story access is inherited from Story Zone '{zone_name}' "
-                f"({zone_type}); the story has no direct ACL grants."
+                f"({zone_type}); the story has no direct catalog permissions."
             )
     return result

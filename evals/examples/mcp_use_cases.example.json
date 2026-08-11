@@ -89,11 +89,12 @@
       "actual_output": "I listed native Redshift grants for svc_analytics.",
       "mcp_tools_called": [
         {
-          "name": "source_system_access",
+          "name": "access_explorer",
           "args": {
             "source_system": "redshift",
             "query_direction": "user_to_objects",
-            "username": "svc_analytics"
+            "username": "svc_analytics",
+            "operation": "source_system_access"
           },
           "result": {
             "grants": [],
@@ -312,15 +313,16 @@
     {
       "name": "example_catalog_object_access",
       "input": "Can john.doe read payroll_fact in OvalEdge?",
-      "actual_output": "I used get_user_object_access for catalog ACLs, not source_system_access (native DB grants).",
+      "actual_output": "I used access_explorer (operation=catalog_access) for catalog ACLs, not access_explorer (operation=source_system_access) (native DB grants).",
       "mcp_tools_called": [
         {
-          "name": "get_user_object_access",
+          "name": "access_explorer",
           "args": {
             "query_direction": "user_to_object",
             "username": "john.doe",
             "object_id": 101,
-            "object_type": "oetable"
+            "object_type": "oetable",
+            "operation": "catalog_access"
           },
           "result": {
             "ok": true,
@@ -1144,16 +1146,17 @@
       ]
     },
     {
-      "name": "example_get_user_object_access_intent_required",
+      "name": "example_access_explorer_catalog_intent_required",
       "input": "Who has access to payroll_fact?",
-      "actual_output": "get_user_object_access required ACCESS_INTENT_REQUIRED for object_to_principals; I asked the user to pick catalog ACL vs native.",
+      "actual_output": "access_explorer (operation=catalog_access) required ACCESS_INTENT_REQUIRED for object_to_principals; I asked the user to pick catalog ACL vs native.",
       "mcp_tools_called": [
         {
-          "name": "get_user_object_access",
+          "name": "access_explorer",
           "args": {
             "query_direction": "object_to_principals",
             "object_id": 101,
-            "object_type": "oetable"
+            "object_type": "oetable",
+            "operation": "catalog_access"
           },
           "result": {
             "error": "Who-has-access requires disambiguation before calling this tool.",
@@ -1165,18 +1168,19 @@
       ]
     },
     {
-      "name": "example_source_system_access_intent_required",
+      "name": "example_access_explorer_source_intent_required",
       "input": "Who has access to BUSINESS.BANKING in Redshift?",
-      "actual_output": "source_system_access object_to_users needs access_intent_confirmed=native after disambiguation; I presented the 1/2 choice.",
+      "actual_output": "access_explorer (operation=source_system_access) object_to_users needs access_intent_confirmed=native after disambiguation; I presented the 1/2 choice.",
       "mcp_tools_called": [
         {
-          "name": "source_system_access",
+          "name": "access_explorer",
           "args": {
             "source_system": "redshift",
             "query_direction": "object_to_users",
             "object_path": "BUSINESS.BANKING",
             "object_type": "schema",
-            "connection_id": 1000
+            "connection_id": 1000,
+            "operation": "source_system_access"
           },
           "result": {
             "error": "Who-has-access requires disambiguation before calling this tool.",

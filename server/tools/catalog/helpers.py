@@ -55,6 +55,7 @@ _DESC_ASSET_EXPLORER = classify_tool_desc(
     "(include_parent/children for tags). "
     "Glossary placement: domain_id|domain_name + optional category/subcategory.\n\n"
     "Examples: "
+    '"What tables can I see/access?" → this tool (not access_explorer); '
     'search_terms=["payment"] + context_query="Find assets related to payment"; '
     'tables only → object_type="oetable"; '
     'glossary name="Revenue" object_type="glossary".\n\n'

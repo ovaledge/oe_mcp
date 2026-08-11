@@ -21,7 +21,7 @@ class TestEnrichGetUserObjectAccessResponse:
         msg = out["data"]["advisoryMessage"]
         assert "inherited from Story Zone" in msg
         assert "OvalEdge" in msg
-        assert "no direct ACL" in msg
+        assert "no direct catalog permissions" in msg
 
     def test_non_oestory_unchanged(self) -> None:
         result = {
