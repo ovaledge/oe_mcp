@@ -6,6 +6,7 @@ from server.constants import (
     MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE,
     MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC,
     MCP_SOURCE_SYSTEMS_DOC,
+    TOOL_ACCESS_EXPLORER,
     TOOL_ASSESS_CDE_DQ,
     TOOL_ASSET_DETAILS,
     TOOL_ASSET_EXPLORER,
@@ -16,11 +17,9 @@ from server.constants import (
     TOOL_CREATE_SQL_DQ_RULE,
     TOOL_CREATE_TAG,
     TOOL_GENERATE_DQ_QUERIES,
-    TOOL_GET_USER_OBJECT_ACCESS,
     TOOL_KNOWLEDGE_SEARCH,
     TOOL_LOOKUP_DQ_RULE,
     TOOL_METADATA_CHANGES_BETWEEN_CRAWLS,
-    TOOL_SOURCE_SYSTEM_ACCESS,
     TOOL_UPDATE_ASSET_DESCRIPTIONS,
     TOOL_UPDATE_GOVERNANCE_ROLES,
     TOOL_VALIDATE_DQ_QUERIES,
@@ -39,6 +38,8 @@ def register(mcp: FastMCP) -> None:
 
         Trigger: "Find data about customer transactions"
                  "What tables do we have for financial reporting?"
+                 "What tables can I see/access?"
+                 "What schemas/columns can I view?"
         """
         text = (
             f"Help me find data for: '{query}'\n\n"
@@ -280,22 +281,28 @@ def register(mcp: FastMCP) -> None:
         Trigger: "Who has access to ORDERS?"
                  "Who has access to BUSINESS.BANKING in Snowflake?"
                  "Who can see this table?"
+        Not: first-person catalog inventory without a named principal
+             ("What tables can I see/access?") — use data_discovery / asset_explorer.
         """
         text = (
             f"Answer access for: '{question}'\n\n"
             f"{MCP_ACCESS_DISAMBIGUATION_RULE_DOC}\n\n"
             f"{MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC}\n\n"
             f"When native/DAM signals are present → native_source_access → "
-            f"{TOOL_SOURCE_SYSTEM_ACCESS} with access_intent_confirmed=native. "
-            f"When catalog ACL / OE security signals are present → catalog_object_access → "
-            f"{TOOL_GET_USER_OBJECT_ACCESS} with access_intent_confirmed=catalog_acl. "
+            f"{TOOL_ACCESS_EXPLORER} with operation=source_system_access and "
+            f"access_intent_confirmed=native. "
+            f"When catalog-permissions / OE security signals are present → catalog_object_access → "
+            f"{TOOL_ACCESS_EXPLORER} with operation=catalog_access and "
+            f"access_intent_confirmed=catalog_acl. "
             f"When **neither** signal set is present — do **not** call any access tool; "
             f"present this message verbatim and wait for **1** or **2**:\n\n"
             f"{MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE}\n\n"
-            f"After **1**: native_source_access → {TOOL_SOURCE_SYSTEM_ACCESS} with "
-            f"access_intent_confirmed=native. "
+            f"After **1**: native_source_access → {TOOL_ACCESS_EXPLORER} with "
+            f"operation=source_system_access and access_intent_confirmed=native. "
             f"After **2**: catalog_object_access → {TOOL_ASSET_EXPLORER} (if needed) → "
-            f"{TOOL_GET_USER_OBJECT_ACCESS} with access_intent_confirmed=catalog_acl."
+            f"{TOOL_ACCESS_EXPLORER} with operation=catalog_access and "
+            f"access_intent_confirmed=catalog_acl. "
+            f"When speaking to users, say catalog permissions (not ACL)."
         )
         return [Message(text)]
 
@@ -305,23 +312,30 @@ def register(mcp: FastMCP) -> None:
         question: str,
     ) -> list[Message]:
         """
-        Native Redshift/Snowflake/Tableau grants (harvested RDAM), not catalog ACLs.
+        Native Redshift/Snowflake/Tableau grants (harvested RDAM), not catalog permissions.
 
         Trigger: "What native privileges does svc_analytics have in Redshift?"
                  "Who has DAM access to prod_db.public.orders?"
                  "Which users have source-system SELECT on the Revenue Dashboard?"
+                 "What tables can I access in Redshift?" (first-person + named source)
+        Not: "What tables can I see/access?" without a named principal or source —
+             use data_discovery / asset_explorer.
         """
         text = (
             f"Answer native access for {source_system}: '{question}'\n\n"
             f"Prerequisite: user picked **1** (native) or the question includes native/DAM "
-            f"keywords — not Snowflake/Redshift/Tableau alone. If ambiguous, use "
-            f"resolve_object_access first.\n\n"
+            f"keywords — not Snowflake/Redshift/Tableau alone — or first-person inventory "
+            f"with this named source. Require a named remote username for user_to_objects "
+            f"(ask if missing). If ambiguous who-has-access, use resolve_object_access first. "
+            f"Generic first-person catalog inventory without a principal/source is "
+            f"data_discovery / {TOOL_ASSET_EXPLORER}, not this prompt.\n\n"
             f"Steps:\n"
             f"1. Infer query_direction from the question (do not ask the user): user_to_objects "
             f"when asking what a specific user can access; object_to_users when asking who has "
             f"access to an object. For user permission questions, use user_to_objects and report "
             f"only that user's grants — never object_to_users.\n"
-            f"2. Call {TOOL_SOURCE_SYSTEM_ACCESS} with source_system='{source_system}' "
+            f"2. Call {TOOL_ACCESS_EXPLORER} with operation=source_system_access, "
+            f"source_system='{source_system}' "
             f"({MCP_SOURCE_SYSTEMS_DOC}) and query_direction inferred from the question. "
             f"For object_to_users who-has-access, set access_intent_confirmed=native. "
             f"Only source_system and query_direction are mandatory otherwise; add username, "
@@ -358,14 +372,20 @@ def register(mcp: FastMCP) -> None:
         Browse DAM-visible objects (inventory) on a connector.
 
         Trigger: "List schemas in BUSINESS on connection 1000"
-                 "What tables are in BUSINESS.BANKING?"
-                 "Show columns in ORDERS table"
+                 "What tables are in BUSINESS.BANKING?" (DAM / connection_id known)
+                 "Show columns in ORDERS table" (DAM browse)
+        Not: generic "What tables can I see?" without DAM/connection_id —
+             use data_discovery / asset_explorer.
         """
         text = (
             f"Browse DAM inventory on connection {connection_id} for: '{scope}'\n\n"
+            f"Prerequisite: explicit DAM browse / known connection_id (or first-person "
+            f"inventory with a named source that needs DAM browse). Generic first-person "
+            f"catalog inventory without DAM/connection_id → data_discovery / "
+            f"{TOOL_ASSET_EXPLORER}, not this prompt.\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_SOURCE_SYSTEM_ACCESS} with query_direction=browse, "
-            f"connection_id={connection_id}. "
+            f"1. Call {TOOL_ACCESS_EXPLORER} with operation=source_system_access, "
+            f"query_direction=browse, connection_id={connection_id}. "
             f"object_type is the **child level to list**; object_path (or fully_qualified_name) "
             f"is the **parent** scope.\n"
             f"2. Routing: list databases → omit object_path, object_type=database; "
@@ -375,7 +395,8 @@ def register(mcp: FastMCP) -> None:
             f"object_type=column.\n"
             f"3. Path routing: see docs://ovaledge/mcp_workflows (Native source access — "
             f"object_path formats and DAM browse).\n"
-            f"4. For access questions after browse, call {TOOL_SOURCE_SYSTEM_ACCESS} with "
+            f"4. For access questions after browse, call {TOOL_ACCESS_EXPLORER} with "
+            f"operation=source_system_access and "
             f"query_direction=user_to_objects or object_to_users."
         )
         return [Message(text)]
@@ -383,28 +404,30 @@ def register(mcp: FastMCP) -> None:
     @mcp.prompt()
     def catalog_object_access(question: str) -> list[Message]:
         """
-        OvalEdge catalog ACL permissions (user/role grants), not native RDAM.
+        OvalEdge catalog permissions (user/role grants), not native RDAM.
 
-        Trigger: "What OvalEdge catalog ACL does john.doe have on CUSTOMER_MASTER?"
+        Trigger: "What OvalEdge catalog permissions does john.doe have on CUSTOMER_MASTER?"
                  "Who has catalog access to the Finance schema?"
                  "Which OE security roles provide access to this report?"
         """
         text = (
             f"Answer OvalEdge catalog access: '{question}'\n\n"
-            f"Prerequisite: user picked **2** (catalog ACL) or the question includes OE "
+            f"Prerequisite: user picked **2** (catalog permissions) or the question includes OE "
             f"security / catalog-access keywords — not Snowflake/Redshift/Tableau alone. "
-            f"If ambiguous, use resolve_object_access first.\n\n"
+            f"If ambiguous, use resolve_object_access first. "
+            f"Say **catalog permissions** to users (not ACL).\n\n"
             f"Steps:\n"
             f"1. Infer query_direction: user_to_object when asking what a specific user can do; "
             f"object_to_principals when asking who has access on an asset.\n"
             f"2. Resolve the asset with {TOOL_ASSET_EXPLORER} when the user names it; pass "
             f"object_id and object_type from the chosen hit. If multiple matches, ask the user "
-            f"to pick or use matchCandidates from get_user_object_access.\n"
-            f"3. Call {TOOL_GET_USER_OBJECT_ACCESS} with query_direction, username (for "
-            f"user_to_object), resolved object_id+object_type, and for object_to_principals "
-            f"who-has-access set access_intent_confirmed=catalog_acl.\n"
+            f"to pick or use matchCandidates from {TOOL_ACCESS_EXPLORER}.\n"
+            f"3. Call {TOOL_ACCESS_EXPLORER} with operation=catalog_access, query_direction, "
+            f"username (for user_to_object), resolved object_id+object_type, and for "
+            f"object_to_principals who-has-access set access_intent_confirmed=catalog_acl.\n"
             f"4. Present metadataPermission, dataPermission, grantSources, contributingRoles, "
-            f"inheritedFrom when columns/terms inherit parent ACLs, and redirectUrl."
+            f"inheritedFrom when columns/terms inherit parent catalog permissions, and "
+            f"redirectUrl."
         )
         return [Message(text)]
 

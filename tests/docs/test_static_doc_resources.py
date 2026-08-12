@@ -90,3 +90,10 @@ class TestStaticDocResources:
         )
         assert not missing_tools, f"mcp_workflows.md missing tools: {missing_tools}"
         assert not missing_prompts, f"mcp_workflows.md missing prompts: {missing_prompts}"
+
+    def test_mcp_workflows_routes_first_person_inventory_to_asset_explorer(self) -> None:
+        text = read_doc_markdown("mcp_workflows")
+        assert "Discovery vs grants" in text
+        assert "What tables/schemas/columns can I see/view/access?" in text
+        assert "without a named principal" in text
+        assert "First-person **with** a named source" in text

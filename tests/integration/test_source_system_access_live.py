@@ -1,5 +1,5 @@
 """
-Live integration tests for GET /api/v1/mcp/source-system-access (NFD-48785).
+Live integration tests for GET /api/v1/mcp/access-explorer (operation=source_system_access).
 
 Run:
   poetry run pytest -c tests/integration/pytest.ini tests/integration -m integration

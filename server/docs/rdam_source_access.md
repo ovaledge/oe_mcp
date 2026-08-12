@@ -1,12 +1,12 @@
-# RDAM native source access (`source_system_access`)
+# RDAM native source access (`access_explorer` operation=source_system_access)
 
-Deep routing reference for **`source_system_access`** — native Redshift, Snowflake, and Tableau grants harvested in RDAM SQL metadata. For workflow steps and a parameter cheat sheet, see [mcp_workflows](mcp_workflows#native-source-access-rdam). For DAA enforcement, see [governance](governance#data-access-admin-daa).
+Deep routing reference for **`access_explorer`** with **`operation=source_system_access`** — native Redshift, Snowflake, and Tableau grants harvested in RDAM SQL metadata. For workflow steps and a parameter cheat sheet, see [mcp_workflows](mcp_workflows#native-source-access-rdam). For DAA enforcement, see [governance](governance#data-access-admin-daa).
 
 ## Why this tool exists
 
-`get_user_object_access` resolves effective access at the OvalEdge **catalog permission** layer. There is no equivalent for access that exists **natively in the source systems** — Redshift, Snowflake, and Tableau — independent of OvalEdge grants. Customers need answers like "What tables can this service account actually query in Redshift?" or "Which users have native access to this table?" without navigating each source manually.
+`access_explorer` with `operation=catalog_access` resolves effective access at the OvalEdge **catalog permission** layer. There is no equivalent for access that exists **natively in the source systems** — Redshift, Snowflake, and Tableau — independent of OvalEdge grants. Customers need answers like "What tables can this service account actually query in Redshift?" or "Which users have native access to this table?" without navigating each source manually.
 
-| | get_user_object_access (catalog) | source_system_access (native RDAM) |
+| | access_explorer catalog_access | access_explorer source_system_access |
 |---|---|---|
 | Access layer | OvalEdge catalog permissions | Native source-system grants |
 | Grant mechanisms | OvalEdge user grants + OvalEdge roles | Redshift (direct / group / role), Snowflake (role), Tableau (direct / group) |
@@ -15,7 +15,7 @@ Deep routing reference for **`source_system_access`** — native Redshift, Snowf
 
 ## No catalog / Elasticsearch fallback
 
-`source_system_access` reads RDAM SQL metadata only. Never call `asset_explorer`, `asset_details`, or other catalog tools as a substitute when RDAM returns empty grants, 4xx/5xx, not-found, or not-harvested — catalog search cannot answer native Redshift/Snowflake/Tableau grants. Report the RDAM result (or API error) and suggest RDAM harvest, DAA, object_path / object_type, or native SQL (e.g. Snowflake `SHOW GRANTS`) — do not invoke catalog search.
+`access_explorer` source_system_access reads RDAM SQL metadata only. Never call `asset_explorer`, `asset_details`, or other catalog tools as a substitute when RDAM returns empty grants, 4xx/5xx, not-found, or not-harvested — catalog search cannot answer native Redshift/Snowflake/Tableau grants. Report the RDAM result (or API error) and suggest RDAM harvest, DAA, object_path / object_type, or native SQL (e.g. Snowflake `SHOW GRANTS`) — do not invoke catalog search.
 
 ## Mandatory API fields
 
@@ -78,7 +78,7 @@ Scope with **`connection_id`** (preferred) or optional `connectionName.` prefix 
 | Table | `dbName.schemaName.tableName`, `schemaName.tableName`, `tableName` | `table` |
 | Column | `dbName.schemaName.tableName.columnName`, `schemaName.tableName.columnName`, `tableName.columnName`, `columnName` | `column` |
 
-**source_system_access (browse):** `object_path` is the **parent** scope; `object_type` is the **child level to list** — omit parent to list databases; `dbName` + `schema` lists schemas; `dbName.schemaName` + `table` lists tables; `dbName.schemaName.tableName` + `column` lists columns.
+**access_explorer source_system_access (browse):** `object_path` is the **parent** scope; `object_type` is the **child level to list** — omit parent to list databases; `dbName` + `schema` lists schemas; `dbName.schemaName` + `table` lists tables; `dbName.schemaName.tableName` + `column` lists columns.
 
 ## object_type
 

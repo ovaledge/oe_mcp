@@ -62,7 +62,7 @@ MCP clients load **all** tool descriptions on every session. Keep them small.
 | Package | Use for |
 |---------|---------|
 | `server/tools/catalog/` | Catalog search, details, lineage, profiles, metadata drift, asset descriptions, CDE associations |
-| `server/tools/access/` | OvalEdge catalog ACL (`get_user_object_access`) |
+| `server/tools/access/` | Unified access (`access_explorer`: catalog permissions + RDAM) |
 | `server/tools/governance/` | Glossary, tags, data stories, governance roles, custom fields (incl. guided creates) |
 | `server/tools/dataquality/` | DQ rule lookup, CDE assess, associate, create |
 | `server/tools/docs/` | OvalEdge **product** documentation search only |
@@ -172,8 +172,8 @@ In `tests/tools/test_<feature>.py`:
 | Long logic in `register.py` | `helpers.py` / `formatters.py` / `invocations.py` |
 | Hard-coded tool names in prompts | `from server.constants import TOOL_*` |
 | Knowledge questions | `knowledge_search` searches both data stories and product docs |
-| Catalog search for native DB grants | `source_system_access` |
-| Catalog ACL for native grants | `get_user_object_access` vs `source_system_access` |
+| Catalog search for native DB grants | `access_explorer` operation=source_system_access |
+| Catalog permissions for native grants | `access_explorer` catalog_access vs source_system_access |
 | Skipping `mcp_workflows.md` | Routing table row + section when non-obvious |
 
 ## Enterprise architecture alignment

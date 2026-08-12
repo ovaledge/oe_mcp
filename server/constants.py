@@ -16,8 +16,7 @@ TOOL_UPDATE_CDE_ASSOCIATIONS = "update_cde_associations"
 TOOL_UPDATE_GOVERNANCE_ROLES = "update_governance_roles"
 TOOL_UPDATE_CUSTOM_FIELD_VALUE = "update_custom_field_value"
 TOOL_LOOKUP_DQ_RULE = "lookup_dq_rule"
-TOOL_SOURCE_SYSTEM_ACCESS = "source_system_access"
-TOOL_GET_USER_OBJECT_ACCESS = "get_user_object_access"
+TOOL_ACCESS_EXPLORER = "access_explorer"
 TOOL_ASSESS_CDE_DQ = "assess_cde_dq"
 TOOL_ASSOCIATE_DQ_RULE_OBJECTS = "associate_dq_rule_objects"
 TOOL_CREATE_DQ_RULES = "create_dq_rules"
@@ -137,8 +136,13 @@ NAV_GLOSSARY_TERM_HASH = "#nav/glossary?id="
 MCP_PATH_TAGS = "/api/v1/mcp/tags"  # POST create only
 MCP_PATH_TAGS_CREATE_OPTIONS = "/api/v1/mcp/tags/create-options"
 MCP_PATH_TAGS_PARENT_OPTIONS = "/api/v1/mcp/tags/parent-options"
-MCP_PATH_SOURCE_SYSTEM_ACCESS = "/api/v1/mcp/source-system-access"
-MCP_PATH_GET_USER_OBJECT_ACCESS = "/api/v1/mcp/get-user-object-access"
+MCP_PATH_ACCESS_EXPLORER = "/api/v1/mcp/access-explorer"
+MCP_OPERATION_CATALOG_ACCESS = "catalog_access"
+MCP_OPERATION_SOURCE_SYSTEM_ACCESS = "source_system_access"
+MCP_ACCESS_OPERATIONS = frozenset(
+    {MCP_OPERATION_CATALOG_ACCESS, MCP_OPERATION_SOURCE_SYSTEM_ACCESS}
+)
+MCP_ACCESS_OPERATIONS_DOC = "catalog_access | source_system_access"
 
 # Secure-mode create_tag wizard phases (matches OvalEdge UI).
 SELECTION_PHASE_MASTER_REQUIRED = "MASTER_REQUIRED"
@@ -197,14 +201,14 @@ MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES_DOC = ", ".join(
     sorted(MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES)
 )
 
-# Native source-system access (source_system_access).
+# Native source-system access (access_explorer operation=source_system_access).
 # Must match backend McpSourceSystemAccessReadService.
 MCP_SOURCE_SYSTEMS = frozenset({"redshift", "snowflake", "tableau"})
 MCP_SOURCE_SYSTEMS_DOC = ", ".join(sorted(MCP_SOURCE_SYSTEMS))
 MCP_QUERY_DIRECTIONS = frozenset({"user_to_objects", "object_to_users", "browse"})
 MCP_QUERY_DIRECTIONS_DOC = "user_to_objects | object_to_users | browse"
 
-# RDAM native object levels for source_system_access (wire: objectType).
+# RDAM native object levels for access_explorer source_system_access (wire: objectType).
 # Must match backend McpSourceSystemAccessReadService.
 MCP_RDAM_OBJECT_TYPES = frozenset(
     {"database", "schema", "table", "column", "project", "report"}
@@ -254,7 +258,8 @@ MCP_RDAM_PRIVILEGE_MAP_DOC = (
 
 # Agents must not fall back to catalog/Elasticsearch when RDAM returns empty or errors.
 MCP_RDAM_NO_CATALOG_FALLBACK_DOC = (
-    "**No catalog / Elasticsearch fallback:** `source_system_access` reads RDAM SQL metadata "
+    f"**No catalog / Elasticsearch fallback:** `{TOOL_ACCESS_EXPLORER}` "
+    f"(operation={MCP_OPERATION_SOURCE_SYSTEM_ACCESS}) reads RDAM SQL metadata "
     "only. Never call `asset_explorer`, `asset_details`, or other catalog "
     "tools as a substitute when RDAM returns empty grants, 4xx/5xx, not-found, or "
     "not-harvested — catalog search cannot answer native Redshift/Snowflake/Tableau grants. "
@@ -263,7 +268,7 @@ MCP_RDAM_NO_CATALOG_FALLBACK_DOC = (
 )
 
 # RDAM/DAM path + objectType matrix — must match Java McpSourceSystemAccessReadService /
-# source-system-access browse path resolution (objectType disambiguates;
+# access-explorer source_system_access browse path resolution (objectType disambiguates;
 # do not infer from segment count alone).
 MCP_DAM_OBJECT_PATH_MATRIX_DOC = (
     "**RDAM path + object_type matrix** (Redshift/Snowflake). Scope with **`connection_id`** "
@@ -278,14 +283,15 @@ MCP_DAM_OBJECT_PATH_MATRIX_DOC = (
     "| Table | `dbName.schemaName.tableName`, `schemaName.tableName`, `tableName` | `table` |\n"
     "| Column | `dbName.schemaName.tableName.columnName`, `schemaName.tableName.columnName`, "
     "`tableName.columnName`, `columnName` | `column` |\n\n"
-    "**source_system_access (browse):** `object_path` is the **parent** scope; "
+    f"**{TOOL_ACCESS_EXPLORER} browse (operation={MCP_OPERATION_SOURCE_SYSTEM_ACCESS}):** "
+    "`object_path` is the **parent** scope; "
     "`object_type` is the "
     "**child level to list** — omit parent to list databases; `dbName` + `schema` lists schemas; "
     "`dbName.schemaName` + `table` lists tables; `dbName.schemaName.tableName` + `column` "
     "lists columns."
 )
 
-# source_system_access objectPath — must match backend path resolution.
+# access_explorer source_system_access objectPath — must match backend path resolution.
 MCP_OBJECT_PATH_FORMATS_DOC = (
     "**object_path** formats (Redshift/Snowflake; dot-separated):\n"
     "- Optional OvalEdge **connection name** prefix when multiple connections share a "
@@ -303,13 +309,14 @@ MCP_OBJECT_PATH_FORMATS_DOC = (
     + MCP_DAM_OBJECT_PATH_MATRIX_DOC
 )
 MCP_SOURCE_SYSTEM_ACCESS_OVERVIEW_DOC = (
-    "**Why this tool exists:** `get_user_object_access` resolves effective access at the "
+    f"**Why this tool exists:** `{TOOL_ACCESS_EXPLORER}` with "
+    f"`operation={MCP_OPERATION_CATALOG_ACCESS}` resolves effective access at the "
     "OvalEdge **catalog permission** layer. There is no equivalent for access that exists "
     "**natively in the source systems** — Redshift, Snowflake, and Tableau — independent of "
     "OvalEdge grants. Customers need answers like \"What tables can this service account "
     "actually query in Redshift?\" or \"Which users have native access to this table?\" "
     "without navigating each source manually.\n\n"
-    "| | get_user_object_access (catalog) | source_system_access (native RDAM) |\n"
+    f"| | {TOOL_ACCESS_EXPLORER} catalog_access | {TOOL_ACCESS_EXPLORER} source_system_access |\n"
     "|---|---|---|\n"
     "| Access layer | OvalEdge catalog permissions | Native source-system grants |\n"
     "| Grant mechanisms | OvalEdge user grants + OvalEdge roles | Redshift (direct / group / "
@@ -320,9 +327,10 @@ MCP_SOURCE_SYSTEM_ACCESS_OVERVIEW_DOC = (
     "Tableau project/report |"
 )
 MCP_CATALOG_OBJECT_ACCESS_OVERVIEW_DOC = (
-    "Answers who can see or use a catalog object in OvalEdge (ACL grants), including "
-    "metadata-read/write and data permission levels. Effective permission is the highest "
-    "across direct user grants and role grants. Use source_system_access for native "
+    "Answers who can see or use a catalog object in OvalEdge (catalog permissions), "
+    "including metadata-read/write and data permission levels. Effective permission is "
+    "the highest across direct user grants and role grants. Use "
+    f"`{TOOL_ACCESS_EXPLORER}` operation={MCP_OPERATION_SOURCE_SYSTEM_ACCESS} for native "
     "database/BI grants only. Connectors (connections) are resolved from the database by "
     "name — they are not in catalog search. Data Domains, Data Products, glossary Domains, "
     "and Story Zones are resolved from the database when Elasticsearch has no document."
@@ -355,57 +363,84 @@ MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC = (
     "\"Who has access to BUSINESS.BANKING in Snowflake?\"; "
     "\"Who has access to customer1 in redshift1 in Redshift?\"."
 )
+# Catalog discovery vs grants — keep compact (feeds tool descriptions + instructions).
+MCP_CATALOG_DISCOVERY_VS_ACCESS_DOC = (
+    "Catalog discovery vs grants: first-person inventory without a named principal "
+    f"(e.g. \"What tables/schemas/columns can I see/view/access?\") → `{TOOL_ASSET_EXPLORER}` "
+    f"— not `{TOOL_ACCESS_EXPLORER}`. Named principal "
+    f"(e.g. \"What can svc_analytics access?\") → `{TOOL_ACCESS_EXPLORER}`. "
+    f"First-person + named Redshift/Snowflake/Tableau → `{TOOL_ACCESS_EXPLORER}` "
+    "operation=source_system_access (ask for remote username/connection_id as needed). "
+    "\"Who can see / who has access to this object?\" remains who-has-access "
+    "(resolve_object_access)."
+)
 MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC = (
     "Ambiguous who-has-access: disambiguate via resolve_object_access; "
     "do not call access tools until user picks. "
-    "Skip disambiguation only when native/DAM or catalog ACL/OE security signals "
-    "are present. "
+    "Skip disambiguation only when native/DAM or catalog-permissions/OE security "
+    "signals are present. "
+    "When speaking to users, say **catalog permissions** (not ACL). "
     + MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC
+    + " "
+    + MCP_CATALOG_DISCOVERY_VS_ACCESS_DOC
 )
 MCP_ACCESS_DISAMBIGUATION_TOOL_LEAD_DOC = (
     "**Who-has-access:** `resolve_object_access` then `access_intent_confirmed` "
     "(native / catalog_acl). Snowflake/Redshift/Tableau alone do not skip "
-    "disambiguation.\n\n"
+    "disambiguation. "
+    + MCP_CATALOG_DISCOVERY_VS_ACCESS_DOC
+    + "\n\n"
 )
 MCP_ACCESS_DISAMBIGUATION_SEARCH_GUARD_DOC = (
     "**Not who-has-access or RDAM** — `resolve_object_access` first; RDAM via "
-    "`source_system_access` only.\n\n"
+    f"`{TOOL_ACCESS_EXPLORER}` with operation=source_system_access only. "
+    + MCP_CATALOG_DISCOVERY_VS_ACCESS_DOC
+    + "\n\n"
 )
 MCP_ACCESS_INTENT_NATIVE = "native"
 MCP_ACCESS_INTENT_CATALOG_ACL = "catalog_acl"
 MCP_ACCESS_INTENT_CONFIRMED_FIELD_DOC = (
     "Who-has-access only: `native` after user picks **1** or when the question names "
     "native/DAM signals (not Snowflake/Redshift/Tableau alone); `catalog_acl` after **2** "
-    "or when the question names OE security / ACL / catalog-access signals. "
-    "Omit for user_to_objects / user_to_object / browse."
+    "or when the question names OE security / catalog permissions / catalog-access signals. "
+    "Omit for user_to_objects / user_to_object / browse. "
+    "Present to users as catalog permissions (not ACL)."
 )
 MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE = (
-    "OvalEdge has **two** different tools for “who has access” questions:\n\n"
-    "| Tool | What it answers |\n"
-    "|------|------------------|\n"
-    f"| **`{TOOL_SOURCE_SYSTEM_ACCESS}`** | **Native / remote** permissions crawled from "
+    "OvalEdge has **two** different access layers for “who has access” questions "
+    f"(one tool: `{TOOL_ACCESS_EXPLORER}`):\n\n"
+    "| Operation | What it answers |\n"
+    "|-----------|------------------|\n"
+    f"| **`operation=source_system_access`** | **Native / remote** permissions crawled from "
     "Redshift, Snowflake, or Tableau — what you see on the **DAM** (Data Access Management) "
     "screen (e.g. SELECT, roles, groups). |\n"
-    f"| **`{TOOL_GET_USER_OBJECT_ACCESS}`** | **OvalEdge catalog ACL** on the **Security** "
+    f"| **`operation=catalog_access`** | **OvalEdge catalog permissions** on the **Security** "
     "page — metadata read/write and data permission levels for OvalEdge users and roles. |\n\n"
     "Your question does not mention native/remote/DAM/source-system access or OvalEdge "
-    "catalog ACL / OE security signals.\n\n"
+    "catalog permissions / OE security signals.\n\n"
     "**Which do you want?**\n"
     "1. **Native source access** — database/BI grants from Redshift, Snowflake, or Tableau\n"
-    "2. **OvalEdge catalog ACL** — permissions inside OvalEdge on a catalog asset\n\n"
-    "Reply with **1** or **2**, then I will call the matching tool."
+    "2. **OvalEdge catalog permissions** — permissions inside OvalEdge on a catalog asset\n\n"
+    f"Reply with **1** or **2**, then I will call `{TOOL_ACCESS_EXPLORER}` with the matching "
+    "operation."
 )
 MCP_ACCESS_DISAMBIGUATION_RULE_DOC = (
     "For who-has-access / permission questions (case-insensitive signals): "
     "native/DAM keywords ("
     + MCP_ACCESS_NATIVE_SIGNAL_KEYWORDS_DOC
-    + ") → source_system_access with access_intent_confirmed=native. Catalog ACL keywords ("
+    + f") → {TOOL_ACCESS_EXPLORER} operation=source_system_access with "
+    "access_intent_confirmed=native. Catalog-permissions keywords ("
     + MCP_ACCESS_CATALOG_ACL_SIGNAL_KEYWORDS_DOC
-    + ") → get_user_object_access with access_intent_confirmed=catalog_acl. When **neither** "
-    "signal set is present — do **not** call source_system_access or get_user_object_access; "
-    "show the disambiguation message and wait for **1** (native) or **2** (catalog ACL). "
+    + f") → {TOOL_ACCESS_EXPLORER} operation=catalog_access with "
+    "access_intent_confirmed=catalog_acl. When **neither** "
+    f"signal set is present — do **not** call {TOOL_ACCESS_EXPLORER}; "
+    "show the disambiguation message and wait for **1** (native) or **2** "
+    "(catalog permissions). "
     + MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC
-    + " Workflow prompt: resolve_object_access."
+    + " "
+    + MCP_CATALOG_DISCOVERY_VS_ACCESS_DOC
+    + " Workflow prompt: resolve_object_access. "
+    "When speaking to users, say catalog permissions (not ACL)."
 )
 MCP_CATALOG_OBJECT_ACCESS_DIRECTIONS = (
     "`user_to_object` — what access does user X have on object Y? "

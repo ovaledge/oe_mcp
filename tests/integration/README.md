@@ -81,11 +81,11 @@ poetry run pytest -c tests/integration/pytest.ini \
 
 ---
 
-## `source_system_access` (RDAM)
+## `access_explorer` source_system_access (RDAM)
 
 File: `test_source_system_access_live.py`
 
-Requires OvalEdge backend with native source-system access (RDAM) MCP APIs enabled.
+Requires OvalEdge backend with access-explorer (RDAM) MCP APIs enabled.
 
 | Variable | Example | Purpose |
 |----------|---------|---------|
@@ -102,7 +102,7 @@ Requires OvalEdge backend with native source-system access (RDAM) MCP APIs enabl
 Unit tests (mocked) still run via:
 
 ```bash
-poetry run pytest tests/tools/test_source_system_access.py -q
+poetry run pytest tests/tools/test_access_explorer.py tests/tools/test_source_system_access.py -q
 ```
 
 ## Manual QA — multi-connection schema access

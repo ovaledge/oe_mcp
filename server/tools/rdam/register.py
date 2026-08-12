@@ -1,31 +1,24 @@
-"""MCP tool registration for native source-system (RDAM) access."""
+"""RDAM source-system access invoke helpers (registered via access_explorer)."""
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from typing import Any
 
 from fastmcp import FastMCP
-from pydantic import Field
 
 from server.client import OvalEdgeError
 from server.constants import (
-    MCP_ACCESS_INTENT_CONFIRMED_FIELD_DOC,
     MCP_ACCESS_INTENT_NATIVE,
-    MCP_PATH_SOURCE_SYSTEM_ACCESS,
-    MCP_QUERY_DIRECTIONS_DOC,
+    MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
+    MCP_PATH_ACCESS_EXPLORER,
     MCP_RDAM_OBJECT_TYPE_ALL,
-    MCP_RDAM_OBJECT_TYPES_DOC,
     MCP_RDAM_SCOPE_MODE_DESCENDANTS,
     MCP_RDAM_SCOPE_MODE_EXACT,
-    MCP_RDAM_SCOPE_MODES_DOC,
-    MCP_SOURCE_SYSTEMS_DOC,
 )
 from server.tools.access.disambiguation import validate_access_intent_confirmed
 from server.tools.common import drop_none, map_ovaledge_error, ovaledge_client
-from server.tools.common.annotations import READ_ONLY
 from server.tools.common.tool_logging import logged_tool_invocation
 from server.tools.rdam.helpers import (
-    _DESC_SOURCE_SYSTEM_ACCESS,
     annotate_multi_connection_advisory,
     enrich_column_grants_fallback,
     enrich_table_schema_candidates,
@@ -116,6 +109,7 @@ async def _invoke_source_system_access(
     descendants_scope = scope_mode == MCP_RDAM_SCOPE_MODE_DESCENDANTS
     browse_mode = qd == "browse"
     params: dict[str, object] = drop_none(
+        operation=MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
         sourceSystem=source.strip().lower(),
         queryDirection=qd,
         username=wire_username,
@@ -129,7 +123,7 @@ async def _invoke_source_system_access(
     if browse_mode:
         try:
             async with ovaledge_client() as client:
-                return await client.get(MCP_PATH_SOURCE_SYSTEM_ACCESS, params=params)
+                return await client.get(MCP_PATH_ACCESS_EXPLORER, params=params)
         except OvalEdgeError as e:
             return map_ovaledge_error(e)
     incomplete_table_lookup = (
@@ -149,7 +143,7 @@ async def _invoke_source_system_access(
         async with ovaledge_client() as client:
             initial_error: OvalEdgeError | None = None
             try:
-                result = await client.get(MCP_PATH_SOURCE_SYSTEM_ACCESS, params=params)
+                result = await client.get(MCP_PATH_ACCESS_EXPLORER, params=params)
             except OvalEdgeError as e:
                 if not incomplete_table_lookup:
                     return map_ovaledge_error(e)
@@ -203,133 +197,5 @@ async def _invoke_source_system_access(
 
 
 def register(mcp: FastMCP) -> None:
-
-    @mcp.tool(
-        title="Check native source access",
-        description=_DESC_SOURCE_SYSTEM_ACCESS,
-        annotations=READ_ONLY,
-    )
-    async def source_system_access(
-        source_system: Annotated[
-            Literal["redshift", "snowflake", "tableau"],
-            Field(description="Native platform: " + MCP_SOURCE_SYSTEMS_DOC + "."),
-        ],
-        query_direction: Annotated[
-            Literal["user_to_objects", "object_to_users", "browse"],
-            Field(
-                description=(
-                    MCP_QUERY_DIRECTIONS_DOC
-                    + " — infer from the question. See tool description for browse vs grants."
-                ),
-            ),
-        ],
-        object_path: Annotated[
-            str | list[str] | None,
-            Field(
-                default=None,
-                description=(
-                    "RDAM scope path; see docs://ovaledge/mcp_workflows. "
-                    "Pair with object_type."
-                ),
-            ),
-        ] = None,
-        fully_qualified_name: Annotated[
-            str | None,
-            Field(
-                default=None,
-                description="Catalog-style dotted FQN; alias for object_path.",
-            ),
-        ] = None,
-        object_name: Annotated[
-            str | list[str] | None,
-            Field(
-                default=None,
-                description=(
-                    "Bare table/report name; composes with object_path (object_type=table)."
-                ),
-            ),
-        ] = None,
-        object_type: Annotated[
-            str | None,
-            Field(
-                default=None,
-                description=(
-                    "RDAM object level: "
-                    + MCP_RDAM_OBJECT_TYPES_DOC
-                    + ". Required for browse and when object_path is set."
-                ),
-            ),
-        ] = None,
-        connection_id: Annotated[
-            int | list[int] | None,
-            Field(
-                default=None,
-                description="OvalEdge connector id (required for browse). From user only.",
-            ),
-        ] = None,
-        username: Annotated[
-            str | list[str] | None,
-            Field(
-                default=None,
-                description="Remote login for user_to_objects; exact match, case-insensitive.",
-            ),
-        ] = None,
-        privileges: Annotated[
-            str | list[str] | None,
-            Field(
-                default=None,
-                description="Optional post-filter on native privilege names (e.g. INSERT, SELECT).",
-            ),
-        ] = None,
-        include_columns: Annotated[
-            bool,
-            Field(
-                description=(
-                    "Redshift only: include column-level grants (default false). "
-                    "Ignored for Snowflake/Tableau and browse."
-                ),
-                default=False,
-            ),
-        ] = False,
-        resolve_all_matches: Annotated[
-            bool,
-            Field(
-                description=(
-                    "When object_path matches multiple catalog objects (same name across "
-                    "connections/schemas/tables/columns or Tableau projects/reports), return "
-                    "all matches. Default false returns matchCandidates."
-                ),
-                default=False,
-            ),
-        ] = False,
-        scope_mode: Annotated[
-            Literal["exact", "descendants"],
-            Field(
-                description=MCP_RDAM_SCOPE_MODES_DOC + " (default exact).",
-                default="exact",
-            ),
-        ] = "exact",
-        access_intent_confirmed: Annotated[
-            Literal["native", "catalog_acl"] | None,
-            Field(
-                default=None,
-                description=MCP_ACCESS_INTENT_CONFIRMED_FIELD_DOC,
-            ),
-        ] = None,
-    ) -> dict[str, Any]:
-        """Native source-system access and DAM browse (see MCP tool description)."""
-        return await _invoke_source_system_access(
-            source_system=source_system,
-            query_direction=query_direction,
-            object_path=object_path,
-            object_name=object_name,
-            object_type=object_type,
-            connection_id=connection_id,
-            username=username,
-            privileges=privileges,
-            include_columns=include_columns,
-            resolve_all_matches=resolve_all_matches,
-            scope_mode=scope_mode,
-            fully_qualified_name=fully_qualified_name,
-            access_intent_confirmed=access_intent_confirmed,
-        )
+    """No standalone RDAM tool — surface is access_explorer (registered under access)."""
+    del mcp

@@ -55,6 +55,41 @@ class TestDetectAccessIntentFromQuestion:
         assert detect_access_intent_from_question(question) is None
 
 
+class TestDisambiguationUserMessage:
+    def test_message_names_access_explorer(self) -> None:
+        from server.constants import (
+            MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE,
+            TOOL_ACCESS_EXPLORER,
+        )
+
+        assert TOOL_ACCESS_EXPLORER in MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE
+        assert "operation=source_system_access" in MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE
+        assert "operation=catalog_access" in MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE
+        assert "get_user_object_access" not in MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE
+        assert "OvalEdge catalog permissions" in MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE
+        assert "OvalEdge catalog ACL" not in MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE
+
+    def test_discovery_vs_access_constant_routes_first_person(self) -> None:
+        from server.constants import (
+            MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC,
+            MCP_ACCESS_DISAMBIGUATION_RULE_DOC,
+            MCP_ACCESS_DISAMBIGUATION_SEARCH_GUARD_DOC,
+            MCP_CATALOG_DISCOVERY_VS_ACCESS_DOC,
+            TOOL_ACCESS_EXPLORER,
+            TOOL_ASSET_EXPLORER,
+        )
+
+        assert TOOL_ASSET_EXPLORER in MCP_CATALOG_DISCOVERY_VS_ACCESS_DOC
+        assert TOOL_ACCESS_EXPLORER in MCP_CATALOG_DISCOVERY_VS_ACCESS_DOC
+        assert "What tables/schemas/columns can I see/view/access" in (
+            MCP_CATALOG_DISCOVERY_VS_ACCESS_DOC
+        )
+        assert "named principal" in MCP_CATALOG_DISCOVERY_VS_ACCESS_DOC
+        assert MCP_CATALOG_DISCOVERY_VS_ACCESS_DOC in MCP_ACCESS_DISAMBIGUATION_SEARCH_GUARD_DOC
+        assert MCP_CATALOG_DISCOVERY_VS_ACCESS_DOC in MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC
+        assert MCP_CATALOG_DISCOVERY_VS_ACCESS_DOC in MCP_ACCESS_DISAMBIGUATION_RULE_DOC
+
+
 class TestValidateAccessIntentConfirmed:
     def test_object_to_users_requires_native_intent(self) -> None:
         err = validate_access_intent_confirmed(

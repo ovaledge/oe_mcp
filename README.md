@@ -38,8 +38,8 @@ Optional OpenTelemetry trace export to [Phoenix](https://arize.com/docs/phoenix)
 - Column profile, entity relationships, lineage, metadata drift (`metadata_changes_between_crawls`)
 - Glossary/tag search and guided creation (`asset_explorer`, `create_glossary_term`, `create_tag`)
 - **Knowledge search** for organizational stories and product documentation (`knowledge_search`)
-- Native source-system grant previews (`source_system_access`) — Redshift / Snowflake / Tableau, not catalog ACLs
-- OvalEdge catalog ACL (`get_user_object_access`) — user/role grants on catalog objects, not native RDAM
+- Native source-system grant previews (`access_explorer` operation=source_system_access) — Redshift / Snowflake / Tableau, not catalog permissionss
+- OvalEdge catalog permissions (`access_explorer` operation=catalog_access) — user/role grants on catalog objects, not native RDAM
 - DQ rule lookup (`lookup_dq_rule`)
 - CDE / column DQ assessment — read-only (`assess_cde_dq`)
 - Associate objects to data quality rules (`associate_dq_rule_objects`)
@@ -59,8 +59,8 @@ These rules apply to every MCP session (also exposed to clients as server **inst
 | ----- | -------- |
 | **Organizational knowledge / product how-to** | Use **`knowledge_search`**, which searches both corpora without a corpus enum. Present returned citations and formatted content. |
 | **Physical datasets** | Use **`asset_explorer`**, then **`asset_details`** for one selected object. |
-| **Native DB/BI access** | Use **`source_system_access`** only (RDAM SQL). Never fall back to **`asset_explorer`** when RDAM is empty or errors. |
-| **Catalog ACL** | Use **`get_user_object_access`** for OvalEdge user/role grants on catalog objects — not **`source_system_access`**. |
+| **Native DB/BI access** | Use **`access_explorer`** with **`operation=source_system_access`** only (RDAM SQL). Never fall back to **`asset_explorer`** when RDAM is empty or errors. |
+| **Catalog permissions** | Use **`access_explorer`** with **`operation=catalog_access`** for OvalEdge user/role grants on catalog objects — not source_system_access. |
 | **Deep links** | Use **`ovaledge://...` resources** when you already have object ids; prefer lookup tools for rich formatted output. |
 | **Governed writes** | **`create_glossary_term`**, **`create_tag`**, **`update_asset_descriptions`**, **`update_governance_roles`**, **`update_cde_associations`**, **`update_custom_field_value`**, **`associate_dq_rule_objects`**, **`create_dq_rules`**, **`validate_dq_queries`**, **`create_sql_dq_rule`**: show **`confirm_create`** / **`confirm_update`** preview, then POST only with **`write_confirmed_by_user=true`** (`dry_run` skips confirm on updates). |
 | **Glossary placement** | Domain → category (when categories exist) → subcategory; never invent **`description`**; pass **`domain_name`** on first call when the user names a domain in natural language. |
@@ -68,7 +68,7 @@ These rules apply to every MCP session (also exposed to clients as server **inst
 
 ## Tools, resources, and prompts
 
-### Tools (`server/tools/`) — 25 tools
+### Tools (`server/tools/`) — 19 tools
 
 Canonical inventory: `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 
@@ -76,7 +76,7 @@ Canonical inventory: `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 
 - `asset_explorer`, `asset_details`, `asset_lineage`, `metadata_changes_between_crawls`
 - `update_asset_descriptions`, `update_cde_associations`
-- `get_user_object_access` (catalog ACL)
+- `access_explorer` (catalog permissions via `operation=catalog_access`; native RDAM via `operation=source_system_access`)
 
 **Governance**
 
@@ -84,7 +84,7 @@ Canonical inventory: `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 
 **Native access (RDAM)**
 
-- `source_system_access` (Redshift / Snowflake / Tableau grant previews)
+- Covered by `access_explorer` with `operation=source_system_access` (see Catalog & access above)
 
 **Data quality**
 

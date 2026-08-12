@@ -11,6 +11,7 @@ from fastmcp.prompts.function_prompt import FunctionPrompt
 from mcp.types import TextContent
 
 from server.constants import (
+    TOOL_ACCESS_EXPLORER,
     TOOL_ASSESS_CDE_DQ,
     TOOL_ASSET_DETAILS,
     TOOL_ASSET_EXPLORER,
@@ -21,11 +22,9 @@ from server.constants import (
     TOOL_CREATE_SQL_DQ_RULE,
     TOOL_CREATE_TAG,
     TOOL_GENERATE_DQ_QUERIES,
-    TOOL_GET_USER_OBJECT_ACCESS,
     TOOL_KNOWLEDGE_SEARCH,
     TOOL_LOOKUP_DQ_RULE,
     TOOL_METADATA_CHANGES_BETWEEN_CRAWLS,
-    TOOL_SOURCE_SYSTEM_ACCESS,
     TOOL_UPDATE_ASSET_DESCRIPTIONS,
     TOOL_UPDATE_GOVERNANCE_ROLES,
     TOOL_VALIDATE_DQ_QUERIES,
@@ -62,14 +61,13 @@ _PROMPT_REQUIRED_TOOLS: dict[str, tuple[str, ...]] = {
         TOOL_KNOWLEDGE_SEARCH,
         TOOL_ASSET_EXPLORER,
     ),
-    "native_source_access": (TOOL_SOURCE_SYSTEM_ACCESS,),
+    "native_source_access": (TOOL_ACCESS_EXPLORER,),
     "resolve_object_access": (
-        TOOL_SOURCE_SYSTEM_ACCESS,
+        TOOL_ACCESS_EXPLORER,
         TOOL_ASSET_EXPLORER,
-        TOOL_GET_USER_OBJECT_ACCESS,
     ),
-    "dam_object_browse": (TOOL_SOURCE_SYSTEM_ACCESS,),
-    "catalog_object_access": (TOOL_GET_USER_OBJECT_ACCESS, TOOL_ASSET_EXPLORER),
+    "dam_object_browse": (TOOL_ACCESS_EXPLORER,),
+    "catalog_object_access": (TOOL_ACCESS_EXPLORER, TOOL_ASSET_EXPLORER),
     "platform_help": (TOOL_KNOWLEDGE_SEARCH,),
     "metadata_drift": (
         TOOL_METADATA_CHANGES_BETWEEN_CRAWLS,
@@ -195,11 +193,10 @@ class TestMcpServerInstructions:
     def test_instructions_prioritize_data_stories_for_org_knowledge(self) -> None:
         from server.app import MCP_SERVER_INSTRUCTION_TOOL_NAMES, create_mcp
         from server.constants import (
+            TOOL_ACCESS_EXPLORER,
             TOOL_ASSET_DETAILS,
             TOOL_ASSET_EXPLORER,
-            TOOL_GET_USER_OBJECT_ACCESS,
             TOOL_KNOWLEDGE_SEARCH,
-            TOOL_SOURCE_SYSTEM_ACCESS,
         )
         from server.mcp_surface import MCP_TOOL_NAMES
 
@@ -208,8 +205,7 @@ class TestMcpServerInstructions:
         assert TOOL_KNOWLEDGE_SEARCH in instructions
         assert TOOL_ASSET_EXPLORER in instructions
         assert TOOL_ASSET_DETAILS in instructions
-        assert TOOL_SOURCE_SYSTEM_ACCESS in instructions
-        assert TOOL_GET_USER_OBJECT_ACCESS in instructions
+        assert TOOL_ACCESS_EXPLORER in instructions
         assert "write_confirmed_by_user" in instructions
         assert "never show ovaledge://" in instructions
         assert "find data assets" in instructions
@@ -251,6 +247,8 @@ class TestMcpServerInstructions:
         assert f"{DOCS_RESOURCE_URI_PREFIX}/mcp_workflows" in instructions
         assert "session start" in instructions
         assert "routing guide" in instructions
+        assert "what tables can i see/access" in instructions
+        assert "for ambiguous who-has-access only" in instructions
 
 
 class TestDiscoveryPromptsOpenCatalogSearch:
@@ -293,3 +291,57 @@ class TestResolveObjectAccessPrompt:
         assert "snowflake" in text
         assert "customer1" in text
         assert "access_intent_confirmed" in text
+        assert "what tables/schemas/columns can i see/view/access" in text
+        assert "named principal" in text
+        assert TOOL_ASSET_EXPLORER in messages[0].content.text
+
+    async def test_prompt_docstring_excludes_first_person_inventory(self) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        register_workflow_prompts(mcp)
+        prompt = await mcp.get_prompt("resolve_object_access")
+        assert prompt is not None
+        assert isinstance(prompt, FunctionPrompt)
+        doc = (prompt.fn.__doc__ or "").lower()
+        assert "what tables can i see/access" in doc
+        assert "data_discovery" in doc
+        assert "not:" in doc
+
+
+class TestDataDiscoveryFirstPersonTriggers:
+    async def test_data_discovery_docstring_includes_first_person_see_access(self) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        register_workflow_prompts(mcp)
+        prompt = await mcp.get_prompt("data_discovery")
+        assert prompt is not None
+        assert isinstance(prompt, FunctionPrompt)
+        doc = (prompt.fn.__doc__ or "").lower()
+        assert "what tables can i see/access" in doc
+        assert "what schemas/columns can i view" in doc
+
+
+class TestNativeAndDamBrowseGuards:
+    async def test_native_source_access_guards_generic_first_person(self) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        register_workflow_prompts(mcp)
+        prompt = await mcp.get_prompt("native_source_access")
+        assert prompt is not None
+        assert isinstance(prompt, FunctionPrompt)
+        doc = (prompt.fn.__doc__ or "").lower()
+        assert "what tables can i access in redshift" in doc
+        assert "data_discovery" in doc
+        text = prompt.fn("redshift", "What can svc access?")[0].content.text.lower()
+        assert "data_discovery" in text
+        assert TOOL_ASSET_EXPLORER in prompt.fn("redshift", "What can svc access?")[0].content.text
+
+    async def test_dam_object_browse_guards_generic_inventory(self) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        register_workflow_prompts(mcp)
+        prompt = await mcp.get_prompt("dam_object_browse")
+        assert prompt is not None
+        assert isinstance(prompt, FunctionPrompt)
+        doc = (prompt.fn.__doc__ or "").lower()
+        assert "what tables can i see" in doc
+        assert "data_discovery" in doc
+        text = prompt.fn(1000, "BUSINESS.BANKING")[0].content.text.lower()
+        assert "data_discovery" in text
+        assert TOOL_ASSET_EXPLORER in prompt.fn(1000, "BUSINESS.BANKING")[0].content.text

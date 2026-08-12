@@ -111,9 +111,9 @@ Maintain these routing distinctions:
 
 - Organizational knowledge and product how-to: `knowledge_search`.
 - Catalog assets: `asset_explorer`, then `asset_details` after a shortlist.
-- Native DB/BI grants: `source_system_access` with native intent—never substitute
-  catalog search or ACL tools.
-- OvalEdge catalog ACL: `get_user_object_access`, not RDAM.
+- Native DB/BI grants: `access_explorer` with `operation=source_system_access` and
+  native intent—never substitute catalog search or catalog-permissions tools.
+- OvalEdge catalog permissions: `access_explorer` with `operation=catalog_access`, not RDAM.
 - For user-facing links, use `navLink` or `redirectUrl`; never show an
   `ovaledge://` URI.
 

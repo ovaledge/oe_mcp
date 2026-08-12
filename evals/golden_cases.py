@@ -23,12 +23,11 @@ from evals import golden_cases_coverage
 from evals.mcp_eval_helpers import ovaledge_eval_mcp_server, tool_call_result
 from server.constants import (
     DOCS_RESOURCE_URI_PREFIX,
+    TOOL_ACCESS_EXPLORER,
     TOOL_ASSET_DETAILS,
     TOOL_ASSET_EXPLORER,
     TOOL_ASSET_LINEAGE,
-    TOOL_GET_USER_OBJECT_ACCESS,
     TOOL_KNOWLEDGE_SEARCH,
-    TOOL_SOURCE_SYSTEM_ACCESS,
     TOOL_UPDATE_ASSET_DESCRIPTIONS,
 )
 from server.docs.loader import read_doc_markdown
@@ -62,12 +61,13 @@ _PLATFORM_HELP_PROMPT_TEXT = (
 )
 
 _CATALOG_OBJECT_ACCESS_PROMPT_TEXT = (
-    "Check OvalEdge catalog ACL access.\n\n"
+    "Check OvalEdge catalog permissions.\n\n"
     "User: john.doe\n"
     "Object: payroll_fact (oetable)\n\n"
     "Steps:\n"
-    "1. Call get_user_object_access with query_direction=user_to_object.\n"
-    "2. Do not use source_system_access (native DB grants).\n"
+    "1. Call access_explorer with operation=catalog_access and "
+    "query_direction=user_to_object.\n"
+    "2. Do not use operation=source_system_access (native DB grants).\n"
     "3. Optionally asset_explorer only to resolve object_id if needed."
 )
 
@@ -660,14 +660,14 @@ def golden_mcp_use_organizational_knowledge_prompt() -> LLMTestCase:
 
 
 def golden_mcp_use_native_source_access() -> LLMTestCase:
-    """Single-turn: native Redshift grants via source_system_access."""
-    srv = ovaledge_eval_mcp_server(tool_names=frozenset({TOOL_SOURCE_SYSTEM_ACCESS}))
+    """Single-turn: native Redshift grants via access_explorer source_system_access."""
+    srv = ovaledge_eval_mcp_server(tool_names=frozenset({TOOL_ACCESS_EXPLORER}))
     return LLMTestCase(
         name="mcp_use_native_source_access",
         input="What tables can svc_analytics query in Redshift?",
         actual_output=(
-            "This asks for native database grants (not OvalEdge catalog ACLs), so I used "
-            "source_system_access with source_system=redshift, "
+            "This asks for native database grants (not OvalEdge catalog permissions), so I used "
+            "access_explorer with operation=source_system_access, source_system=redshift, "
             "query_direction=user_to_objects, username=svc_analytics, "
             "object_path=prod, object_type=database, and connection_id for the Redshift "
             "connector. I did not use asset_explorer, which indexes governance metadata "
@@ -676,8 +676,9 @@ def golden_mcp_use_native_source_access() -> LLMTestCase:
         mcp_servers=[srv],
         mcp_tools_called=[
             MCPToolCall(
-                name=TOOL_SOURCE_SYSTEM_ACCESS,
+                name=TOOL_ACCESS_EXPLORER,
                 args={
+                    "operation": "source_system_access",
                     "source_system": "redshift",
                     "query_direction": "user_to_objects",
                     "username": "svc_analytics",
@@ -702,10 +703,77 @@ def golden_mcp_use_native_source_access() -> LLMTestCase:
     )
 
 
+def golden_mcp_use_first_person_catalog_inventory() -> LLMTestCase:
+    """Generic first-person see/access inventory → asset_explorer, not access_explorer."""
+    srv = ovaledge_eval_mcp_server(
+        tool_names=frozenset({TOOL_ASSET_EXPLORER}),
+        prompt_names=frozenset({"data_discovery"}),
+    )
+    prompt_result = GetPromptResult(
+        messages=[
+            PromptMessage(
+                role="user",
+                content=TextContent(
+                    type="text",
+                    text=(
+                        "Help me find data for: 'What tables can I see?'\n\n"
+                        "Please follow this sequence:\n"
+                        "1. Extract search keywords from the query\n"
+                        "2. Call asset_explorer with search_terms and context_query\n"
+                    ),
+                ),
+            )
+        ],
+    )
+    return LLMTestCase(
+        name="mcp_use_first_person_catalog_inventory",
+        input="What tables can I see?",
+        actual_output=(
+            "This is first-person catalog inventory without a named principal or source, "
+            "so I used data_discovery / asset_explorer — not access_explorer (which is for "
+            "named-principal grants or who-has-access). I searched the catalog with "
+            "search_terms and context_query set to your question."
+        ),
+        mcp_servers=[srv],
+        mcp_prompts_called=[
+            MCPPromptCall(
+                name="data_discovery",
+                result=prompt_result,
+            )
+        ],
+        mcp_tools_called=[
+            MCPToolCall(
+                name=TOOL_ASSET_EXPLORER,
+                args={
+                    "search_terms": ["tables"],
+                    "context_query": "What tables can I see?",
+                },
+                result=tool_call_result(
+                    {
+                        "total": 2,
+                        "items": [
+                            {
+                                "objectId": 101,
+                                "objectType": "oetable",
+                                "objectName": "orders",
+                            },
+                            {
+                                "objectId": 102,
+                                "objectType": "oetable",
+                                "objectName": "customers",
+                            },
+                        ],
+                    }
+                ),
+            ),
+        ],
+    )
+
+
 def golden_mcp_use_routing_guide_resource() -> LLMTestCase:
     """Agent reads mcp_workflows resource before native source access (RDAM routing)."""
     srv = ovaledge_eval_mcp_server(
-        tool_names=frozenset({TOOL_SOURCE_SYSTEM_ACCESS}),
+        tool_names=frozenset({TOOL_ACCESS_EXPLORER}),
     )
     workflows_text = read_doc_markdown("mcp_workflows")
     resource_result = ReadResourceResult(
@@ -722,9 +790,10 @@ def golden_mcp_use_routing_guide_resource() -> LLMTestCase:
         input="Who has native SELECT on prod_db.public.orders in Snowflake?",
         actual_output=(
             "I read docs://ovaledge/mcp_workflows first for RDAM routing, then called "
-            "source_system_access with query_direction=object_to_users, source_system=snowflake, "
+            "access_explorer with operation=source_system_access, "
+            "query_direction=object_to_users, source_system=snowflake, "
             "object_path=prod_db.public.orders, and object_type=table. I did not use "
-            "asset_explorer or get_user_object_access — native grants are RDAM-only."
+            "asset_explorer or catalog_access — native grants are RDAM-only."
         ),
         mcp_servers=[srv],
         mcp_resources_called=[
@@ -732,8 +801,9 @@ def golden_mcp_use_routing_guide_resource() -> LLMTestCase:
         ],
         mcp_tools_called=[
             MCPToolCall(
-                name=TOOL_SOURCE_SYSTEM_ACCESS,
+                name=TOOL_ACCESS_EXPLORER,
                 args={
+                    "operation": "source_system_access",
                     "source_system": "snowflake",
                     "query_direction": "object_to_users",
                     "object_path": "prod_db.public.orders",
@@ -803,9 +873,9 @@ def golden_mcp_use_platform_help() -> LLMTestCase:
 
 
 def golden_mcp_use_catalog_object_access() -> LLMTestCase:
-    """Single-turn: catalog_object_access prompt → get_user_object_access."""
+    """Single-turn: catalog_object_access prompt → access_explorer catalog_access."""
     srv = ovaledge_eval_mcp_server(
-        tool_names=frozenset({TOOL_GET_USER_OBJECT_ACCESS, TOOL_ASSET_EXPLORER}),
+        tool_names=frozenset({TOOL_ACCESS_EXPLORER, TOOL_ASSET_EXPLORER}),
         prompt_names=frozenset({"catalog_object_access"}),
     )
     prompt_result = GetPromptResult(
@@ -820,10 +890,10 @@ def golden_mcp_use_catalog_object_access() -> LLMTestCase:
         name="mcp_use_catalog_object_access",
         input="Can john.doe read the payroll_fact table in OvalEdge?",
         actual_output=(
-            "Catalog ACL checks use get_user_object_access with query_direction=user_to_object, "
-            "username=john.doe, object_id=101, object_type=oetable. I did not call "
-            "source_system_access because that returns native database grants, not OvalEdge "
-            "catalog permissions."
+            "Catalog permissions checks use access_explorer with operation=catalog_access, "
+            "query_direction=user_to_object, username=john.doe, object_id=101, "
+            "object_type=oetable. I did not call operation=source_system_access because "
+            "that returns native database grants, not OvalEdge catalog permissions."
         ),
         mcp_servers=[srv],
         mcp_prompts_called=[
@@ -831,8 +901,9 @@ def golden_mcp_use_catalog_object_access() -> LLMTestCase:
         ],
         mcp_tools_called=[
             MCPToolCall(
-                name=TOOL_GET_USER_OBJECT_ACCESS,
+                name=TOOL_ACCESS_EXPLORER,
                 args={
+                    "operation": "catalog_access",
                     "query_direction": "user_to_object",
                     "username": "john.doe",
                     "object_id": 101,
@@ -1027,6 +1098,7 @@ def all_mcp_use_golden_fns() -> list[str]:
         "golden_mcp_use_datastory",
         "golden_mcp_use_organizational_knowledge_prompt",
         "golden_mcp_use_native_source_access",
+        "golden_mcp_use_first_person_catalog_inventory",
         "golden_mcp_use_routing_guide_resource",
         "golden_mcp_use_platform_help",
         "golden_mcp_use_catalog_object_access",
@@ -1064,6 +1136,7 @@ __all__ = [
     "golden_mcp_use_datastory",
     "golden_mcp_use_knowledge_not_catalog_for_policy",
     "golden_mcp_use_native_source_access",
+    "golden_mcp_use_first_person_catalog_inventory",
     "golden_mcp_use_open_catalog_search",
     "golden_mcp_use_organizational_knowledge_prompt",
     "golden_mcp_use_platform_help",
