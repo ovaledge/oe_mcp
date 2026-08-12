@@ -28,6 +28,25 @@ class TestAccessExplorerRegistration:
         tool = await get_tool_object(mcp, TOOL_ACCESS_EXPLORER)
         assert tool.name == TOOL_ACCESS_EXPLORER
 
+    async def test_query_direction_schema_is_enum(self) -> None:
+        mcp = FastMCP("test")
+        access.register(mcp)
+        tool = await get_tool_object(mcp, TOOL_ACCESS_EXPLORER)
+        props = (tool.parameters or {}).get("properties", {})
+        qd = props["query_direction"]
+        enum_values: set[str] = set()
+        if "enum" in qd:
+            enum_values.update(v for v in qd["enum"] if v is not None)
+        for variant in qd.get("anyOf", []) + qd.get("oneOf", []):
+            enum_values.update(v for v in variant.get("enum", []) if v is not None)
+        assert enum_values == {
+            "user_to_object",
+            "object_to_principals",
+            "user_to_objects",
+            "object_to_users",
+            "browse",
+        }
+
     def test_description_covers_both_operations(self) -> None:
         assert "catalog permissions" in _DESC_ACCESS_EXPLORER
         assert "catalog_access" in _DESC_ACCESS_EXPLORER
@@ -73,7 +92,7 @@ class TestAccessExplorerValidation:
         assert "source_system" in err["error"]
 
     async def test_unknown_operation_rejected_without_http(self) -> None:
-        from server.tools.access.register import _invoke_access_explorer
+        from server.tools.access.invocations import _invoke_access_explorer
 
         out = await _invoke_access_explorer(
             operation="not_a_real_op",
@@ -125,7 +144,7 @@ class TestAccessExplorerValidation:
 
 
 class TestAccessExplorerCatalogPath:
-    @patch("server.tools.access.register.ovaledge_client")
+    @patch("server.tools.access.invocations.ovaledge_client")
     async def test_catalog_access_maps_params_with_operation(
         self, mock_client_factory: AsyncMock
     ) -> None:
@@ -160,7 +179,7 @@ class TestAccessExplorerCatalogPath:
         assert params["username"] == "john.doe"
         assert params["objectId"] == 42
 
-    @patch("server.tools.access.register.ovaledge_client")
+    @patch("server.tools.access.invocations.ovaledge_client")
     async def test_object_to_principals_requires_access_intent(
         self, mock_client_factory: AsyncMock
     ) -> None:
@@ -179,7 +198,7 @@ class TestAccessExplorerCatalogPath:
         assert out.get("error_code") == "ACCESS_INTENT_REQUIRED"
         mock_client.get.assert_not_awaited()
 
-    @patch("server.tools.access.register.ovaledge_client")
+    @patch("server.tools.access.invocations.ovaledge_client")
     async def test_catalog_connector_by_name(self, mock_client_factory: AsyncMock) -> None:
         mock_client = AsyncMock()
         mock_client.get.return_value = {
@@ -209,7 +228,7 @@ class TestAccessExplorerCatalogPath:
         assert params["objectName"] == "looker connector"
         assert params["objectType"] == "connection"
 
-    @patch("server.tools.access.register.ovaledge_client")
+    @patch("server.tools.access.invocations.ovaledge_client")
     async def test_catalog_fqn_happy_path(self, mock_client_factory: AsyncMock) -> None:
         mock_client = AsyncMock()
         mock_client.get.return_value = {

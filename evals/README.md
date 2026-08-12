@@ -10,7 +10,7 @@ Main project docs: [README.md](../README.md) (local stdio, remote HTTP, Okta `re
 poetry install --with eval
 ```
 
-Pinned package: `deepeval` (~3.9.9) in the `eval` Poetry group (`pyproject.toml`).
+Pinned package: `deepeval` (`>=3.9.9,<4.2.0`) in the `eval` Poetry group (`pyproject.toml`).
 
 ## Environment
 
@@ -126,7 +126,7 @@ poetry run python -m evals.run_evals --output evals/out/report.json
 
 Defined in `golden_cases.py`:
 
-- `MCPUseMetric` — five single-turn goldens: asset exploration, `data_discovery` prompt + search, `knowledge_search`, `organizational_knowledge` prompt + knowledge search, `source_system_access`.
+- `MCPUseMetric` — single-turn goldens: asset exploration, `data_discovery` prompt + search, `knowledge_search`, `organizational_knowledge` prompt + knowledge search, `access_explorer` (`operation=source_system_access` and `operation=catalog_access`).
 - `MCPTaskCompletionMetric` — conversational discovery with expected outcome.
 - `MultiTurnMCPUseMetric` — follow-up user turn with resource read.
 

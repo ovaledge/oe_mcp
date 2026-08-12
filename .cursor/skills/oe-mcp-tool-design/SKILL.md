@@ -75,7 +75,7 @@ Shared logic: `server/tools/common/` (never duplicate `error_payload` or client 
 
 **Data classification:** append via `classify_tool_desc()` from `server/tools/common/descriptions.py` (INTERNAL default; CONFIDENTIAL for access/RDAM tools).
 
-**Invocation modules:** `catalog/invocations.py` and `governance/invocations.py` hold `_invoke_*` logic; `register.py` keeps decorators and Pydantic `Field` signatures only.
+**Invocation modules:** `catalog/invocations.py`, `governance/invocations.py`, `access/invocations.py`, and `rdam/invocations.py` hold `_invoke_*` logic; `register.py` keeps decorators and Pydantic `Field` signatures only.
 
 ## Implementation checklist
 

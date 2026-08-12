@@ -207,6 +207,12 @@ MCP_SOURCE_SYSTEMS = frozenset({"redshift", "snowflake", "tableau"})
 MCP_SOURCE_SYSTEMS_DOC = ", ".join(sorted(MCP_SOURCE_SYSTEMS))
 MCP_QUERY_DIRECTIONS = frozenset({"user_to_objects", "object_to_users", "browse"})
 MCP_QUERY_DIRECTIONS_DOC = "user_to_objects | object_to_users | browse"
+MCP_CATALOG_QUERY_DIRECTIONS = frozenset({"user_to_object", "object_to_principals"})
+MCP_CATALOG_QUERY_DIRECTIONS_DOC = "user_to_object | object_to_principals"
+MCP_ACCESS_QUERY_DIRECTIONS_DOC = (
+    "catalog_access: user_to_object | object_to_principals; "
+    "source_system_access: user_to_objects | object_to_users | browse"
+)
 
 # RDAM native object levels for access_explorer source_system_access (wire: objectType).
 # Must match backend McpSourceSystemAccessReadService.

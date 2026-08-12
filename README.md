@@ -1,5 +1,11 @@
 # OvalEdge MCP Server
 
+[![CI](https://github.com/ovaledge/oe_mcp/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/ovaledge/oe_mcp/actions/workflows/ci.yml)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![Version](https://img.shields.io/badge/version-1.0.4-blue)](pyproject.toml)
+[![FastMCP](https://img.shields.io/badge/FastMCP-3.4-00C7B7)](https://gofastmcp.com)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
+
 OvalEdge governance and catalog MCP server for MCP clients (Cursor, Claude Desktop, etc.): catalog discovery, lineage, glossary and tags, organizational knowledge, metadata drift, native source-system access previews, product docs, workflow prompts, and governed writes (glossary terms, tags, descriptions, roles) — all subject to OvalEdge RBAC. Server instructions route knowledge questions through **`knowledge_search`**.
 
 ## How to run / deploy
@@ -38,7 +44,7 @@ Optional OpenTelemetry trace export to [Phoenix](https://arize.com/docs/phoenix)
 - Column profile, entity relationships, lineage, metadata drift (`metadata_changes_between_crawls`)
 - Glossary/tag search and guided creation (`asset_explorer`, `create_glossary_term`, `create_tag`)
 - **Knowledge search** for organizational stories and product documentation (`knowledge_search`)
-- Native source-system grant previews (`access_explorer` operation=source_system_access) — Redshift / Snowflake / Tableau, not catalog permissionss
+- Native source-system grant previews (`access_explorer` operation=source_system_access) — Redshift / Snowflake / Tableau, not catalog permissions
 - OvalEdge catalog permissions (`access_explorer` operation=catalog_access) — user/role grants on catalog objects, not native RDAM
 - DQ rule lookup (`lookup_dq_rule`)
 - CDE / column DQ assessment — read-only (`assess_cde_dq`)
@@ -47,7 +53,7 @@ Optional OpenTelemetry trace export to [Phoenix](https://arize.com/docs/phoenix)
 - Custom SQL DQ: `generate_dq_queries`, `validate_dq_queries`, `create_sql_dq_rule` (workflow prompt: `create_custom_sql_dq_workflow`)
 - Asset description, CDE, governance role, and custom field updates (`update_asset_descriptions`, `update_cde_associations`, `update_governance_roles`, `update_custom_field_value`)
 - Resource URIs (`ovaledge://catalog/...`, `ovaledge://governance/...`) and static guides (`docs://ovaledge/...`)
-- Nineteen workflow prompts under `server/prompts/workflows/` (see below; canonical list in `server/mcp_surface.py`)
+- Twenty-one workflow prompts under `server/prompts/workflows/` (see below; canonical list in `server/mcp_surface.py`)
 
 Read and write tools honor OvalEdge permissions — the MCP does not bypass RBAC.
 
@@ -123,7 +129,7 @@ Full list: [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md#workflow-
 Discovery: `data_discovery`, `explore_data_domain`, `find_related_assets`.  
 Knowledge: `explain_business_term`, `organizational_knowledge`, `explain_tag`, `explain_dq_rule`, `platform_help`.  
 Lineage & quality: `trust_assessment`, `trace_data_lineage`, `metadata_drift`, `assess_cde_dq_coverage`.  
-Access: `native_source_access`, `catalog_object_access`, `dam_object_browse`.  
+Access: `resolve_object_access`, `native_source_access`, `catalog_object_access`, `dam_object_browse`.  
 Writes (human-in-the-loop): `create_business_glossary_term`, `create_governance_tag`, `document_asset_descriptions`, `assign_governance_roles`.  
 DQ writes (user-approved after `assess_cde_dq`): use `associate_dq_rule_objects`, `create_dq_rules` tools directly.
 

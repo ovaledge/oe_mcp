@@ -111,7 +111,7 @@ Resource: `ovaledge://governance/data-story/{object_id}` — prefer `knowledge_s
 
 ## Native source access (RDAM) summary
 
-**`access_explorer`** with **`operation=source_system_access`** returns **native** Redshift, Snowflake, or Tableau grants from **RDAM SQL metadata** — not catalog permissionss and not `asset_explorer`. Do not fall back to catalog when RDAM is empty or errors. Prompt: **`native_source_access`**. Deep routing: [rdam_source_access](rdam_source_access); index: [mcp_workflows](mcp_workflows#native-source-access-rdam).
+**`access_explorer`** with **`operation=source_system_access`** returns **native** Redshift, Snowflake, or Tableau grants from **RDAM SQL metadata** — not catalog permissions and not `asset_explorer`. Do not fall back to catalog when RDAM is empty or errors. Prompt: **`native_source_access`**. Deep routing: [rdam_source_access](rdam_source_access); index: [mcp_workflows](mcp_workflows#native-source-access-rdam).
 
 ### Data Access Admin (DAA)
 

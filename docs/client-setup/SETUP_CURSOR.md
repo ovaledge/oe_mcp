@@ -150,7 +150,7 @@ With the server connected, Cursor can list **MCP prompts**, **resources**, and *
 | Find tables, files, reports | Prompt `data_discovery` or `asset_explorer` |
 | Create tag or glossary term | Prompt `create_governance_tag` / `create_business_glossary_term` (confirm preview, then `write_confirmed_by_user=true`) |
 | OvalEdge product how-to | Prompt `platform_help` or `knowledge_search` |
-| Native Redshift / Snowflake / Tableau grants | Prompt `native_source_access` or tool `source_system_access` |
+| Native Redshift / Snowflake / Tableau grants | Prompt `native_source_access` or `access_explorer` (`operation=source_system_access`) |
 | Deep link by id | `ovaledge://catalog/table/{id}`, `ovaledge://governance/data-story/{id}`, … |
 
 Full index: [server/docs/mcp_workflows.md](../../server/docs/mcp_workflows.md) (`docs://ovaledge/mcp_workflows`). Agent rules: [README.md](../../README.md#agent-guidance-mirrors-serverapppy-instructions).
