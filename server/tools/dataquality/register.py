@@ -24,6 +24,7 @@ from server.constants import (
 )
 from server.tools.common import drop_none as _q
 from server.tools.common import map_ovaledge_error, ovaledge_client, strip_or_none
+from server.tools.common.annotations import GOVERNED_CREATE, GOVERNED_EXECUTE, READ_ONLY
 from server.tools.common.confirm_gate import (
     CONFIRMATION_TOKEN_PARAM_DESCRIPTION,
     verify_write_confirmation,
@@ -69,7 +70,11 @@ type _DqObjectsArgOpt = _DqObjectsArg | None
 
 def register(mcp: FastMCP) -> None:
 
-    @mcp.tool(description=_DESC_LOOKUP_DQ_RULE)
+    @mcp.tool(
+        title="Look up data quality rules",
+        description=_DESC_LOOKUP_DQ_RULE,
+        annotations=READ_ONLY,
+    )
     async def lookup_dq_rule(
         object_id: Annotated[
             int | None,
@@ -98,7 +103,11 @@ def register(mcp: FastMCP) -> None:
             limit=limit,
         )
 
-    @mcp.tool(description=_DESC_ASSESS_CDE_DQ)
+    @mcp.tool(
+        title="Assess CDE data quality",
+        description=_DESC_ASSESS_CDE_DQ,
+        annotations=READ_ONLY,
+    )
     async def assess_cde_dq(
         discover_cde_columns: Annotated[
             bool,
@@ -114,7 +123,7 @@ def register(mcp: FastMCP) -> None:
             list[dict[str, Any]] | dict[str, Any] | str | None,
             Field(
                 description=(
-                    "Catalog objects to assess from search_catalog_assets. objectType: "
+                    "Catalog objects to assess from asset_explorer. objectType: "
                     + MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC
                     + ". Each entry: objectId + objectType (or object_id + object_type)."
                 ),
@@ -184,7 +193,11 @@ def register(mcp: FastMCP) -> None:
             excluded_function_names=excluded_function_names,
         )
 
-    @mcp.tool(description=_DESC_ASSOCIATE_DQ_RULE_OBJECTS)
+    @mcp.tool(
+        title="Apply DQ rule to assets",
+        description=_DESC_ASSOCIATE_DQ_RULE_OBJECTS,
+        annotations=GOVERNED_CREATE,
+    )
     async def associate_dq_rule_objects(
         dqrule_id: Annotated[
             int,
@@ -231,7 +244,11 @@ def register(mcp: FastMCP) -> None:
             confirmation_token=confirmation_token,
         )
 
-    @mcp.tool(description=_DESC_CREATE_DQ_RULES)
+    @mcp.tool(
+        title="Create data quality rules",
+        description=_DESC_CREATE_DQ_RULES,
+        annotations=GOVERNED_CREATE,
+    )
     async def create_dq_rules(
         discover_cde_columns: Annotated[
             bool,
@@ -359,7 +376,11 @@ def register(mcp: FastMCP) -> None:
             confirmation_token=confirmation_token,
         )
 
-    @mcp.tool(description=_DESC_GENERATE_DQ_QUERIES)
+    @mcp.tool(
+        title="Generate DQ SQL queries",
+        description=_DESC_GENERATE_DQ_QUERIES,
+        annotations=READ_ONLY,
+    )
     async def generate_dq_queries(
         objects: Annotated[
             list[dict[str, Any]] | dict[str, Any] | str,
@@ -386,7 +407,11 @@ def register(mcp: FastMCP) -> None:
             business_description=business_description,
         )
 
-    @mcp.tool(description=_DESC_VALIDATE_DQ_QUERIES)
+    @mcp.tool(
+        title="Validate DQ SQL queries",
+        description=_DESC_VALIDATE_DQ_QUERIES,
+        annotations=GOVERNED_EXECUTE,
+    )
     async def validate_dq_queries(
         connection_id: Annotated[
             int,
@@ -428,7 +453,11 @@ def register(mcp: FastMCP) -> None:
             confirmation_token=confirmation_token,
         )
 
-    @mcp.tool(description=_DESC_CREATE_SQL_DQ_RULE)
+    @mcp.tool(
+        title="Create SQL data quality rule",
+        description=_DESC_CREATE_SQL_DQ_RULE,
+        annotations=GOVERNED_CREATE,
+    )
     async def create_sql_dq_rule(
         objects: Annotated[
             list[dict[str, Any]] | dict[str, Any] | str,

@@ -1,5 +1,11 @@
 """Shared primitives for MCP tool modules."""
 
+from server.tools.common.annotations import (
+    GOVERNED_CREATE,
+    GOVERNED_EXECUTE,
+    GOVERNED_UPDATE,
+    READ_ONLY,
+)
 from server.tools.common.descriptions import classify_tool_desc
 from server.tools.common.errors import error_payload, map_ovaledge_error
 from server.tools.common.params import drop_none
@@ -18,6 +24,10 @@ from server.tools.common.validators import (
 )
 
 __all__ = [
+    "GOVERNED_CREATE",
+    "GOVERNED_EXECUTE",
+    "GOVERNED_UPDATE",
+    "READ_ONLY",
     "as_dict",
     "blank",
     "classify_tool_desc",

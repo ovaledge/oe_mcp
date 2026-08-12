@@ -73,7 +73,7 @@ class TestAssessCdeDq:
     def test_description_routing_phrases(self) -> None:
         desc = dataquality_helpers._DESC_ASSESS_CDE_DQ
         assert "lookup_dq_rule" in desc
-        assert "search_catalog_assets" in desc
+        assert "asset_explorer" in desc
         assert "associate_dq_rule_objects" in desc
         assert "description_custom_field_name" in desc
         assert "description_term_name" in desc

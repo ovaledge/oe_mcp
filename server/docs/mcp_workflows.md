@@ -2,9 +2,9 @@
 
 This document is the **agent routing guide** for the OvalEdge MCP server. It is served as a static MCP resource at **`docs://ovaledge/mcp_workflows`** (alongside other files in `server/docs/`).
 
-**Agents must read this resource** at session start and before multi-step workflows, governed writes, native source access (RDAM), catalog ACL checks, or DQ operations. Server instructions (`server/app.py`) and tool descriptions link here; workflow prompts assume you have loaded this guide or an equivalent section.
+**Agents must read this resource** at session start and before multi-step workflows, governed writes, native source access (RDAM), catalog permissions checks, or DQ operations. Server instructions (`server/app.py`) and tool descriptions link here; workflow prompts assume you have loaded this guide or an equivalent section.
 
-Canonical inventories (used by tests): **`server/mcp_surface.py`** — `MCP_TOOL_NAMES` (25 tools), `MCP_WORKFLOW_PROMPT_NAMES` (20 prompts), `MCP_OVALEDGE_RESOURCE_TEMPLATES` (5 object-detail templates).
+Canonical inventories (used by tests): **`server/mcp_surface.py`** — `MCP_TOOL_NAMES` (19 tools), `MCP_WORKFLOW_PROMPT_NAMES` (21 prompts), `MCP_OVALEDGE_RESOURCE_TEMPLATES` (5 object-detail templates).
 
 There is **no MCP protocol “tool priority” field**. Routing is guided by:
 
@@ -12,21 +12,20 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 2. **This document** (`docs://ovaledge/mcp_workflows`) — full routing index and playbooks  
 3. **Tool descriptions** — per-tool when-to-call (budget: `tests/tools/test_tool_description_budget.py`)  
 4. **Workflow prompts** (`server/prompts/workflows/`) — optional multi-step playbooks  
-5. **Domain guides** — `docs://ovaledge/glossary_guide`, `tags_guide`, `rdam_source_access`, etc.  
+5. **Domain guides** — `docs://ovaledge/governance`, `asset_types`, `rdam_source_access`, `overview`  
 6. **Client rules** (e.g. Cursor project rules) — host-specific, outside this repo  
 
 ## Tool routing (quick reference)
 
 | User intent | Start with |
 |-------------|------------|
-| Find tables, files, reports, columns | `search_catalog_assets` → `catalog_asset_details` |
-| Rich metadata for one catalog object | `catalog_asset_details` (after search or when `object_id` known) |
-| Org policies, playbooks, narrative knowledge in data stories | `lookup_datastory` (`content_query` = question); prompt `organizational_knowledge` |
-| OvalEdge product how-to (UI, features) | `search_platform_docs`; prompt `platform_help` |
-| Business term definition | `lookup_glossary_term`; prompt `explain_business_term` |
-| Tag meaning or hierarchy | `lookup_tags`; prompt `explain_tag` |
+| Find tables, files, reports, columns (incl. first-person “what can I see/view/access?” without a named principal) | `asset_explorer` (Find data assets; omit `object_type` unless query implies a type) → `asset_details` after shortlist |
+| Rich metadata, column profile, or table relationships | `asset_details` (View asset details; after search or when `object_id` known) |
+| Org policies, playbooks, narratives, or OvalEdge product how-to | `knowledge_search` (Search knowledge & docs); prompts `organizational_knowledge`, `platform_help` |
+| Business term definition | `asset_explorer` with `name` and `object_type=glossary`; prompt `explain_business_term` |
+| Tag meaning or hierarchy | `asset_explorer` with `name` and `object_type=oetag`; prompt `explain_tag` |
 | Data quality rule lookup | `lookup_dq_rule`; prompt `explain_dq_rule` |
-| CDE assets / DQ function & rule recommendations | `assess_cde_dq` (after `search_catalog_assets` or `discover_cde_columns=true`) |
+| CDE assets / DQ function & rule recommendations | `assess_cde_dq` (after `asset_explorer` or `discover_cde_columns=true`) |
 | Associate objects to existing data quality rule | `associate_dq_rule_objects` (after `assess_cde_dq` / `lookup_dq_rule`; confirm gate) |
 | Find same-function rules before creating | `create_dq_rules` with `prefer_existing_rule=true` (default); user chooses a returned rule ID or explicitly requests new |
 | Create a **new** data quality rule (second rule / explicit new) | `create_dq_rules` with `prefer_existing_rule=false`; often `skip_duplicate_function_on_object=false` |
@@ -36,11 +35,10 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 | Create custom SQL data quality rule | `create_sql_dq_rule` (confirm gate; after validate when `canCreateRule`) |
 | CDE / custom SQL DQ workflow (prompt) | `create_custom_sql_dq_workflow` or `assess_cde_dq_coverage` |
 | Metadata drift between crawls | `metadata_changes_between_crawls`; prompt `metadata_drift` |
-| Native Redshift/Snowflake/Tableau grants | `source_system_access`; prompts `native_source_access`, `dam_object_browse` |
-| OvalEdge catalog ACL (user/role on catalog objects) | `get_user_object_access`; prompt `catalog_object_access` |
-| Lineage | `asset_lineage`; prompt `trace_data_lineage` |
-| Column stats | `column_profile_statistics` |
-| Table relationships | `table_entity_relationships`; prompt `find_related_assets` |
+| Native Redshift/Snowflake/Tableau grants | `access_explorer` with `operation=source_system_access`; prompts `native_source_access`, `dam_object_browse` |
+| OvalEdge catalog permissions (user/role on catalog objects) | `access_explorer` with `operation=catalog_access`; prompt `catalog_object_access` |
+| Lineage | `asset_lineage` (Trace data lineage); prompt `trace_data_lineage` |
+| Column stats / table relationships | `asset_details` (automatic for `oetable`/`oefile`; relationships for `oetable`); prompt `find_related_assets` |
 | Trust / certification scorecard | prompt `trust_assessment` |
 | Domain overview (terms, tables, stories) | prompt `explore_data_domain` |
 | Create glossary term | `create_glossary_term` (guided; human confirms); prompt `create_business_glossary_term` |
@@ -48,27 +46,22 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 | Update descriptions | `update_asset_descriptions`; prompt `document_asset_descriptions` |
 | Update governance roles | `update_governance_roles`; prompt `assign_governance_roles` |
 | Update CDE flag on tables/columns/files | `update_cde_associations` (confirm gate) |
-| Update custom / additional field | `search_catalog_assets` (if needed) → `update_custom_field_value` (confirm gate) |
+| Update custom / additional field | `asset_explorer` (if needed) → `update_custom_field_value` (confirm gate) |
 
-**Data stories vs platform docs:** `lookup_datastory` searches **your organization’s** onboarded stories (`oestory`). `search_platform_docs` searches **OvalEdge product** documentation. Do not use platform docs for internal policy questions.
+**Knowledge search:** `knowledge_search` searches both your organization’s onboarded data stories (`oestory`) and OvalEdge product documentation. It has no corpus enum; use the question context and returned citations to distinguish the result source.
 
 ## Registered MCP tools (inventory)
 
 | Domain | Tool | Governed write |
 |--------|------|----------------|
-| Catalog | `search_catalog_assets` | — |
-| Catalog | `catalog_asset_details` | — |
-| Catalog | `column_profile_statistics` | — |
-| Catalog | `table_entity_relationships` | — |
+| Catalog | `asset_explorer` | — |
+| Catalog | `asset_details` | — |
 | Catalog | `asset_lineage` | — |
 | Catalog | `metadata_changes_between_crawls` | — |
 | Catalog | `update_asset_descriptions` | confirm gate |
 | Catalog | `update_cde_associations` | confirm gate |
-| Governance | `lookup_glossary_term` | — |
 | Governance | `create_glossary_term` | confirm gate |
-| Governance | `lookup_tags` | — |
 | Governance | `create_tag` | confirm gate |
-| Governance | `lookup_datastory` | — |
 | Governance | `update_governance_roles` | confirm gate |
 | Governance | `update_custom_field_value` | confirm gate |
 | Data quality | `lookup_dq_rule` | — |
@@ -78,11 +71,10 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 | Data quality | `generate_dq_queries` | — |
 | Data quality | `validate_dq_queries` | confirm gate |
 | Data quality | `create_sql_dq_rule` | confirm gate |
-| Access | `get_user_object_access` | — |
-| RDAM | `source_system_access` | — |
-| Docs | `search_platform_docs` | — |
+| Access | `access_explorer` | — |
+| Knowledge | `knowledge_search` | — |
 
-## Catalog search (`search_catalog_assets`)
+## Asset explorer (`asset_explorer`)
 
 Extended parameter patterns (tool description keeps a short summary; use this section when disambiguating filters):
 
@@ -95,6 +87,8 @@ Extended parameter patterns (tool description keeps a short summary; use this se
 | Data Domains (not glossary Global Domain) | `object_type=dp_domain` alone — do not combine with other types |
 | Report Groups | `object_type=oedomain` alone — do not combine with other types |
 | PII / classification | `classifications=["PII"]`, `context_query` |
+| Assets by exact tag name | `tags=["Customer and Sales"]` — exact tag name (case-insensitive), not FQN/description contains |
+| Assets by exact glossary term | `terms=["Payment"]` — exact term name (case-insensitive), not description/domain contains |
 | Glossary terms in placement | `object_type=glossary`, `domain_name`, optional `category_name` |
 | Assets linked to domain terms | `object_type=oetable`, `domain_name` |
 | CDE columns | `object_type=oecolumn`, `critical_data_element=["Yes"]` → then `assess_cde_dq` |
@@ -103,17 +97,37 @@ Extended parameter patterns (tool description keeps a short summary; use this se
 
 **server_type:** Infer from the user question when they name a technology; omit when not implied — do not guess.
 
-Omit empty list parameters; filter-only search is valid. Each hit includes `objectId`, `objectType`, `navLink`, `redirectUrl`. For `oestory` hits, follow with `lookup_datastory`.
+`asset_explorer` (**Find data assets**) is the unified catalog search; it has no operation enum. **Default discovery:** `search_terms` + `context_query`; **omit `object_type`**, `tags`, and `terms` unless the user/query clearly implies them (e.g. “tables only”, “tagged Payments”, “glossary term Region”). Do not default to `oetable`-only or replace an open catalog search with separate type-scoped calls. `tags`/`terms` are exact governance filters, not keyword synonyms. Call **`asset_details` only after shortlisting** a hit (`object_id` + `object_type`). Omit empty list parameters; filter-only search is valid. Each hit includes `objectId`, `objectType`, `navLink`, `redirectUrl`.
+
+**Discovery vs grants:** first-person inventory without a named principal (e.g. “What tables/schemas/columns can I see/view/access?”) → `asset_explorer` — **not** `access_explorer`. Named-principal grant questions and who-has-access on a specific object use `access_explorer` (see below). First-person + named Redshift/Snowflake/Tableau → RDAM via `access_explorer` (ask for remote username / `connection_id` as needed).
+
+Use `name` plus `object_type=glossary` for a business term entity, or `name` plus `object_type=oetag` for a tag entity — after or alongside open catalog search, not instead of it for “find related assets” questions.
+
+## Asset details (`asset_details`)
+
+**View asset details:** call with `object_id` and `object_type` after shortlisting from `asset_explorer`; `fully_qualified_name` is not supported. Always returns details; auto profile for `oetable`/`oefile`; relationships for `oetable`.
+
+## Asset lineage (`asset_lineage`)
+
+**Trace data lineage:** upstream/downstream graph for **`oetable`** or **`oefile`** only (`object_id` + `object_type`, optional `depth`). Resolve the id via `asset_explorer` first when the user names an asset.
+
+## Knowledge search (`knowledge_search`)
+
+**Search knowledge & docs:** searches both data stories and OvalEdge product documentation (no corpus enum). Prefer `query`; optional story filters. Present `formattedResponse` / `storyCitation`. Not for physical catalog discovery — use `asset_explorer`. Details: [governance](governance#data-stories-organizational-knowledge).
 
 ## Who has access? (disambiguate first)
 
-Use workflow prompt **`resolve_object_access`**. Native RDAM → `source_system_access` with `access_intent_confirmed=native`; OvalEdge catalog ACL → `get_user_object_access` with `access_intent_confirmed=catalog_acl`. Skip disambiguation when the question includes native/DAM signals (native, remote, DAM, source system, …) or catalog ACL signals (OE security, ACL, catalog access, …). **Snowflake/Redshift/Tableau alone do not skip disambiguation** — e.g. “Who has access to BUSINESS.BANKING in Snowflake?” and “Who has access to customer1 in redshift1 in Redshift?” both require the **1** / **2** choice first. Server returns `ACCESS_INTENT_REQUIRED` when who-has-access directions omit `access_intent_confirmed`.
+Use workflow prompt **`resolve_object_access`**. Native RDAM → `access_explorer` with `operation=source_system_access` and `access_intent_confirmed=native`; OvalEdge catalog permissions → `access_explorer` with `operation=catalog_access` and `access_intent_confirmed=catalog_acl`. Skip disambiguation when the question includes native/DAM signals (native, remote, DAM, source system, …) or catalog-permissions signals (OE security, catalog permissions, catalog access; legacy “ACL”, …). **Snowflake/Redshift/Tableau alone do not skip disambiguation** — e.g. “Who has access to BUSINESS.BANKING in Snowflake?” and “Who has access to customer1 in redshift1 in Redshift?” both require the **1** / **2** choice first. Server returns `ACCESS_INTENT_REQUIRED` when who-has-access directions omit `access_intent_confirmed`.
+
+Do **not** treat generic first-person catalog inventory (“What tables can I see/access?” with no named principal and no named source) as who-has-access — use `asset_explorer` / `data_discovery` instead.
 
 ## Native source access (RDAM)
 
-Use **`source_system_access`** for **native** grants harvested from Redshift, Snowflake, or Tableau (RDAM SQL only — **no Elasticsearch**). This is **not** OvalEdge catalog ACL (`get_user_object_access`) and **not** catalog discovery.
+Use **`access_explorer`** with **`operation=source_system_access`** for **native** grants harvested from Redshift, Snowflake, or Tableau (RDAM SQL only — **no Elasticsearch**). This is **not** OvalEdge catalog permissions (`operation=catalog_access`) and **not** catalog discovery.
 
-**Never fall back to `search_catalog_assets`** when RDAM is empty, not-found, or errors — catalog search cannot return native grants. Report the RDAM/API outcome instead.
+**Never fall back to `asset_explorer`** when RDAM is empty, not-found, or errors — catalog search cannot return native grants. Report the RDAM/API outcome instead.
+
+Bare first-person “What can I access?” / “What tables can I see?” **without** a named principal **and** without naming Redshift/Snowflake/Tableau → catalog discovery (`asset_explorer`). First-person **with** a named source (e.g. “What tables can I access in Redshift?”) → this RDAM path (ask for remote `username` / `connection_id` as needed). Named-principal questions (e.g. “What can `svc_analytics` access?”) stay here.
 
 **Workflow prompt:** `native_source_access` (pass `source_system` and the user’s question).
 
@@ -157,16 +171,16 @@ Partial paths (e.g. table name only) may return **`matchCandidates`** — disamb
 
 ### DAM object browse + scoped “who has access to all …”
 
-Use **`source_system_access`** for inventory browse and scoped grant rollups:
+Use **`access_explorer`** (`operation=source_system_access`) for inventory browse and scoped grant rollups:
 
 | User intent | Approach |
 |-------------|----------|
-| List databases / schemas / tables / columns in DAM | `source_system_access` with `query_direction=browse` |
-| Who can access **one** table or schema grant | `source_system_access` `object_to_users` (default `scope_mode=exact`) |
-| Who has access to **all objects under** a schema or database | `source_system_access` with `scope_mode=descendants` |
+| List databases / schemas / tables / columns in DAM | `access_explorer` `operation=source_system_access` with `query_direction=browse` |
+| Who can access **one** table or schema grant | `access_explorer` `operation=source_system_access` `object_to_users` (default `scope_mode=exact`) |
+| Who has access to **all objects under** a schema or database | `access_explorer` `operation=source_system_access` with `scope_mode=descendants` |
 | Schema inventory **and** access audit | Browse tables/columns, then scoped grants call |
 
-Do not use `search_catalog_assets` for either browse or native grants.
+Do not use `asset_explorer` for either browse or native grants. Without an explicit DAM / `connection_id` / named-source intent, “What tables are in X?” / first-person inventory is catalog discovery (`asset_explorer`), not this browse path.
 
 ### Grant models (what to expect in the response)
 
@@ -174,11 +188,11 @@ Do not use `search_catalog_assets` for either browse or native grants.
 - **Snowflake:** role assignment only (no direct user grants / groups).
 - **Tableau:** direct site-user grants and site-group grants on project/report (`grant_mechanism`: direct | group). Group access is expanded via harvested `rdam_usergroup` membership.
 
-**Authorization:** Instance or Connector **Data Access Admin** is enforced server-side; callers without DAA on the scoped connection see RDAM no-access. See [governance_model](governance_model#data-access-admin-daa). Deep routing (agent rules, privilege map, disambiguation): [rdam_source_access](rdam_source_access).
+**Authorization:** Instance or Connector **Data Access Admin** is enforced server-side; callers without DAA on the scoped connection see RDAM no-access. See [governance](governance#data-access-admin-daa). Deep routing (agent rules, privilege map, disambiguation): [rdam_source_access](rdam_source_access).
 
-## Catalog object access (`get_user_object_access`)
+## Catalog object access (`access_explorer` operation=catalog_access)
 
-OvalEdge **catalog ACL** grants (metadata read/write, data permissions) — **not** native DB/BI grants (`source_system_access`).
+OvalEdge **catalog permissions** grants (metadata read/write, data permissions) — **not** native DB/BI grants (`operation=source_system_access`).
 
 **Workflow prompt:** `catalog_object_access`.
 
@@ -187,11 +201,11 @@ OvalEdge **catalog ACL** grants (metadata read/write, data permissions) — **no
 | `user_to_object` | What access does user X have on object Y? (`username` required) |
 | `object_to_principals` | Which users and roles have access on object Y? |
 
-**Asset resolution (exactly one):** `object_id` + `object_type` (preferred after `search_catalog_assets`), `fully_qualified_name`, or `object_name` (may return `matchCandidates`).
+**Asset resolution (exactly one):** `object_id` + `object_type` (preferred after `asset_explorer`), `fully_qualified_name`, or `object_name` (may return `matchCandidates`).
 
 **Connectors:** `object_type=connection` (aliases: `connector`, `data source`) with `object_name`. Connectors are not in catalog search — resolve by display name or pass `object_id` from data-sources.
 
-**JDBC-backed types** (may be absent from Elasticsearch — use exclusive `search_catalog_assets` then access with ids from the hit):
+**JDBC-backed types** (may be absent from Elasticsearch — use exclusive `asset_explorer` then access with ids from the hit):
 
 | Type | object_type | Notes |
 |------|-------------|--------|
@@ -202,13 +216,13 @@ OvalEdge **catalog ACL** grants (metadata read/write, data permissions) — **no
 | Report Groups | `oedomain` | Search alone (aliases: `reportgroup`); not ES-indexed |
 | Data Stories | `oestory` | Access inherited from parent Story Zone — present `inheritedFrom` |
 
-When the user names a catalog asset, call `search_catalog_assets` first, then pass `object_id` and `object_type` from the chosen hit.
+When the user names a catalog asset, call `asset_explorer` first, then pass `object_id` and `object_type` from the chosen hit.
 
 ## Update asset descriptions (`update_asset_descriptions`)
 
 **Workflow prompt:** `document_asset_descriptions`.
 
-Resolve `object_id` via `search_catalog_assets`, `lookup_glossary_term`, or `lookup_tags` — do not guess ids. Required: `object_id`, `object_type`, and an explicit description slot.
+Resolve `object_id` via `asset_explorer` — do not guess ids. Required: `object_id`, `object_type`, and an explicit description slot.
 
 If the user says only "description", ask which slot applies — do not guess `business_description` vs `technical_description`. For multi-slot types, a typed field without `clientContext.prompt` naming the slot is rejected (HTTP 400).
 
@@ -228,32 +242,29 @@ If the user says only "description", ask which slot applies — do not guess `bu
 
 ## Resources (deep links by object id)
 
-Resources return JSON catalog documents from `GET /api/v1/mcp/object-details`. When you need rich narrative (story sections, tag create flow), prefer the **lookup tools** listed below.
+Resources return JSON catalog documents from `GET /api/v1/mcp/asset-details`. When you need rich narrative or citations, use `knowledge_search`; use `asset_explorer` for glossary terms and tags.
 
 | URI template | objectType | Prefer tool for |
 |--------------|------------|-----------------|
-| `ovaledge://catalog/table/{object_id}` | `oetable` | `catalog_asset_details` |
-| `ovaledge://catalog/file/{object_id}` | `oefile` | `catalog_asset_details` |
-| `ovaledge://governance/glossary-term/{object_id}` | `glossary` | `lookup_glossary_term` |
-| `ovaledge://governance/data-story/{object_id}` | `oestory` | `lookup_datastory` |
-| `ovaledge://governance/tag/{object_id}` | `oetag` | `lookup_tags` |
+| `ovaledge://catalog/table/{object_id}` | `oetable` | `asset_details` |
+| `ovaledge://catalog/file/{object_id}` | `oefile` | `asset_details` |
+| `ovaledge://governance/glossary-term/{object_id}` | `glossary` | `asset_explorer` |
+| `ovaledge://governance/data-story/{object_id}` | `oestory` | `knowledge_search` |
+| `ovaledge://governance/tag/{object_id}` | `oetag` | `asset_explorer` |
 
 Static platform markdown (this folder): `docs://ovaledge/{filename}`:
 
 | Resource URI | Topic |
 |--------------|--------|
 | `docs://ovaledge/mcp_workflows` | This routing guide (read first) |
-| `docs://ovaledge/overview` | OvalEdge product overview + MCP summary |
-| `docs://ovaledge/asset_types` | Catalog `object_type` allow-list |
-| `docs://ovaledge/glossary_guide` | Glossary create wizard |
-| `docs://ovaledge/tags_guide` | Tag create (OPEN/SECURE) wizard |
-| `docs://ovaledge/data_stories` | Data story lookup behavior |
-| `docs://ovaledge/governance_model` | Roles, DAA, governance concepts |
-| `docs://ovaledge/rdam_source_access` | Deep RDAM routing and disambiguation |
+| `docs://ovaledge/overview` | OvalEdge product overview + MCP read-tool summary |
+| `docs://ovaledge/asset_types` | Catalog `object_type` allow-list + filter guidance |
+| `docs://ovaledge/governance` | Roles, CDE, glossary/tag create, data stories, DAA summary |
+| `docs://ovaledge/rdam_source_access` | Deep RDAM / native grants routing |
 
 ## Workflow prompts
 
-Invoke by name from the MCP client when supported. Each prompt returns instruction text that tells the agent which tools to call in order. **20 prompts** registered (see `MCP_WORKFLOW_PROMPT_NAMES` in `server/mcp_surface.py`).
+Invoke by name from the MCP client when supported. Each prompt returns instruction text that tells the agent which tools to call in order. **21 prompts** registered (see `MCP_WORKFLOW_PROMPT_NAMES` in `server/mcp_surface.py`).
 
 ### Discovery
 
@@ -271,7 +282,7 @@ Invoke by name from the MCP client when supported. Each prompt returns instructi
 | `organizational_knowledge` | **Data stories first** — internal policies and narratives |
 | `explain_tag` | Tag lookup and tagged assets |
 | `explain_dq_rule` | Data quality rule lookup and steward context |
-| `platform_help` | OvalEdge product docs via `search_platform_docs` |
+| `platform_help` | OvalEdge product docs via `knowledge_search` |
 
 ### Lineage and quality
 
@@ -287,10 +298,10 @@ Invoke by name from the MCP client when supported. Each prompt returns instructi
 
 | Prompt | Purpose |
 |--------|---------|
-| `resolve_object_access` | Disambiguate native RDAM vs catalog ACL before calling an access tool |
-| `native_source_access` | Redshift / Snowflake / Tableau native grants (not catalog ACLs) |
-| `catalog_object_access` | OvalEdge catalog ACL (`get_user_object_access`) |
-| `dam_object_browse` | DAM inventory browse via `source_system_access` |
+| `resolve_object_access` | Disambiguate native RDAM vs catalog permissions before calling an access tool |
+| `native_source_access` | Redshift / Snowflake / Tableau native grants (not catalog permissionss) |
+| `catalog_object_access` | OvalEdge catalog permissions (`access_explorer` operation=catalog_access) |
+| `dam_object_browse` | DAM inventory browse via `access_explorer` operation=source_system_access |
 
 ### Governed writes (human-in-the-loop)
 
@@ -305,7 +316,7 @@ Invoke by name from the MCP client when supported. Each prompt returns instructi
 
 ## Update CDE associations (`update_cde_associations`)
 
-Mark or unmark **Critical Data Element (CDE)** on catalog objects — tables, columns, files, file columns, schemas, charts, APIs, and queries. Resolve targets via `search_catalog_assets` first.
+Mark or unmark **Critical Data Element (CDE)** on catalog objects — tables, columns, files, file columns, schemas, charts, APIs, and queries. Resolve targets via `asset_explorer` first.
 
 **Required before auto-create:** `create_dq_rules` skips objects that are not **CDE=Yes** (per-row message explains this).
 
@@ -319,7 +330,7 @@ Often used before DQ workflows when the user wants to mark a table or column as 
 
 This gate is enforced in the MCP server (preview tokens, `write_confirmed_by_user`). The OvalEdge backend enforces RBAC and business rules on the actual POST (e.g. CDE prerequisite and skip reasons on `create_dq_rules`).
 
-See also: [glossary_guide](glossary_guide), [tags_guide](tags_guide), [data_stories](data_stories), [governance_model](governance_model).
+See also: [governance](governance), [asset_types](asset_types), [overview](overview), [rdam_source_access](rdam_source_access).
 
 ## CDE / DQ intelligence (MCP)
 
@@ -327,7 +338,7 @@ End-to-end routing for function-based and custom-SQL data quality workflows.
 
 ### Read-only path
 
-1. `search_catalog_assets` with `critical_data_element=Yes` (types: `oetable`, `oecolumn`, `oefile`, `oefilecolumn`), **or** pass known `objects` to `assess_cde_dq`.
+1. `asset_explorer` with `critical_data_element=Yes` (types: `oetable`, `oecolumn`, `oefile`, `oefilecolumn`), **or** pass known `objects` to `assess_cde_dq`.
 2. `assess_cde_dq` — recommended function and `existingRulesForFunction` (all active rules using that function, purpose-ranked but never filtered by purpose).
 3. Optional: `lookup_dq_rule` when the user names an existing rule (rules are not in catalog search).
 

@@ -22,18 +22,18 @@ def mcp_client(mock_oe_client: AsyncMock) -> FastMCP:  # noqa: ARG001 — uses O
 
 
 class TestMcpClientTools:
-    async def test_list_tools_includes_catalog_search(self, mcp_client: FastMCP) -> None:
+    async def test_list_tools_includes_consolidated_reads(self, mcp_client: FastMCP) -> None:
         async with Client(mcp_client) as client:
             tools = await client.list_tools()
             names = {t.name for t in tools}
-        assert "search_catalog_assets" in names
-        assert "catalog_asset_details" in names
-        assert "lookup_glossary_term" in names
+        assert "asset_explorer" in names
+        assert "asset_details" in names
+        assert "asset_lineage" in names
         assert "create_glossary_term" in names
-        assert "lookup_datastory" in names
+        assert "knowledge_search" in names
         assert "create_tag" in names
 
-    async def test_call_tool_search_catalog_assets(
+    async def test_call_tool_asset_explorer(
         self,
         mcp_client: FastMCP,
         mock_oe_client: AsyncMock,
@@ -41,7 +41,7 @@ class TestMcpClientTools:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
         async with Client(mcp_client) as client:
             result = await client.call_tool(
-                "search_catalog_assets",
+                "asset_explorer",
                 {"search_terms": ["customer"], "object_type": "oetable", "limit": 5},
             )
         assert result.is_error is False
@@ -53,7 +53,7 @@ class TestMcpClientTools:
     ) -> None:
         async with Client(mcp_client) as client:
             result = await client.call_tool(
-                "search_catalog_assets",
+                "asset_explorer",
                 {"search_terms": ["x"], "object_type": "TABLE"},
             )
         assert result.is_error is False
@@ -85,4 +85,4 @@ class TestMcpClientResourcesAndPrompts:
         assert pr.messages
         content = pr.messages[0].content
         assert isinstance(content, TextContent)
-        assert "search_catalog_assets" in content.text
+        assert "asset_explorer" in content.text

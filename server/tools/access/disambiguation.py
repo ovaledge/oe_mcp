@@ -50,7 +50,7 @@ def validate_access_intent_confirmed(
     expected_intent: str,
 ) -> dict[str, Any] | None:
     """
-    Block who-has-access tool calls until the user picks native (1) or catalog ACL (2).
+    Block who-has-access tool calls until the user picks native (1) or catalog permissions (2).
 
     ``user_to_objects``, ``user_to_object``, and ``browse`` are not gated.
     """

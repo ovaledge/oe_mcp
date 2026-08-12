@@ -28,7 +28,7 @@ _DESC_UPDATE_CUSTOM_FIELD_VALUE = classify_tool_desc(
     "write_confirmed_by_user=true, confirmation_token from preview, same object_id, "
     "object_type, field_updates, clientContext.\n\n"
     "Workflow:\n"
-    "1. Parse field name(s) and value(s); search_catalog_assets when the asset name is known.\n"
+    "1. Parse field name(s) and value(s); asset_explorer when the asset name is known.\n"
     "2. Code fields: GET custom-fields; validate options; single-select → one option; "
     "multi-select → code_update_mode (replace_all|add|remove).\n"
     "3. User approves preview → POST per Confirm gate.\n\n"

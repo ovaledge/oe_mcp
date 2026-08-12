@@ -1,8 +1,8 @@
 """
 Native source-system access helpers (RDAM harvest).
 
-Queries OvalEdge-harvested RDAM privilege metadata — not OvalEdge catalog ACLs
-(see get_user_object_access) and not catalog data-sources.
+Queries OvalEdge-harvested RDAM privilege metadata — not OvalEdge catalog permissions
+(access_explorer operation=catalog_access) and not catalog data-sources.
 """
 
 from __future__ import annotations
@@ -13,15 +13,13 @@ from typing import Any
 
 from server.client import OvalEdgeError
 from server.constants import (
-    MCP_ACCESS_DISAMBIGUATION_TOOL_LEAD_DOC,
-    MCP_PATH_SOURCE_SYSTEM_ACCESS,
+    MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
+    MCP_PATH_ACCESS_EXPLORER,
     MCP_QUERY_DIRECTIONS,
-    MCP_QUERY_DIRECTIONS_DOC,
     MCP_RDAM_OBJECT_TYPE_ALL,
     MCP_RDAM_OBJECT_TYPES,
     MCP_RDAM_SCOPE_MODE_DESCENDANTS,
     MCP_RDAM_SCOPE_MODE_EXACT,
-    MCP_RDAM_SCOPE_MODES_DOC,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_CONNECTION_ERROR,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_OBJECT_TYPE_ERROR,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_SOURCE_ERROR,
@@ -30,13 +28,11 @@ from server.constants import (
     MCP_SOURCE_SYSTEM_OBJECT_TYPE_REQUIRED_ERROR,
     MCP_SOURCE_SYSTEM_USERNAME_REQUIRED_ERROR,
     MCP_SOURCE_SYSTEMS,
-    MCP_SOURCE_SYSTEMS_DOC,
     MCP_TABLE_SCHEMA_DISCOVERY_EARLY_EXIT_CANDIDATES,
     MCP_TABLE_SCHEMA_DISCOVERY_MAX_PROBES,
     MCP_TABLE_SCHEMA_DISCOVERY_PROBE_CONCURRENCY,
 )
 from server.tools.common import error_payload
-from server.tools.common.descriptions import classify_tool_desc
 
 _RDAM_OBJECT_TYPE_ALIASES = {
     "oeschema": "schema",
@@ -390,8 +386,9 @@ async def discover_table_schema_candidates(
     hint = grants_hint_result
     if hint is None or not hint.get("ok"):
         hint = await client.get(
-            MCP_PATH_SOURCE_SYSTEM_ACCESS,
+            MCP_PATH_ACCESS_EXPLORER,
             params={
+                "operation": MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
                 "sourceSystem": source_system.strip().lower(),
                 "queryDirection": "object_to_users",
                 "objectPath": table,
@@ -422,8 +419,9 @@ async def discover_table_schema_candidates(
         async with sem:
             try:
                 probe = await client.get(
-                    MCP_PATH_SOURCE_SYSTEM_ACCESS,
+                    MCP_PATH_ACCESS_EXPLORER,
                     params={
+                        "operation": MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
                         "sourceSystem": ss,
                         "queryDirection": "object_to_users",
                         "objectPath": probe_path,
@@ -848,8 +846,9 @@ async def enrich_column_grants_fallback(
 
     try:
         retry = await client.get(
-            MCP_PATH_SOURCE_SYSTEM_ACCESS,
+            MCP_PATH_ACCESS_EXPLORER,
             params={
+                "operation": MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
                 "sourceSystem": source_system.strip().lower(),
                 "queryDirection": "object_to_users",
                 "objectPath": table_path,
@@ -926,41 +925,8 @@ def filter_grants_by_object_level(
     }
 
 
-_DESC_SOURCE_SYSTEM_ACCESS = classify_tool_desc(
-    MCP_ACCESS_DISAMBIGUATION_TOOL_LEAD_DOC
-    + "Resolve **native** access grants harvested from Redshift, Snowflake, or Tableau (RDAM) — "
-    "independent of OvalEdge catalog ACLs.\n\n"
-    f"Backend: GET {MCP_PATH_SOURCE_SYSTEM_ACCESS}\n\n"
-    "**Not** `get_user_object_access` or `search_catalog_assets`. Never fall back to "
-    "`search_catalog_assets` when RDAM is empty or errors.\n\n"
-    "**Required always:** `source_system` ("
-    + MCP_SOURCE_SYSTEMS_DOC
-    + "), `query_direction` ("
-    + MCP_QUERY_DIRECTIONS_DOC
-    + ") — infer direction from the question.\n"
-    "**browse:** `connection_id` + `object_type`; optional `object_path` as parent scope.\n"
-    "**user_to_objects:** `username` required; with `connection_id` + `object_type=table`, omit "
-    "`object_path` to list all tables on the connector.\n"
-    "**object_to_users:** `object_path` + `object_type` required for exact scope.\n"
-    "Whenever `object_path` is set, `object_type` is required. Do not probe or discover "
-    "`connection_id` — ask the user.\n\n"
-    "**browse** returns DAM inventory objects, not grant rows. **user_to_objects** / "
-    "**object_to_users** return native privileges (grant_mechanism, contributing_role/group, "
-    "privileges). Optional `object_name` composes with `object_path` for table lookups.\n\n"
-    "**scope_mode:** "
-    + MCP_RDAM_SCOPE_MODES_DOC
-    + f" (default {MCP_RDAM_SCOPE_MODE_EXACT}). **descendants** rolls up grants under a "
-    "schema, database, or connector.\n\n"
-    "Partial paths may return `matchCandidates` or `requiresSchemaSelection`; use "
-    "`resolve_all_matches=true` only when the user wants all matches (max 50).\n\n"
-    "Full routing (path formats, grant models, agent rules, DAA): "
-    "docs://ovaledge/rdam_source_access, "
-    "docs://ovaledge/mcp_workflows (Native source access), and workflow prompt "
-    "`native_source_access`.\n\n"
-    "Read-only. Instance/Connector **Data Access Admin** enforced server-side."
-,
-    confidential=True,
-)
+
+
 
 def validate_and_normalize_object_type(
     source_system: str,

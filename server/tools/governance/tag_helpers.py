@@ -8,8 +8,6 @@ from typing import Any
 
 from server.client import OvalEdgeClient, OvalEdgeError
 from server.constants import (
-    MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
-    MCP_GLOSSARY_TAGS_LIMIT_MAX,
     MCP_PATH_TAGS,
     MCP_PATH_TAGS_CREATE_OPTIONS,
     MCP_PATH_TAGS_PARENT_OPTIONS,
@@ -32,18 +30,10 @@ from server.tools.governance._shared import (
     _positive_int,
 )
 
+# Deprecated as a standalone MCP tool — use asset_explorer. Kept for enrichment helpers.
 _DESC_TAGS = classify_tool_desc(
-    "Look up OETAG (tag) document(s) by id or name from Elasticsearch; name search "
-    "may return multiple hits.\n\n"
-    f"Backend: GET {MCP_PATH_TAGS} (objectId OR tagName — mutually exclusive).\n"
-    f"Optional query param limit (default {MCP_GLOSSARY_TAGS_LIMIT_DEFAULT} on server; "
-    f"this client caps at {MCP_GLOSSARY_TAGS_LIMIT_MAX}).\n\n"
-    "Provide either tag_name or object_id, never both.\n\n"
-    "Hierarchy: set include_parent=true when the user asks for the parent tag; "
-    "include_children=true when they ask for child tags (or both). The API enriches "
-    "each hit with parentTag and/or childTags from tagrelationship.\n\n"
-    "Each hit includes relative navLink plus redirectUrl (absolute, from OVALEDGE_BASE_URL). "
-    "When hierarchy flags are set, formattedResponse summarizes tag, parent, and children."
+    "Tag enrichment helper (not registered as a standalone MCP tool). "
+    "Use asset_explorer with name + object_type=oetag (optional include_parent/children)."
 )
 _DESC_CREATE_TAG = classify_tool_desc(
     "Create a new OETAG (guided pickers). Flow depends on tagSecurityMode from create-options.\n\n"
@@ -53,7 +43,7 @@ _DESC_CREATE_TAG = classify_tool_desc(
     "SECURE: master required, parent optional. OPEN: parent optional, no master step.\n\n"
     "Complete placement steps → confirm_create preview → POST only after "
     "write_confirmed_by_user=true.\n\n"
-    "Full OPEN/SECURE steps: docs://ovaledge/tags_guide and workflow prompt "
+    "Full OPEN/SECURE steps: docs://ovaledge/governance and workflow prompt "
     "`create_governance_tag`."
 )
 def _tag_nav_from_item(item: dict[str, Any]) -> str:
@@ -651,12 +641,16 @@ def _format_open_parent_list_for_user(parents: list[dict[str, Any]]) -> str:
         "",
         "Ask the human which option they want BEFORE creating the tag.",
         "",
-        "  - **No parent** (root/open tag) → call create_tag again with "
-        "create_directly_under_master=true and parent_step_completed_by_user=true "
-        "(do not set masterTagId).",
-        "  - **Under a parent** → call create_tag with parent_tag_id, "
-        "parent_tag_id_confirmed_by_user=true, and parent_step_completed_by_user=true "
-        "(pick from list below; root/master rows use parent_tag_id only).",
+        (
+            "  - **No parent** (root/open tag) → call create_tag again with "
+            "create_directly_under_master=true and parent_step_completed_by_user=true "
+            "(do not set masterTagId)."
+        ),
+        (
+            "  - **Under a parent** → call create_tag with parent_tag_id, "
+            "parent_tag_id_confirmed_by_user=true, and parent_step_completed_by_user=true "
+            "(pick from list below; root/master rows use parent_tag_id only)."
+        ),
         "",
     ]
     if not parents:
@@ -717,11 +711,15 @@ def _format_parent_list_for_user(
         f"    (keep master_tag_id={master_tag_id}, master_tag_id_confirmed_by_user=true)",
         "",
         "  - **Under a parent tag** (pick parentTagId from list below):",
-        "    parent_tag_id + parent_tag_id_confirmed_by_user=true + "
-        "parent_step_completed_by_user=true",
+        (
+            "    parent_tag_id + parent_tag_id_confirmed_by_user=true + "
+            "parent_step_completed_by_user=true"
+        ),
         "",
-        "  - **Browse deeper** (when a row shows has children): call create_tag again with "
-        "browse_parent_tag_id=<that parentTagId> (same master_tag_id + confirmations).",
+        (
+            "  - **Browse deeper** (when a row shows has children): call create_tag again with "
+            "browse_parent_tag_id=<that parentTagId> (same master_tag_id + confirmations)."
+        ),
         "",
     ])
     if not parents:
@@ -866,15 +864,24 @@ async def _resolve_tag_hierarchy_names_for_create(
 
 
 async def _lookup_tag_name_by_id(client: OvalEdgeClient, object_id: int) -> str | None:
+    from server.constants import MCP_PATH_ASSET_EXPLORER
+
     try:
-        result = await client.get(MCP_PATH_TAGS, params={"objectId": object_id})
+        result = await client.get(
+            MCP_PATH_ASSET_EXPLORER,
+            params={"objectId": object_id, "objectType": "oetag"},
+        )
     except OvalEdgeError:
         return None
     if not isinstance(result, dict) or not result.get("ok"):
         return None
     data = result.get("data")
-    if isinstance(data, dict):
-        name = data.get("objectName") or data.get("tagName") or data.get("name")
+    tags = data.get("tags") if isinstance(data, dict) else None
+    hit = tags if isinstance(tags, dict) else None
+    if hit is None and isinstance(tags, list) and tags and isinstance(tags[0], dict):
+        hit = tags[0]
+    if isinstance(hit, dict):
+        name = hit.get("objectName") or hit.get("tagName") or hit.get("name")
         if isinstance(name, str) and name.strip():
             return name.strip()
     return None
@@ -974,8 +981,10 @@ def _format_open_parent_selection_guidance(
     lines.extend([
         _format_open_parent_list_for_user(parents),
         "",
-        "Ask the human: use a parent from the list, browse deeper with "
-        "browse_parent_tag_id when hasChildren=true, or no parent.",
+        (
+            "Ask the human: use a parent from the list, browse deeper with "
+            "browse_parent_tag_id when hasChildren=true, or no parent."
+        ),
         "Next create_tag call: parent_step_completed_by_user=true plus their choice.",
     ])
     extra: dict[str, Any] = {
@@ -1291,8 +1300,11 @@ def _block_llm_master_selection(
 ) -> dict[str, Any]:
     lines = [
         "master_tag_id was sent without master_tag_id_confirmed_by_user=true.",
-        "The LLM must not choose the master tag — ask the human to pick from "
-        "masterTagChoices, then retry with their id and master_tag_id_confirmed_by_user=true.",
+        (
+            "The LLM must not choose the master tag — ask the human to pick from "
+            "masterTagChoices, then retry with their id and "
+            "master_tag_id_confirmed_by_user=true."
+        ),
     ]
     if master_tag_id is not None and master_tag_id > 0:
         lines.insert(0, f"Rejected master_tag_id={master_tag_id} (not human-confirmed).")
@@ -1506,7 +1518,7 @@ def _enrich_create_tag_response(
     if not indexed:
         create_body["catalogLookupNote"] = (
             "Tag catalog document not indexed yet; nav link built from create ids. "
-            "Retry lookup_tags(object_id) later for full summary."
+            "Retry asset_explorer(object_id) later for full summary."
         )
         data["catalogLookupNote"] = create_body["catalogLookupNote"]
 
@@ -1517,11 +1529,27 @@ async def _lookup_tag_after_create(
     client: OvalEdgeClient,
     tag_id: int,
 ) -> dict[str, Any] | None:
+    from server.constants import MCP_PATH_ASSET_EXPLORER
+
     try:
-        return await client.get(
-            MCP_PATH_TAGS,
-            params={"objectId": tag_id, "limit": 1},
+        body = await client.get(
+            MCP_PATH_ASSET_EXPLORER,
+            params={"objectId": tag_id, "objectType": "oetag", "limit": 1},
         )
     except OvalEdgeError:
         return None
+    if not isinstance(body, dict):
+        return None
+    data = body.get("data")
+    tags = data.get("tags") if isinstance(data, dict) else None
+    if isinstance(tags, dict):
+        return {"ok": True, "data": tags}
+    if isinstance(tags, list) and tags and isinstance(tags[0], dict):
+        return {"ok": True, "data": tags[0]}
+    # Already a classic McpApiResult tag payload
+    if body.get("ok") and isinstance(data, dict) and (
+        "objectId" in data or "tagName" in data or "objectName" in data
+    ):
+        return body
+    return body if isinstance(body, dict) else None
 

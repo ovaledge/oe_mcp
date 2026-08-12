@@ -12,10 +12,33 @@ description: >-
 ## Core rules
 
 1. **One OvalEdge endpoint → one MCP tool** — no alias tools on the same HTTP path/method. Use parameters (`query_direction`, modes) instead of duplicate registrations. Paired read/write on one path (e.g. GET + POST `glossary-terms`) is OK when intents differ.
-2. **Tool name = snake_case function name** — add `TOOL_*` constant in `server/constants.py`; prompts and evals import the constant, never hard-code strings.
+2. **Tool name = snake_case function name** — add `TOOL_*` constant in `server/constants.py`; prompts and evals import the constant, never hard-code strings. See **Naming** below.
 3. **Descriptions live in helpers** as `_DESC_<NAME>` — compact routing only (see **Context budget**). Put playbooks, allow-lists, and field matrices in `server/docs/` + workflow prompts.
-4. **Thin `register.py`** — `@mcp.tool(description=_DESC_…)` + short `Field` params; delegate to `_invoke_*` or helper builders; use `server.tools.common` (`drop_none`, `map_ovaledge_error`, `ovaledge_client`, validators).
+4. **Thin `register.py`** — `@mcp.tool(title=…, description=_DESC_…, annotations=…)` + short `Field` params; delegate to `_invoke_*` or helper builders; use `server.tools.common` (`drop_none`, `map_ovaledge_error`, `ovaledge_client`, validators).
 5. **Client validation before HTTP** — return `error_payload(...)` from helpers when args are invalid; do not rely on the API for MCP-side mutual-exclusion rules.
+6. **Every tool declares `title` and `annotations`** — the human-readable name and the machine-readable side-effect contract. Both are enforced in `tests/client/test_mcp_surface_inventory.py`.
+
+## Naming and title
+
+| Layer | Convention | Examples |
+|-------|-----------|----------|
+| `name` (agent routing) | Consolidated **reads** use the `<domain>_<facet>` family so siblings sort together and the boundary is obvious. **Actions** stay verb-led. | `asset_explorer`, `asset_details`, `asset_lineage`, `knowledge_search`; `create_glossary_term`, `update_asset_descriptions`, `assess_cde_dq` |
+| `title` (what a business user sees in the client) | Always **verb-led, plain English**, no jargon and no snake_case. Unique across the surface. | "Find data assets", "View asset details", "Trace data lineage", "Search knowledge & docs" |
+
+Reference the `title` in `_DESC_*` and in `mcp_workflows.md` (e.g. ``asset_explorer`` (**Find data assets**)) so the agent and the user share vocabulary.
+
+## Side-effect annotations
+
+`server/tools/common/annotations.py` holds the four allowed profiles. Pick one — do not hand-roll a dict:
+
+| Profile | Use for | `readOnlyHint` / `destructiveHint` |
+|---------|---------|-----------------------------------|
+| `READ_ONLY` | Lookups that never mutate OvalEdge state | `True` / `False` |
+| `GOVERNED_CREATE` | Confirm-gated writes that add objects | `False` / `False` |
+| `GOVERNED_UPDATE` | Confirm-gated writes that overwrite existing values | `False` / `True` |
+| `GOVERNED_EXECUTE` | Confirm-gated, non-mutating (e.g. runs SQL on a connection) | `False` / `False` |
+
+**Invariant (tested):** a tool exposing `write_confirmed_by_user` must **not** be `READ_ONLY`, and a tool without the gate must be. Clients auto-approve read-only tools — an over-claimed hint bypasses human review on a governed write.
 
 ## Context budget (always-on agent context)
 
@@ -29,7 +52,7 @@ MCP clients load **all** tool descriptions on every session. Keep them small.
 
 **Budget (enforced in tests):** each `_DESC_*` ≤ **2,500** chars; all descriptions combined ≤ **32,000** chars (`tests/tools/test_tool_description_budget.py`).
 
-- `_DESC_*`: link to `docs://ovaledge/mcp_workflows` and/or domain guides (`glossary_guide`, `tags_guide`, `asset_types`).
+- `_DESC_*`: link to `docs://ovaledge/mcp_workflows` and/or domain guides (`governance`, `asset_types`).
 - `Field(description=...)`: **one line** per parameter; no repeated playbook text.
 - `MCP_*_DOC` constants: reuse in **docs and prompts**; avoid concatenating large blocks into `_DESC_*`.
 - Heavy **responses**: apply `slim_tool_response()` from `server/mcp_response_slim.py` on large catalog/glossary reads (separate from description budget).
@@ -39,7 +62,7 @@ MCP clients load **all** tool descriptions on every session. Keep them small.
 | Package | Use for |
 |---------|---------|
 | `server/tools/catalog/` | Catalog search, details, lineage, profiles, metadata drift, asset descriptions, CDE associations |
-| `server/tools/access/` | OvalEdge catalog ACL (`get_user_object_access`) |
+| `server/tools/access/` | Unified access (`access_explorer`: catalog permissions + RDAM) |
 | `server/tools/governance/` | Glossary, tags, data stories, governance roles, custom fields (incl. guided creates) |
 | `server/tools/dataquality/` | DQ rule lookup, CDE assess, associate, create |
 | `server/tools/docs/` | OvalEdge **product** documentation search only |
@@ -52,7 +75,7 @@ Shared logic: `server/tools/common/` (never duplicate `error_payload` or client 
 
 **Data classification:** append via `classify_tool_desc()` from `server/tools/common/descriptions.py` (INTERNAL default; CONFIDENTIAL for access/RDAM tools).
 
-**Invocation modules:** `catalog/invocations.py` and `governance/invocations.py` hold `_invoke_*` logic; `register.py` keeps decorators and Pydantic `Field` signatures only.
+**Invocation modules:** `catalog/invocations.py`, `governance/invocations.py`, `access/invocations.py`, and `rdam/invocations.py` hold `_invoke_*` logic; `register.py` keeps decorators and Pydantic `Field` signatures only.
 
 ## Implementation checklist
 
@@ -83,6 +106,7 @@ poetry run pytest tests/tools/test_<tool>.py tests/tools/test_tool_description_b
 
 ```python
 async def _invoke_my_tool(arg: str, ...) -> dict[str, Any]:
+    """One line: METHOD path — what it returns."""
     err = validate_my_tool_args(...)
     if err is not None:
         return err
@@ -94,7 +118,7 @@ async def _invoke_my_tool(arg: str, ...) -> dict[str, Any]:
         return map_ovaledge_error(e)
 
 def register(mcp: FastMCP) -> None:
-    @mcp.tool(description=_DESC_MY_TOOL)
+    @mcp.tool(title="Do the thing", description=_DESC_MY_TOOL, annotations=READ_ONLY)
     async def my_tool_name(
         arg: Annotated[str, Field(description="Short param hint.")],
         optional: Annotated[str | None, Field(description="Optional.", default=None)] = None,
@@ -125,7 +149,7 @@ Read-only. <RBAC/DAA one-liner if server-enforced>.
 <Data classification appended by classify_tool_desc() — do not duplicate manually.>
 ```
 
-**Governed writes** (`create_*`, `update_*`): state confirm gate in `_DESC_*` (one paragraph); full wizard steps in `glossary_guide`, `tags_guide`, or `mcp_workflows` — not inlined.
+**Governed writes** (`create_*`, `update_*`): state confirm gate in `_DESC_*` (one paragraph); full wizard steps in `governance` or `mcp_workflows` — not inlined.
 
 ## Tests (required)
 
@@ -147,9 +171,9 @@ In `tests/tools/test_<feature>.py`:
 | Concatenating many `MCP_*_DOC` blocks into tool description | Constants in tier 3 only |
 | Long logic in `register.py` | `helpers.py` / `formatters.py` / `invocations.py` |
 | Hard-coded tool names in prompts | `from server.constants import TOOL_*` |
-| Platform docs for org stories | `lookup_datastory` vs `search_platform_docs` |
-| Catalog search for native DB grants | `source_system_access` |
-| Catalog ACL for native grants | `get_user_object_access` vs `source_system_access` |
+| Knowledge questions | `knowledge_search` searches both data stories and product docs |
+| Catalog search for native DB grants | `access_explorer` operation=source_system_access |
+| Catalog permissions for native grants | `access_explorer` catalog_access vs source_system_access |
 | Skipping `mcp_workflows.md` | Routing table row + section when non-obvious |
 
 ## Enterprise architecture alignment
@@ -158,8 +182,8 @@ This repo implements **Level 2** MCP contract governance (domain-scoped tool des
 
 | EA expectation | oe_mcp practice |
 |----------------|-----------------|
-| Complete tool contract (purpose, inputs, outputs, side effects) | `_DESC_*` + Pydantic `Field` + `mcp_workflows` / domain docs |
-| Human-in-the-loop for writes | `confirm_create` / `confirm_update` + `write_confirmed_by_user=true` |
+| Complete tool contract (purpose, inputs, outputs, side effects) | `title` + `_DESC_*` + Pydantic `Field` + MCP `annotations` + `mcp_workflows` / domain docs |
+| Human-in-the-loop for writes | `confirm_create` / `confirm_update` + `write_confirmed_by_user=true`, with `readOnlyHint=False` so clients cannot auto-approve |
 | Context window budgeting | Description budget tests + `mcp_response_slim` on responses |
 | AuthZ on every data call | OvalEdge RBAC/DAA enforced server-side; document in `_DESC_*` |
 | Stable error contracts | `{"error", "status_code"}` via `error_payload` / `map_ovaledge_error`; optional `error_code` on validation errors |

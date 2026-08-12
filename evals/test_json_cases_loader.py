@@ -98,19 +98,19 @@ def test_load_example_mcp_use_json() -> None:
     if "example_catalog_search" in by_name:
         c = by_name["example_catalog_search"]
         assert "revenue" in (c.input or "")
-        assert _mcp_tools_called(c)[0].name == "search_catalog_assets"
+        assert _mcp_tools_called(c)[0].name == "asset_explorer"
     if "example_catalog_then_details" in by_name:
         c = by_name["example_catalog_then_details"]
         assert [x.name for x in _mcp_tools_called(c)] == [
-            "search_catalog_assets",
-            "catalog_asset_details",
+            "asset_explorer",
+            "asset_details",
         ]
     if "example_datastory_lookup" in by_name:
         c = by_name["example_datastory_lookup"]
-        assert _mcp_tools_called(c)[0].name == "lookup_datastory"
+        assert _mcp_tools_called(c)[0].name == "knowledge_search"
     if "example_glossary_lookup" in by_name:
         c = by_name["example_glossary_lookup"]
-        assert _mcp_tools_called(c)[0].args.get("term_name") == "PII"
+        assert _mcp_tools_called(c)[0].args.get("name") == "PII"
 
 
 def test_example_json_covers_all_mcp_tools() -> None:
@@ -159,7 +159,7 @@ def test_llm_only_skips_structural_validation_fixtures() -> None:
     assert len(llm_cases) < len(all_cases)
     skipped = {c.name for c in all_cases} - {c.name for c in llm_cases}
     assert "example_search_rejects_invalid_object_type" in skipped
-    assert "example_lookup_tags_neither_id_nor_name" in skipped
+    assert "example_asset_explorer_neither_id_nor_name" in skipped
 
 
 def test_load_root_array(tmp_path: Path) -> None:

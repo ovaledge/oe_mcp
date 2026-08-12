@@ -74,7 +74,7 @@ To see the **OvalEdge logo** while developing locally:
 
 ## Tools, prompts, and routing
 
-After connect, use workflow prompts and tools as documented in [server/docs/mcp_workflows.md](../server/docs/mcp_workflows.md) (`docs://ovaledge/mcp_workflows`), including **`native_source_access`** / **`source_system_access`** for Redshift, Snowflake, and Tableau native grants.
+After connect, use workflow prompts and tools as documented in [server/docs/mcp_workflows.md](../server/docs/mcp_workflows.md) (`docs://ovaledge/mcp_workflows`), including **`native_source_access`** / **`access_explorer`** (`operation=source_system_access`) for Redshift, Snowflake, and Tableau native grants.
 
 ## Agent skills (this repo)
 

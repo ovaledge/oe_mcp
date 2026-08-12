@@ -1,5 +1,5 @@
 """
-Catalog and related data tools (search, details, column profile, relationships, lineage).
+Catalog MCP helpers: tool descriptions, search params, description updates.
 """
 
 import json
@@ -9,12 +9,10 @@ from typing import Any
 from server.constants import (
     MCP_ACCESS_DISAMBIGUATION_SEARCH_GUARD_DOC,
     MCP_CATALOG_OBJECT_TYPES_DOC,
-    MCP_PATH_COLUMN_PROFILE,
-    MCP_PATH_ENTITY_RELATIONSHIPS,
-    MCP_PATH_LINEAGE,
+    MCP_PATH_ASSET_DETAILS,
+    MCP_PATH_ASSET_EXPLORER,
+    MCP_PATH_ASSET_LINEAGE,
     MCP_PATH_METADATA_CHANGES_BETWEEN_CRAWLS,
-    MCP_PATH_OBJECT_DETAILS,
-    MCP_PATH_SEARCH_CATALOG,
     MCP_PATH_UPDATE_ASSET_DESCRIPTIONS,
     MCP_SEARCH_CLASSIFICATIONS_PARAM,
     MCP_SEARCH_CONTEXT_QUERY_PARAM,
@@ -35,74 +33,61 @@ from server.tools.common.descriptions import classify_tool_desc
 
 _TABLE_FILE_TYPES = frozenset({"oetable", "oefile"})
 
-_DESC_SEARCH = classify_tool_desc(
+_DESC_ASSET_EXPLORER = classify_tool_desc(
     MCP_ACCESS_DISAMBIGUATION_SEARCH_GUARD_DOC
-    + "Search the OvalEdge catalog (Elasticsearch hybrid / keyword search plus optional "
-    "server-side vector context). Use for discovery: schemas, tables, columns, files, charts, "
-    "APIs, queries, data products, glossary, tags, and stories.\n\n"
-    f"Backend: GET {MCP_PATH_SEARCH_CATALOG}\n\n"
-    "**Parameters:** Lexical lists (wire as JSON array strings): "
+    + "**Find data assets** (`asset_explorer`) — search the catalog for tables, files, "
+    "columns, reports, glossary terms, tags, and other governed objects related to a "
+    "business question.\n\n"
+    "How to call: pass keywords in search_terms and the user's full question in "
+    "context_query. Omit object_type, tags, and terms (leave them unset) unless the user "
+    "clearly asks for one kind of asset (e.g. \"tables only\", \"tagged Payments\", a named "
+    "glossary term). Do not default to tables-only. After you shortlist hits, call "
+    "asset_details for full metadata.\n\n"
+    f"Backend: GET {MCP_PATH_ASSET_EXPLORER}\n\n"
+    "Keyword lists (JSON array strings): "
     f"{MCP_SEARCH_TERMS_PARAM}, {MCP_SEARCH_TAGS_PARAM}, {MCP_SEARCH_GLOSSARY_TERMS_PARAM}, "
     f"{MCP_SEARCH_CUSTOM_FIELDS_PARAM}, {MCP_SEARCH_DATA_PRODUCTS_PARAM}, "
     f"{MCP_SEARCH_CLASSIFICATIONS_PARAM}, {MCP_SEARCH_CRITICAL_DATA_ELEMENT_PARAM}. "
     "Exact filters: connection_name, schema_name, server_type, owner, steward, custodian, "
-    "object_type. Glossary placement: domain_id/domain_name plus optional category/subcategory. "
-    f"Semantic ranking: {MCP_SEARCH_CONTEXT_QUERY_PARAM} = user's verbatim question.\n\n"
-    "Prefer tags=[] for tag assignments, terms=[] for glossary links, classifications=[] for "
-    "sensitivity labels; use search_terms for general keywords.\n\n"
-    "Examples:\n"
-    '1) "Assets with Operations tag" → tags=["Operations"], context_query=<question>.\n'
-    '2) "Customer tables owned by rohit" → search_terms=["customer"], object_type="oetable", '
-    'owner="rohit.anand@ovaledge.com".\n'
-    '3) "CDE columns" → object_type="oecolumn", critical_data_element=["Yes"]; '
-    "then assess_cde_dq.\n\n"
-    "object_type: one catalog type or omit for all — allowlist in docs://ovaledge/asset_types. "
-    "JDBC-backed exclusive types (use alone): dp_domain, dp_product, oeglobaldomain, "
-    "storyzone, oedomain.\n\n"
-    "More filter combinations and examples: docs://ovaledge/mcp_workflows (Catalog search).\n\n"
-    "Each hit includes objectId, objectType, navLink, redirectUrl. For oestory hits, call "
-    "lookup_datastory for full narrative — do not answer from search snippets alone."
+    "object_type. tags/terms match exact governance names (not loose synonyms). "
+    f"Semantic ranking: {MCP_SEARCH_CONTEXT_QUERY_PARAM}. "
+    "Look up one term/tag: name + object_type=glossary|oetag "
+    "(include_parent/children for tags). "
+    "Glossary placement: domain_id|domain_name + optional category/subcategory.\n\n"
+    "Examples: "
+    '"What tables can I see/access?" → this tool (not access_explorer); '
+    'search_terms=["payment"] + context_query="Find assets related to payment"; '
+    'tables only → object_type="oetable"; '
+    'glossary name="Revenue" object_type="glossary".\n\n'
+    "Types: docs://ovaledge/asset_types. Playbooks: docs://ovaledge/mcp_workflows. "
+    "Policies and how-tos: knowledge_search — not search snippets alone."
 )
-_DESC_DETAILS = classify_tool_desc(
-    "Fetch one catalog document (JSON from Elasticsearch for most types; embeddings removed). "
-    "Long business/technical/wiki descriptions are truncated for MCP client limits "
-    "(plain text up to ~6k chars; HTML/wiki markup shorter). "
-    "Use after search_catalog_assets to drill into an asset.\n\n"
-    f"Backend: GET {MCP_PATH_OBJECT_DETAILS}\n\n"
-    "Exactly one lookup mode: (1) fully_qualified_name alone, OR "
-    "(2) object_id AND object_type together. Never mix FQN with id/type.\n\n"
-    "For **dp_domain** (Data Domains), **dp_product** (Data Products), **oeglobaldomain** "
-    "(glossary Domains), **storyzone** (Story Zones), and **oedomain** (Report Groups), use "
-    "object_id + object_type from search_catalog_assets hits; FQN lookup is not supported. "
-    "Details are resolved from the database and wiki when no ES document exists.\n\n"
-    "object_type must be one of: "
+_DESC_ASSET_DETAILS = classify_tool_desc(
+    "**View asset details** (`asset_details`) — full catalog metadata for one chosen asset "
+    "(object_id + object_type; no fully qualified name). Includes profile stats for tables/"
+    "files and entity relationships for tables when available. Use after asset_explorer "
+    "shortlist — not for open-ended discovery.\n\n"
+    f"Backend: GET {MCP_PATH_ASSET_DETAILS}\n\n"
+    "object_type one of: "
     + MCP_CATALOG_OBJECT_TYPES_DOC
-    + ".\n\n"
-    "Response includes relative navLink plus redirectUrl "
-    "(absolute, from OVALEDGE_BASE_URL)."
+    + ". Response: details; optional profile and relationships; navLink/redirectUrl when "
+    "present. Playbooks: docs://ovaledge/mcp_workflows."
 )
-_DESC_COLUMN = classify_tool_desc(
-    "Column-level profile statistics for one table or file asset.\n\n"
-    f"Backend: GET {MCP_PATH_COLUMN_PROFILE}\n\n"
-    "object_type must be oetable or oefile only."
-)
-_DESC_REL = classify_tool_desc(
-    "Table-only: entity relationships (columns, patterns) for one oetable.\n\n"
-    f"Backend: GET {MCP_PATH_ENTITY_RELATIONSHIPS}\n\n"
-    "Pass the table's internal object_id (oetable)."
-)
-_DESC_LINEAGE = classify_tool_desc(
-    "Data lineage graph from the database for a table or file.\n\n"
-    f"Backend: GET {MCP_PATH_LINEAGE}\n\n"
-    "object_type must be oetable or oefile. depth defaults to 2; server may clamp depth."
+_DESC_ASSET_LINEAGE = classify_tool_desc(
+    "**Trace data lineage** (`asset_lineage`) — show where a table or file comes from and "
+    "what depends on it (upstream/downstream). Resolve the asset id with asset_explorer "
+    "first when the user only gives a name.\n\n"
+    f"Backend: GET {MCP_PATH_ASSET_LINEAGE}\n\n"
+    "Requires object_id + object_type (oetable or oefile only). depth defaults to 2 "
+    "(server may clamp). Playbooks: docs://ovaledge/mcp_workflows; prompt trace_data_lineage."
 )
 _DESC_UPDATE_DESCRIPTIONS = classify_tool_desc(
     "Update description field(s) on a catalog or governance asset (RBAC on server).\n\n"
     f"Backend: POST {MCP_PATH_UPDATE_ASSET_DESCRIPTIONS}\n\n"
     "**Confirm gate:** confirm_update preview first; POST only with write_confirmed_by_user=true "
     "(same pattern as create_glossary_term / create_tag). Never confirm until user approves.\n\n"
-    "Resolve object_id via search_catalog_assets, lookup_glossary_term, or lookup_tags — do not "
-    "guess ids. Required: object_id, object_type, and an explicit description slot.\n\n"
+    "Resolve object_id via asset_explorer — do not guess ids. Required: object_id, object_type, "
+    "and an explicit description slot.\n\n"
     "If the user says only \"description\", ask which slot applies — do not guess business vs "
     "technical vs domain/tag fields. Multi-slot types need clientContext.prompt when using "
     "typed fields.\n\n"
@@ -514,22 +499,71 @@ def _enrich_catalog_item_nav(item: dict[str, Any]) -> dict[str, Any]:
 
 
 def _enrich_catalog_search_response(body: dict[str, Any]) -> dict[str, Any]:
+    """Enrich catalog hit nav links (flat or McpApiResult-wrapped explorer payload)."""
     if body.get("error"):
         return body
     out = dict(body)
     items = body.get("items")
+    data = body.get("data")
     if isinstance(items, list):
         out["items"] = [_enrich_catalog_item_nav(x) for x in items if isinstance(x, dict)]
+    elif isinstance(data, dict):
+        data_out = dict(data)
+        nested_items = data.get("items")
+        if isinstance(nested_items, list):
+            data_out["items"] = [
+                _enrich_catalog_item_nav(x) for x in nested_items if isinstance(x, dict)
+            ]
+        out["data"] = data_out
+    return out
+
+
+def _enrich_asset_explorer_response(body: dict[str, Any]) -> dict[str, Any]:
+    """Enrich explorer response: catalog items + glossary/tag sections when present."""
+    from server.tools.governance.glossary_helpers import _enrich_glossary_lookup_response
+    from server.tools.governance.tag_helpers import _enrich_tag_lookup_response
+
+    if body.get("error") or body.get("ok") is False:
+        return body
+    out = _enrich_catalog_search_response(body)
+    data = out.get("data")
+    if not isinstance(data, dict):
+        return out
+    data_out = dict(data)
+    glossary = data.get("glossaryTerms")
+    if glossary is not None:
+        enriched = _enrich_glossary_lookup_response({"ok": True, "data": glossary})
+        data_out["glossaryTerms"] = enriched.get("data", glossary)
+        if enriched.get("formattedResponse"):
+            out["formattedResponse"] = enriched["formattedResponse"]
+    tags = data.get("tags")
+    if tags is not None:
+        enriched = _enrich_tag_lookup_response({"ok": True, "data": tags})
+        data_out["tags"] = enriched.get("data", tags)
+        if enriched.get("formattedResponse"):
+            out["formattedResponse"] = enriched["formattedResponse"]
+    out["data"] = data_out
     return out
 
 
 def _enrich_catalog_details_response(body: dict[str, Any]) -> dict[str, Any]:
+    """Enrich composite asset-details (details + optional profile/relationships)."""
     if body.get("error") or body.get("ok") is False:
         return body
     out = dict(body)
     data = body.get("data")
-    if isinstance(data, dict):
-        out["data"] = _enrich_catalog_item_nav(data)
+    if not isinstance(data, dict):
+        return out
+    data_out = dict(data)
+    details = data.get("details")
+    if isinstance(details, dict):
+        data_out["details"] = _enrich_catalog_item_nav(details)
+    elif details is None and (
+        "objectId" in data or "objectType" in data or "navLink" in data
+    ):
+        # Flat metadata fallback
+        data_out = _enrich_catalog_item_nav(data_out)
+    out["data"] = data_out
     return out
 
 

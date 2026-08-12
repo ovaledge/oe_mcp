@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from fastmcp import FastMCP
 from fastmcp.client import Client
@@ -9,26 +11,20 @@ from fastmcp.prompts.function_prompt import FunctionPrompt
 from mcp.types import TextContent
 
 from server.constants import (
+    TOOL_ACCESS_EXPLORER,
     TOOL_ASSESS_CDE_DQ,
+    TOOL_ASSET_DETAILS,
+    TOOL_ASSET_EXPLORER,
     TOOL_ASSET_LINEAGE,
     TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
-    TOOL_CATALOG_ASSET_DETAILS,
-    TOOL_COLUMN_PROFILE,
     TOOL_CREATE_DQ_RULES,
     TOOL_CREATE_GLOSSARY_TERM,
     TOOL_CREATE_SQL_DQ_RULE,
     TOOL_CREATE_TAG,
     TOOL_GENERATE_DQ_QUERIES,
-    TOOL_GET_USER_OBJECT_ACCESS,
-    TOOL_LOOKUP_DATASTORY,
+    TOOL_KNOWLEDGE_SEARCH,
     TOOL_LOOKUP_DQ_RULE,
-    TOOL_LOOKUP_GLOSSARY_TERM,
-    TOOL_LOOKUP_TAGS,
     TOOL_METADATA_CHANGES_BETWEEN_CRAWLS,
-    TOOL_SEARCH_CATALOG,
-    TOOL_SEARCH_DOCS,
-    TOOL_SOURCE_SYSTEM_ACCESS,
-    TOOL_TABLE_ENTITY_RELATIONSHIPS,
     TOOL_UPDATE_ASSET_DESCRIPTIONS,
     TOOL_UPDATE_GOVERNANCE_ROLES,
     TOOL_VALIDATE_DQ_QUERIES,
@@ -40,75 +36,68 @@ WORKFLOW_PROMPT_NAMES = tuple(sorted(MCP_WORKFLOW_PROMPT_NAMES))
 
 # Each prompt must reference the tools its instruction text tells the model to call.
 _PROMPT_REQUIRED_TOOLS: dict[str, tuple[str, ...]] = {
-    "data_discovery": (TOOL_SEARCH_CATALOG, TOOL_LOOKUP_GLOSSARY_TERM, TOOL_LOOKUP_DATASTORY),
-    "explain_business_term": (TOOL_LOOKUP_GLOSSARY_TERM, TOOL_CATALOG_ASSET_DETAILS),
+    "data_discovery": (TOOL_ASSET_EXPLORER, TOOL_ASSET_DETAILS, TOOL_KNOWLEDGE_SEARCH),
+    "explain_business_term": (TOOL_ASSET_EXPLORER, TOOL_ASSET_DETAILS),
     "trust_assessment": (
-        TOOL_SEARCH_CATALOG,
-        TOOL_CATALOG_ASSET_DETAILS,
+        TOOL_ASSET_EXPLORER,
+        TOOL_ASSET_DETAILS,
         TOOL_ASSET_LINEAGE,
-        TOOL_COLUMN_PROFILE,
     ),
     "explore_data_domain": (
-        TOOL_SEARCH_CATALOG,
-        TOOL_LOOKUP_GLOSSARY_TERM,
-        TOOL_LOOKUP_TAGS,
-        TOOL_LOOKUP_DATASTORY,
+        TOOL_ASSET_EXPLORER,
+        TOOL_ASSET_DETAILS,
+        TOOL_KNOWLEDGE_SEARCH,
     ),
     "trace_data_lineage": (
-        TOOL_SEARCH_CATALOG,
+        TOOL_ASSET_EXPLORER,
         TOOL_ASSET_LINEAGE,
-        TOOL_CATALOG_ASSET_DETAILS,
+        TOOL_ASSET_DETAILS,
     ),
     "find_related_assets": (
-        TOOL_SEARCH_CATALOG,
-        TOOL_TABLE_ENTITY_RELATIONSHIPS,
-        TOOL_CATALOG_ASSET_DETAILS,
-        TOOL_LOOKUP_GLOSSARY_TERM,
-        TOOL_LOOKUP_TAGS,
+        TOOL_ASSET_EXPLORER,
+        TOOL_ASSET_DETAILS,
     ),
     "organizational_knowledge": (
-        TOOL_LOOKUP_DATASTORY,
-        TOOL_SEARCH_CATALOG,
-        TOOL_SEARCH_DOCS,
+        TOOL_KNOWLEDGE_SEARCH,
+        TOOL_ASSET_EXPLORER,
     ),
-    "native_source_access": (TOOL_SOURCE_SYSTEM_ACCESS,),
+    "native_source_access": (TOOL_ACCESS_EXPLORER,),
     "resolve_object_access": (
-        TOOL_SOURCE_SYSTEM_ACCESS,
-        TOOL_SEARCH_CATALOG,
-        TOOL_GET_USER_OBJECT_ACCESS,
+        TOOL_ACCESS_EXPLORER,
+        TOOL_ASSET_EXPLORER,
     ),
-    "dam_object_browse": (TOOL_SOURCE_SYSTEM_ACCESS,),
-    "catalog_object_access": (TOOL_GET_USER_OBJECT_ACCESS, TOOL_SEARCH_CATALOG),
-    "platform_help": (TOOL_SEARCH_DOCS,),
+    "dam_object_browse": (TOOL_ACCESS_EXPLORER,),
+    "catalog_object_access": (TOOL_ACCESS_EXPLORER, TOOL_ASSET_EXPLORER),
+    "platform_help": (TOOL_KNOWLEDGE_SEARCH,),
     "metadata_drift": (
         TOOL_METADATA_CHANGES_BETWEEN_CRAWLS,
-        TOOL_SEARCH_CATALOG,
-        TOOL_CATALOG_ASSET_DETAILS,
+        TOOL_ASSET_EXPLORER,
+        TOOL_ASSET_DETAILS,
     ),
-    "explain_tag": (TOOL_LOOKUP_TAGS, TOOL_SEARCH_CATALOG),
+    "explain_tag": (TOOL_ASSET_EXPLORER,),
     "explain_dq_rule": (TOOL_LOOKUP_DQ_RULE, TOOL_UPDATE_GOVERNANCE_ROLES),
     "create_business_glossary_term": (TOOL_CREATE_GLOSSARY_TERM,),
     "create_governance_tag": (TOOL_CREATE_TAG,),
     "document_asset_descriptions": (
-        TOOL_SEARCH_CATALOG,
-        TOOL_CATALOG_ASSET_DETAILS,
+        TOOL_ASSET_EXPLORER,
+        TOOL_ASSET_DETAILS,
         TOOL_UPDATE_ASSET_DESCRIPTIONS,
     ),
     "assign_governance_roles": (
         TOOL_LOOKUP_DQ_RULE,
-        TOOL_SEARCH_CATALOG,
-        TOOL_CATALOG_ASSET_DETAILS,
+        TOOL_ASSET_EXPLORER,
+        TOOL_ASSET_DETAILS,
         TOOL_UPDATE_GOVERNANCE_ROLES,
     ),
     "assess_cde_dq_coverage": (
-        TOOL_SEARCH_CATALOG,
+        TOOL_ASSET_EXPLORER,
         TOOL_ASSESS_CDE_DQ,
         TOOL_LOOKUP_DQ_RULE,
         TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
         TOOL_CREATE_DQ_RULES,
     ),
     "create_custom_sql_dq_workflow": (
-        TOOL_SEARCH_CATALOG,
+        TOOL_ASSET_EXPLORER,
         TOOL_ASSESS_CDE_DQ,
         TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
         TOOL_CREATE_DQ_RULES,
@@ -204,23 +193,24 @@ class TestMcpServerInstructions:
     def test_instructions_prioritize_data_stories_for_org_knowledge(self) -> None:
         from server.app import MCP_SERVER_INSTRUCTION_TOOL_NAMES, create_mcp
         from server.constants import (
-            TOOL_GET_USER_OBJECT_ACCESS,
-            TOOL_LOOKUP_DATASTORY,
-            TOOL_SEARCH_CATALOG,
-            TOOL_SEARCH_DOCS,
-            TOOL_SOURCE_SYSTEM_ACCESS,
+            TOOL_ACCESS_EXPLORER,
+            TOOL_ASSET_DETAILS,
+            TOOL_ASSET_EXPLORER,
+            TOOL_KNOWLEDGE_SEARCH,
         )
         from server.mcp_surface import MCP_TOOL_NAMES
 
         mcp = create_mcp()
         instructions = (mcp.instructions or "").lower()
-        assert TOOL_LOOKUP_DATASTORY in instructions
-        assert TOOL_SEARCH_DOCS in instructions
-        assert TOOL_SEARCH_CATALOG in instructions
-        assert TOOL_SOURCE_SYSTEM_ACCESS in instructions
-        assert TOOL_GET_USER_OBJECT_ACCESS in instructions
+        assert TOOL_KNOWLEDGE_SEARCH in instructions
+        assert TOOL_ASSET_EXPLORER in instructions
+        assert TOOL_ASSET_DETAILS in instructions
+        assert TOOL_ACCESS_EXPLORER in instructions
         assert "write_confirmed_by_user" in instructions
         assert "never show ovaledge://" in instructions
+        assert "find data assets" in instructions
+        assert "omit object_type" in instructions
+        assert "blanket" not in instructions
         navlink = "navlink" in instructions or "redirecturl" in instructions
         assert navlink
         assert MCP_SERVER_INSTRUCTION_TOOL_NAMES <= MCP_TOOL_NAMES
@@ -235,6 +225,19 @@ class TestMcpServerInstructions:
         assert "redshift" in instructions
         assert "1" in instructions and "2" in instructions
 
+    def test_instructions_have_no_duplicated_guidance(self) -> None:
+        """Always-on instructions are pure context cost — no sentence may repeat."""
+        from server.app import create_mcp
+
+        mcp = create_mcp()
+        sentences = [
+            s.strip().lower()
+            for s in re.split(r"(?<=[.!?])\s+", mcp.instructions or "")
+            if len(s.strip()) > 25
+        ]
+        repeated = sorted({s for s in sentences if sentences.count(s) > 1})
+        assert not repeated, f"duplicated instruction sentences: {repeated}"
+
     def test_instructions_require_mcp_workflows_resource(self) -> None:
         from server.app import create_mcp
         from server.constants import DOCS_RESOURCE_URI_PREFIX
@@ -244,6 +247,35 @@ class TestMcpServerInstructions:
         assert f"{DOCS_RESOURCE_URI_PREFIX}/mcp_workflows" in instructions
         assert "session start" in instructions
         assert "routing guide" in instructions
+        assert "what tables can i see/access" in instructions
+        assert "for ambiguous who-has-access only" in instructions
+
+
+class TestDiscoveryPromptsOpenCatalogSearch:
+    async def test_data_discovery_omits_object_type_by_default(self) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        register_workflow_prompts(mcp)
+        prompt = await mcp.get_prompt("data_discovery")
+        assert prompt is not None
+        assert isinstance(prompt, FunctionPrompt)
+        text = prompt.fn("Find all assets related to payment")[0].content.text.lower()
+        assert "find related assets" in text
+        assert "omit object_type" in text
+        assert TOOL_ASSET_DETAILS in text
+        assert "blanket" not in text
+
+    async def test_find_related_assets_starts_with_open_catalog_search(self) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        register_workflow_prompts(mcp)
+        prompt = await mcp.get_prompt("find_related_assets")
+        assert prompt is not None
+        assert isinstance(prompt, FunctionPrompt)
+        text = prompt.fn("payment")[0].content.text.lower()
+        assert "find related assets" in text
+        assert "omit object_type" in text
+        assert "blanket" not in text
+        assert "oetable-only" in text
+        assert TOOL_ASSET_DETAILS in text
 
 
 class TestResolveObjectAccessPrompt:
@@ -259,3 +291,57 @@ class TestResolveObjectAccessPrompt:
         assert "snowflake" in text
         assert "customer1" in text
         assert "access_intent_confirmed" in text
+        assert "what tables/schemas/columns can i see/view/access" in text
+        assert "named principal" in text
+        assert TOOL_ASSET_EXPLORER in messages[0].content.text
+
+    async def test_prompt_docstring_excludes_first_person_inventory(self) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        register_workflow_prompts(mcp)
+        prompt = await mcp.get_prompt("resolve_object_access")
+        assert prompt is not None
+        assert isinstance(prompt, FunctionPrompt)
+        doc = (prompt.fn.__doc__ or "").lower()
+        assert "what tables can i see/access" in doc
+        assert "data_discovery" in doc
+        assert "not:" in doc
+
+
+class TestDataDiscoveryFirstPersonTriggers:
+    async def test_data_discovery_docstring_includes_first_person_see_access(self) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        register_workflow_prompts(mcp)
+        prompt = await mcp.get_prompt("data_discovery")
+        assert prompt is not None
+        assert isinstance(prompt, FunctionPrompt)
+        doc = (prompt.fn.__doc__ or "").lower()
+        assert "what tables can i see/access" in doc
+        assert "what schemas/columns can i view" in doc
+
+
+class TestNativeAndDamBrowseGuards:
+    async def test_native_source_access_guards_generic_first_person(self) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        register_workflow_prompts(mcp)
+        prompt = await mcp.get_prompt("native_source_access")
+        assert prompt is not None
+        assert isinstance(prompt, FunctionPrompt)
+        doc = (prompt.fn.__doc__ or "").lower()
+        assert "what tables can i access in redshift" in doc
+        assert "data_discovery" in doc
+        text = prompt.fn("redshift", "What can svc access?")[0].content.text.lower()
+        assert "data_discovery" in text
+        assert TOOL_ASSET_EXPLORER in prompt.fn("redshift", "What can svc access?")[0].content.text
+
+    async def test_dam_object_browse_guards_generic_inventory(self) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        register_workflow_prompts(mcp)
+        prompt = await mcp.get_prompt("dam_object_browse")
+        assert prompt is not None
+        assert isinstance(prompt, FunctionPrompt)
+        doc = (prompt.fn.__doc__ or "").lower()
+        assert "what tables can i see" in doc
+        assert "data_discovery" in doc
+        text = prompt.fn(1000, "BUSINESS.BANKING")[0].content.text.lower()
+        assert "data_discovery" in text
+        assert TOOL_ASSET_EXPLORER in prompt.fn(1000, "BUSINESS.BANKING")[0].content.text

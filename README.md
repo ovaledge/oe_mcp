@@ -1,6 +1,12 @@
 # OvalEdge MCP Server
 
-OvalEdge governance and catalog MCP server for MCP clients (Cursor, Claude Desktop, etc.): catalog discovery, lineage, glossary and tags, **data stories** for organizational knowledge, metadata drift, native source-system access previews, product docs, workflow prompts, and governed writes (glossary terms, tags, descriptions, roles) — all subject to OvalEdge RBAC. Server instructions in `server/app.py` tell agents to prefer **`lookup_datastory`** for internal policy/playbook questions and **`search_platform_docs`** only for OvalEdge product how-to.
+[![CI](https://github.com/ovaledge/oe_mcp/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/ovaledge/oe_mcp/actions/workflows/ci.yml)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![Version](https://img.shields.io/badge/version-1.0.4-blue)](pyproject.toml)
+[![FastMCP](https://img.shields.io/badge/FastMCP-3.4-00C7B7)](https://gofastmcp.com)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
+
+OvalEdge governance and catalog MCP server for MCP clients (Cursor, Claude Desktop, etc.): catalog discovery, lineage, glossary and tags, organizational knowledge, metadata drift, native source-system access previews, product docs, workflow prompts, and governed writes (glossary terms, tags, descriptions, roles) — all subject to OvalEdge RBAC. Server instructions route knowledge questions through **`knowledge_search`**.
 
 ## How to run / deploy
 
@@ -34,14 +40,12 @@ Optional OpenTelemetry trace export to [Phoenix](https://arize.com/docs/phoenix)
 
 ## What this server provides
 
-- Catalog search and asset details (`search_catalog_assets`, `catalog_asset_details`) — paginate with `page` when results exceed one page
+- Catalog search and asset details (`asset_explorer`, `asset_details`) — paginate with `page` when results exceed one page
 - Column profile, entity relationships, lineage, metadata drift (`metadata_changes_between_crawls`)
-- Glossary lookup and guided term creation (`lookup_glossary_term`, `create_glossary_term`)
-- Tag lookup and guided creation (`lookup_tags`, `create_tag`)
-- **Data stories** for organizational knowledge (`lookup_datastory`) — not a substitute for `search_platform_docs`
-- Platform product documentation (`search_platform_docs`)
-- Native source-system grant previews (`source_system_access`) — Redshift / Snowflake / Tableau, not catalog ACLs
-- OvalEdge catalog ACL (`get_user_object_access`) — user/role grants on catalog objects, not native RDAM
+- Glossary/tag search and guided creation (`asset_explorer`, `create_glossary_term`, `create_tag`)
+- **Knowledge search** for organizational stories and product documentation (`knowledge_search`)
+- Native source-system grant previews (`access_explorer` operation=source_system_access) — Redshift / Snowflake / Tableau, not catalog permissions
+- OvalEdge catalog permissions (`access_explorer` operation=catalog_access) — user/role grants on catalog objects, not native RDAM
 - DQ rule lookup (`lookup_dq_rule`)
 - CDE / column DQ assessment — read-only (`assess_cde_dq`)
 - Associate objects to data quality rules (`associate_dq_rule_objects`)
@@ -49,7 +53,7 @@ Optional OpenTelemetry trace export to [Phoenix](https://arize.com/docs/phoenix)
 - Custom SQL DQ: `generate_dq_queries`, `validate_dq_queries`, `create_sql_dq_rule` (workflow prompt: `create_custom_sql_dq_workflow`)
 - Asset description, CDE, governance role, and custom field updates (`update_asset_descriptions`, `update_cde_associations`, `update_governance_roles`, `update_custom_field_value`)
 - Resource URIs (`ovaledge://catalog/...`, `ovaledge://governance/...`) and static guides (`docs://ovaledge/...`)
-- Nineteen workflow prompts under `server/prompts/workflows/` (see below; canonical list in `server/mcp_surface.py`)
+- Twenty-one workflow prompts under `server/prompts/workflows/` (see below; canonical list in `server/mcp_surface.py`)
 
 Read and write tools honor OvalEdge permissions — the MCP does not bypass RBAC.
 
@@ -59,11 +63,10 @@ These rules apply to every MCP session (also exposed to clients as server **inst
 
 | Topic | Behavior |
 | ----- | -------- |
-| **Organizational knowledge** | Call **`lookup_datastory`** first (`content_query` = user question; add `story_zone_name` or `story_name` when named). Present **`formattedResponse`** and lead with **`storyCitation`** verbatim. Do not answer from model memory when a story may exist. |
-| **Product how-to** | Use **`search_platform_docs`** only for OvalEdge UI/features/configuration — not for internal policy or playbooks. |
-| **Physical datasets** | Use **`search_catalog_assets`**; if results include `oestory`, follow with **`lookup_datastory`**. |
-| **Native DB/BI access** | Use **`source_system_access`** only (RDAM SQL). Never fall back to **`search_catalog_assets`** when RDAM is empty or errors. |
-| **Catalog ACL** | Use **`get_user_object_access`** for OvalEdge user/role grants on catalog objects — not **`source_system_access`**. |
+| **Organizational knowledge / product how-to** | Use **`knowledge_search`**, which searches both corpora without a corpus enum. Present returned citations and formatted content. |
+| **Physical datasets** | Use **`asset_explorer`**, then **`asset_details`** for one selected object. |
+| **Native DB/BI access** | Use **`access_explorer`** with **`operation=source_system_access`** only (RDAM SQL). Never fall back to **`asset_explorer`** when RDAM is empty or errors. |
+| **Catalog permissions** | Use **`access_explorer`** with **`operation=catalog_access`** for OvalEdge user/role grants on catalog objects — not source_system_access. |
 | **Deep links** | Use **`ovaledge://...` resources** when you already have object ids; prefer lookup tools for rich formatted output. |
 | **Governed writes** | **`create_glossary_term`**, **`create_tag`**, **`update_asset_descriptions`**, **`update_governance_roles`**, **`update_cde_associations`**, **`update_custom_field_value`**, **`associate_dq_rule_objects`**, **`create_dq_rules`**, **`validate_dq_queries`**, **`create_sql_dq_rule`**: show **`confirm_create`** / **`confirm_update`** preview, then POST only with **`write_confirmed_by_user=true`** (`dry_run` skips confirm on updates). |
 | **Glossary placement** | Domain → category (when categories exist) → subcategory; never invent **`description`**; pass **`domain_name`** on first call when the user names a domain in natural language. |
@@ -71,25 +74,23 @@ These rules apply to every MCP session (also exposed to clients as server **inst
 
 ## Tools, resources, and prompts
 
-### Tools (`server/tools/`) — 25 tools
+### Tools (`server/tools/`) — 19 tools
 
 Canonical inventory: `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 
 **Catalog & access**
 
-- `search_catalog_assets`, `catalog_asset_details`, `column_profile_statistics`
-- `table_entity_relationships`, `asset_lineage`, `metadata_changes_between_crawls`
+- `asset_explorer`, `asset_details`, `asset_lineage`, `metadata_changes_between_crawls`
 - `update_asset_descriptions`, `update_cde_associations`
-- `get_user_object_access` (catalog ACL)
+- `access_explorer` (catalog permissions via `operation=catalog_access`; native RDAM via `operation=source_system_access`)
 
 **Governance**
 
-- `lookup_glossary_term`, `create_glossary_term`, `lookup_tags`, `create_tag`
-- `lookup_datastory`, `update_governance_roles`, `update_custom_field_value`
+- `create_glossary_term`, `create_tag`, `update_governance_roles`, `update_custom_field_value`
 
 **Native access (RDAM)**
 
-- `source_system_access` (Redshift / Snowflake / Tableau grant previews)
+- Covered by `access_explorer` with `operation=source_system_access` (see Catalog & access above)
 
 **Data quality**
 
@@ -97,38 +98,38 @@ Canonical inventory: `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 
 **Platform docs**
 
-- `search_platform_docs`
+- `knowledge_search`
 
 **`create_glossary_term` workflow:** (1) `term_name` → domain picker; (2) `term_name` + `domain_id` → category picker when categories exist (skip only after user says skip: `skip_category=true` + `category_skip_confirmed=true`); (3) subcategory picker when applicable; (4) non-blank `description` required; (5) `confirm_create` preview; (6) POST with `write_confirmed_by_user=true`. Manual pickers: `search_on=oeglobaldomain|category|subcategory`.
 
-**`create_tag` workflow:** OPEN or SECURE mode from create-options; master/parent pickers with user confirmation flags; `confirm_create` preview; POST with `write_confirmed_by_user=true`. See [server/docs/tags_guide.md](server/docs/tags_guide.md).
+**`create_tag` workflow:** OPEN or SECURE mode from create-options; master/parent pickers with user confirmation flags; `confirm_create` preview; POST with `write_confirmed_by_user=true`. See [server/docs/governance.md](server/docs/governance.md).
 
 **`update_asset_descriptions` / `update_governance_roles` / `update_cde_associations` / `update_custom_field_value`:** Same confirm gate (`confirm_update`, `write_confirmed_by_user=true`) before POST; `dry_run=true` validates without confirm.
 
 **DQ governed writes (`associate_dq_rule_objects`, `create_dq_rules`, `validate_dq_queries`, `create_sql_dq_rule`):** Same confirm gate before POST. `generate_dq_queries` is read-only (no confirm). Workflow prompts: `assess_cde_dq_coverage`, `create_custom_sql_dq_workflow`.
 
-**Data stories:** Prefer `lookup_datastory` (`content_query`) for organizational knowledge; use `organizational_knowledge` prompt. Not `search_platform_docs`. See [server/docs/data_stories.md](server/docs/data_stories.md).
+**Knowledge:** Use `knowledge_search` for organizational knowledge and OvalEdge product documentation; it searches both corpora. See [server/docs/governance.md](server/docs/governance.md).
 
-**Agent guides (static MCP doc resources):** [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md) (tools, resources, prompts index), [glossary_guide.md](server/docs/glossary_guide.md), [governance_model.md](server/docs/governance_model.md), [asset_types.md](server/docs/asset_types.md). Exposed as `docs://ovaledge/{name}` (e.g. `docs://ovaledge/mcp_workflows`).
+**Agent guides (static MCP doc resources):** [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md) (tools, resources, prompts index), [governance.md](server/docs/governance.md), [asset_types.md](server/docs/asset_types.md), [overview.md](server/docs/overview.md). Exposed as `docs://ovaledge/{name}` (e.g. `docs://ovaledge/mcp_workflows`).
 
 ### Resources (`server/resources/`)
 
 - `ovaledge://catalog/table/{object_id}` — oetable catalog document
 - `ovaledge://catalog/file/{object_id}` — oefile catalog document
 - `ovaledge://governance/glossary-term/{object_id}` — glossary term
-- `ovaledge://governance/data-story/{object_id}` — data story (prefer `lookup_datastory` for narrative)
-- `ovaledge://governance/tag/{object_id}` — tag (prefer `lookup_tags` for hierarchy)
+- `ovaledge://governance/data-story/{object_id}` — data story (prefer `knowledge_search` for narrative)
+- `ovaledge://governance/tag/{object_id}` — tag (prefer `asset_explorer` for hierarchy)
 
-Static product docs: `docs://ovaledge/...` (all `server/docs/*.md`, including `mcp_workflows`, `data_stories`, `tags_guide`).
+Static product docs: `docs://ovaledge/...` (all `server/docs/*.md`, including `mcp_workflows`, `governance`, `asset_types`).
 
-### Prompts (`server/prompts/workflows/`) — 20 prompts
+### Prompts (`server/prompts/workflows/`) — 21 prompts
 
 Full list: [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md#workflow-prompts). Inventory: `server/mcp_surface.py` (`MCP_WORKFLOW_PROMPT_NAMES`).
 
 Discovery: `data_discovery`, `explore_data_domain`, `find_related_assets`.  
 Knowledge: `explain_business_term`, `organizational_knowledge`, `explain_tag`, `explain_dq_rule`, `platform_help`.  
 Lineage & quality: `trust_assessment`, `trace_data_lineage`, `metadata_drift`, `assess_cde_dq_coverage`.  
-Access: `native_source_access`, `catalog_object_access`, `dam_object_browse`.  
+Access: `resolve_object_access`, `native_source_access`, `catalog_object_access`, `dam_object_browse`.  
 Writes (human-in-the-loop): `create_business_glossary_term`, `create_governance_tag`, `document_asset_descriptions`, `assign_governance_roles`.  
 DQ writes (user-approved after `assess_cde_dq`): use `associate_dq_rule_objects`, `create_dq_rules` tools directly.
 

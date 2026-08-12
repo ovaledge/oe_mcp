@@ -5,38 +5,34 @@ OvalEdge is a data governance platform that helps organizations find, understand
 ## Core capabilities
 
 - **Data catalog** — Searchable inventory of tables, files, reports, APIs, and code with profiling, popularity, and usage context.
-- **Business glossary** — Definitions, domains, and rich relationships between business concepts and physical data.
-- **Lineage** — Upstream and downstream impact analysis, combining automated SQL-based lineage with curated manual links.
-- **Governance** — Ownership, stewardship, certification, classifications, and access context aligned to your operating model.
-- **Data quality** — Rules, scores, and monitoring signals that feed trust and prioritization in the catalog.
+- **Business glossary** — Definitions, domains, and relationships between business concepts and physical data.
+- **Lineage** — Upstream and downstream impact analysis.
+- **Governance** — Ownership, stewardship, certification, classifications, tags, and access context.
+- **Data quality** — Rules, scores, and monitoring signals that feed trust in the catalog.
+- **Knowledge** — Data stories (org narratives) and product documentation searchable via MCP.
 
 ## Key concepts
 
 | Concept | Meaning |
 |--------|---------|
-| **Asset** | Any governed object (e.g. table, column, report, API) with metadata and governance attributes. |
-| **Steward / owner** | People accountable for definition, quality, and appropriate use of data. |
-| **Policy** | Organizational rules (e.g. retention, masking) applied in OvalEdge and reflected in metadata. |
-| **Domain** | Business grouping for glossary and catalog organization (e.g. Finance, Marketing). |
-| **Certification** | Lifecycle state (e.g. certified, cautioned) signaling trust and review status. |
-| **CDE** | Critical Data Element — high-impact fields or objects under enhanced governance. |
-| **Curation score** | Measure of metadata completeness and governance hygiene for an asset or term. |
-| **DQ score** | Data quality score derived from rules and assessments. |
+| **Asset** | Any governed object (table, column, report, API, …) with metadata and governance attributes. |
+| **Steward / owner** | People accountable for definition, quality, and appropriate use. |
+| **Domain** | Business grouping for glossary and catalog organization. |
+| **Certification** | Lifecycle state signaling trust and review status. |
+| **CDE** | Critical Data Element — high-impact fields under enhanced governance. |
+| **Curation / DQ score** | Metadata hygiene vs measured data quality. |
 
-## MCP agents
+## MCP read tools (consolidated)
 
-This repository ships an MCP server (see `server/app.py` **instructions**) for catalog discovery, lineage, glossary, tags, **data stories**, platform docs, metadata drift, native access previews, and governed writes. Routing summary:
+| Tool | Role |
+|------|------|
+| **`asset_explorer`** | Find data assets across types; omit `object_type` unless the query implies one. Then shortlist. |
+| **`asset_details`** | View full metadata for one shortlisted `object_id` + `object_type`. |
+| **`asset_lineage`** | Trace lineage for a table or file. |
+| **`knowledge_search`** | Search org stories and OvalEdge product docs. |
 
-| Intent | Tool / prompt |
-|--------|----------------|
-| Organizational policy, playbook, onboarding narrative | **`lookup_datastory`** (`content_query`); prompt **`organizational_knowledge`** |
-| OvalEdge product UI / features / configuration | **`search_platform_docs`**; prompt **`platform_help`** |
-| Tables, files, columns, reports | **`search_catalog_assets`** → **`catalog_asset_details`** |
-| Native Redshift / Snowflake / Tableau grants | **`source_system_access`** (not catalog ACLs) |
-| Create glossary term or tag | **`create_glossary_term`** / **`create_tag`** with picker flow; POST only after **`write_confirmed_by_user=true`** |
-
-Present **`formattedResponse`** and **`storyCitation`** from data-story tools verbatim when provided. Do not invent glossary **descriptions**. Workflow prompts and resource URIs: [mcp_workflows](mcp_workflows). Static guides: `docs://ovaledge/{name}`.
+Present **`formattedResponse`** (and **`storyCitation`** for stories) when provided. Do not invent glossary descriptions. Full routing: [mcp_workflows](mcp_workflows). Governance / glossary / tags / stories: [governance](governance). Types: [asset_types](asset_types).
 
 ## Bridge Client
 
-For on-premises or restricted networks, the **Bridge Client** connects OvalEdge Cloud to sources inside your perimeter so crawling, profiling, and lineage run where the data lives—without moving raw data to the cloud unnecessarily. Use it when direct cloud-to-source connectivity is not allowed.
+For on-premises or restricted networks, the **Bridge Client** connects OvalEdge Cloud to sources inside your perimeter so crawling, profiling, and lineage run where the data lives—without moving raw data to the cloud unnecessarily.

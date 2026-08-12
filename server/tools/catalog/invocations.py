@@ -7,12 +7,10 @@ from typing import Any
 from server.client import OvalEdgeError
 from server.constants import (
     MCP_CATALOG_OBJECT_TYPES,
-    MCP_PATH_COLUMN_PROFILE,
-    MCP_PATH_ENTITY_RELATIONSHIPS,
-    MCP_PATH_LINEAGE,
+    MCP_PATH_ASSET_DETAILS,
+    MCP_PATH_ASSET_EXPLORER,
+    MCP_PATH_ASSET_LINEAGE,
     MCP_PATH_METADATA_CHANGES_BETWEEN_CRAWLS,
-    MCP_PATH_OBJECT_DETAILS,
-    MCP_PATH_SEARCH_CATALOG,
     MCP_PATH_UPDATE_ASSET_DESCRIPTIONS,
     MCP_PATH_UPDATE_CDE_ASSOCIATIONS,
     MCP_SEARCH_CATALOG_MAX_LIMIT,
@@ -37,8 +35,8 @@ from server.tools.catalog.helpers import (
     _apply_lexical_search_params,
     _build_update_descriptions_body,
     _description_field_hint,
+    _enrich_asset_explorer_response,
     _enrich_catalog_details_response,
-    _enrich_catalog_search_response,
     _enrich_update_descriptions_response,
     _format_update_descriptions_confirmation_preview,
     _is_specific_table_compare,
@@ -53,7 +51,7 @@ from server.tools.common.tool_logging import logged_tool_invocation
 
 
 @logged_tool_invocation
-async def _invoke_search_catalog_assets(
+async def _invoke_asset_explorer(
     search_terms: list[str] | None = None,
     tags: list[str] | None = None,
     terms: list[str] | None = None,
@@ -77,7 +75,12 @@ async def _invoke_search_catalog_assets(
     category_name: str | None = None,
     subcategory_id: int | None = None,
     subcategory_name: str | None = None,
+    object_id: int | None = None,
+    name: str | None = None,
+    include_parent: bool = False,
+    include_children: bool = False,
 ) -> dict[str, Any]:
+    """GET asset-explorer — find related catalog assets; omit object_type unless inferred."""
     if object_type is not None and object_type not in MCP_CATALOG_OBJECT_TYPES:
         return {
             "error": (
@@ -107,6 +110,10 @@ async def _invoke_search_catalog_assets(
             steward=steward,
             custodian=custodian,
             objectType=object_type,
+            objectId=object_id if object_id is not None and object_id > 0 else None,
+            name=strip_or_none(name),
+            includeParent=True if include_parent else None,
+            includeChildren=True if include_children else None,
             **{
                 MCP_SEARCH_DOMAIN_ID_PARAM: domain_id
                 if domain_id is not None and domain_id > 0
@@ -133,95 +140,37 @@ async def _invoke_search_catalog_assets(
             critical_data_element=critical_data_element,
         )
         async with ovaledge_client() as client:
-            body = await client.get(MCP_PATH_SEARCH_CATALOG, params=params)
+            body = await client.get(MCP_PATH_ASSET_EXPLORER, params=params)
             if not isinstance(body, dict):
                 return {"data": body}
-            return _enrich_catalog_search_response(body)
+            return _enrich_asset_explorer_response(body)
     except OvalEdgeError as e:
         return map_ovaledge_error(e)
 
 
 @logged_tool_invocation
-async def _invoke_catalog_asset_details(
-    object_id: int | None = None,
-    object_type: str | None = None,
-    fully_qualified_name: str | None = None,
-) -> dict[str, Any]:
-    has_fqn = fully_qualified_name is not None and str(fully_qualified_name).strip() != ""
-    has_pair = object_id is not None and object_type is not None
-    if has_fqn and (object_id is not None or object_type is not None):
-        return {
-            "error": (
-                "Use either fully_qualified_name alone, or object_id + object_type "
-                "— not both."
-            ),
-            "status_code": 400,
-        }
-    if not has_fqn and not has_pair:
-        return {
-            "error": "Provide fully_qualified_name, or both object_id and object_type.",
-            "status_code": 400,
-        }
-    if has_pair:
-        if object_id is None or object_type is None:
-            return {
-                "error": "object_id and object_type must be provided together.",
-                "status_code": 400,
-            }
-        if object_type not in MCP_CATALOG_OBJECT_TYPES:
-            return {
-                "error": (
-                    f"object_type must be one of {sorted(MCP_CATALOG_OBJECT_TYPES)}, "
-                    f"got {object_type!r}"
-                ),
-                "status_code": 400,
-            }
-    try:
-        async with ovaledge_client() as client:
-            if has_fqn:
-                od_params: dict[str, object] = _q(
-                    fullyQualifiedName=fully_qualified_name,
-                )
-            else:
-                od_params = _q(objectId=object_id, objectType=object_type)
-            body = await client.get(MCP_PATH_OBJECT_DETAILS, params=od_params)
-            if not isinstance(body, dict):
-                return {"data": body}
-            return _enrich_catalog_details_response(body)
-    except OvalEdgeError as e:
-        return map_ovaledge_error(e)
-
-
-@logged_tool_invocation
-async def _invoke_column_profile_statistics(
+async def _invoke_asset_details(
     object_id: int,
     object_type: str,
 ) -> dict[str, Any]:
-    if object_type not in _TABLE_FILE_TYPES:
+    """GET asset-details — full metadata for one chosen object_id + object_type."""
+    if object_type not in MCP_CATALOG_OBJECT_TYPES:
         return {
-            "error": f"object_type must be oetable or oefile, got {object_type!r}",
+            "error": (
+                f"object_type must be one of {sorted(MCP_CATALOG_OBJECT_TYPES)}, "
+                f"got {object_type!r}"
+            ),
             "status_code": 400,
         }
     try:
         async with ovaledge_client() as client:
-            return await client.get(
-                MCP_PATH_COLUMN_PROFILE,
+            body = await client.get(
+                MCP_PATH_ASSET_DETAILS,
                 params={"objectId": object_id, "objectType": object_type},
             )
-    except OvalEdgeError as e:
-        return map_ovaledge_error(e)
-
-
-@logged_tool_invocation
-async def _invoke_table_entity_relationships(
-    object_id: int,
-) -> dict[str, Any]:
-    try:
-        async with ovaledge_client() as client:
-            return await client.get(
-                MCP_PATH_ENTITY_RELATIONSHIPS,
-                params={"objectId": object_id},
-            )
+            if not isinstance(body, dict):
+                return {"data": body}
+            return _enrich_catalog_details_response(body)
     except OvalEdgeError as e:
         return map_ovaledge_error(e)
 
@@ -232,6 +181,7 @@ async def _invoke_asset_lineage(
     object_type: str,
     depth: int = 2,
 ) -> dict[str, Any]:
+    """GET asset-lineage — graph for oetable/oefile only."""
     if object_type not in _TABLE_FILE_TYPES:
         return {
             "error": f"object_type must be oetable or oefile, got {object_type!r}",
@@ -240,7 +190,7 @@ async def _invoke_asset_lineage(
     try:
         async with ovaledge_client() as client:
             return await client.get(
-                MCP_PATH_LINEAGE,
+                MCP_PATH_ASSET_LINEAGE,
                 params={
                     "objectId": object_id,
                     "objectType": object_type,

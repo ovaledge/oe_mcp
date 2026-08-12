@@ -4,9 +4,9 @@ import time
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from jose import jwt as jose_jwt
 
 from server.auth import context as auth_context
+from server.auth.jwt_util import encode_hs256
 from server.auth.token_exchange import (
     JWT_REFRESH_LEEWAY_SECONDS,
     get_or_refresh_local_token,
@@ -25,24 +25,22 @@ def _reset_local_jwt_cache() -> object:
 
 def _jwt_expires_in(seconds: int) -> str:
     exp = int(time.time()) + seconds
-    return jose_jwt.encode({"exp": exp, "sub": "t"}, "k", algorithm="HS256")
+    return encode_hs256({"exp": exp, "sub": "t"})
 
 
 def test_is_token_expiring_false_when_no_exp_claim() -> None:
-    opaque = jose_jwt.encode({"sub": "opaque"}, "k", algorithm="HS256")
+    opaque = encode_hs256({"sub": "opaque"})
     assert is_token_expiring(opaque) is False
 
 
 def test_is_token_expiring_true_when_expired() -> None:
-    past = jose_jwt.encode({"exp": int(time.time()) - 60}, "k", algorithm="HS256")
+    past = encode_hs256({"exp": int(time.time()) - 60})
     assert is_token_expiring(past) is True
 
 
 def test_is_token_expiring_true_within_leeway() -> None:
-    soon = jose_jwt.encode(
+    soon = encode_hs256(
         {"exp": int(time.time()) + max(1, JWT_REFRESH_LEEWAY_SECONDS // 2)},
-        "k",
-        algorithm="HS256",
     )
     assert is_token_expiring(soon) is True
 
@@ -72,10 +70,8 @@ async def test_get_or_refresh_uses_cache_without_exchange() -> None:
 
 @pytest.mark.asyncio
 async def test_get_or_refresh_exchanges_when_cached_token_expired() -> None:
-    auth_context.local_cached_oe_jwt = jose_jwt.encode(
+    auth_context.local_cached_oe_jwt = encode_hs256(
         {"exp": int(time.time()) - 120},
-        "k",
-        algorithm="HS256",
     )
     new_t = _jwt_expires_in(7200)
     with patch(

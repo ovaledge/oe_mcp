@@ -41,15 +41,15 @@ async def test_verify_oauth_access_token_decodes(monkeypatch: pytest.MonkeyPatch
             "server.auth.bearer_jwt.get_authorization_server_metadata_for_base",
             new=AsyncMock(return_value=fake_meta),
         ),
-        patch("server.auth.bearer_jwt.jwt.get_unverified_claims", return_value=unverified),
+        patch("server.auth.bearer_jwt.get_unverified_claims", return_value=unverified),
         patch("server.auth.bearer_jwt._get_jwks", new=AsyncMock(return_value=fake_jwks)),
-        patch("server.auth.bearer_jwt.jwt.decode", return_value=claims) as dec,
+        patch("server.auth.bearer_jwt.decode_rs_jwt", return_value=claims) as dec,
     ):
         out = await bearer_jwt.verify_oauth_access_token("header.payload.sig")
 
     assert out == claims
     dec.assert_called_once()
-    assert "audience" in dec.call_args.kwargs
+    assert dec.call_args.kwargs.get("audience") == "api://my-api"
 
 
 @pytest.mark.asyncio
@@ -71,14 +71,14 @@ async def test_verify_jwt_without_audience_skips_aud_check(
             "server.auth.bearer_jwt.get_authorization_server_metadata_for_base",
             new=AsyncMock(return_value=fake_meta),
         ),
-        patch("server.auth.bearer_jwt.jwt.get_unverified_claims", return_value=unverified),
+        patch("server.auth.bearer_jwt.get_unverified_claims", return_value=unverified),
         patch("server.auth.bearer_jwt._get_jwks", new=AsyncMock(return_value={"keys": []})),
-        patch("server.auth.bearer_jwt.jwt.decode", return_value=claims) as dec,
+        patch("server.auth.bearer_jwt.decode_rs_jwt", return_value=claims) as dec,
     ):
         out = await bearer_jwt.verify_oauth_access_token("header.payload.sig")
 
     assert out == claims
-    assert "audience" not in dec.call_args.kwargs
+    assert dec.call_args.kwargs.get("audience") is None
 
 
 @pytest.mark.asyncio
@@ -108,7 +108,7 @@ async def test_verify_rejects_issuer_not_in_allowlist(
     monkeypatch.setattr("server.config.settings.oauth_audience", "api://my-api")
     monkeypatch.setattr("server.config.settings.oauth_issuer", "https://trusted.example.com")
     unverified = {"iss": "https://evil.example.com", "aud": "api://my-api"}
-    with patch("server.auth.bearer_jwt.jwt.get_unverified_claims", return_value=unverified):
+    with patch("server.auth.bearer_jwt.get_unverified_claims", return_value=unverified):
         with pytest.raises(ValueError, match="not in the OAuth allowlist"):
             await bearer_jwt.verify_oauth_access_token("header.payload.sig")
 

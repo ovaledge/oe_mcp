@@ -4,15 +4,17 @@ from fastmcp import FastMCP
 
 from server.client import OvalEdgeError
 from server.constants import (
-    MCP_PATH_SOURCE_SYSTEM_ACCESS,
+    MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
+    MCP_PATH_ACCESS_EXPLORER,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_CONNECTION_ERROR,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_OBJECT_TYPE_ERROR,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_SOURCE_ERROR,
+    TOOL_ACCESS_EXPLORER,
 )
 from server.docs.loader import read_doc_markdown
-from server.tools import rdam
+from server.tools import access
+from server.tools.access.helpers import _DESC_ACCESS_EXPLORER
 from server.tools.rdam.helpers import (
-    _DESC_SOURCE_SYSTEM_ACCESS,
     _has_table_level_grants,
     _schema_names_from_schema_grants,
     is_incomplete_table_object_path,
@@ -28,7 +30,8 @@ from tests.helpers import get_tool_fn
 
 
 def assert_rdam_api_called(mock_client: AsyncMock, params: dict[str, object]) -> None:
-    mock_client.get.assert_any_call(MCP_PATH_SOURCE_SYSTEM_ACCESS, params=params)
+    expected = {"operation": MCP_OPERATION_SOURCE_SYSTEM_ACCESS, **params}
+    mock_client.get.assert_any_call(MCP_PATH_ACCESS_EXPLORER, params=expected)
 
 
 # Required on every source_system_access call (matches tool schema).
@@ -42,8 +45,8 @@ _REQ = {
 
 class TestGetSourceSystemAccess:
     def test_tool_description_documents_daa_scope(self) -> None:
-        governance_doc = read_doc_markdown("governance_model")
-        assert "Data Access Admin" in _DESC_SOURCE_SYSTEM_ACCESS
+        governance_doc = read_doc_markdown("governance")
+        assert "Data Access Admin" in _DESC_ACCESS_EXPLORER
         assert "Instance Data Access Admin" in governance_doc
         assert "Connector Data Access Admin" in governance_doc
 
@@ -55,30 +58,35 @@ class TestGetSourceSystemAccess:
         assert "SNOWFLAKE.ALERT" in rdam_doc
         assert "object_type=schema" in rdam_doc
         assert "rdam_tableprivilege" in rdam_doc
-        assert "never fall back to `search_catalog_assets`" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
+        assert "never fall back to `asset_explorer`" in _DESC_ACCESS_EXPLORER.lower()
         assert "Mandatory API fields" in rdam_doc
-        assert "object_name" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "object_name" in _DESC_ACCESS_EXPLORER
         assert "object_type=all" in rdam_doc
         assert "svc_analytics" in rdam_doc
-        assert "get_user_object_access" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "access_explorer" in _DESC_ACCESS_EXPLORER or "operation" in _DESC_ACCESS_EXPLORER
+        assert "catalog_access" in _DESC_ACCESS_EXPLORER
         assert "Access grant models by source system" in rdam_doc
-        assert "direct" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "contributing_role" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "user_to_objects" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "descendants" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "direct" in _DESC_ACCESS_EXPLORER
+        assert "contributing_role" in _DESC_ACCESS_EXPLORER
+        assert "user_to_objects" in _DESC_ACCESS_EXPLORER
+        assert "descendants" in _DESC_ACCESS_EXPLORER
         assert "never call `object_to_users`" in rdam_doc.lower()
-        assert "do not probe" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
+        assert "do not probe" in _DESC_ACCESS_EXPLORER.lower()
         assert "do not probe" in rdam_doc.lower()
-        assert "omit `object_path`" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
+        assert "omit `object_path`" in _DESC_ACCESS_EXPLORER.lower()
         assert "all tables on that connector" in rdam_doc.lower()
         assert "ask the user which schema" in rdam_doc.lower()
-        assert "requiresSchemaSelection" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "connection_id" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "docs://ovaledge/rdam_source_access" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "docs://ovaledge/mcp_workflows" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "native_source_access" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "requiresSchemaSelection" in _DESC_ACCESS_EXPLORER
+        assert "connection_id" in _DESC_ACCESS_EXPLORER
+        assert "docs://ovaledge/rdam_source_access" in _DESC_ACCESS_EXPLORER
+        assert "docs://ovaledge/mcp_workflows" in _DESC_ACCESS_EXPLORER
+        assert "native_source_access" in _DESC_ACCESS_EXPLORER
         assert "disabled" in rdam_doc.lower()
-        assert "filteredToObjectLevel" not in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "what tables/schemas/columns can i see/view/access" in _DESC_ACCESS_EXPLORER.lower()
+        assert "named principal" in _DESC_ACCESS_EXPLORER.lower()
+        assert "not `access_explorer`" in _DESC_ACCESS_EXPLORER
+
+        assert "filteredToObjectLevel" not in _DESC_ACCESS_EXPLORER
 
     def test_validate_only_source_system_and_query_direction_required(self) -> None:
         assert (
@@ -192,9 +200,10 @@ class TestGetSourceSystemAccess:
     async def test_user_to_objects_forwards_params(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="user_to_objects",
             **_REQ,
@@ -216,9 +225,10 @@ class TestGetSourceSystemAccess:
     ) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="user_to_objects",
             username="bhanuddm",
@@ -237,9 +247,10 @@ class TestGetSourceSystemAccess:
     async def test_object_to_users_forwards_params(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {}
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -259,9 +270,10 @@ class TestGetSourceSystemAccess:
         self, mock_oe_client: AsyncMock
     ) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="object_to_users",
             object_path=_REQ["object_path"],
@@ -275,9 +287,10 @@ class TestGetSourceSystemAccess:
         self, mock_oe_client: AsyncMock
     ) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="object_to_users",
             access_intent_confirmed="catalog_acl",
@@ -293,9 +306,10 @@ class TestGetSourceSystemAccess:
     ) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="user_to_objects",
             username=None,
@@ -307,9 +321,10 @@ class TestGetSourceSystemAccess:
 
     async def test_rejects_invalid_source_system(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="postgres",
             query_direction="user_to_objects",
             **_REQ,
@@ -320,9 +335,10 @@ class TestGetSourceSystemAccess:
     async def test_forwards_without_object_type(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="snowflake",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -342,9 +358,10 @@ class TestGetSourceSystemAccess:
     async def test_forwards_minimal_user_to_objects(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="snowflake",
             query_direction="user_to_objects",
             username="RACHEL",
@@ -362,9 +379,10 @@ class TestGetSourceSystemAccess:
         self, mock_oe_client: AsyncMock
     ) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="snowflake",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -380,9 +398,10 @@ class TestGetSourceSystemAccess:
     async def test_normalizes_oeschema_alias(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         await fn(
+            operation="source_system_access",
             source_system="snowflake",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -408,9 +427,10 @@ class TestGetSourceSystemAccess:
             "username not found in harvested metadata",
         )
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="snowflake",
             query_direction="user_to_objects",
             username="missing.user",
@@ -422,9 +442,10 @@ class TestGetSourceSystemAccess:
 
     async def test_rejects_invalid_query_direction(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="objects_to_user",
             **_REQ,
@@ -435,9 +456,10 @@ class TestGetSourceSystemAccess:
     async def test_forwards_include_columns(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -463,9 +485,10 @@ class TestGetSourceSystemAccess:
             "object_path not found in harvested metadata: ovaledgedb.ovaledge.customer_vw",
         )
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -511,9 +534,10 @@ class TestGetSourceSystemAccess:
             },
         }
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -554,9 +578,10 @@ class TestGetSourceSystemAccess:
             },
         }
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="tableau",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -597,9 +622,10 @@ class TestGetSourceSystemAccess:
             },
         }
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="tableau",
             query_direction="user_to_objects",
             username="jane.doe",
@@ -617,9 +643,10 @@ class TestGetSourceSystemAccess:
     ) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         await fn(
+            operation="source_system_access",
             source_system="snowflake",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -643,9 +670,10 @@ class TestGetSourceSystemAccess:
             "data": {"grants": [], "ambiguousMatch": True},
         }
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -694,9 +722,10 @@ class TestGetSourceSystemAccess:
             },
         }
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="user_to_objects",
             username="john_analyst",
@@ -746,9 +775,10 @@ class TestGetSourceSystemAccess:
             },
         }
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="user_to_objects",
             username="john_analyst",
@@ -774,9 +804,10 @@ class TestGetSourceSystemAccess:
             },
         }
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -793,9 +824,10 @@ class TestGetSourceSystemAccess:
     ) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="user_to_objects",
             username=["john_analyst", "svc_analytics"],
@@ -834,9 +866,10 @@ class TestGetSourceSystemAccess:
     ) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -1042,9 +1075,10 @@ class TestShapeObjectToUsersDisambiguation:
 
         mock_oe_client.get.side_effect = _get
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -1099,9 +1133,10 @@ class TestSourceSystemAccessHelpers:
     async def test_object_name_forwards_composed_path(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -1129,9 +1164,10 @@ class TestSourceSystemAccessHelpers:
             },
         }
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="snowflake",
             query_direction="user_to_objects",
             username="john.doe",
@@ -1165,9 +1201,10 @@ class TestSourceSystemAccessHelpers:
             },
         }
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="user_to_objects",
             username="svc_etl",
@@ -1192,9 +1229,10 @@ class TestSourceSystemAccessHelpers:
             },
         }
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="snowflake",
             query_direction="user_to_objects",
             username="svc_analytics",

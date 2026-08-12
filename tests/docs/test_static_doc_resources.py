@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 from fastmcp import FastMCP
 from fastmcp.client import Client
 
@@ -9,6 +12,9 @@ from server.constants import DOCS_RESOURCE_URI_PREFIX
 from server.docs.loader import DOCS_DIR, read_doc_markdown
 from server.docs.register import register as register_doc_resources
 from server.mcp_surface import MCP_TOOL_NAMES, MCP_WORKFLOW_PROMPT_NAMES
+
+SERVER_DIR = Path(__file__).resolve().parents[2] / "server"
+_DOCS_URI_RE = re.compile(re.escape(DOCS_RESOURCE_URI_PREFIX) + r"/([a-z0-9_]+)")
 
 
 class TestStaticDocResources:
@@ -29,9 +35,32 @@ class TestStaticDocResources:
 
         assert expected_uris <= listed_uris
         assert "mcp_workflows" in {f.stem for f in md_files}
-        assert "data_stories" in {f.stem for f in md_files}
-        assert "tags_guide" in {f.stem for f in md_files}
+        assert "governance" in {f.stem for f in md_files}
+        assert "asset_types" in {f.stem for f in md_files}
         assert "rdam_source_access" in {f.stem for f in md_files}
+        assert "overview" in {f.stem for f in md_files}
+        # Merged guides (must not reappear as separate stems)
+        assert "glossary_guide" not in {f.stem for f in md_files}
+        assert "tags_guide" not in {f.stem for f in md_files}
+        assert "data_stories" not in {f.stem for f in md_files}
+        assert "governance_model" not in {f.stem for f in md_files}
+
+    def test_every_referenced_docs_uri_resolves_to_a_doc(self) -> None:
+        """No tool description, prompt, or doc may point at a docs:// stem that is gone."""
+        stems = {f.stem for f in DOCS_DIR.glob("*.md")}
+        dangling: dict[str, set[str]] = {}
+        sources = list(SERVER_DIR.rglob("*.py")) + list(SERVER_DIR.rglob("*.md"))
+        for path in sources:
+            if "__pycache__" in path.parts:
+                continue
+            for stem in set(_DOCS_URI_RE.findall(path.read_text(encoding="utf-8"))):
+                if stem not in stems:
+                    rel = path.relative_to(SERVER_DIR.parent).as_posix()
+                    dangling.setdefault(stem, set()).add(rel)
+        assert not dangling, (
+            "docs:// references with no matching server/docs/*.md: "
+            + "; ".join(f"{stem} ← {sorted(files)}" for stem, files in sorted(dangling.items()))
+        )
 
     async def test_read_mcp_workflows_resource(self) -> None:
         path = DOCS_DIR / "mcp_workflows.md"
@@ -43,7 +72,7 @@ class TestStaticDocResources:
             contents = await client.read_resource(uri)
         assert contents
         text = contents[0].text if hasattr(contents[0], "text") else str(contents[0])
-        assert "lookup_datastory" in text
+        assert "knowledge_search" in text
         assert "organizational_knowledge" in text
         assert "Native source access (RDAM)" in text
         assert "user_to_objects" in text
@@ -61,3 +90,10 @@ class TestStaticDocResources:
         )
         assert not missing_tools, f"mcp_workflows.md missing tools: {missing_tools}"
         assert not missing_prompts, f"mcp_workflows.md missing prompts: {missing_prompts}"
+
+    def test_mcp_workflows_routes_first_person_inventory_to_asset_explorer(self) -> None:
+        text = read_doc_markdown("mcp_workflows")
+        assert "Discovery vs grants" in text
+        assert "What tables/schemas/columns can I see/view/access?" in text
+        assert "without a named principal" in text
+        assert "First-person **with** a named source" in text

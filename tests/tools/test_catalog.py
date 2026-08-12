@@ -5,11 +5,10 @@ from fastmcp import FastMCP
 
 from server.client import OvalEdgeError
 from server.constants import (
-    MCP_PATH_COLUMN_PROFILE,
-    MCP_PATH_ENTITY_RELATIONSHIPS,
-    MCP_PATH_LINEAGE,
+    MCP_PATH_ASSET_DETAILS,
+    MCP_PATH_ASSET_EXPLORER,
+    MCP_PATH_ASSET_LINEAGE,
     MCP_PATH_METADATA_CHANGES_BETWEEN_CRAWLS,
-    MCP_PATH_SEARCH_CATALOG,
     MCP_PATH_UPDATE_ASSET_DESCRIPTIONS,
     MCP_PATH_UPDATE_CDE_ASSOCIATIONS,
     MCP_SEARCH_CATEGORY_NAME_PARAM,
@@ -24,7 +23,7 @@ from server.constants import (
     MCP_SEARCH_TERMS_PARAM,
 )
 from server.tools import catalog
-from server.tools.catalog.helpers import _DESC_SEARCH
+from server.tools.catalog.helpers import _DESC_ASSET_EXPLORER
 from tests.conftest import (
     MOCK_ASSET_DETAIL,
     MOCK_LINEAGE_RESPONSE,
@@ -35,33 +34,51 @@ from tests.helpers import get_tool_fn
 from tests.tools.confirm_test_helpers import invoke_write_confirmed
 
 
-class TestSearchCatalogAssets:
+class TestAssetExplorer:
     async def test_enriches_absolute_nav_url_from_relative_nav_link(
         self, mock_oe_client: AsyncMock
     ) -> None:
         mock_oe_client.get.return_value = {
             "ok": True,
-            "items": [
-                {
-                    "objectId": 2468,
-                    "objectType": "glossary",
-                    "objectName": "Sidheshwar",
-                    "navLink": "#nav/glossary?browse=summary&id=2468",
-                }
-            ],
+            "data": {
+                "items": [
+                    {
+                        "objectId": 2468,
+                        "objectType": "glossary",
+                        "objectName": "Sidheshwar",
+                        "navLink": "#nav/glossary?browse=summary&id=2468",
+                    }
+                ]
+            },
         }
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
-        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        tool_fn = await get_tool_fn(mcp, "asset_explorer")
         result = await tool_fn(search_terms=["Sidheshwar"])
-        hit = result["items"][0]
+        hit = result["data"]["items"][0]
         assert hit["navLink"] == "#nav/glossary?browse=summary&id=2468"
         assert hit["redirectUrl"].startswith("https://mock.ovaledge.com/")
         assert hit["redirectUrl"].endswith("#nav/glossary?browse=summary&id=2468")
         assert "navUrl" not in hit
 
-    def test_search_description_rejects_native_grant_fallback(self) -> None:
-        assert "source_system_access" in _DESC_SEARCH
+    def test_explorer_description_rejects_native_grant_fallback(self) -> None:
+        assert "access_explorer" in _DESC_ASSET_EXPLORER
+        assert "source_system_access" in _DESC_ASSET_EXPLORER
+
+    def test_explorer_description_defaults_to_open_catalog_search(self) -> None:
+        assert "omit object_type" in _DESC_ASSET_EXPLORER.lower()
+        assert "do not default to tables-only" in _DESC_ASSET_EXPLORER.lower()
+        assert "asset_details" in _DESC_ASSET_EXPLORER.lower()
+        assert "shortlist" in _DESC_ASSET_EXPLORER.lower()
+        assert "exact governance names" in _DESC_ASSET_EXPLORER.lower()
+        assert "find data assets" in _DESC_ASSET_EXPLORER.lower()
+        assert "blanket" not in _DESC_ASSET_EXPLORER.lower()
+
+    def test_explorer_description_routes_first_person_inventory(self) -> None:
+        desc = _DESC_ASSET_EXPLORER.lower()
+        assert "what tables can i see/access" in desc
+        assert "not `access_explorer`" in _DESC_ASSET_EXPLORER or "not access_explorer" in desc
+        assert "named principal" in desc
 
     async def test_search_get_params(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
@@ -69,13 +86,13 @@ class TestSearchCatalogAssets:
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
 
-        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        tool_fn = await get_tool_fn(mcp, "asset_explorer")
         result = await tool_fn(search_terms=["customer", "transactions"], object_type="oetable")
 
         assert result == MOCK_SEARCH_RESPONSE
         mock_oe_client.get.assert_called_once()
         args, kwargs = mock_oe_client.get.call_args
-        assert args[0] == MCP_PATH_SEARCH_CATALOG
+        assert args[0] == MCP_PATH_ASSET_EXPLORER
         params = kwargs["params"]
         assert json.loads(params[MCP_SEARCH_TERMS_PARAM]) == ["customer", "transactions"]
         assert params["objectType"] == "oetable"
@@ -86,7 +103,7 @@ class TestSearchCatalogAssets:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
-        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        tool_fn = await get_tool_fn(mcp, "asset_explorer")
         full_q = "Where do we store employee payroll dimensions?"
         await tool_fn(search_terms=["employee"], context_query=full_q)
         params = mock_oe_client.get.call_args[1]["params"]
@@ -97,7 +114,7 @@ class TestSearchCatalogAssets:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
-        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        tool_fn = await get_tool_fn(mcp, "asset_explorer")
         await tool_fn(search_terms=[], limit=10)
         params = mock_oe_client.get.call_args[1]["params"]
         assert MCP_SEARCH_TERMS_PARAM not in params
@@ -108,7 +125,7 @@ class TestSearchCatalogAssets:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
-        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        tool_fn = await get_tool_fn(mcp, "asset_explorer")
         await tool_fn(
             tags=["Operations"],
             terms=["Revenue"],
@@ -130,7 +147,7 @@ class TestSearchCatalogAssets:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
-        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        tool_fn = await get_tool_fn(mcp, "asset_explorer")
         await tool_fn(classifications=[], limit=10)
         params = mock_oe_client.get.call_args[1]["params"]
         assert MCP_SEARCH_CLASSIFICATIONS_PARAM not in params
@@ -139,7 +156,7 @@ class TestSearchCatalogAssets:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
-        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        tool_fn = await get_tool_fn(mcp, "asset_explorer")
         await tool_fn(
             schema_name="sakila",
             connection_name="ovaledgedb",
@@ -158,7 +175,7 @@ class TestSearchCatalogAssets:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
-        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        tool_fn = await get_tool_fn(mcp, "asset_explorer")
         await tool_fn(
             context_query="Find all assets related to MySQL databases",
             server_type="mysql",
@@ -171,7 +188,7 @@ class TestSearchCatalogAssets:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
-        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        tool_fn = await get_tool_fn(mcp, "asset_explorer")
         await tool_fn(server_type="MySQL")
         params = mock_oe_client.get.call_args[1]["params"]
         assert params[MCP_SEARCH_SERVER_TYPE_PARAM] == "mysql"
@@ -180,7 +197,7 @@ class TestSearchCatalogAssets:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
-        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        tool_fn = await get_tool_fn(mcp, "asset_explorer")
         await tool_fn(search_terms=["customer"])
         params = mock_oe_client.get.call_args[1]["params"]
         assert MCP_SEARCH_SERVER_TYPE_PARAM not in params
@@ -188,7 +205,7 @@ class TestSearchCatalogAssets:
     async def test_server_type_invalid_returns_400(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
-        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        tool_fn = await get_tool_fn(mcp, "asset_explorer")
         result = await tool_fn(server_type="not-a-real-connector")
         assert result["status_code"] == 400
         assert "server_type" in result["error"]
@@ -200,7 +217,7 @@ class TestSearchCatalogAssets:
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
 
-        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        tool_fn = await get_tool_fn(mcp, "asset_explorer")
         await tool_fn(search_terms=["x"], limit=500)
 
         params = mock_oe_client.get.call_args[1]["params"]
@@ -210,7 +227,7 @@ class TestSearchCatalogAssets:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
-        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        tool_fn = await get_tool_fn(mcp, "asset_explorer")
         await tool_fn(search_terms=["q"], object_type="oequery")
         params = mock_oe_client.get.call_args[1]["params"]
         assert params["objectType"] == "oequery"
@@ -219,18 +236,61 @@ class TestSearchCatalogAssets:
         mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
-        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        tool_fn = await get_tool_fn(mcp, "asset_explorer")
         await tool_fn(
             object_type="glossary",
             domain_name="PrakashDOmain",
             category_name="test",
-            subcategory_name="okok",
+            subcategory_id=42,
         )
         params = mock_oe_client.get.call_args[1]["params"]
         assert params["objectType"] == "glossary"
         assert params[MCP_SEARCH_DOMAIN_NAME_PARAM] == "PrakashDOmain"
         assert params[MCP_SEARCH_CATEGORY_NAME_PARAM] == "test"
-        assert params["subCategoryName"] == "okok"
+        assert params["subcategoryId"] == 42
+
+    async def test_glossary_name_mode_forwards_standardized_params(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {"ok": True, "data": {"glossaryTerms": []}}
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "asset_explorer")
+        await fn(object_type="glossary", name="Revenue")
+        assert mock_oe_client.get.call_args[1]["params"]["objectType"] == "glossary"
+        assert mock_oe_client.get.call_args[1]["params"]["name"] == "Revenue"
+
+    async def test_tag_name_mode_forwards_hierarchy_flags(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {"ok": True, "data": {"tags": []}}
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "asset_explorer")
+        await fn(object_type="oetag", name="PII", include_children=True)
+        params = mock_oe_client.get.call_args[1]["params"]
+        assert params["objectType"] == "oetag"
+        assert params["name"] == "PII"
+        assert params["includeChildren"] is True
+
+    async def test_page_and_limit_forwarded(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "asset_explorer")
+        await fn(search_terms=["customer"], page=3, limit=25)
+        params = mock_oe_client.get.call_args[1]["params"]
+        assert params["page"] == 3
+        assert params["limit"] == 25
+
+    async def test_object_type_omitted_when_unset(self, mock_oe_client: AsyncMock) -> None:
+        """Open catalog search is the default — no implicit tables-only filter."""
+        mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "asset_explorer")
+        await fn(search_terms=["payment"], context_query="Anything about payments")
+        assert "objectType" not in mock_oe_client.get.call_args[1]["params"]
 
     async def test_error_returns_structured_dict(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.side_effect = OvalEdgeError(403, "Forbidden")
@@ -238,7 +298,7 @@ class TestSearchCatalogAssets:
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
 
-        tool_fn = await get_tool_fn(mcp, "search_catalog_assets")
+        tool_fn = await get_tool_fn(mcp, "asset_explorer")
         result = await tool_fn(search_terms=["secret"])
 
         assert "error" in result
@@ -247,13 +307,120 @@ class TestSearchCatalogAssets:
     async def test_rejects_invalid_object_type(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
-        fn = await get_tool_fn(mcp, "search_catalog_assets")
+        fn = await get_tool_fn(mcp, "asset_explorer")
         out = await fn(search_terms=["x"], object_type="not_a_real_type")
         assert out["status_code"] == 400
         mock_oe_client.get.assert_not_called()
 
 
-class TestCatalogAssetDetails:
+class TestAssetExplorerSectionEnrichment:
+    """Glossary and tag sections of an explorer payload get governance formatting."""
+
+    GLOSSARY_SECTION = {
+        "objectId": 1275,
+        "objectType": "glossary",
+        "objectName": "Revenue",
+        "navLink": "#nav/glossary?browse=summary&id=1275",
+    }
+    TAG_SECTION = {
+        "objectId": 1085,
+        "objectType": "oetag",
+        "objectName": "Finance & Economics",
+        "navLink": "#nav/tag?id=1085&objectType=oetag",
+        "childTags": [
+            {
+                "objectId": 1086,
+                "objectName": "Macroeconomic Indicators",
+                "navLink": "#nav/tag?id=1086&objectType=oetag",
+            }
+        ],
+    }
+
+    async def _explore(self, mock_oe_client: AsyncMock, body: dict, **kwargs: object) -> dict:
+        mock_oe_client.get.return_value = body
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "asset_explorer")
+        return await fn(**kwargs)
+
+    async def test_glossary_section_nav_links_enriched(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        out = await self._explore(
+            mock_oe_client,
+            {"ok": True, "data": {"glossaryTerms": self.GLOSSARY_SECTION}},
+            object_type="glossary",
+            name="Revenue",
+        )
+        term = out["data"]["glossaryTerms"]
+        assert term["redirectUrl"].startswith("https://mock.ovaledge.com/")
+        assert term["redirectUrl"].endswith("#nav/glossary?browse=summary&id=1275")
+
+    async def test_tag_section_hierarchy_produces_formatted_response(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        out = await self._explore(
+            mock_oe_client,
+            {"ok": True, "data": {"tags": self.TAG_SECTION}},
+            object_type="oetag",
+            name="Finance & Economics",
+            include_children=True,
+        )
+        formatted = out["formattedResponse"]
+        assert "Finance & Economics" in formatted
+        assert "Macroeconomic Indicators" in formatted
+        child = out["data"]["tags"]["childTags"][0]
+        assert child["redirectUrl"].endswith("#nav/tag?id=1086&objectType=oetag")
+
+    async def test_catalog_items_and_glossary_section_enriched_together(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        out = await self._explore(
+            mock_oe_client,
+            {
+                "ok": True,
+                "data": {
+                    "items": [
+                        {
+                            "objectId": 100600,
+                            "objectType": "oetable",
+                            "objectName": "Customers",
+                            "navLink": "#nav/table?id=100600",
+                        }
+                    ],
+                    "glossaryTerms": self.GLOSSARY_SECTION,
+                },
+            },
+            search_terms=["customer"],
+        )
+        assert out["data"]["items"][0]["redirectUrl"].endswith("#nav/table?id=100600")
+        assert out["data"]["glossaryTerms"]["redirectUrl"]
+
+    async def test_error_payload_is_not_enriched(self, mock_oe_client: AsyncMock) -> None:
+        body = {"error": "boom", "status_code": 500}
+        out = await self._explore(mock_oe_client, body, search_terms=["x"])
+        assert out == body
+
+    async def test_ok_false_payload_is_not_enriched(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        body = {"ok": False, "data": {"glossaryTerms": self.GLOSSARY_SECTION}}
+        out = await self._explore(mock_oe_client, body, object_type="glossary", name="Revenue")
+        assert out == body
+        assert "redirectUrl" not in out["data"]["glossaryTerms"]
+
+    async def test_hits_without_nav_link_are_left_alone(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        out = await self._explore(
+            mock_oe_client,
+            {"ok": True, "data": {"items": [{"objectId": 7, "objectType": "oetable"}]}},
+            search_terms=["x"],
+        )
+        assert "redirectUrl" not in out["data"]["items"][0]
+
+
+class TestAssetDetails:
     async def test_enriches_absolute_nav_url_from_relative_nav_link(
         self, mock_oe_client: AsyncMock
     ) -> None:
@@ -268,53 +435,69 @@ class TestCatalogAssetDetails:
         }
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
-        tool_fn = await get_tool_fn(mcp, "catalog_asset_details")
+        tool_fn = await get_tool_fn(mcp, "asset_details")
         out = await tool_fn(object_id=2468, object_type="glossary")
         assert out["data"]["navLink"] == "#nav/glossary?browse=summary&id=2468"
         assert out["data"]["redirectUrl"].endswith("#nav/glossary?browse=summary&id=2468")
         assert "redirectUrl" not in out
         assert "navUrl" not in out
 
-    async def test_fqn_only(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = MOCK_ASSET_DETAIL
-        mcp = FastMCP(name="test", version="0.0.1")
-        catalog.register(mcp)
-        tool_fn = await get_tool_fn(mcp, "catalog_asset_details")
-        out = await tool_fn(fully_qualified_name="db.schema.table")
-        assert out == MOCK_ASSET_DETAIL
-        params = mock_oe_client.get.call_args[1]["params"]
-        assert params == {"fullyQualifiedName": "db.schema.table"}
-
     async def test_object_id_and_type(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = MOCK_ASSET_DETAIL
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
-        tool_fn = await get_tool_fn(mcp, "catalog_asset_details")
+        tool_fn = await get_tool_fn(mcp, "asset_details")
         await tool_fn(object_id=42, object_type="oetable")
         params = mock_oe_client.get.call_args[1]["params"]
         assert params == {"objectId": 42, "objectType": "oetable"}
+        assert mock_oe_client.get.call_args[0][0] == MCP_PATH_ASSET_DETAILS
 
-    async def test_rejects_mixing_fqn_and_id(self, mock_oe_client: AsyncMock) -> None:
+    async def test_details_block_nav_link_is_enriched(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        """Composite payloads carry the asset under `details` — enrich that, not the wrapper."""
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "details": {
+                    "objectId": 1038,
+                    "objectType": "oetable",
+                    "objectName": "INPATIENTDISCHARGEDETIALS",
+                    "navLink": "#nav/table?id=1038",
+                },
+                "profile": {"columns": []},
+            },
+        }
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
-        tool_fn = await get_tool_fn(mcp, "catalog_asset_details")
-        result = await tool_fn(fully_qualified_name="a.b.c", object_id=1)
-        assert result["status_code"] == 400
-        mock_oe_client.get.assert_not_called()
+        fn = await get_tool_fn(mcp, "asset_details")
+        out = await fn(object_id=1038, object_type="oetable")
+        assert out["data"]["details"]["redirectUrl"].endswith("#nav/table?id=1038")
+        assert "redirectUrl" not in out["data"]
 
-    async def test_rejects_missing_lookup_mode(self, mock_oe_client: AsyncMock) -> None:
+    async def test_error_payload_is_not_enriched(self, mock_oe_client: AsyncMock) -> None:
+        body = {"error": "not found", "status_code": 404}
+        mock_oe_client.get.return_value = body
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
-        tool_fn = await get_tool_fn(mcp, "catalog_asset_details")
-        result = await tool_fn()
-        assert result["status_code"] == 400
-        assert "fully_qualified_name" in result["error"]
-        mock_oe_client.get.assert_not_called()
+        fn = await get_tool_fn(mcp, "asset_details")
+        assert await fn(object_id=1, object_type="oetable") == body
+
+    async def test_ok_false_payload_is_not_enriched(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        body = {"ok": False, "data": {"objectId": 1, "navLink": "#nav/table?id=1"}}
+        mock_oe_client.get.return_value = body
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        fn = await get_tool_fn(mcp, "asset_details")
+        out = await fn(object_id=1, object_type="oetable")
+        assert "redirectUrl" not in out["data"]
 
     async def test_rejects_invalid_object_type_with_id(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
-        tool_fn = await get_tool_fn(mcp, "catalog_asset_details")
+        tool_fn = await get_tool_fn(mcp, "asset_details")
         result = await tool_fn(object_id=1, object_type="invalid_type")
         assert result["status_code"] == 400
         mock_oe_client.get.assert_not_called()
@@ -323,7 +506,7 @@ class TestCatalogAssetDetails:
         mock_oe_client.get.side_effect = OvalEdgeError(502, "Bad gateway")
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
-        tool_fn = await get_tool_fn(mcp, "catalog_asset_details")
+        tool_fn = await get_tool_fn(mcp, "asset_details")
         result = await tool_fn(object_id=1, object_type="oetable")
         assert result["status_code"] == 502
         assert "502" in result["error"]
@@ -342,132 +525,29 @@ class TestCatalogAssetDetails:
         }
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
-        fn = await get_tool_fn(mcp, "catalog_asset_details")
+        fn = await get_tool_fn(mcp, "asset_details")
         out = await fn(object_id=1019, object_type="oetable")
         assert out["data"]["objectName"] == "film"
         assert out["data"]["redirectUrl"].endswith("#nav/table?browse=summary&id=1019")
         mock_oe_client.get.assert_called_once()
 
-    async def test_not_found_returns_structured_dict(
+    async def test_composite_response_includes_profile_and_relationships(
         self, mock_oe_client: AsyncMock
     ) -> None:
-        mock_oe_client.get.side_effect = OvalEdgeError(404, "Not found")
-        mcp = FastMCP(name="test", version="0.0.1")
-        catalog.register(mcp)
-        fn = await get_tool_fn(mcp, "catalog_asset_details")
-        out = await fn(fully_qualified_name="missing.table")
-        assert out["status_code"] == 404
-        assert "404" in out["error"]
-
-    async def test_rejects_object_id_without_type(self, mock_oe_client: AsyncMock) -> None:
-        mcp = FastMCP(name="test", version="0.0.1")
-        catalog.register(mcp)
-        fn = await get_tool_fn(mcp, "catalog_asset_details")
-        out = await fn(object_id=10)
-        assert out["status_code"] == 400
-        assert "fully_qualified_name" in out["error"]
-        mock_oe_client.get.assert_not_called()
-
-
-class TestColumnProfileStatistics:
-    async def test_oetable(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = {"columns": [{"name": "id", "nulls": 0}]}
-        mcp = FastMCP(name="test", version="0.0.1")
-        catalog.register(mcp)
-        fn = await get_tool_fn(mcp, "column_profile_statistics")
-        out = await fn(object_id=7, object_type="oetable")
-        assert out["columns"][0]["name"] == "id"
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_COLUMN_PROFILE,
-            params={"objectId": 7, "objectType": "oetable"},
-        )
-
-    async def test_oefile_happy_path(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = {"columns": [{"name": "col_a"}]}
-        mcp = FastMCP(name="test", version="0.0.1")
-        catalog.register(mcp)
-        fn = await get_tool_fn(mcp, "column_profile_statistics")
-        out = await fn(object_id=55, object_type="oefile")
-        assert out == {"columns": [{"name": "col_a"}]}
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_COLUMN_PROFILE,
-            params={"objectId": 55, "objectType": "oefile"},
-        )
-
-    async def test_rejects_glossary(self, mock_oe_client: AsyncMock) -> None:
-        mcp = FastMCP(name="test", version="0.0.1")
-        catalog.register(mcp)
-        fn = await get_tool_fn(mcp, "column_profile_statistics")
-        out = await fn(object_id=1, object_type="glossary")
-        assert out["status_code"] == 400
-        assert "oetable or oefile" in out["error"]
-        mock_oe_client.get.assert_not_called()
-
-    async def test_rejects_oeschema(self, mock_oe_client: AsyncMock) -> None:
-        mcp = FastMCP(name="test", version="0.0.1")
-        catalog.register(mcp)
-        fn = await get_tool_fn(mcp, "column_profile_statistics")
-        out = await fn(object_id=1, object_type="oeschema")
-        assert out["status_code"] == 400
-        mock_oe_client.get.assert_not_called()
-
-    async def test_oval_edge_error_returns_structured_dict(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.side_effect = OvalEdgeError(502, "Bad gateway")
-        mcp = FastMCP(name="test", version="0.0.1")
-        catalog.register(mcp)
-        fn = await get_tool_fn(mcp, "column_profile_statistics")
-        out = await fn(object_id=7, object_type="oetable")
-        assert out["status_code"] == 502
-
-    async def test_not_found_returns_structured_dict(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.side_effect = OvalEdgeError(404, "Object not found")
-        mcp = FastMCP(name="test", version="0.0.1")
-        catalog.register(mcp)
-        fn = await get_tool_fn(mcp, "column_profile_statistics")
-        out = await fn(object_id=999, object_type="oetable")
-        assert out["status_code"] == 404
-        assert "404" in out["error"]
-
-
-class TestTableEntityRelationships:
-    async def test_forwards_object_id(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {
-            "relationships": [{"from": "a", "to": "b", "type": "FK"}]
+            "ok": True,
+            "data": {
+                "details": {"objectId": 7, "objectType": "oetable"},
+                "profile": {"columns": [{"name": "id", "nulls": 0}]},
+                "relationships": [{"from": "a", "to": "b", "type": "FK"}],
+            },
         }
         mcp = FastMCP(name="test", version="0.0.1")
         catalog.register(mcp)
-        fn = await get_tool_fn(mcp, "table_entity_relationships")
-        out = await fn(object_id=99)
-        assert out["relationships"][0]["type"] == "FK"
-        mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_ENTITY_RELATIONSHIPS,
-            params={"objectId": 99},
-        )
-
-    async def test_empty_relationships_happy_path(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.return_value = {"relationships": []}
-        mcp = FastMCP(name="test", version="0.0.1")
-        catalog.register(mcp)
-        fn = await get_tool_fn(mcp, "table_entity_relationships")
-        out = await fn(object_id=12)
-        assert out == {"relationships": []}
-
-    async def test_oval_edge_error_returns_structured_dict(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.side_effect = OvalEdgeError(503, "Unavailable")
-        mcp = FastMCP(name="test", version="0.0.1")
-        catalog.register(mcp)
-        fn = await get_tool_fn(mcp, "table_entity_relationships")
-        out = await fn(object_id=99)
-        assert out["status_code"] == 503
-
-    async def test_unauthorized_returns_structured_dict(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.side_effect = OvalEdgeError(401, "Unauthorized")
-        mcp = FastMCP(name="test", version="0.0.1")
-        catalog.register(mcp)
-        fn = await get_tool_fn(mcp, "table_entity_relationships")
-        out = await fn(object_id=99)
-        assert out["status_code"] == 401
-        assert "401" in out["error"]
+        fn = await get_tool_fn(mcp, "asset_details")
+        out = await fn(object_id=7, object_type="oetable")
+        assert out["data"]["profile"]["columns"][0]["name"] == "id"
+        assert out["data"]["relationships"][0]["type"] == "FK"
 
 
 class TestAssetLineage:
@@ -479,7 +559,7 @@ class TestAssetLineage:
         out = await fn(object_id=1, object_type="oefile", depth=4)
         assert out == MOCK_LINEAGE_RESPONSE
         mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_LINEAGE,
+            MCP_PATH_ASSET_LINEAGE,
             params={"objectId": 1, "objectType": "oefile", "depth": 4},
         )
 
@@ -491,7 +571,7 @@ class TestAssetLineage:
         out = await fn(object_id=1019, object_type="oetable")
         assert out["nodes"][0]["id"] == 1
         mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_LINEAGE,
+            MCP_PATH_ASSET_LINEAGE,
             params={"objectId": 1019, "objectType": "oetable", "depth": 2},
         )
 
@@ -530,15 +610,6 @@ class TestAssetLineage:
         assert "403" in out["error"]
 
 
-class TestTableEntityRelationshipsErrors:
-    async def test_oval_edge_error_returns_dict(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.side_effect = OvalEdgeError(503, "Unavailable")
-        mcp = FastMCP(name="test", version="0.0.1")
-        catalog.register(mcp)
-        fn = await get_tool_fn(mcp, "table_entity_relationships")
-        out = await fn(object_id=5)
-        assert out["status_code"] == 503
-        assert "503" in out["error"]
 
 
 MOCK_UPDATE_DESCRIPTIONS_RESPONSE = {
