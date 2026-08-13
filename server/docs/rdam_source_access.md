@@ -13,9 +13,13 @@ Deep routing reference for **`access_explorer`** with **`operation=source_system
 | Permission model | metadata-read/write + data permission levels | Native privileges (SELECT, INSERT, ALL, …) |
 | Object scope | All OvalEdge asset types | RS/SF database/schema/table/column; Tableau project/report |
 
-## No catalog / Elasticsearch fallback
+## Unsupported connector type (continue with catalog_access)
 
-`access_explorer` source_system_access reads RDAM SQL metadata only. Never call `asset_explorer`, `asset_details`, or other catalog tools as a substitute when RDAM returns empty grants, 4xx/5xx, not-found, or not-harvested — catalog search cannot answer native Redshift/Snowflake/Tableau grants. Report the RDAM result (or API error) and suggest RDAM harvest, DAA, object_path / object_type, or native SQL (e.g. Snowflake `SHOW GRANTS`) — do not invoke catalog search.
+If the API returns **400** `mcp.source.system.unsupported` (`Connector type {0} is not supported for native DAM access. Supported connector types: {1}. Continue with operation=catalog_access.`), `{0}` is the requested connector type / `servertype` and `{1}` is the DAM registry CSV. New DAM connectors register as a Spring `McpSourceSystemAccessCapabilities` bean. **Continue with `operation=catalog_access`** — native DAM is not available for that connector.
+
+## No catalog fallback for empty RDAM
+
+`access_explorer` source_system_access reads RDAM SQL metadata only. Never call `asset_explorer`, `asset_details`, or other catalog tools as a substitute when RDAM returns empty grants, other 4xx/5xx, not-found, or not-harvested — catalog search cannot answer native Redshift/Snowflake/Tableau grants. Report the RDAM result (or API error) and suggest RDAM harvest, DAA, object_path / object_type, or native SQL (e.g. Snowflake `SHOW GRANTS`) — do not invoke catalog search.
 
 ## Mandatory API fields
 

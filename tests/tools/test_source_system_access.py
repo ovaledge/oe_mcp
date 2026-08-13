@@ -4,6 +4,7 @@ from fastmcp import FastMCP
 
 from server.client import OvalEdgeError
 from server.constants import (
+    MCP_OPERATION_CATALOG_ACCESS,
     MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
     MCP_PATH_ACCESS_EXPLORER,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_CONNECTION_ERROR,
@@ -133,12 +134,11 @@ class TestGetSourceSystemAccess:
         )
         assert err is not None
 
-    def test_validate_rejects_invalid_source_system_or_direction(self) -> None:
+    def test_validate_rejects_invalid_direction_not_unknown_source_system(self) -> None:
         err = validate_source_system_access_args(
             "postgres", "user_to_objects", "u", "prod_db.t", "table", 1000
         )
-        assert err is not None
-        assert "source_system" in err["error"]
+        assert err is None
 
         err = validate_source_system_access_args(
             "redshift", "invalid", "u", "prod_db.t", "table", 1000
@@ -319,7 +319,18 @@ class TestGetSourceSystemAccess:
         )
         assert out["status_code"] == 400
 
-    async def test_rejects_invalid_source_system(self, mock_oe_client: AsyncMock) -> None:
+    async def test_unsupported_source_system_continues_with_catalog_access(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.side_effect = [
+            OvalEdgeError(
+                400,
+                "Connector type postgres is not supported for native DAM access. "
+                "Supported connector types: redshift, snowflake, tableau. "
+                "Continue with operation=catalog_access.",
+            ),
+            {"ok": True, "data": {"effectiveAccess": []}},
+        ]
         mcp = FastMCP(name="test", version="0.0.1")
         access.register(mcp)
         fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
@@ -329,8 +340,12 @@ class TestGetSourceSystemAccess:
             query_direction="user_to_objects",
             **_REQ,
         )
-        assert out["status_code"] == 400
-        mock_oe_client.get.assert_not_called()
+        assert out["ok"] is True
+        assert "catalog_access" in (out.get("data") or {}).get("advisoryMessage", "")
+        catalog_call = mock_oe_client.get.await_args_list[-1]
+        assert catalog_call.args[0] == MCP_PATH_ACCESS_EXPLORER
+        assert catalog_call.kwargs["params"]["operation"] == MCP_OPERATION_CATALOG_ACCESS
+        assert catalog_call.kwargs["params"]["queryDirection"] == "user_to_object"
 
     async def test_forwards_without_object_type(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}

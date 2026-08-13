@@ -86,12 +86,11 @@ class TestAccessExplorerValidation:
         assert err is not None
         assert "one object resolution" in err["error"]
 
-    def test_rdam_validate_rejects_invalid_source(self) -> None:
+    def test_rdam_validate_allows_unknown_source_for_java_registry(self) -> None:
         err = validate_source_system_access_args(
             "postgres", "user_to_objects", "u", "prod_db.t", "table", 1000
         )
-        assert err is not None
-        assert "source_system" in err["error"]
+        assert err is None
 
     async def test_unknown_operation_rejected_without_http(self) -> None:
         from server.tools.access.invocations import _invoke_access_explorer

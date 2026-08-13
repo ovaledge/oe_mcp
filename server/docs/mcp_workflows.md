@@ -35,7 +35,7 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 | Create custom SQL data quality rule | `create_sql_dq_rule` (confirm gate; after validate when `canCreateRule`) |
 | CDE / custom SQL DQ workflow (prompt) | `create_custom_sql_dq_workflow` or `assess_cde_dq_coverage` |
 | Metadata drift between crawls | `metadata_changes_between_crawls`; prompt `metadata_drift` |
-| Native Redshift/Snowflake/Tableau grants | `access_explorer` with `operation=source_system_access`; prompts `native_source_access`, `dam_object_browse` |
+| Native Redshift/Snowflake/Tableau grants | `access_explorer` with `operation=source_system_access`; prompts `native_source_access`, `dam_object_browse`. If 400 unsupported connector type / servertype, continue with `operation=catalog_access` |
 | OvalEdge catalog permissions (user/role on catalog objects) | `access_explorer` with `operation=catalog_access`; prompt `catalog_object_access` |
 | Lineage | `asset_lineage` (Trace data lineage); prompt `trace_data_lineage` |
 | Column stats / table relationships | `asset_details` (automatic for `oetable`/`oefile`; relationships for `oetable`); prompt `find_related_assets` |

@@ -14,7 +14,11 @@ from server.constants import (
 )
 from server.tools.access.disambiguation import validate_access_intent_confirmed
 from server.tools.access.helpers import (
+    annotate_catalog_fallback,
+    catalog_direction_for_unsupported_dam,
+    catalog_object_type_for_fallback,
     enrich_get_user_object_access_response,
+    is_dam_connector_unsupported,
     validate_get_user_object_access_args,
 )
 from server.tools.common import drop_none, error_payload, map_ovaledge_error, ovaledge_client
@@ -110,7 +114,7 @@ async def _invoke_access_explorer(
             return error_payload("source_system is required for operation=source_system_access.")
         if not query_direction:
             return error_payload("query_direction is required.")
-        return await _invoke_source_system_access(
+        result = await _invoke_source_system_access(
             source_system=source_system,
             query_direction=query_direction,
             object_path=object_path,
@@ -126,4 +130,55 @@ async def _invoke_access_explorer(
             object_id=object_id,
             access_intent_confirmed=access_intent_confirmed,
         )
+        return await _continue_catalog_access_if_dam_unsupported(
+            result,
+            query_direction=query_direction,
+            username=username,
+            object_id=object_id,
+            object_type=object_type,
+            fully_qualified_name=fully_qualified_name,
+            object_name=object_name,
+            object_path=object_path,
+            resolve_all_matches=resolve_all_matches,
+        )
     return error_payload(f"operation must be one of: {MCP_ACCESS_OPERATIONS_DOC}.")
+
+
+async def _continue_catalog_access_if_dam_unsupported(
+    result: dict[str, Any],
+    *,
+    query_direction: str | None,
+    username: str | list[str] | None,
+    object_id: int | None,
+    object_type: str | list[str] | None,
+    fully_qualified_name: str | None,
+    object_name: str | list[str] | None,
+    object_path: str | list[str] | None,
+    resolve_all_matches: bool,
+) -> dict[str, Any]:
+    if not is_dam_connector_unsupported(result):
+        return result
+    catalog_qd = catalog_direction_for_unsupported_dam(query_direction)
+    if catalog_qd is None:
+        return result
+    catalog_type = catalog_object_type_for_fallback(object_type)
+    catalog_name = _first_str(object_name)
+    catalog_fqn = fully_qualified_name or _first_str(object_path)
+    has_id = object_id is not None and object_id > 0 and bool(catalog_type)
+    has_fqn = bool(catalog_fqn and str(catalog_fqn).strip())
+    has_name = bool(catalog_name and str(catalog_name).strip())
+    if not (has_id or has_fqn or has_name):
+        return result
+    fallback = await _invoke_catalog_access(
+        query_direction=catalog_qd,
+        username=_first_str(username),
+        object_id=object_id if has_id else None,
+        object_type=catalog_type if has_id else None,
+        fully_qualified_name=None if has_id else (catalog_fqn if has_fqn else None),
+        object_name=None if has_id or has_fqn else catalog_name,
+        resolve_all_matches=resolve_all_matches,
+        access_intent_confirmed=MCP_ACCESS_INTENT_CATALOG_ACL,
+    )
+    if fallback.get("ok"):
+        return annotate_catalog_fallback(fallback)
+    return result
