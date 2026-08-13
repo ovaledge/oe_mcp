@@ -10,6 +10,8 @@ from server.constants import (
     MCP_OPERATION_CATALOG_ACCESS,
     MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
     MCP_PATH_ACCESS_EXPLORER,
+    MCP_PATH_ASSET_DETAILS,
+    MCP_PATH_ASSET_EXPLORER,
     TOOL_ACCESS_EXPLORER,
 )
 from server.tools import access
@@ -324,4 +326,107 @@ class TestAccessExplorerSourceSystemPath:
                 "objectType": "database",
                 "connectionId": 1000,
             },
+        )
+
+
+class TestAccessExplorerCatalogResolveForSourceSystem:
+    async def test_object_id_uses_asset_explorer_then_source_system_access(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.side_effect = [
+            {
+                "ok": True,
+                "data": {
+                    "items": [
+                        {
+                            "objectId": 42,
+                            "objectType": "oetable",
+                            "objectName": "orders",
+                        }
+                    ]
+                },
+            },
+            {
+                "ok": True,
+                "data": {
+                    "details": {
+                        "objectId": 42,
+                        "objectType": "oetable",
+                        "fullyQualifiedName": "prod_db.public.orders",
+                        "connectionInfoId": 1000,
+                    }
+                },
+            },
+            {"ok": True, "data": {"grants": []}},
+        ]
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation=MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
+            source_system="redshift",
+            query_direction="object_to_users",
+            access_intent_confirmed="native",
+            object_id=42,
+            object_type="oetable",
+        )
+        assert out["ok"] is True
+        paths = [call.args[0] for call in mock_oe_client.get.await_args_list]
+        assert paths[0] == MCP_PATH_ASSET_EXPLORER
+        assert paths[1] == MCP_PATH_ASSET_DETAILS
+        assert paths[2] == MCP_PATH_ACCESS_EXPLORER
+        rdam_params = mock_oe_client.get.await_args_list[2].kwargs["params"]
+        assert rdam_params["operation"] == MCP_OPERATION_SOURCE_SYSTEM_ACCESS
+        assert rdam_params["objectPath"] == "prod_db.public.orders"
+        assert rdam_params["objectType"] == "table"
+        assert rdam_params["connectionId"] == 1000
+
+    async def test_ambiguous_catalog_hits_do_not_call_rdam(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "items": [
+                    {"objectId": 1, "objectType": "oetable", "objectName": "orders"},
+                    {"objectId": 2, "objectType": "oetable", "objectName": "orders"},
+                ]
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation=MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
+            source_system="snowflake",
+            query_direction="object_to_users",
+            access_intent_confirmed="native",
+            object_id=1,
+            object_type="oetable",
+        )
+        assert out["ok"] is True
+        assert out["data"]["ambiguousMatch"] is True
+        assert len(out["data"]["matchCandidates"]) == 2
+        mock_oe_client.get.assert_awaited_once()
+        assert mock_oe_client.get.await_args.args[0] == MCP_PATH_ASSET_EXPLORER
+
+    async def test_explicit_object_path_skips_asset_explorer(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        await fn(
+            operation=MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
+            source_system="redshift",
+            query_direction="user_to_objects",
+            username="svc_analytics",
+            object_path="prod_db.public.orders",
+            object_type="table",
+            connection_id=1000,
+        )
+        assert all(
+            call.args[0] == MCP_PATH_ACCESS_EXPLORER
+            for call in mock_oe_client.get.await_args_list
         )

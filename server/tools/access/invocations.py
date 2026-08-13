@@ -123,6 +123,7 @@ async def _invoke_access_explorer(
             resolve_all_matches=resolve_all_matches,
             scope_mode=scope_mode,
             fully_qualified_name=fully_qualified_name,
+            object_id=object_id,
             access_intent_confirmed=access_intent_confirmed,
         )
     return error_payload(f"operation must be one of: {MCP_ACCESS_OPERATIONS_DOC}.")

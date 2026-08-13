@@ -79,7 +79,7 @@ def register(mcp: FastMCP) -> None:
             Field(description="Resolve all ambiguous name matches (default false)."),
         ] = False,
         source_system: Annotated[
-            Literal["redshift", "snowflake", "tableau"] | None,
+            str | None,
             Field(
                 description="Required for source_system_access: " + MCP_SOURCE_SYSTEMS_DOC + ".",
             ),

@@ -15,6 +15,10 @@ from server.constants import (
 )
 from server.tools.access.disambiguation import validate_access_intent_confirmed
 from server.tools.common import drop_none, map_ovaledge_error, ovaledge_client
+from server.tools.rdam.catalog_resolve import (
+    resolve_rdam_scope_via_asset_explorer,
+    should_resolve_via_asset_explorer,
+)
 from server.tools.rdam.helpers import (
     annotate_multi_connection_advisory,
     enrich_column_grants_fallback,
@@ -46,6 +50,7 @@ async def _invoke_source_system_access(
     resolve_all_matches: bool,
     scope_mode: str = MCP_RDAM_SCOPE_MODE_EXACT,
     fully_qualified_name: str | None = None,
+    object_id: int | None = None,
     access_intent_confirmed: str | None = None,
 ) -> dict[str, Any]:
     intent_err = validate_access_intent_confirmed(
@@ -64,6 +69,7 @@ async def _invoke_source_system_access(
         connection_id,
         object_name=object_name,
         fully_qualified_name=fully_qualified_name,
+        object_id=object_id,
         scope_mode=scope_mode,
     )
     if err is not None:
@@ -71,13 +77,44 @@ async def _invoke_source_system_access(
     source = normalize_string_list(source_system)[0]
     resolved_connection_id = resolve_single_connection_id(connection_id)
     raw_object_type = resolve_single_object_type(object_type)
+    qd = query_direction.strip().lower()
+    composed_path = merge_rdam_object_path(object_path, object_name, fully_qualified_name)
+    if object_id is not None and object_id > 0 and not normalize_string_list(object_path):
+        composed_path = None
+    if should_resolve_via_asset_explorer(
+        qd,
+        object_id,
+        object_type,
+        object_path,
+        object_name,
+        fully_qualified_name,
+    ):
+        try:
+            async with ovaledge_client() as client:
+                resolved = await resolve_rdam_scope_via_asset_explorer(
+                    client,
+                    source_system=source,
+                    object_id=object_id,
+                    object_type=raw_object_type,
+                    object_name=object_name,
+                    fully_qualified_name=fully_qualified_name,
+                    resolve_all_matches=resolve_all_matches,
+                    connection_id=resolved_connection_id,
+                )
+        except OvalEdgeError as e:
+            return map_ovaledge_error(e)
+        if isinstance(resolved, dict):
+            return resolved
+        composed_path, mapped_type, mapped_conn = resolved
+        if mapped_type:
+            raw_object_type = mapped_type
+        if mapped_conn is not None:
+            resolved_connection_id = mapped_conn
     normalized_type: str | None = None
     if raw_object_type is not None:
         normalized_type, type_err = validate_and_normalize_object_type(source, raw_object_type)
         if type_err is not None:
             return type_err
-    qd = query_direction.strip().lower()
-    composed_path = merge_rdam_object_path(object_path, object_name, fully_qualified_name)
     if normalized_type is not None and composed_path is not None:
         path_err = validate_resolved_rdam_paths(
             composed_path,
@@ -102,6 +139,9 @@ async def _invoke_source_system_access(
         wire_object_path = object_paths[0]
     else:
         wire_object_path = object_paths
+    names = normalize_string_list(object_name)
+    wire_object_name = names[0] if names else None
+    wire_fqn = fully_qualified_name.strip() if fully_qualified_name else None
     descendants_scope = scope_mode == MCP_RDAM_SCOPE_MODE_DESCENDANTS
     browse_mode = qd == "browse"
     params: dict[str, object] = drop_none(
@@ -109,6 +149,9 @@ async def _invoke_source_system_access(
         sourceSystem=source.strip().lower(),
         queryDirection=qd,
         username=wire_username,
+        objectId=object_id if object_id is not None and object_id > 0 else None,
+        fullyQualifiedName=wire_fqn,
+        objectName=wire_object_name if wire_object_path is None else None,
         objectPath=wire_object_path,
         objectType=None if normalized_type == MCP_RDAM_OBJECT_TYPE_ALL else normalized_type,
         includeColumns=include_columns if include_columns else None,
