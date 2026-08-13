@@ -11,16 +11,14 @@ import pytest
 from fastmcp import FastMCP
 
 from server.constants import (
-    TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
-    TOOL_CREATE_DQ_RULES,
     TOOL_CREATE_GLOSSARY_TERM,
-    TOOL_CREATE_SQL_DQ_RULE,
     TOOL_CREATE_TAG,
+    TOOL_DQ_RULE_ADVISOR,
+    TOOL_DQ_RULE_MANAGER,
     TOOL_UPDATE_ASSET_DESCRIPTIONS,
     TOOL_UPDATE_CDE_ASSOCIATIONS,
     TOOL_UPDATE_CUSTOM_FIELD_VALUE,
     TOOL_UPDATE_GOVERNANCE_ROLES,
-    TOOL_VALIDATE_DQ_QUERIES,
 )
 from server.tools import catalog, dataquality, governance
 from server.tools.common.confirm_gate import compute_confirmation_token
@@ -108,24 +106,26 @@ STALE_TOKEN_CASES: tuple[StaleTokenCase, ...] = (
         },
     ),
     StaleTokenCase(
-        tool_name=TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
+        tool_name=TOOL_DQ_RULE_MANAGER,
         register=dataquality.register,
         preview_kwargs={
+            "step": "associate",
             "dqrule_id": 42,
             "objects": [{"objectId": 10, "objectType": "oecolumn"}],
         },
         tamper_kwargs={"dqrule_id": 99},
     ),
     StaleTokenCase(
-        tool_name=TOOL_CREATE_DQ_RULES,
+        tool_name=TOOL_DQ_RULE_MANAGER,
         register=dataquality.register,
-        preview_kwargs={"discover_cde_columns": True},
+        preview_kwargs={"step": "create_standard", "discover_cde_columns": True},
         tamper_kwargs={"prefer_existing_rule": False},
     ),
     StaleTokenCase(
-        tool_name=TOOL_VALIDATE_DQ_QUERIES,
+        tool_name=TOOL_DQ_RULE_ADVISOR,
         register=dataquality.register,
         preview_kwargs={
+            "step": "validate_query",
             "connection_id": 1,
             "schema_id": 2,
             "rule_query": "SELECT 1",
@@ -135,9 +135,10 @@ STALE_TOKEN_CASES: tuple[StaleTokenCase, ...] = (
         tamper_kwargs={"rule_query": "SELECT 9"},
     ),
     StaleTokenCase(
-        tool_name=TOOL_CREATE_SQL_DQ_RULE,
+        tool_name=TOOL_DQ_RULE_MANAGER,
         register=dataquality.register,
         preview_kwargs={
+            "step": "create_custom_sql",
             "objects": [{"objectId": 101, "objectType": "oecolumn"}],
             "rule_name": "mcp_rule",
             "rule_query": "SELECT 1",

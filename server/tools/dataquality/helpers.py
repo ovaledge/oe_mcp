@@ -17,11 +17,8 @@ from server.constants import (
     MCP_PATH_GENERATE_DQ_QUERIES,
     MCP_PATH_LOOKUP_DQ_RULES,
     MCP_PATH_VALIDATE_DQ_QUERIES,
-    TOOL_ASSESS_CDE_DQ,
-    TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
-    TOOL_CREATE_DQ_RULES,
-    TOOL_CREATE_SQL_DQ_RULE,
-    TOOL_VALIDATE_DQ_QUERIES,
+    TOOL_DQ_RULE_ADVISOR,
+    TOOL_DQ_RULE_MANAGER,
 )
 from server.tools.common.confirm_gate import attach_confirmation_token
 from server.tools.common.descriptions import classify_tool_desc
@@ -36,86 +33,35 @@ _DQ_CREATE_CONFIRM_INSTRUCTION = (
     "write_confirmed_by_user=true."
 )
 
-_DESC_ASSESS_CDE_DQ = classify_tool_desc(
-    "Assess CDE / DQ-applicable assets: business metadata, ranked DQ function candidates, "
-    "reusable rule, association status.\n\n"
-    f"Backend: POST {MCP_PATH_ASSESS_CDE_DQ}\n\n"
-    "**Not** lookup_dq_rule — that resolves existing DQ rules by name/id.\n\n"
-    "**Not** asset_explorer alone — search finds assets; call this with "
-    "objectId/objectType (or discover_cde_columns) for DQ rows.\n\n"
-    f"**objectType**: {MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC} (aliases normalized).\n\n"
-    "**discover_cde_columns**: when true and objects empty, discovers CDE columns.\n\n"
-    "**objects**: "
-    '[{"objectId": 123, "objectType": "oecolumn"}, ...] from asset_explorer; '
-    "pass only the assets in scope (one column when the user named one). "
-    "Pass a real array (not a stringified JSON string).\n\n"
-    "Rows include function candidates, all same-function rules, workflow, descriptionSource, "
-    "association state, and links.\n\n"
-    "**preferred_function_name** / **excluded_function_names**: pick or reject candidates; "
-    "re-call for next-closest matches.\n\n"
-    "Description routing: default object/catalog description; pass "
-    "description_term_name or description_custom_field_name only when the user names "
-    "a term or field (no automatic glossary/custom-field fallback).\n\n"
-    "**Not** associate_dq_rule_objects or create_dq_rules — writes after user approval.\n\n"
-    "Read-only. Validation when objects empty and discover false; RBAC on catalog reads."
+_DESC_DQ_RULE_ADVISOR = classify_tool_desc(
+    "Read/recommend DQ workflow (no rule create/associate).\n\n"
+    f"step: assess | generate_query | validate_query | lookup\n"
+    f"Backends: POST {MCP_PATH_ASSESS_CDE_DQ}, {MCP_PATH_GENERATE_DQ_QUERIES}, "
+    f"{MCP_PATH_VALIDATE_DQ_QUERIES}; GET {MCP_PATH_LOOKUP_DQ_RULES}\n\n"
+    f"**Not** {TOOL_DQ_RULE_MANAGER} — writes (create/associate) live there.\n\n"
+    "Standard path: assess → manager create_standard. "
+    "Custom SQL: assess → generate_query → validate_query → manager create_custom_sql. "
+    "lookup: resolve existing dqrule by rule_name or object_id (not catalog search).\n\n"
+    f"**objectType**: {MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC}. "
+    "validate_query confirm gate before running SQL. "
+    "Details: docs://ovaledge/mcp_workflows"
 )
 
-_DESC_ASSOCIATE_DQ_RULE_OBJECTS = classify_tool_desc(
-    "Associate catalog objects to an existing data quality rule (idempotent when "
-    "skip_already_associated=true).\n\n"
-    f"Backend: POST {MCP_PATH_ASSOCIATE_DQ_RULE_OBJECTS}\n\n"
-    "Mirrors the UI flow: batch-validates each objectType against the rule function via "
-    "getSupportedDQRuleObjectsForDQFunction (validateDQRuleObjectsForDQFunction), then "
-    "associates only supported objects.\n\n"
-    "**Not** assess_cde_dq — that is read-only assessment; use this after the user "
-    "confirms linking to a specific data quality rule.\n\n"
-    "**Not** create_dq_rules — use that when you need auto-create or prefer-existing "
-    "in one call.\n\n"
-    "**dqrule_id** (required): data quality rule id from assess_cde_dq or lookup_dq_rule.\n\n"
-    "**objects** (required): "
-    '[{"objectId": 123, "objectType": "oecolumn"}, ...]\n\n'
-    f"**objectType**: {MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC} only.\n\n"
-    "Published (ACTIVE) data quality rules are temporarily demoted to draft for association, "
-    "then restored to published when complete. Rules already in draft proceed directly.\n\n"
-    "Response: statusMessage, associatedCount/skippedCount/failedCount, per-row status "
-    "(associated, skipped, failed).\n\n"
-    "**Confirm gate:** preview without write_confirmed_by_user → user approval → "
-    "write_confirmed_by_user=true + confirmation_token from preview.\n\n"
-    "Present formattedResponse to the user. Audit source OE-MCP."
+_DESC_DQ_RULE_MANAGER = classify_tool_desc(
+    "DQ rule write workflow (create/associate only).\n\n"
+    f"step: create_standard | create_custom_sql | associate\n"
+    f"Backends: POST {MCP_PATH_CREATE_DQ_RULES}, {MCP_PATH_CREATE_SQL_DQ_RULE}, "
+    f"{MCP_PATH_ASSOCIATE_DQ_RULE_OBJECTS}\n\n"
+    f"**Not** {TOOL_DQ_RULE_ADVISOR} — assessment/SQL draft/validate/lookup live there.\n\n"
+    "create_standard: function-based create/prefer-existing. "
+    "create_custom_sql: after validated custom SQL. "
+    "associate: dqrule_id or rule_name (name resolved internally) + objects.\n\n"
+    f"**objectType**: {MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC}. "
+    "Confirm gate on every step. Audit OE-MCP. "
+    "Details: docs://ovaledge/mcp_workflows"
 )
 
-_DESC_CREATE_DQ_RULES = classify_tool_desc(
-    "Assess CDE/DQ objects then associate or auto-create data quality rules.\n\n"
-    f"Backend: POST {MCP_PATH_CREATE_DQ_RULES}\n\n"
-    "**Not** assess_cde_dq — read-only only; use create_dq_rules when the user wants "
-    "data quality rules created or associated in one step.\n\n"
-    "**Not** associate_dq_rule_objects — use that when the data quality rule id "
-    "is already known.\n\n"
-    "**Scope:** when the user names one column/asset, pass only that object in "
-    "**objects** (discover_cde_columns=false). Use discover_cde_columns only to list "
-    "all CDE columns — never broaden a single-column request.\n\n"
-    "**discover_cde_columns** / **objects** / **limit** / "
-    "**description_term_name** / **description_custom_field_name**: same as assess_cde_dq.\n\n"
-    "**prefer_existing_rule**: true lists same-function rules for user choice; "
-    "false creates new.\n\n"
-    "**skip_duplicate_function_on_object** (default true): skip duplicate function on object.\n\n"
-    "**supplemental_criteria_text** (optional): prompt criteria when not in metadata.\n\n"
-    "**preferred_function_name** / **excluded_function_names**: same as assess_cde_dq.\n\n"
-    "Criteria priority: metadata or supplemental_criteria_text, then function defaults. "
-    "Missing success/input criteria do not block create.\n\n"
-    "Object validation and row statuses: same as associate_dq_rule_objects.\n\n"
-    "**Confirm:** select_existing_rule requires user choice; new create uses preview, approval, "
-    "write_confirmed_by_user=true, and confirmation_token.\n\n"
-    "Routing: docs://ovaledge/mcp_workflows (CDE / DQ intelligence). Audit source OE-MCP."
-)
-
-_DESC_LOOKUP_DQ_RULE = classify_tool_desc(
-    "Look up Data Quality rules by name or id (not in asset_explorer).\n\n"
-    f"Backend: GET {MCP_PATH_LOOKUP_DQ_RULES}\n\n"
-    "Provide either rule_name (partial match) or object_id, never both.\n\n"
-    "Each hit includes objectId, objectType (dqrule), objectName, steward, redirectUrl. "
-    "Use with update_governance_roles: only steward may be updated on DQ rules."
-)
+# Dissolved tool _DESC_* aliases removed — use _DESC_DQ_RULE_ADVISOR / _DESC_DQ_RULE_MANAGER.
 
 
 def validate_lookup_dq_rule_args(
@@ -234,7 +180,7 @@ def validate_assess_cde_dq_args(
         return err
     if not refs and not discover_cde_columns:
         return error_payload(
-            "Provide objects from asset_explorer, or set discover_cde_columns=true "
+            "Provide objects from search_catalog_assets, or set discover_cde_columns=true "
             "to discover CDE columns.",
         )
     return None
@@ -347,16 +293,18 @@ def format_assess_cde_dq_response(body: dict[str, Any]) -> str:
             if isinstance(workflow, str) and workflow.strip().lower() == "custom_sql":
                 lines.append(
                     "  Custom SQL path: use the returned recommendedFunction verbatim with "
-                    "generate_dq_queries → validate_dq_queries → create_sql_dq_rule. "
-                    "Do not call create_dq_rules for an OEQUERY SQL function. IN/NOT IN or "
+                    f"{TOOL_DQ_RULE_ADVISOR} step=generate_query → validate_query → "
+                    f"{TOOL_DQ_RULE_MANAGER} step=create_custom_sql. "
+                    "Do not use create_standard for an OEQUERY SQL function. IN/NOT IN or "
                     "allowed-value sets use SQL Values Contains, not SQL Exact Value."
                 )
             else:
                 lines.append(
-                    "  Use create_dq_rules with preferred_function_name set to one of these "
+                    f"  Use {TOOL_DQ_RULE_MANAGER} step=create_standard with "
+                    "preferred_function_name set to one of these "
                     "exact catalog names (e.g. Date Validation). Do not invent names like "
-                    "'Date Range Check'. If none fit: re-call assess with "
-                    "excluded_function_names."
+                    f"'Date Range Check'. If none fit: re-call {TOOL_DQ_RULE_ADVISOR} "
+                    "step=assess with excluded_function_names."
                 )
         elif (
             isinstance(rec_fn, str)
@@ -371,7 +319,8 @@ def format_assess_cde_dq_response(body: dict[str, Any]) -> str:
             ):
                 lines.append(
                     f"  Custom SQL path: use recommendedFunction `{rec_fn}` with "
-                    "generate_dq_queries → validate_dq_queries → create_sql_dq_rule "
+                    f"{TOOL_DQ_RULE_ADVISOR} step=generate_query → validate_query → "
+                    f"{TOOL_DQ_RULE_MANAGER} step=create_custom_sql "
                     "(do not invent a different function name)."
                 )
             else:
@@ -583,8 +532,9 @@ def format_create_dq_rules_confirmation_preview(
                 "The following active rules use the recommended function:\n"
                 f"{chr(10).join(selection_lines)}\n\n"
                 "Ask the user to choose a DQ rule ID. For a selected rule, call "
-                "`associate_dq_rule_objects` and use its confirmation flow. If the user "
-                "explicitly wants a new rule instead, re-call `create_dq_rules` with "
+                f"`{TOOL_DQ_RULE_MANAGER}` step=associate and use its confirmation flow. "
+                "If the user explicitly wants a new rule instead, re-call "
+                f"`{TOOL_DQ_RULE_MANAGER}` step=create_standard with "
                 "`prefer_existing_rule=false` to receive a create confirmation preview."
             ),
             "agentInstruction": (
@@ -738,21 +688,6 @@ def _unwrap_api_data(body: Any) -> Any:
     return body
 
 
-_DESC_GENERATE_DQ_QUERIES = classify_tool_desc(
-    "Generate rule/stats/failed-values SQL (custom_sql). "
-    f"POST {MCP_PATH_GENERATE_DQ_QUERIES}. Requires objects; after {TOOL_ASSESS_CDE_DQ}."
-)
-
-_DESC_VALIDATE_DQ_QUERIES = classify_tool_desc(
-    "Validate DQ SQL on connection. "
-    f"POST {MCP_PATH_VALIDATE_DQ_QUERIES}. connection_id, schema_id, three queries; confirm gate."
-)
-
-_DESC_CREATE_SQL_DQ_RULE = classify_tool_desc(
-    "Create custom SQL DQ rule and associate objects. "
-    f"POST {MCP_PATH_CREATE_SQL_DQ_RULE}. rule_name; queries or code_object_id; confirm gate."
-)
-
 _DQ_SQL_VALIDATE_CONFIRM_INSTRUCTION = (
     "Present formattedResponse and wait for explicit user approval before setting "
     "write_confirmed_by_user=true to execute SQL on the connection."
@@ -783,8 +718,8 @@ def _format_sql_context_lines(data: dict[str, Any]) -> list[str]:
     if connection_id is None or schema_id is None:
         return []
     return [
-        f"- **connection_id:** {connection_id} (for {TOOL_VALIDATE_DQ_QUERIES})",
-        f"- **schema_id:** {schema_id} (for {TOOL_VALIDATE_DQ_QUERIES})",
+        f"- **connection_id:** {connection_id} (for {TOOL_DQ_RULE_ADVISOR} step=validate_query)",
+        f"- **schema_id:** {schema_id} (for {TOOL_DQ_RULE_ADVISOR} step=validate_query)",
     ]
 
 
@@ -793,10 +728,10 @@ def _validate_queries_context_hint(data: dict[str, Any]) -> str:
     if connection_id is None or schema_id is None:
         return (
             f"Pass connection_id and schema_id from data.context when calling "
-            f"{TOOL_VALIDATE_DQ_QUERIES}."
+            f"{TOOL_DQ_RULE_ADVISOR} step=validate_query."
         )
     return (
-        f"Call {TOOL_VALIDATE_DQ_QUERIES} with connection_id={connection_id}, "
+        f"Call {TOOL_DQ_RULE_ADVISOR} step=validate_query with connection_id={connection_id}, "
         f"schema_id={schema_id}, and all three queries."
     )
 
@@ -838,14 +773,15 @@ def _agent_instruction_for_code_found(data: dict[str, Any]) -> str:
     if action == _REUSE_ALREADY_ASSOCIATED:
         return (
             "Target is already associated to the matching DQ rule. "
-            f"Do not call {TOOL_VALIDATE_DQ_QUERIES} or {TOOL_CREATE_SQL_DQ_RULE}."
+            f"Do not call {TOOL_DQ_RULE_ADVISOR} step=validate_query or "
+            f"{TOOL_DQ_RULE_MANAGER} step=create_custom_sql."
         )
     if action == _REUSE_ASSOCIATE_EXISTING_DQR:
         rule_hint = f"dqrule_id={dqrule_id}" if dqrule_id else "dqrule_id from data"
         return (
-            f"Call {TOOL_ASSOCIATE_DQ_RULE_OBJECTS} with {rule_hint} and the target "
-            f"object(s), confirm gate required. Do not call {TOOL_VALIDATE_DQ_QUERIES} "
-            f"or {TOOL_CREATE_SQL_DQ_RULE}."
+            f"Call {TOOL_DQ_RULE_MANAGER} step=associate with {rule_hint} and the target "
+            f"object(s), confirm gate required. Do not call {TOOL_DQ_RULE_ADVISOR} "
+            f"step=validate_query or {TOOL_DQ_RULE_MANAGER} step=create_custom_sql."
         )
     if action == _REUSE_CREATE_FROM_CODE:
         code_hint = f"code_object_id={code_id}" if code_id else "code_object_id from data"
@@ -854,12 +790,15 @@ def _agent_instruction_for_code_found(data: dict[str, Any]) -> str:
         if conn is not None and schema is not None:
             ctx = f", connection_id={conn}, schema_id={schema}"
         return (
-            f"Call {TOOL_CREATE_SQL_DQ_RULE} with {code_hint}{ctx} and rule_name; "
-            "confirm gate required. Skip validate unless the user explicitly requests it."
+            f"Call {TOOL_DQ_RULE_MANAGER} step=create_custom_sql with "
+            f"{code_hint}{ctx} and rule_name; confirm gate required. "
+            "Skip validate unless the user explicitly requests it."
         )
     return (
-        f"Review recommendedReuseAction in data. Prefer {TOOL_ASSOCIATE_DQ_RULE_OBJECTS} "
-        f"or {TOOL_CREATE_SQL_DQ_RULE} with code_object_id before generating new SQL."
+        f"Review recommendedReuseAction in data. Prefer "
+        f"{TOOL_DQ_RULE_MANAGER} step=associate or "
+        f"{TOOL_DQ_RULE_MANAGER} step=create_custom_sql with "
+        "code_object_id before generating new SQL."
     )
 
 
@@ -927,14 +866,17 @@ def format_generate_dq_queries_response(body: dict[str, Any]) -> dict[str, Any]:
             ),
             "data": data,
             "agentInstruction": (
-                f"Do not call {TOOL_VALIDATE_DQ_QUERIES} or {TOOL_CREATE_SQL_DQ_RULE}. "
+                f"Do not call {TOOL_DQ_RULE_ADVISOR} step=validate_query or "
+                f"{TOOL_DQ_RULE_MANAGER} step=create_custom_sql. "
                 "Cross-schema dependent rules are not supported for custom SQL."
             ),
         }
     if status == "function_based":
         lines.append(
-            f"This DQ function is not oequery-based. Use {TOOL_CREATE_DQ_RULES} "
-            f"(or {TOOL_ASSESS_CDE_DQ} → {TOOL_ASSOCIATE_DQ_RULE_OBJECTS}) instead."
+            f"This DQ function is not oequery-based. Use "
+            f"{TOOL_DQ_RULE_MANAGER} step=create_standard "
+            f"(or {TOOL_DQ_RULE_ADVISOR} step=assess → "
+            f"{TOOL_DQ_RULE_MANAGER} step=associate) instead."
         )
         return {
             "ok": True,
@@ -942,13 +884,16 @@ def format_generate_dq_queries_response(body: dict[str, Any]) -> dict[str, Any]:
             "formattedResponse": "\n".join(lines),
             "data": data,
             "agentInstruction": (
-                f"Do not call {TOOL_VALIDATE_DQ_QUERIES} or {TOOL_CREATE_SQL_DQ_RULE}. "
-                f"Route to {TOOL_CREATE_DQ_RULES} or {TOOL_ASSOCIATE_DQ_RULE_OBJECTS}."
+                f"Do not call {TOOL_DQ_RULE_ADVISOR} step=validate_query or "
+                f"{TOOL_DQ_RULE_MANAGER} step=create_custom_sql. "
+                f"Route to {TOOL_DQ_RULE_MANAGER} step=create_standard or "
+                "step=associate."
             ),
         }
     if status == "function_not_identified":
         lines.append(
-            f"No DQ function could be resolved. Run {TOOL_ASSESS_CDE_DQ} first or add "
+            f"No DQ function could be resolved. Run "
+            f"{TOOL_DQ_RULE_ADVISOR} step=assess first or add "
             "Function Name to business description."
         )
         return {
@@ -1000,7 +945,7 @@ def format_generate_dq_queries_response(body: dict[str, Any]) -> dict[str, Any]:
         "data": data,
         "agentInstruction": (
             f"{validate_hint} Confirm gate required. After canCreateRule is true, call "
-            f"{TOOL_CREATE_SQL_DQ_RULE} with user approval."
+            f"{TOOL_DQ_RULE_MANAGER} step=create_custom_sql with user approval."
         ),
     }
     connection_id, schema_id = _sql_context_ids(data)
@@ -1096,8 +1041,8 @@ def format_validate_dq_queries_response(body: dict[str, Any]) -> dict[str, Any]:
         "formattedResponse": "\n".join(lines),
         "data": data,
         "agentInstruction": (
-            f"Proceed to {TOOL_CREATE_SQL_DQ_RULE} only when canCreateRule is true "
-            "and the user confirms."
+            f"Proceed to {TOOL_DQ_RULE_MANAGER} step=create_custom_sql only when "
+            "canCreateRule is true and the user confirms."
         ),
     }
 

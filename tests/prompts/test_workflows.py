@@ -12,22 +12,17 @@ from mcp.types import TextContent
 
 from server.constants import (
     TOOL_ACCESS_EXPLORER,
-    TOOL_ASSESS_CDE_DQ,
     TOOL_ASSET_DETAILS,
     TOOL_ASSET_EXPLORER,
     TOOL_ASSET_LINEAGE,
-    TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
-    TOOL_CREATE_DQ_RULES,
     TOOL_CREATE_GLOSSARY_TERM,
-    TOOL_CREATE_SQL_DQ_RULE,
     TOOL_CREATE_TAG,
-    TOOL_GENERATE_DQ_QUERIES,
+    TOOL_DQ_RULE_ADVISOR,
+    TOOL_DQ_RULE_MANAGER,
     TOOL_KNOWLEDGE_SEARCH,
-    TOOL_LOOKUP_DQ_RULE,
     TOOL_METADATA_CHANGES_BETWEEN_CRAWLS,
     TOOL_UPDATE_ASSET_DESCRIPTIONS,
     TOOL_UPDATE_GOVERNANCE_ROLES,
-    TOOL_VALIDATE_DQ_QUERIES,
 )
 from server.mcp_surface import MCP_WORKFLOW_PROMPT_NAMES
 from server.prompts.workflows import register as register_workflow_prompts
@@ -75,7 +70,7 @@ _PROMPT_REQUIRED_TOOLS: dict[str, tuple[str, ...]] = {
         TOOL_ASSET_DETAILS,
     ),
     "explain_tag": (TOOL_ASSET_EXPLORER,),
-    "explain_dq_rule": (TOOL_LOOKUP_DQ_RULE, TOOL_UPDATE_GOVERNANCE_ROLES),
+    "explain_dq_rule": (TOOL_DQ_RULE_ADVISOR, TOOL_UPDATE_GOVERNANCE_ROLES),
     "create_business_glossary_term": (TOOL_CREATE_GLOSSARY_TERM,),
     "create_governance_tag": (TOOL_CREATE_TAG,),
     "document_asset_descriptions": (
@@ -83,29 +78,9 @@ _PROMPT_REQUIRED_TOOLS: dict[str, tuple[str, ...]] = {
         TOOL_ASSET_DETAILS,
         TOOL_UPDATE_ASSET_DESCRIPTIONS,
     ),
-    "assign_governance_roles": (
-        TOOL_LOOKUP_DQ_RULE,
-        TOOL_ASSET_EXPLORER,
-        TOOL_ASSET_DETAILS,
-        TOOL_UPDATE_GOVERNANCE_ROLES,
-    ),
-    "assess_cde_dq_coverage": (
-        TOOL_ASSET_EXPLORER,
-        TOOL_ASSESS_CDE_DQ,
-        TOOL_LOOKUP_DQ_RULE,
-        TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
-        TOOL_CREATE_DQ_RULES,
-    ),
-    "create_custom_sql_dq_workflow": (
-        TOOL_ASSET_EXPLORER,
-        TOOL_ASSESS_CDE_DQ,
-        TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
-        TOOL_CREATE_DQ_RULES,
-        TOOL_GENERATE_DQ_QUERIES,
-        TOOL_VALIDATE_DQ_QUERIES,
-        TOOL_CREATE_SQL_DQ_RULE,
-        TOOL_LOOKUP_DQ_RULE,
-    ),
+    "assign_governance_roles": (TOOL_DQ_RULE_ADVISOR, TOOL_ASSET_EXPLORER, TOOL_ASSET_DETAILS, TOOL_UPDATE_GOVERNANCE_ROLES),
+    "assess_cde_dq_coverage": (TOOL_ASSET_EXPLORER, TOOL_DQ_RULE_ADVISOR, TOOL_DQ_RULE_MANAGER),
+    "create_custom_sql_dq_workflow": (TOOL_ASSET_EXPLORER, TOOL_DQ_RULE_ADVISOR, TOOL_DQ_RULE_MANAGER),
 }
 
 
