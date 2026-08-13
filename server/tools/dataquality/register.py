@@ -24,7 +24,7 @@ from server.constants import (
 )
 from server.tools.common import drop_none as _q
 from server.tools.common import map_ovaledge_error, ovaledge_client, strip_or_none
-from server.tools.common.annotations import GOVERNED_CREATE, READ_ONLY
+from server.tools.common.annotations import GOVERNED_CREATE, GOVERNED_EXECUTE
 from server.tools.common.confirm_gate import (
     CONFIRMATION_TOKEN_PARAM_DESCRIPTION,
     verify_write_confirmation,
@@ -69,7 +69,7 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool(
         title="DQ rule advisor",
         description=_DESC_DQ_RULE_ADVISOR,
-        annotations=READ_ONLY,
+        annotations=GOVERNED_EXECUTE,  # validate_query confirm gate executes SQL
     )
     async def dq_rule_advisor(
         step: Annotated[

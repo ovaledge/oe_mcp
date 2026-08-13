@@ -78,9 +78,22 @@ _PROMPT_REQUIRED_TOOLS: dict[str, tuple[str, ...]] = {
         TOOL_ASSET_DETAILS,
         TOOL_UPDATE_ASSET_DESCRIPTIONS,
     ),
-    "assign_governance_roles": (TOOL_DQ_RULE_ADVISOR, TOOL_ASSET_EXPLORER, TOOL_ASSET_DETAILS, TOOL_UPDATE_GOVERNANCE_ROLES),
-    "assess_cde_dq_coverage": (TOOL_ASSET_EXPLORER, TOOL_DQ_RULE_ADVISOR, TOOL_DQ_RULE_MANAGER),
-    "create_custom_sql_dq_workflow": (TOOL_ASSET_EXPLORER, TOOL_DQ_RULE_ADVISOR, TOOL_DQ_RULE_MANAGER),
+    "assign_governance_roles": (
+        TOOL_DQ_RULE_ADVISOR,
+        TOOL_ASSET_EXPLORER,
+        TOOL_ASSET_DETAILS,
+        TOOL_UPDATE_GOVERNANCE_ROLES,
+    ),
+    "assess_cde_dq_coverage": (
+        TOOL_ASSET_EXPLORER,
+        TOOL_DQ_RULE_ADVISOR,
+        TOOL_DQ_RULE_MANAGER,
+    ),
+    "create_custom_sql_dq_workflow": (
+        TOOL_ASSET_EXPLORER,
+        TOOL_DQ_RULE_ADVISOR,
+        TOOL_DQ_RULE_MANAGER,
+    ),
 }
 
 
