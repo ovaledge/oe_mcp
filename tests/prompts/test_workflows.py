@@ -112,8 +112,10 @@ class TestWorkflowPromptRegistration:
 
         text = prompt.fn("version must be in (2,3,4,5)")[0].content.text
 
-        assert "Copy recommendedFunction verbatim" in text
+        assert "recommendedFunction" in text
         assert "IN/NOT IN set-membership is SQL Values Contains" in text
+        assert "auto-retry" in text.lower() or "ask the user" in text.lower()
+        assert "stop" in text.lower()
 
 
 @pytest.mark.parametrize("prompt_name", WORKFLOW_PROMPT_NAMES)

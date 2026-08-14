@@ -369,6 +369,7 @@ class TestCreateSqlDqRule:
             rule_query="SELECT 1",
             stats_query="SELECT 2",
             failed_values_query="SELECT 3",
+            recommended_function="SQL Exact Value",
         )
         assert out["workflowPhase"] == "confirm_create"
         assert out.get("confirmationToken")
@@ -392,6 +393,7 @@ class TestCreateSqlDqRule:
             failed_values_query="SELECT 3",
             connection_id=5,
             schema_id=6,
+            recommended_function="SQL Exact Value",
         )
         assert out["workflowPhase"] == "create_sql_rule"
         mock_oe_client.post.assert_called_once_with(
@@ -405,6 +407,7 @@ class TestCreateSqlDqRule:
                 "failedValuesQuery": "SELECT 3",
                 "connectionId": 5,
                 "schemaId": 6,
+                "recommendedFunction": "SQL Exact Value",
             },
         )
 
@@ -424,6 +427,7 @@ class TestCreateSqlDqRule:
             code_object_id=555,
             connection_id=5,
             schema_id=6,
+            recommended_function="SQL Exact Value",
         )
         assert out["workflowPhase"] == "create_sql_rule"
         mock_oe_client.post.assert_called_once_with(
@@ -435,6 +439,7 @@ class TestCreateSqlDqRule:
                 "connectionId": 5,
                 "schemaId": 6,
                 "codeObjectId": 555,
+                "recommendedFunction": "SQL Exact Value",
             },
         )
 
@@ -448,6 +453,7 @@ class TestCreateSqlDqRule:
             rule_query="SELECT 1",
             stats_query="SELECT 2",
             failed_values_query="SELECT 3",
+            recommended_function="SQL Exact Value",
         )
         out = await fn(step="create_custom_sql", 
             objects=[{"objectId": 101, "objectType": "oecolumn"}],
@@ -457,6 +463,7 @@ class TestCreateSqlDqRule:
             failed_values_query="SELECT 3",
             write_confirmed_by_user=True,
             confirmation_token=preview["confirmationToken"],
+            recommended_function="SQL Exact Value",
         )
         assert out["status_code"] == 400
         assert out.get("error_code") == "confirmation_token_mismatch"
@@ -472,6 +479,7 @@ class TestCreateSqlDqRule:
             rule_query="SELECT 1",
             stats_query="SELECT 2",
             failed_values_query="SELECT 3",
+            recommended_function="SQL Exact Value",
         )
         assert out["status_code"] == 400
         mock_oe_client.post.assert_not_called()
@@ -488,6 +496,7 @@ class TestCreateSqlDqRule:
             rule_query="SELECT 1",
             stats_query="SELECT 2",
             failed_values_query="SELECT 3",
+            recommended_function="SQL Exact Value",
         )
         assert out["status_code"] == 400
         assert "rule_name" in out["error"]
@@ -502,6 +511,7 @@ class TestCreateSqlDqRule:
         out = await fn(step="create_custom_sql", 
             objects=[{"objectId": 101, "objectType": "oecolumn"}],
             rule_name="mcp_rule",
+            recommended_function="SQL Exact Value",
         )
         assert out["status_code"] == 400
         assert "rule_query or code_object_id" in out["error"]
@@ -518,6 +528,7 @@ class TestCreateSqlDqRule:
             rule_name="mcp_rule",
             rule_query="SELECT 1",
             failed_values_query="SELECT 3",
+            recommended_function="SQL Exact Value",
         )
         assert out["status_code"] == 400
         assert "stats_query" in out["error"]
@@ -533,6 +544,7 @@ class TestCreateSqlDqRule:
             objects=[{"objectId": 101, "objectType": "glossary"}],
             rule_name="mcp_rule",
             code_object_id=555,
+            recommended_function="SQL Exact Value",
         )
         assert out["status_code"] == 400
         mock_oe_client.post.assert_not_called()
@@ -571,6 +583,44 @@ class TestCreateSqlDqRule:
         assert body["purpose"] == "detect nulls"
         assert body["recommendedFunction"] == "Non-Null Validation"
 
+    async def test_create_sql_rejects_missing_recommended_function(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
+        out = await fn(
+            step="create_custom_sql",
+            objects=[{"objectId": 101, "objectType": "oecolumn"}],
+            rule_name="mcp_rule",
+            rule_query="SELECT 1",
+            stats_query="SELECT 2",
+            failed_values_query="SELECT 3",
+        )
+        assert out["status_code"] == 400
+        assert "recommended_function" in out["error"]
+        assert "generate_query" in out["error"]
+        mock_oe_client.post.assert_not_called()
+
+    async def test_create_sql_rejects_placeholder_recommended_function(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
+        out = await fn(
+            step="create_custom_sql",
+            objects=[{"objectId": 101, "objectType": "oecolumn"}],
+            rule_name="mcp_rule",
+            rule_query="SELECT 1",
+            stats_query="SELECT 2",
+            failed_values_query="SELECT 3",
+            recommended_function="CUSTOM_SQL",
+        )
+        assert out["status_code"] == 400
+        assert out.get("error_code") == "validation_invalid"
+        mock_oe_client.post.assert_not_called()
+
     async def test_create_sql_oval_edge_error_returns_structured_dict(
         self, mock_oe_client: AsyncMock
     ) -> None:
@@ -588,6 +638,7 @@ class TestCreateSqlDqRule:
             code_object_id=555,
             connection_id=5,
             schema_id=6,
+            recommended_function="SQL Exact Value",
         )
         assert out["status_code"] == 403
         assert "403" in out["error"]

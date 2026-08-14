@@ -362,9 +362,11 @@ End-to-end routing for function-based and custom-SQL data quality workflows.
 **Function recommendation (assess):**
 
 1. Match business metadata (description / rule / term text) against catalog DQ function **names and definitions** → ranked `recommendedFunctionCandidates` (top also in `recommendedFunction`).
-2. Present candidates to the user. If they reject them, re-call `dq_rule_advisor` step=assess with `excluded_function_names` for the next-closest set.
-3. Only when **no** strong catalog function candidates remain → `recommendedWorkflow=custom_sql` (last resort) with the **best-match OEQUERY SQL function** when available (e.g. **SQL Exact Value** for “equal to X”, **SQL Values Contains** for `IN` / `NOT IN` or allowed-value sets, **SQL Value Range** for ranges) → `dq_rule_advisor` step=generate_query / `dq_rule_manager` step=create_custom_sql using that `recommendedFunction` verbatim.
-4. Weak catalog matches (low score) do **not** block the custom-SQL last resort. Preserve the returned function family through create; do not replace Values Contains or Value Range with Exact Value.
+2. Present candidates to the user using **exact OE catalog names only** (e.g. **Data Length Range**). Never invent labels such as “Max Length Check”, “Length Check”, or similar non-catalog names.
+3. If they reject candidates, re-call `dq_rule_advisor` step=assess with `excluded_function_names` for the next-closest set. Prefer `create_standard` with an exact candidate name when `recommendedFunction` is Not Identified but candidates are present.
+4. Only when **no** recommendedFunction / candidates remain → ask user to confirm custom SQL → `recommendedWorkflow=custom_sql` (last resort) with the **best-match OEQUERY** `recommendedFunction` when available (e.g. **SQL Exact Value** for “equal to X”, **SQL Values Contains** for `IN` / `NOT IN` or allowed-value sets, **SQL Value Range** for ranges) → `dq_rule_advisor` step=generate_query → validate_query → `dq_rule_manager` step=create_custom_sql using that `recommendedFunction` name verbatim (never invent SQL or placeholders like `CUSTOM_SQL`).
+5. Weak matches (low score) do **not** block the custom-SQL last resort. Preserve the returned `recommendedFunction` through create.
+6. **Retry policy:** on error, auto-retry the last successful ladder step **once**. If it still fails, **stop and ask the user** whether to retry again. Retry again only if the user explicitly says yes; if they decline, stop. Never invent SQL or `recommendedFunction` names.
 
 **`prefer_existing_rule` behavior:**
 
@@ -383,7 +385,7 @@ End-to-end routing for function-based and custom-SQL data quality workflows.
 | Associate failed | Could not link to recommended rule |
 | Rule name exists / insert failed | Create collision or server error |
 
-Missing success/input criteria do **not** block create — function defaults are applied when metadata has none.
+Missing success/input criteria do **not** block create — Business Rule, `supplemental_criteria_text`, then function defaults are applied. Create returns `criteriaSource` / `criteriaMessage` instead of `criteria_missing`.
 
 Present skipped/failed rows and `message` to the user; fix prerequisites (CDE, flags) before re-calling.
 

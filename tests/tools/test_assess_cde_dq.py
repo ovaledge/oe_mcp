@@ -207,10 +207,10 @@ class TestAssessCdeDq:
                 ],
             }
         )
-        assert "Function candidates" in text
+        assert "recommendedFunctionCandidates" in text
         assert "Non-Empty and Non-Null Validation" in text
         assert "excluded_function_names" in text
-        assert "Existing rules using this function" in text
+        assert "Existing rules using this function" in text or "existingRulesForFunction" in text
         assert "DESCRIPTION_datalengthrange" in text
         assert "ID 1618" in text
 
@@ -237,7 +237,8 @@ class TestAssessCdeDq:
             }
         )
 
-        assert "Custom SQL path" in text
+        assert "Custom SQL" in text or "generate_query" in text
         assert "Do not use create_standard for an OEQUERY SQL function" in text
         assert "IN/NOT IN or allowed-value sets use SQL Values Contains" in text
         assert "Use dq_rule_manager step=create_standard with preferred_function_name" not in text
+        assert "recommendedFunction" in text

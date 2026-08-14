@@ -33,6 +33,7 @@ from server.tools.common.tool_logging import logged_tool_invocation
 from server.tools.dataquality.helpers import (
     _DESC_DQ_RULE_ADVISOR,
     _DESC_DQ_RULE_MANAGER,
+    _DQ_ASSESS_AGENT_INSTRUCTION,
     build_assess_cde_dq_payload,
     build_associate_dq_rule_objects_payload,
     build_create_dq_rules_payload,
@@ -49,6 +50,7 @@ from server.tools.dataquality.helpers import (
     format_generate_dq_queries_response,
     format_validate_dq_queries_confirmation_preview,
     format_validate_dq_queries_response,
+    map_create_sql_dq_error,
     validate_assess_cde_dq_args,
     validate_associate_dq_rule_objects_args,
     validate_create_dq_rules_args,
@@ -293,7 +295,9 @@ def register(mcp: FastMCP) -> None:
         recommended_function: Annotated[
             str | None,
             Field(
-                description="create_custom_sql: copy recommendedFunction from assess/generate.",
+                description=(
+                    "create_custom_sql: recommendedFunction name from generate_query/assess."
+                ),
                 default=None,
             ),
         ] = None,
@@ -616,6 +620,7 @@ async def _invoke_assess_cde_dq(
             body = await client.post(MCP_PATH_ASSESS_CDE_DQ, payload)
             out = body if isinstance(body, dict) else {"data": body}
             out["formattedResponse"] = format_assess_cde_dq_response(out)
+            out["agentInstruction"] = _DQ_ASSESS_AGENT_INSTRUCTION
             return out
     except OvalEdgeError as e:
         return map_ovaledge_error(e)
@@ -805,7 +810,13 @@ async def _invoke_create_sql_dq_rule(
     confirmation_token: str | None = None,
 ) -> dict[str, Any]:
     err = validate_create_sql_dq_rule_args(
-        objects, rule_name, rule_query, stats_query, failed_values_query, code_object_id
+        objects,
+        rule_name,
+        rule_query,
+        stats_query,
+        failed_values_query,
+        code_object_id,
+        recommended_function,
     )
     if err is not None:
         return err
@@ -838,4 +849,4 @@ async def _invoke_create_sql_dq_rule(
             out = body if isinstance(body, dict) else {"data": body}
             return format_create_sql_dq_rule_response(out)
     except OvalEdgeError as e:
-        return map_ovaledge_error(e)
+        return map_create_sql_dq_error(e)

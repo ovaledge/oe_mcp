@@ -33,15 +33,39 @@ _DQ_CREATE_CONFIRM_INSTRUCTION = (
     "write_confirmed_by_user=true."
 )
 
+_DQ_RETRY_POLICY = (
+    "Retry policy: on error, auto-retry the last successful ladder step once. "
+    "If it still fails, stop and ask the user whether to retry again. "
+    "Retry again only if the user explicitly says yes; if they decline, stop. "
+    "Never invent SQL or recommendedFunction names."
+)
+
+_DQ_OE_FUNCTION_ONLY = (
+    "Only use exact recommendedFunction / recommendedFunctionCandidates names "
+    "returned by the tool (real OvalEdge dqfunctiondef names). "
+    "Never invent labels such as Max Length Check, Length Check, or similar."
+)
+
+_DQ_LADDER = (
+    "Ladder (do not skip): (1) assess → present recommendedFunction / "
+    "recommendedFunctionCandidates and existingRulesForFunction; "
+    "(2) if same-function rules exist → user picks → manager associate; "
+    "(3) else → manager create_standard with preferred_function_name = exact "
+    "recommendedFunction / candidate name; "
+    "(4) only when recommendedFunction is Not Identified AND user confirms "
+    "custom SQL → generate_query → validate_query → create_custom_sql with the "
+    "recommendedFunction name from generate/assess. "
+    f"{_DQ_OE_FUNCTION_ONLY} {_DQ_RETRY_POLICY}"
+)
+
 _DESC_DQ_RULE_ADVISOR = classify_tool_desc(
     "Read/recommend DQ workflow (no rule create/associate).\n\n"
     f"step: assess | generate_query | validate_query | lookup\n"
     f"Backends: POST {MCP_PATH_ASSESS_CDE_DQ}, {MCP_PATH_GENERATE_DQ_QUERIES}, "
     f"{MCP_PATH_VALIDATE_DQ_QUERIES}; GET {MCP_PATH_LOOKUP_DQ_RULES}\n\n"
     f"**Not** {TOOL_DQ_RULE_MANAGER} — writes (create/associate) live there.\n\n"
-    "Standard path: assess → manager create_standard. "
-    "Custom SQL: assess → generate_query → validate_query → manager create_custom_sql. "
-    "lookup: resolve existing dqrule by rule_name or object_id (not catalog search).\n\n"
+    f"{_DQ_LADDER}\n\n"
+    "lookup: resolve existing dqrule by rule_name or object_id (not asset search).\n\n"
     f"**objectType**: {MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC}. "
     "validate_query confirm gate before running SQL. "
     "Details: docs://ovaledge/mcp_workflows"
@@ -53,12 +77,46 @@ _DESC_DQ_RULE_MANAGER = classify_tool_desc(
     f"Backends: POST {MCP_PATH_CREATE_DQ_RULES}, {MCP_PATH_CREATE_SQL_DQ_RULE}, "
     f"{MCP_PATH_ASSOCIATE_DQ_RULE_OBJECTS}\n\n"
     f"**Not** {TOOL_DQ_RULE_ADVISOR} — assessment/SQL draft/validate/lookup live there.\n\n"
-    "create_standard: function-based create/prefer-existing. "
-    "create_custom_sql: after validated custom SQL. "
-    "associate: dqrule_id or rule_name (name resolved internally) + objects.\n\n"
+    f"{_DQ_LADDER}\n\n"
+    "create_custom_sql requires recommended_function = recommendedFunction name from "
+    "generate_query/assess (reject blank/CUSTOM_SQL). "
+    "associate: dqrule_id or rule_name + objects.\n\n"
     f"**objectType**: {MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC}. "
     "Confirm gate on every step. Audit OE-MCP. "
     "Details: docs://ovaledge/mcp_workflows"
+)
+
+_DQ_ASSESS_AGENT_INSTRUCTION = (
+    "Follow the DQ ladder: present recommendedFunction and "
+    "recommendedFunctionCandidates (exact OE names only). "
+    "Prefer associate, then create_standard with an exact candidate name. "
+    "If Not Identified but candidates are present, ask the user to pick one "
+    "candidate — do not invent a function name. "
+    "Only after user confirms custom SQL when no usable catalog candidate remains, "
+    f"call {TOOL_DQ_RULE_ADVISOR} step=generate_query — never hand-write SQL. "
+    f"{_DQ_OE_FUNCTION_ONLY} {_DQ_RETRY_POLICY}"
+)
+
+_DQ_CREATE_SQL_LOOP_BACK = (
+    f"Auto-retry once: call {TOOL_DQ_RULE_ADVISOR} step=generate_query (or step=assess), "
+    "copy the returned recommendedFunction name into recommended_function, then "
+    "validate_query → create_custom_sql. Do not invent function names or SQL. "
+    "If that retry still fails, stop and ask the user whether to retry again; "
+    "retry only if they say yes, otherwise stop."
+)
+
+_INVALID_RECOMMENDED_FUNCTION_PLACEHOLDERS = frozenset(
+    {
+        "custom_sql",
+        "customsql",
+        "not identified",
+        "not_identified",
+        "none",
+        "null",
+        "n/a",
+        "na",
+        "unknown",
+    }
 )
 
 # Dissolved tool _DESC_* aliases removed — use _DESC_DQ_RULE_ADVISOR / _DESC_DQ_RULE_MANAGER.
@@ -266,9 +324,22 @@ def format_assess_cde_dq_response(body: dict[str, Any]) -> str:
         otype = row.get("objectType", "?")
         source = row.get("descriptionSource", "?")
         lines.append(f"- {name} ({otype}, id={oid}): descriptionSource={source}")
+        business_rule = row.get("businessRule")
+        if isinstance(business_rule, str) and business_rule.strip():
+            lines.append(f"  businessRule: {business_rule.strip()}")
         message = row.get("descriptionMessage")
         if isinstance(message, str) and message.strip():
-            lines.append(f"  {message.strip()}")
+            # When Business Rule text is present, the long "add a catalog description"
+            # message misleads agents into inventing custom SQL — keep it short.
+            if isinstance(business_rule, str) and business_rule.strip() and (
+                "No business description is available" in message
+                or "Add a catalog description" in message
+            ):
+                lines.append(
+                    "  No catalog/wiki description; matching uses businessRule text above."
+                )
+            else:
+                lines.append(f"  {message.strip()}")
         elif source == "none":
             fields = row.get("availableCustomFields")
             if isinstance(fields, list) and fields:
@@ -277,10 +348,12 @@ def format_assess_cde_dq_response(body: dict[str, Any]) -> str:
         workflow = row.get("recommendedWorkflow")
         if isinstance(rec_fn, str) and rec_fn.strip():
             wf = f" [{workflow}]" if isinstance(workflow, str) and workflow.strip() else ""
-            lines.append(f"  Recommended function: `{rec_fn}`{wf}")
+            lines.append(f"  recommendedFunction: `{rec_fn}`{wf}")
         candidates = row.get("recommendedFunctionCandidates")
         if isinstance(candidates, list) and candidates:
-            lines.append("  Function candidates (pick one, or exclude to get alternatives):")
+            lines.append(
+                "  recommendedFunctionCandidates (pick one, or exclude to get alternatives):"
+            )
             for cand in candidates[:5]:
                 if not isinstance(cand, dict):
                     continue
@@ -292,19 +365,29 @@ def format_assess_cde_dq_response(body: dict[str, Any]) -> str:
                 lines.append(f"    - `{cname}`{score_bit}{reason_bit}")
             if isinstance(workflow, str) and workflow.strip().lower() == "custom_sql":
                 lines.append(
-                    "  Custom SQL path: use the returned recommendedFunction verbatim with "
+                    "  Next: after user confirms custom SQL, call "
                     f"{TOOL_DQ_RULE_ADVISOR} step=generate_query → validate_query → "
-                    f"{TOOL_DQ_RULE_MANAGER} step=create_custom_sql. "
-                    "Do not use create_standard for an OEQUERY SQL function. IN/NOT IN or "
-                    "allowed-value sets use SQL Values Contains, not SQL Exact Value."
+                    f"{TOOL_DQ_RULE_MANAGER} step=create_custom_sql with recommendedFunction "
+                    "verbatim. Never hand-write SQL. Do not use create_standard for an "
+                    "OEQUERY SQL function. IN/NOT IN or allowed-value sets use "
+                    "SQL Values Contains, not SQL Exact Value."
                 )
             else:
+                not_id = (
+                    isinstance(rec_fn, str)
+                    and rec_fn.strip().lower() == "not identified"
+                )
+                if not_id:
+                    lines.append(
+                        "  recommendedFunction is Not Identified, but candidates above are "
+                        "real OE catalog functions — ask the user to pick one exact name "
+                        "for create_standard. Never invent names (Max Length Check, etc.)."
+                    )
                 lines.append(
-                    f"  Use {TOOL_DQ_RULE_MANAGER} step=create_standard with "
-                    "preferred_function_name set to one of these "
-                    "exact catalog names (e.g. Date Validation). Do not invent names like "
-                    f"'Date Range Check'. If none fit: re-call {TOOL_DQ_RULE_ADVISOR} "
-                    "step=assess with excluded_function_names."
+                    f"  Next: {TOOL_DQ_RULE_MANAGER} step=create_standard with "
+                    "preferred_function_name = one exact candidate / recommendedFunction "
+                    "name from the list above. If none fit: re-call "
+                    f"{TOOL_DQ_RULE_ADVISOR} step=assess with excluded_function_names."
                 )
         elif (
             isinstance(rec_fn, str)
@@ -318,23 +401,42 @@ def format_assess_cde_dq_response(body: dict[str, Any]) -> str:
                 and rec_fn.strip().lower() != "not identified"
             ):
                 lines.append(
-                    f"  Custom SQL path: use recommendedFunction `{rec_fn}` with "
+                    f"  Next (custom SQL): use recommendedFunction `{rec_fn}` with "
                     f"{TOOL_DQ_RULE_ADVISOR} step=generate_query → validate_query → "
-                    f"{TOOL_DQ_RULE_MANAGER} step=create_custom_sql "
-                    "(do not invent a different function name)."
+                    f"{TOOL_DQ_RULE_MANAGER} step=create_custom_sql. "
+                    "Never invent a different function name or hand-write SQL."
+                )
+            elif isinstance(business_rule, str) and business_rule.strip():
+                lines.append(
+                    "  No auto-picked recommendedFunction. "
+                    "If recommendedFunctionCandidates are listed above, ask the user to "
+                    "pick one exact OE name for create_standard — never invent names "
+                    "(e.g. Max Length Check). "
+                    "Only if the user rejects all candidates and confirms custom SQL, "
+                    f"call {TOOL_DQ_RULE_ADVISOR} step=generate_query."
                 )
             else:
                 lines.append(
-                    "  No catalog function candidate was returned. Confirm with the user before "
-                    "custom SQL; do not invent a built-in function name."
+                    "  No recommendedFunction returned. Ask the user to confirm custom SQL "
+                    f"before calling {TOOL_DQ_RULE_ADVISOR} step=generate_query; "
+                    "never invent a function name or hand-write SQL."
                 )
         existing_rules = row.get("existingRulesForFunction")
         if isinstance(existing_rules, list) and existing_rules:
-            lines.append("  Existing rules using this function (user must choose):")
+            lines.append(
+                "  existingRulesForFunction (user must choose → associate before create):"
+            )
             for rule in existing_rules:
                 if not isinstance(rule, dict):
                     continue
                 lines.append(f"    {_format_existing_rule_choice(rule)}")
+    lines.append("")
+    lines.append(
+        "Ladder reminder: associate existing same-function rules first; else "
+        "create_standard; custom SQL only after user confirmation when no "
+        "recommendedFunction remains — then generate → validate → create. "
+        f"{_DQ_RETRY_POLICY}"
+    )
     return "\n".join(lines)
 
 
@@ -852,7 +954,7 @@ def format_generate_dq_queries_response(body: dict[str, Any]) -> dict[str, Any]:
         "",
     ]
     if data.get("recommendedFunction"):
-        lines.append(f"- Recommended function: `{data.get('recommendedFunction')}`")
+        lines.append(f"- recommendedFunction: `{data.get('recommendedFunction')}`")
     if data.get("recommendedWorkflow"):
         lines.append(f"- Workflow: `{data.get('recommendedWorkflow')}`")
     if status == "cross_schema_blocked":
@@ -938,14 +1040,25 @@ def format_generate_dq_queries_response(body: dict[str, Any]) -> dict[str, Any]:
     elif data.get("matchingCodeObjects"):
         lines.append("Matching code objects found — prefer reuse before create.")
     validate_hint = _validate_queries_context_hint(data)
+    rec_fn = data.get("recommendedFunction")
+    rf_bit = (
+        f" Copy recommendedFunction `{rec_fn}` into create_custom_sql "
+        "recommended_function."
+        if isinstance(rec_fn, str) and rec_fn.strip()
+        else " Copy recommendedFunction from this response into create_custom_sql "
+        "recommended_function."
+    )
     out = {
         "ok": True,
         "workflowPhase": "generate_queries",
         "formattedResponse": "\n".join(lines),
         "data": data,
         "agentInstruction": (
-            f"{validate_hint} Confirm gate required. After canCreateRule is true, call "
-            f"{TOOL_DQ_RULE_MANAGER} step=create_custom_sql with user approval."
+            f"{validate_hint} Confirm gate required.{rf_bit} "
+            "Never hand-write SQL or invent function names. "
+            f"{_DQ_RETRY_POLICY} "
+            f"After canCreateRule is true, call {TOOL_DQ_RULE_MANAGER} "
+            "step=create_custom_sql with user approval."
         ),
     }
     connection_id, schema_id = _sql_context_ids(data)
@@ -1042,7 +1155,9 @@ def format_validate_dq_queries_response(body: dict[str, Any]) -> dict[str, Any]:
         "data": data,
         "agentInstruction": (
             f"Proceed to {TOOL_DQ_RULE_MANAGER} step=create_custom_sql only when "
-            "canCreateRule is true and the user confirms."
+            "canCreateRule is true and the user confirms. Pass recommended_function = "
+            "recommendedFunction from generate_query/assess. "
+            f"{_DQ_RETRY_POLICY}"
         ),
     }
 
@@ -1054,6 +1169,7 @@ def validate_create_sql_dq_rule_args(
     stats_query: str | None,
     failed_values_query: str | None,
     code_object_id: int | None,
+    recommended_function: str | None = None,
 ) -> dict[str, Any] | None:
     refs, err = _normalize_dq_api_objects(objects)
     if err is not None:
@@ -1075,7 +1191,48 @@ def validate_create_sql_dq_rule_args(
             return error_payload(
                 "failed_values_query is required when rule_query is provided."
             )
+    rf_err = _validate_recommended_function_for_create_sql(recommended_function)
+    if rf_err is not None:
+        return rf_err
     return None
+
+
+def _validate_recommended_function_for_create_sql(
+    recommended_function: str | None,
+) -> dict[str, Any] | None:
+    """create_custom_sql must pass recommendedFunction name from generate/assess."""
+    rf = strip_or_none_description_field(recommended_function)
+    if not rf:
+        return error_payload(
+            "recommended_function is required for create_custom_sql. "
+            + _DQ_CREATE_SQL_LOOP_BACK,
+            error_code="validation_required",
+        )
+    if rf.strip().lower() in _INVALID_RECOMMENDED_FUNCTION_PLACEHOLDERS:
+        return error_payload(
+            "recommended_function must be a real recommendedFunction name from "
+            "generate_query/assess (not a placeholder). "
+            + _DQ_CREATE_SQL_LOOP_BACK,
+            error_code="validation_invalid",
+        )
+    return None
+
+
+def map_create_sql_dq_error(exc: Exception) -> dict[str, Any]:
+    """Map OvalEdge create-sql errors; loop agent back when recommendedFunction missing."""
+    from server.client import OvalEdgeError
+    from server.tools.common.errors import map_ovaledge_error
+
+    if isinstance(exc, OvalEdgeError):
+        out = map_ovaledge_error(exc)
+    else:
+        out = error_payload(str(exc), status_code=500)
+    msg = str(exc).lower()
+    if "recommended dq function" in msg or "recommendedfunction" in msg.replace(" ", ""):
+        out["agentInstruction"] = _DQ_CREATE_SQL_LOOP_BACK
+        detail = out.get("error") or str(exc)
+        out["error"] = f"{detail} {_DQ_CREATE_SQL_LOOP_BACK}"
+    return out
 
 
 def build_create_sql_dq_rule_payload(
@@ -1147,13 +1304,17 @@ def format_create_sql_dq_rule_confirmation_preview(
         "formattedResponse": (
             "**Confirm custom SQL DQ rule create**\n\n"
             f"- **rule_name:** {payload.get('ruleName')}\n"
+            f"- **recommendedFunction:** {payload.get('recommendedFunction')}\n"
             f"**Objects:**\n{objects_block}\n\n"
             "Creates custom SQL data quality rule with rule/stats/failed-values code objects. "
             "Ask the user to confirm. After they approve, call again with "
             "`write_confirmed_by_user=true`, `confirmation_token` from this preview, "
-            "and the same parameters."
+            "and the same parameters (including recommended_function)."
         ),
-        "agentInstruction": _DQ_SQL_CREATE_CONFIRM_INSTRUCTION,
+        "agentInstruction": (
+            f"{_DQ_SQL_CREATE_CONFIRM_INSTRUCTION} Keep recommended_function = "
+            f"recommendedFunction from generate/assess. {_DQ_RETRY_POLICY}"
+        ),
         "pendingCreate": payload,
     }
     return attach_confirmation_token(preview, payload)

@@ -144,6 +144,7 @@ STALE_TOKEN_CASES: tuple[StaleTokenCase, ...] = (
             "rule_query": "SELECT 1",
             "stats_query": "SELECT 2",
             "failed_values_query": "SELECT 3",
+            "recommended_function": "SQL Exact Value",
         },
         tamper_kwargs={"rule_name": "tampered"},
     ),
