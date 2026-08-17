@@ -7,7 +7,7 @@ from server.constants import (
     MCP_DQ_ASSESS_LIMIT_DEFAULT,
     MCP_PATH_ASSESS_CDE_DQ,
     MCP_PATH_CREATE_DQ_RULES,
-    TOOL_CREATE_DQ_RULES,
+    TOOL_DQ_RULE_MANAGER,
 )
 from server.tools import dataquality
 from server.tools.dataquality import helpers as dataquality_helpers
@@ -18,19 +18,19 @@ from tests.tools.confirm_test_helpers import invoke_write_confirmed
 
 class TestCreateDqRules:
     def test_description_scoped_objects_guidance(self) -> None:
-        desc = dataquality_helpers._DESC_CREATE_DQ_RULES
-        assert "Scope:" in desc
-        assert "discover_cde_columns=false" in desc
-        assert "never broaden a single-column request" in desc
+        desc = dataquality_helpers._DESC_DQ_RULE_MANAGER
+        assert "create_standard" in desc
+        assert "dq_rule_advisor" in desc
         assert MCP_PATH_CREATE_DQ_RULES in desc
 
     async def test_stringified_objects_json_accepted(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.post.return_value = {"rows": []}
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
         out = await invoke_write_confirmed(
             fn,
+            step="create_standard",
             objects='[{"objectId": 42, "objectType": "oecolumn"}]',
         )
         assess_payload = {
@@ -55,9 +55,10 @@ class TestCreateDqRules:
         mock_oe_client.post.return_value = {"rows": []}
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
         out = await invoke_write_confirmed(
             fn,
+            step="create_standard",
             objects={"objectId": 42, "objectType": "column"},
         )
         assess_payload = {
@@ -81,8 +82,8 @@ class TestCreateDqRules:
     async def test_preview_before_post(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
-        preview = await fn(discover_cde_columns=True)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
+        preview = await fn(step="create_standard", discover_cde_columns=True)
         assert preview["workflowPhase"] == "confirm_create"
         assert preview["doNotCreate"] is True
         assert preview.get("confirmationToken")
@@ -125,9 +126,12 @@ class TestCreateDqRules:
         }
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
 
-        preview = await fn(objects={"objectId": 42, "objectType": "oecolumn"})
+        preview = await fn(
+            step="create_standard",
+            objects={"objectId": 42, "objectType": "oecolumn"},
+        )
 
         assert preview["workflowPhase"] == "select_existing_rule"
         assert preview["requiresRuleSelection"] is True
@@ -143,9 +147,10 @@ class TestCreateDqRules:
         mock_oe_client.post.return_value = {"rows": []}
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
         out = await invoke_write_confirmed(
             fn,
+            step="create_standard",
             discover_cde_columns=True,
             prefer_existing_rule=False,
             skip_duplicate_function_on_object=False,
@@ -165,9 +170,10 @@ class TestCreateDqRules:
         mock_oe_client.post.return_value = {"rows": []}
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
         out = await invoke_write_confirmed(
             fn,
+            step="create_standard",
             objects=[{"objectId": 99, "objectType": "oetable"}],
             limit=10,
         )
@@ -193,9 +199,10 @@ class TestCreateDqRules:
         mock_oe_client.post.return_value = {"rows": []}
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
         await invoke_write_confirmed(
             fn,
+            step="create_standard",
             objects=[{"objectId": 42, "objectType": "oecolumn"}],
             supplemental_criteria_text="Success criteria: equal to 300",
         )
@@ -221,9 +228,10 @@ class TestCreateDqRules:
         mock_oe_client.post.return_value = {"rows": []}
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
         await invoke_write_confirmed(
             fn,
+            step="create_standard",
             discover_cde_columns=True,
             description_term_name=" Net Revenue ",
         )
@@ -247,8 +255,8 @@ class TestCreateDqRules:
     async def test_rejects_empty_without_discover(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
-        out = await fn()
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
+        out = await fn(step="create_standard")
         assert out["status_code"] == 400
         mock_oe_client.post.assert_not_called()
 
@@ -259,15 +267,17 @@ class TestCreateDqRules:
         ]
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
-        out = await invoke_write_confirmed(fn, discover_cde_columns=True)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
+        out = await invoke_write_confirmed(
+            fn,
+            step="create_standard", discover_cde_columns=True)
         assert out["status_code"] == 502
 
     async def test_rejects_invalid_object_type(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
-        out = await fn(objects=[{"objectId": 1, "objectType": "dqrule"}])
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
+        out = await fn(step="create_standard", objects=[{"objectId": 1, "objectType": "dqrule"}])
         assert out["status_code"] == 400
         mock_oe_client.post.assert_not_called()
 
@@ -277,9 +287,10 @@ class TestCreateDqRules:
         mock_oe_client.post.return_value = {"rows": []}
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
         await invoke_write_confirmed(
             fn,
+            step="create_standard",
             discover_cde_columns=True,
             description_custom_field_name=" Business Definition ",
         )
@@ -292,8 +303,10 @@ class TestCreateDqRules:
         mock_oe_client.post.return_value = {"rows": []}
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_CREATE_DQ_RULES)
-        await invoke_write_confirmed(fn, discover_cde_columns=True, limit=999)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
+        await invoke_write_confirmed(
+            fn,
+            step="create_standard", discover_cde_columns=True, limit=999)
         body = mock_oe_client.post.call_args[0][1]
         assert body["limit"] == MCP_DQ_ASSESS_LIMIT_MAX
 

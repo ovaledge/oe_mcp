@@ -46,11 +46,8 @@ Optional OpenTelemetry trace export to [Phoenix](https://arize.com/docs/phoenix)
 - **Knowledge search** for organizational stories and product documentation (`knowledge_search`)
 - Native source-system grant previews (`access_explorer` operation=source_system_access) — Redshift / Snowflake / Tableau, not catalog permissions
 - OvalEdge catalog permissions (`access_explorer` operation=catalog_access) — user/role grants on catalog objects, not native RDAM
-- DQ rule lookup (`lookup_dq_rule`)
-- CDE / column DQ assessment — read-only (`assess_cde_dq`)
-- Associate objects to data quality rules (`associate_dq_rule_objects`)
-- Auto-create or associate data quality rules for CDE columns (`create_dq_rules`)
-- Custom SQL DQ: `generate_dq_queries`, `validate_dq_queries`, `create_sql_dq_rule` (workflow prompt: `create_custom_sql_dq_workflow`)
+- DQ rule advisor/manager (`dq_rule_advisor`, `dq_rule_manager`)
+- Assess/generate/validate/lookup via `dq_rule_advisor`; create/associate via `dq_rule_manager` (prompts: `assess_cde_dq_coverage`, `create_custom_sql_dq_workflow`)
 - Asset description, CDE, governance role, and custom field updates (`update_asset_descriptions`, `update_cde_associations`, `update_governance_roles`, `update_custom_field_value`)
 - Resource URIs (`ovaledge://catalog/...`, `ovaledge://governance/...`) and static guides (`docs://ovaledge/...`)
 - Twenty-one workflow prompts under `server/prompts/workflows/` (see below; canonical list in `server/mcp_surface.py`)
@@ -68,13 +65,13 @@ These rules apply to every MCP session (also exposed to clients as server **inst
 | **Native DB/BI access** | Use **`access_explorer`** with **`operation=source_system_access`** only (RDAM SQL). Never fall back to **`asset_explorer`** when RDAM is empty or errors. |
 | **Catalog permissions** | Use **`access_explorer`** with **`operation=catalog_access`** for OvalEdge user/role grants on catalog objects — not source_system_access. |
 | **Deep links** | Use **`ovaledge://...` resources** when you already have object ids; prefer lookup tools for rich formatted output. |
-| **Governed writes** | **`create_glossary_term`**, **`create_tag`**, **`update_asset_descriptions`**, **`update_governance_roles`**, **`update_cde_associations`**, **`update_custom_field_value`**, **`associate_dq_rule_objects`**, **`create_dq_rules`**, **`validate_dq_queries`**, **`create_sql_dq_rule`**: show **`confirm_create`** / **`confirm_update`** preview, then POST only with **`write_confirmed_by_user=true`** (`dry_run` skips confirm on updates). |
+| **Governed writes** | **`create_glossary_term`**, **`create_tag`**, **`update_asset_descriptions`**, **`update_governance_roles`**, **`update_cde_associations`**, **`update_custom_field_value`**, **`dq_rule_manager`**, **`dq_rule_advisor`** (validate_query): show **`confirm_create`** / **`confirm_update`** preview, then POST only with **`write_confirmed_by_user=true`** (`dry_run` skips confirm on updates). |
 | **Glossary placement** | Domain → category (when categories exist) → subcategory; never invent **`description`**; pass **`domain_name`** on first call when the user names a domain in natural language. |
 | **Workflows** | Optional MCP **prompts** (discovery, lineage, stories, tags, drift, native access, creates, DQ, roles) — see [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md). |
 
 ## Tools, resources, and prompts
 
-### Tools (`server/tools/`) — 19 tools
+### Tools (`server/tools/`) — 14 tools
 
 Canonical inventory: `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 
@@ -94,7 +91,7 @@ Canonical inventory: `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 
 **Data quality**
 
-- `lookup_dq_rule`, `assess_cde_dq`, `associate_dq_rule_objects`, `create_dq_rules`, `generate_dq_queries`, `validate_dq_queries`, `create_sql_dq_rule`
+- `dq_rule_advisor`, `dq_rule_manager`
 
 **Platform docs**
 
@@ -106,7 +103,7 @@ Canonical inventory: `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 
 **`update_asset_descriptions` / `update_governance_roles` / `update_cde_associations` / `update_custom_field_value`:** Same confirm gate (`confirm_update`, `write_confirmed_by_user=true`) before POST; `dry_run=true` validates without confirm.
 
-**DQ governed writes (`associate_dq_rule_objects`, `create_dq_rules`, `validate_dq_queries`, `create_sql_dq_rule`):** Same confirm gate before POST. `generate_dq_queries` is read-only (no confirm). Workflow prompts: `assess_cde_dq_coverage`, `create_custom_sql_dq_workflow`.
+**DQ governed writes (`dq_rule_manager`, `dq_rule_advisor` validate_query):** Same confirm gate before POST. `dq_rule_advisor` generate_query is read-only (no confirm). Workflow prompts: `assess_cde_dq_coverage`, `create_custom_sql_dq_workflow`.
 
 **Knowledge:** Use `knowledge_search` for organizational knowledge and OvalEdge product documentation; it searches both corpora. See [server/docs/governance.md](server/docs/governance.md).
 
@@ -131,7 +128,7 @@ Knowledge: `explain_business_term`, `organizational_knowledge`, `explain_tag`, `
 Lineage & quality: `trust_assessment`, `trace_data_lineage`, `metadata_drift`, `assess_cde_dq_coverage`.  
 Access: `resolve_object_access`, `native_source_access`, `catalog_object_access`, `dam_object_browse`.  
 Writes (human-in-the-loop): `create_business_glossary_term`, `create_governance_tag`, `document_asset_descriptions`, `assign_governance_roles`.  
-DQ writes (user-approved after `assess_cde_dq`): use `associate_dq_rule_objects`, `create_dq_rules` tools directly.
+DQ writes (user-approved after `dq_rule_advisor` step=assess): use `dq_rule_manager` (create_standard / associate) directly.
 
 ## Development
 

@@ -7,22 +7,17 @@ from server.constants import (
     MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC,
     MCP_SOURCE_SYSTEMS_DOC,
     TOOL_ACCESS_EXPLORER,
-    TOOL_ASSESS_CDE_DQ,
     TOOL_ASSET_DETAILS,
     TOOL_ASSET_EXPLORER,
     TOOL_ASSET_LINEAGE,
-    TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
-    TOOL_CREATE_DQ_RULES,
     TOOL_CREATE_GLOSSARY_TERM,
-    TOOL_CREATE_SQL_DQ_RULE,
     TOOL_CREATE_TAG,
-    TOOL_GENERATE_DQ_QUERIES,
+    TOOL_DQ_RULE_ADVISOR,
+    TOOL_DQ_RULE_MANAGER,
     TOOL_KNOWLEDGE_SEARCH,
-    TOOL_LOOKUP_DQ_RULE,
     TOOL_METADATA_CHANGES_BETWEEN_CRAWLS,
     TOOL_UPDATE_ASSET_DESCRIPTIONS,
     TOOL_UPDATE_GOVERNANCE_ROLES,
-    TOOL_VALIDATE_DQ_QUERIES,
 )
 
 
@@ -463,10 +458,10 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Explain the DQ rule '{rule_name}'.\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_LOOKUP_DQ_RULE}(rule_name='{rule_name}')\n"
+            f"1. Call {TOOL_DQ_RULE_ADVISOR}(step=lookup, rule_name='{rule_name}')\n"
             f"2. Present rule purpose, object binding, steward, and redirectUrl from hits\n"
             f"3. Note that DQ rules are not in {TOOL_ASSET_EXPLORER}; always use "
-            f"{TOOL_LOOKUP_DQ_RULE} first\n"
+            f"{TOOL_DQ_RULE_ADVISOR} step=lookup first\n"
             f"4. If the user wants to change steward only, mention {TOOL_UPDATE_GOVERNANCE_ROLES} "
             f"with object_type=dqrule (steward role only)"
         )
@@ -560,7 +555,8 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Update governance roles for '{asset_name}': {role_changes}\n\n"
             f"Steps:\n"
-            f"1. If the target sounds like a DQ rule, call {TOOL_LOOKUP_DQ_RULE} first; "
+            f"1. If the target sounds like a DQ rule, call "
+            f"{TOOL_DQ_RULE_ADVISOR} step=lookup first; "
             f"otherwise {TOOL_ASSET_EXPLORER} then {TOOL_ASSET_DETAILS}\n"
             f"2. Confirm object_id, object_type, and role_changes with the user (owner, steward, "
             f"custodian, governance_role_4–6; null removes)\n"
@@ -612,20 +608,24 @@ def register(mcp: FastMCP) -> None:
             f"when narrowing)\n"
             f"2. Build objects from hits (objectId + objectType). When the user named one "
             f"column/asset, pass only that object — do not discover-all. Call "
-            f"{TOOL_ASSESS_CDE_DQ}(discover_cde_columns=true) only when listing all CDE columns\n"
-            f"3. Call {TOOL_ASSESS_CDE_DQ} with those objects — read-only; present "
+            f"{TOOL_DQ_RULE_ADVISOR}(step=assess, discover_cde_columns=true) only when "
+            f"listing all CDE columns\n"
+            f"3. Call {TOOL_DQ_RULE_ADVISOR} step=assess with those objects — read-only; present "
             f"recommendedFunction, recommendedFunctionCandidates, existingRulesForFunction, "
             f"associatedToDqRule, and redirect URLs. Show every same-function rule and let the "
             f"user choose a dqruleId; purpose similarity is display order only\n"
-            f"3b. If the user rejects candidates, re-call {TOOL_ASSESS_CDE_DQ} with "
-            f"excluded_function_names; use preferred_function_name when they pick one. "
-            f"Only when no catalog candidates remain, use custom_sql "
-            f"({TOOL_GENERATE_DQ_QUERIES})\n"
-            f"4. Use {TOOL_LOOKUP_DQ_RULE} when the user names an existing rule; do not use "
-            f"{TOOL_ASSET_EXPLORER} for dqrule objects\n"
-            f"5. Only after explicit user approval for writes: {TOOL_ASSOCIATE_DQ_RULE_OBJECTS} "
-            f"for a known data quality rule id, or {TOOL_CREATE_DQ_RULES} "
-            f"with the same scoped objects (never broaden a single-column request)"
+            f"3b. If same-function rules exist → after user picks, "
+            f"{TOOL_DQ_RULE_MANAGER} step=associate. Else "
+            f"{TOOL_DQ_RULE_MANAGER} step=create_standard. If the user rejects candidates, "
+            f"re-call {TOOL_DQ_RULE_ADVISOR} step=assess with excluded_function_names; "
+            f"use preferred_function_name when they pick one. Only when no "
+            f"recommendedFunction remains and the user confirms custom SQL → "
+            f"{TOOL_DQ_RULE_ADVISOR} step=generate_query (never hand-write SQL)\n"
+            f"4. Use {TOOL_DQ_RULE_ADVISOR} step=lookup when the user names an existing rule; "
+            f"do not use {TOOL_ASSET_EXPLORER} for dqrule objects\n"
+            f"5. On any error: auto-retry the last successful ladder step once; if it "
+            f"still fails, ask the user whether to retry again (retry only if they say "
+            f"yes, otherwise stop). Do not invent recommendedFunction names or SQL"
         )
         return [Message(text)]
 
@@ -642,23 +642,30 @@ def register(mcp: FastMCP) -> None:
             f"Steps:\n"
             f"1. If column ids are unknown, call {TOOL_ASSET_EXPLORER} with "
             f"criticalDataElement filter or search_terms for CDE columns\n"
-            f"2. Call {TOOL_ASSESS_CDE_DQ} with explicit objects for the named assets "
+            f"2. Call {TOOL_DQ_RULE_ADVISOR} step=assess with explicit objects for the "
+            f"named assets "
             f"(discover_cde_columns=true only when listing all CDE columns)\n"
             f"3. Present every existingRulesForFunction entry; never hide a same-function rule "
             f"because its purpose differs\n"
             f"4. Ask the user to choose a dqruleId. Then confirm and call "
-            f"{TOOL_ASSOCIATE_DQ_RULE_OBJECTS}. If they explicitly want new, call "
-            f"{TOOL_CREATE_DQ_RULES}(prefer_existing_rule=false) with confirm gate\n"
+            f"{TOOL_DQ_RULE_MANAGER} step=associate. If they explicitly want new, call "
+            f"{TOOL_DQ_RULE_MANAGER}(step=create_standard, prefer_existing_rule=false) "
+            f"with confirm gate\n"
             f"5. After create, surface criteriaSource and criteriaMessage; "
             f"business_metadata_with_defaults or function_default means defaults were applied\n"
-            f"6. For custom_sql workflow: {TOOL_GENERATE_DQ_QUERIES} → use "
+            f"6. For custom_sql workflow (only after user confirmation when no "
+            f"recommendedFunction remains): {TOOL_DQ_RULE_ADVISOR} step=generate_query → use "
             f"connection_id/schema_id from formattedResponse or data.context → "
-            f"{TOOL_VALIDATE_DQ_QUERIES} (confirm gate) → {TOOL_CREATE_SQL_DQ_RULE} "
-            f"(confirm gate) after canCreateRule is true. Copy recommendedFunction verbatim "
-            f"from assess/generate into recommended_function; IN/NOT IN set-membership is "
+            f"{TOOL_DQ_RULE_ADVISOR} step=validate_query (confirm gate) → "
+            f"{TOOL_DQ_RULE_MANAGER} step=create_custom_sql "
+            f"(confirm gate) after canCreateRule is true. Pass recommended_function = "
+            f"recommendedFunction from generate/assess verbatim; never invent names or "
+            f"hand-write SQL. IN/NOT IN set-membership is "
             f"SQL Values Contains, not SQL Exact Value. On code_found follow "
-            f"recommendedReuseAction ({TOOL_ASSOCIATE_DQ_RULE_OBJECTS} or "
-            f"{TOOL_CREATE_SQL_DQ_RULE} with code_object_id)\n"
-            f"7. Ad-hoc rule lookup: {TOOL_LOOKUP_DQ_RULE} (not catalog search)"
+            f"recommendedReuseAction ({TOOL_DQ_RULE_MANAGER} step=associate or "
+            f"{TOOL_DQ_RULE_MANAGER} step=create_custom_sql with code_object_id)\n"
+            f"7. On any error: auto-retry the last successful step once; if still "
+            f"failing, ask the user whether to retry again (yes → retry; no → stop)\n"
+            f"8. Ad-hoc rule lookup: {TOOL_DQ_RULE_ADVISOR} step=lookup (not asset search)"
         )
         return [Message(text)]

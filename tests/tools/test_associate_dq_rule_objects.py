@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 from fastmcp import FastMCP
 
 from server.client import OvalEdgeError
-from server.constants import MCP_PATH_ASSOCIATE_DQ_RULE_OBJECTS, TOOL_ASSOCIATE_DQ_RULE_OBJECTS
+from server.constants import MCP_PATH_ASSOCIATE_DQ_RULE_OBJECTS, TOOL_DQ_RULE_MANAGER
 from server.tools import dataquality
 from server.tools.dataquality.helpers import format_associate_dq_rule_objects_response
 from tests.helpers import get_tool_fn
@@ -14,8 +14,9 @@ class TestAssociateDqRuleObjects:
     async def test_preview_before_post(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_ASSOCIATE_DQ_RULE_OBJECTS)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
         preview = await fn(
+            step="associate",
             dqrule_id=42,
             objects=[{"object_id": 10, "object_type": "column"}],
             skip_already_associated=False,
@@ -44,9 +45,10 @@ class TestAssociateDqRuleObjects:
         }
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_ASSOCIATE_DQ_RULE_OBJECTS)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
         out = await invoke_write_confirmed(
             fn,
+            step="associate",
             dqrule_id=42,
             objects=[{"object_id": 10, "object_type": "column"}],
             skip_already_associated=False,
@@ -120,16 +122,20 @@ class TestAssociateDqRuleObjects:
     async def test_rejects_invalid_dqrule_id(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_ASSOCIATE_DQ_RULE_OBJECTS)
-        out = await fn(dqrule_id=0, objects=[{"objectId": 1, "objectType": "oecolumn"}])
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
+        out = await fn(
+            step="associate",
+            dqrule_id=0,
+            objects=[{"objectId": 1, "objectType": "oecolumn"}],
+        )
         assert out["status_code"] == 400
         mock_oe_client.post.assert_not_called()
 
     async def test_rejects_empty_objects(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_ASSOCIATE_DQ_RULE_OBJECTS)
-        out = await fn(dqrule_id=5, objects=[])
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
+        out = await fn(step="associate", dqrule_id=5, objects=[])
         assert out["status_code"] == 400
         mock_oe_client.post.assert_not_called()
 
@@ -137,9 +143,10 @@ class TestAssociateDqRuleObjects:
         mock_oe_client.post.side_effect = OvalEdgeError(409, "Conflict")
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_ASSOCIATE_DQ_RULE_OBJECTS)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
         out = await invoke_write_confirmed(
             fn,
+            step="associate",
             dqrule_id=42,
             objects=[{"object_id": 10, "object_type": "column"}],
         )
@@ -148,8 +155,9 @@ class TestAssociateDqRuleObjects:
     async def test_rejects_invalid_object_type(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_ASSOCIATE_DQ_RULE_OBJECTS)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
         out = await fn(
+            step="associate",
             dqrule_id=42,
             objects=[{"objectId": 10, "objectType": "glossary"}],
         )
@@ -159,8 +167,9 @@ class TestAssociateDqRuleObjects:
     async def test_rejects_missing_object_id(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_ASSOCIATE_DQ_RULE_OBJECTS)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
         out = await fn(
+            step="associate",
             dqrule_id=42,
             objects=[{"objectType": "oecolumn"}],
         )
@@ -173,9 +182,10 @@ class TestAssociateDqRuleObjects:
         mock_oe_client.post.return_value = {"data": {"associatedCount": 0}}
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_ASSOCIATE_DQ_RULE_OBJECTS)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
         await invoke_write_confirmed(
             fn,
+            step="associate",
             dqrule_id=42,
             objects=[{"objectId": 10, "objectType": "oecolumn"}],
         )

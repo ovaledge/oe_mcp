@@ -344,7 +344,7 @@ def register(mcp: FastMCP) -> None:
             int,
             Field(
                 description=(
-                    "Internal object id from asset_explorer or lookup_dq_rule."
+                    "Internal object id from asset_explorer or dq_rule_advisor (step=lookup)."
                 ),
                 ge=1,
             ),
@@ -355,7 +355,7 @@ def register(mcp: FastMCP) -> None:
                 description=(
                     "OvalEdge objectType: catalog types (oetable, oecolumn, glossary, …) or "
                     "non-catalog governance types (dqrule, dqscheme, dag, policy, …). "
-                    "Use lookup_dq_rule for dqrule — not asset_explorer."
+                    "Use dq_rule_advisor (step=lookup) for dqrule — not asset_explorer."
                 ),
             ),
         ],

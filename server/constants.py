@@ -15,14 +15,16 @@ TOOL_UPDATE_ASSET_DESCRIPTIONS = "update_asset_descriptions"
 TOOL_UPDATE_CDE_ASSOCIATIONS = "update_cde_associations"
 TOOL_UPDATE_GOVERNANCE_ROLES = "update_governance_roles"
 TOOL_UPDATE_CUSTOM_FIELD_VALUE = "update_custom_field_value"
-TOOL_LOOKUP_DQ_RULE = "lookup_dq_rule"
+TOOL_LOOKUP_DQ_RULE = "lookup_dq_rule"  # dissolved; use dq_rule_advisor step=lookup internally
 TOOL_ACCESS_EXPLORER = "access_explorer"
-TOOL_ASSESS_CDE_DQ = "assess_cde_dq"
-TOOL_ASSOCIATE_DQ_RULE_OBJECTS = "associate_dq_rule_objects"
-TOOL_CREATE_DQ_RULES = "create_dq_rules"
-TOOL_GENERATE_DQ_QUERIES = "generate_dq_queries"
-TOOL_VALIDATE_DQ_QUERIES = "validate_dq_queries"
-TOOL_CREATE_SQL_DQ_RULE = "create_sql_dq_rule"
+TOOL_ASSESS_CDE_DQ = "assess_cde_dq"  # dissolved into dq_rule_advisor
+TOOL_ASSOCIATE_DQ_RULE_OBJECTS = "associate_dq_rule_objects"  # dissolved into dq_rule_manager
+TOOL_CREATE_DQ_RULES = "create_dq_rules"  # dissolved into dq_rule_manager
+TOOL_GENERATE_DQ_QUERIES = "generate_dq_queries"  # dissolved into dq_rule_advisor
+TOOL_VALIDATE_DQ_QUERIES = "validate_dq_queries"  # dissolved into dq_rule_advisor
+TOOL_CREATE_SQL_DQ_RULE = "create_sql_dq_rule"  # dissolved into dq_rule_manager
+TOOL_DQ_RULE_ADVISOR = "dq_rule_advisor"
+TOOL_DQ_RULE_MANAGER = "dq_rule_manager"
 
 # MCP tool data classification (appended to every _DESC_* via classify_tool_desc).
 MCP_TOOL_CLASSIFICATION_INTERNAL = (

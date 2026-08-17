@@ -3,7 +3,11 @@ from unittest.mock import AsyncMock
 from fastmcp import FastMCP
 
 from server.client import OvalEdgeError
-from server.constants import MCP_DQ_ASSESS_LIMIT_DEFAULT, MCP_PATH_ASSESS_CDE_DQ, TOOL_ASSESS_CDE_DQ
+from server.constants import (
+    MCP_DQ_ASSESS_LIMIT_DEFAULT,
+    MCP_PATH_ASSESS_CDE_DQ,
+    TOOL_DQ_RULE_ADVISOR,
+)
 from server.tools import dataquality
 from server.tools.dataquality import helpers as dataquality_helpers
 from tests.helpers import get_tool_fn
@@ -14,8 +18,8 @@ class TestAssessCdeDq:
         mock_oe_client.post.return_value = {"rows": [], "assessedCount": 0}
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_ASSESS_CDE_DQ)
-        out = await fn(discover_cde_columns=True)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        out = await fn(step="assess", discover_cde_columns=True)
         assert out["assessedCount"] == 0
         mock_oe_client.post.assert_called_once_with(
             MCP_PATH_ASSESS_CDE_DQ,
@@ -29,8 +33,9 @@ class TestAssessCdeDq:
         mock_oe_client.post.return_value = {"rows": [{"objectId": 10}], "assessedCount": 1}
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_ASSESS_CDE_DQ)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
         await fn(
+            step="assess",
             objects=[{"object_id": 10, "object_type": "column"}],
             limit=25,
             description_custom_field_name=" Business Definition ",
@@ -48,16 +53,16 @@ class TestAssessCdeDq:
     async def test_rejects_empty_without_discover(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_ASSESS_CDE_DQ)
-        out = await fn()
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        out = await fn(step="assess")
         assert out["status_code"] == 400
         mock_oe_client.post.assert_not_called()
 
     async def test_rejects_invalid_object_type(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_ASSESS_CDE_DQ)
-        out = await fn(objects=[{"objectId": 1, "objectType": "dqrule"}])
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        out = await fn(step="assess", objects=[{"objectId": 1, "objectType": "dqrule"}])
         assert out["status_code"] == 400
         assert "objectType" in out["error"]
         mock_oe_client.post.assert_not_called()
@@ -66,22 +71,17 @@ class TestAssessCdeDq:
         mock_oe_client.post.side_effect = OvalEdgeError(500, "Internal error")
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_ASSESS_CDE_DQ)
-        out = await fn(discover_cde_columns=True)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        out = await fn(step="assess", discover_cde_columns=True)
         assert out["status_code"] == 500
 
     def test_description_routing_phrases(self) -> None:
-        desc = dataquality_helpers._DESC_ASSESS_CDE_DQ
-        assert "lookup_dq_rule" in desc
-        assert "asset_explorer" in desc
-        assert "associate_dq_rule_objects" in desc
-        assert "description_custom_field_name" in desc
-        assert "description_term_name" in desc
-        assert "descriptionSource" in desc
-        assert "never used as automatic fallbacks" in desc or "no automatic glossary" in desc
-        assert "Read-only" in desc
+        desc = dataquality_helpers._DESC_DQ_RULE_ADVISOR
+        assert "lookup" in desc
+        assert "dq_rule_manager" in desc
+        assert "assess" in desc
         assert MCP_PATH_ASSESS_CDE_DQ in desc
-        assert "pass only the assets in scope" in desc
+        assert "Read/recommend" in desc or "no rule create" in desc
 
     def test_build_payload_includes_description_term_name(self) -> None:
         payload = dataquality_helpers.build_assess_cde_dq_payload(
@@ -99,8 +99,8 @@ class TestAssessCdeDq:
         mock_oe_client.post.return_value = {"rows": [], "assessedCount": 0}
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_ASSESS_CDE_DQ)
-        await fn(discover_cde_columns=True, description_term_name=" Net Revenue ")
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        await fn(step="assess", discover_cde_columns=True, description_term_name=" Net Revenue ")
         mock_oe_client.post.assert_called_once_with(
             MCP_PATH_ASSESS_CDE_DQ,
             {
@@ -116,24 +116,24 @@ class TestAssessCdeDq:
         mock_oe_client.post.return_value = {"rows": [], "assessedCount": 0}
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_ASSESS_CDE_DQ)
-        await fn(discover_cde_columns=True, limit=999)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        await fn(step="assess", discover_cde_columns=True, limit=999)
         body = mock_oe_client.post.call_args[0][1]
         assert body["limit"] == MCP_DQ_ASSESS_LIMIT_MAX
 
     async def test_rejects_missing_object_id(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_ASSESS_CDE_DQ)
-        out = await fn(objects=[{"objectType": "oecolumn"}])
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        out = await fn(step="assess", objects=[{"objectType": "oecolumn"}])
         assert out["status_code"] == 400
         mock_oe_client.post.assert_not_called()
 
     async def test_rejects_non_positive_object_id(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_ASSESS_CDE_DQ)
-        out = await fn(objects=[{"objectId": 0, "objectType": "oecolumn"}])
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        out = await fn(step="assess", objects=[{"objectId": 0, "objectType": "oecolumn"}])
         assert out["status_code"] == 400
         mock_oe_client.post.assert_not_called()
 
@@ -154,8 +154,8 @@ class TestAssessCdeDq:
         }
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_ASSESS_CDE_DQ)
-        out = await fn(objects=[{"objectId": 11, "objectType": "oecolumn"}])
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        out = await fn(step="assess", objects=[{"objectId": 11, "objectType": "oecolumn"}])
         assert "formattedResponse" in out
         assert "film.rating" in out["formattedResponse"]
         assert "descriptionSource=none" in out["formattedResponse"]
@@ -207,10 +207,10 @@ class TestAssessCdeDq:
                 ],
             }
         )
-        assert "Function candidates" in text
+        assert "recommendedFunctionCandidates" in text
         assert "Non-Empty and Non-Null Validation" in text
         assert "excluded_function_names" in text
-        assert "Existing rules using this function" in text
+        assert "Existing rules using this function" in text or "existingRulesForFunction" in text
         assert "DESCRIPTION_datalengthrange" in text
         assert "ID 1618" in text
 
@@ -237,7 +237,8 @@ class TestAssessCdeDq:
             }
         )
 
-        assert "Custom SQL path" in text
-        assert "Do not call create_dq_rules for an OEQUERY SQL function" in text
+        assert "Custom SQL" in text or "generate_query" in text
+        assert "Do not use create_standard for an OEQUERY SQL function" in text
         assert "IN/NOT IN or allowed-value sets use SQL Values Contains" in text
-        assert "Use create_dq_rules with preferred_function_name" not in text
+        assert "Use dq_rule_manager step=create_standard with preferred_function_name" not in text
+        assert "recommendedFunction" in text
