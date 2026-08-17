@@ -330,7 +330,7 @@ MCP_SOURCE_SYSTEM_ACCESS_OVERVIEW_DOC = (
     "|---|---|---|\n"
     "| Access layer | OvalEdge catalog permissions | Native source-system grants |\n"
     "| Grant mechanisms | OvalEdge user grants + OvalEdge roles | Redshift (direct / group / "
-    "role), Snowflake (role), Tableau (direct / group) |\n"
+    "role), Snowflake (role), Tableau (direct / indirect group / direct role) |\n"
     "| Permission model | metadata-read/write + data permission levels | Native privileges "
     "(SELECT, INSERT, ALL, …) |\n"
     "| Object scope | All OvalEdge asset types | RS/SF database/schema/table/column; "

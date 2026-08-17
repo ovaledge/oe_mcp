@@ -9,7 +9,7 @@ Deep routing reference for **`access_explorer`** with **`operation=source_system
 | | access_explorer catalog_access | access_explorer source_system_access |
 |---|---|---|
 | Access layer | OvalEdge catalog permissions | Native source-system grants |
-| Grant mechanisms | OvalEdge user grants + OvalEdge roles | Redshift (direct / group / role), Snowflake (role), Tableau (direct / group) |
+| Grant mechanisms | OvalEdge user grants + OvalEdge roles | Redshift (direct / group / role), Snowflake (role), Tableau (direct / indirect group / direct role) |
 | Permission model | metadata-read/write + data permission levels | Native privileges (SELECT, INSERT, ALL, …) |
 | Object scope | All OvalEdge asset types | RS/SF database/schema/table/column; Tableau project/report |
 
@@ -59,7 +59,8 @@ Do not guess `connection_id`, `object_type`, or `object_path` — ask the user, 
 |-------------|---------------------|
 | project | `rdam_reportgroup_privilege` |
 | report | `rdam_report_privilege` |
-| group expansion | `rdam_usergroup` (site-group membership for indirect grants) |
+| group expansion | `rdam_workspace_usergroup` (site-group membership for **indirect** grants) |
+| role expansion | `rdam_userrole` + `rdam_role` (direct role grants on project/report) |
 
 ## object_path formats
 

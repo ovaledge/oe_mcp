@@ -152,6 +152,30 @@ class TestGetSourceSystemAccess:
         )
         assert err is None
 
+    def test_object_to_users_object_id_requires_object_type(self) -> None:
+        err = validate_source_system_access_args(
+            "snowflake",
+            "object_to_users",
+            None,
+            None,
+            None,
+            None,
+            object_id=42,
+        )
+        assert err is not None
+        assert "objectType" in err["error"]
+
+        err = validate_source_system_access_args(
+            "snowflake",
+            "object_to_users",
+            None,
+            None,
+            "table",
+            None,
+            object_id=42,
+        )
+        assert err is None
+
     def test_reject_multiple_source_system_values(self) -> None:
         err = reject_multiple_source_system("redshift,snowflake")
         assert err is not None
@@ -652,6 +676,40 @@ class TestGetSourceSystemAccess:
         group_grant = out["data"]["grants"][0]
         assert group_grant["grantMechanism"] == "group"
         assert group_grant["contributingGroup"] == "Analysts"
+
+    async def test_tableau_user_to_objects_direct_role(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {
+                        "objectPath": "Finance/Headcount",
+                        "objectLevel": "report",
+                        "grantMechanism": "role",
+                        "principalType": "user",
+                        "principalName": "jane.doe",
+                        "contributingRole": "Explorer",
+                        "privileges": ["READ"],
+                    },
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="tableau",
+            query_direction="user_to_objects",
+            username="jane.doe",
+            object_path="Finance/Headcount",
+            object_type="report",
+            connection_id=2000,
+        )
+        assert out["ok"] is True
+        role_grant = out["data"]["grants"][0]
+        assert role_grant["grantMechanism"] == "role"
+        assert role_grant["contributingRole"] == "Explorer"
 
     async def test_forwards_connection_prefixed_object_path(
         self, mock_oe_client: AsyncMock

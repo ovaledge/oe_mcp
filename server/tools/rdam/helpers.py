@@ -35,6 +35,7 @@ from server.constants import (
 from server.tools.common import error_payload
 
 _RDAM_OBJECT_TYPE_ALIASES = {
+    "oedatabase": "database",
     "oeschema": "schema",
     "oetable": "table",
     "oecolumn": "column",
@@ -1079,6 +1080,8 @@ def validate_source_system_access_args(
         )
 
     has_catalog_id = object_id is not None and object_id > 0
+    if has_catalog_id and normalized_type is None:
+        return error_payload(MCP_SOURCE_SYSTEM_OBJECT_TYPE_REQUIRED_ERROR)
     if qd == "object_to_users":
         if not object_paths and not has_catalog_id:
             if normalized_scope == MCP_RDAM_SCOPE_MODE_DESCENDANTS:
