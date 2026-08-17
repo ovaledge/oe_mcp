@@ -24,15 +24,15 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 | Org policies, playbooks, narratives, or OvalEdge product how-to | `knowledge_search` (Search knowledge & docs); prompts `organizational_knowledge`, `platform_help` |
 | Business term definition | `asset_explorer` with `name` and `object_type=glossary`; prompt `explain_business_term` |
 | Tag meaning or hierarchy | `asset_explorer` with `name` and `object_type=oetag`; prompt `explain_tag` |
-| Data quality rule lookup | `lookup_dq_rule`; prompt `explain_dq_rule` |
-| CDE assets / DQ function & rule recommendations | `assess_cde_dq` (after `asset_explorer` or `discover_cde_columns=true`) |
-| Associate objects to existing data quality rule | `associate_dq_rule_objects` (after `assess_cde_dq` / `lookup_dq_rule`; confirm gate) |
-| Find same-function rules before creating | `create_dq_rules` with `prefer_existing_rule=true` (default); user chooses a returned rule ID or explicitly requests new |
-| Create a **new** data quality rule (second rule / explicit new) | `create_dq_rules` with `prefer_existing_rule=false`; often `skip_duplicate_function_on_object=false` |
-| Mark object as CDE before auto-create | `update_cde_associations` (confirm gate) → then `create_dq_rules` |
-| Generate custom SQL data quality queries | `generate_dq_queries` (after `assess_cde_dq` when workflow is `custom_sql`) |
-| Validate custom SQL data quality queries | `validate_dq_queries` (confirm gate; executes SELECT on connection) |
-| Create custom SQL data quality rule | `create_sql_dq_rule` (confirm gate; after validate when `canCreateRule`) |
+| Data quality rule lookup | `dq_rule_advisor` step=lookup; prompt `explain_dq_rule` |
+| CDE assets / DQ function & rule recommendations | `dq_rule_advisor` step=assess (after `asset_explorer` or `discover_cde_columns=true`) |
+| Associate objects to existing data quality rule | `dq_rule_manager` step=associate (after assess/lookup; confirm gate) |
+| Find same-function rules before creating | `dq_rule_manager` step=create_standard with `prefer_existing_rule=true` (default) |
+| Create a **new** data quality rule (second rule / explicit new) | `dq_rule_manager` step=create_standard with `prefer_existing_rule=false` |
+| Mark object as CDE before auto-create | `update_cde_associations` (confirm gate) → then `dq_rule_manager` step=create_standard |
+| Generate custom SQL data quality queries | `dq_rule_advisor` step=generate_query (after assess when workflow is `custom_sql`) |
+| Validate custom SQL data quality queries | `dq_rule_advisor` step=validate_query (confirm gate; executes SELECT on connection) |
+| Create custom SQL data quality rule | `dq_rule_manager` step=create_custom_sql (confirm gate; after validate when `canCreateRule`) |
 | CDE / custom SQL DQ workflow (prompt) | `create_custom_sql_dq_workflow` or `assess_cde_dq_coverage` |
 | Metadata drift between crawls | `metadata_changes_between_crawls`; prompt `metadata_drift` |
 | Native Redshift/Snowflake/Tableau grants | `access_explorer` with `operation=source_system_access`; prompts `native_source_access`, `dam_object_browse` |
@@ -64,13 +64,8 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 | Governance | `create_tag` | confirm gate |
 | Governance | `update_governance_roles` | confirm gate |
 | Governance | `update_custom_field_value` | confirm gate |
-| Data quality | `lookup_dq_rule` | — |
-| Data quality | `assess_cde_dq` | — |
-| Data quality | `associate_dq_rule_objects` | confirm gate |
-| Data quality | `create_dq_rules` | confirm gate |
-| Data quality | `generate_dq_queries` | — |
-| Data quality | `validate_dq_queries` | confirm gate |
-| Data quality | `create_sql_dq_rule` | confirm gate |
+| Data quality | `dq_rule_advisor` | validate_query confirm gate |
+| Data quality | `dq_rule_manager` | confirm gate |
 | Access | `access_explorer` | — |
 | Knowledge | `knowledge_search` | — |
 
@@ -91,7 +86,7 @@ Extended parameter patterns (tool description keeps a short summary; use this se
 | Assets by exact glossary term | `terms=["Payment"]` — exact term name (case-insensitive), not description/domain contains |
 | Glossary terms in placement | `object_type=glossary`, `domain_name`, optional `category_name` |
 | Assets linked to domain terms | `object_type=oetable`, `domain_name` |
-| CDE columns | `object_type=oecolumn`, `critical_data_element=["Yes"]` → then `assess_cde_dq` |
+| CDE columns | `object_type=oecolumn`, `critical_data_element=["Yes"]` → then `dq_rule_advisor` step=assess |
 
 **Glossary placement:** `domain_id` or `domain_name` (required), plus optional category/subcategory. With `object_type=glossary`, returns terms in that placement; without `object_type`, returns catalog assets linked to terms there.
 
@@ -291,7 +286,7 @@ Invoke by name from the MCP client when supported. Each prompt returns instructi
 | `trust_assessment` | Scorecard: DQ, certification, lineage, roles |
 | `trace_data_lineage` | Upstream/downstream narrative |
 | `metadata_drift` | Changes between crawls |
-| `assess_cde_dq_coverage` | CDE columns: catalog search → read-only `assess_cde_dq`; optional writes after approval |
+| `assess_cde_dq_coverage` | CDE columns: catalog search → read-only `dq_rule_advisor` step=assess; optional writes after approval |
 | `create_custom_sql_dq_workflow` | CDE assess → associate/create_rules → generate/validate/create SQL via thin DQ tools |
 
 ### Access
@@ -311,24 +306,24 @@ Invoke by name from the MCP client when supported. Each prompt returns instructi
 | `create_governance_tag` | Guided `create_tag` (secure/open) with confirm gate |
 | `document_asset_descriptions` | Draft + user confirm → `update_asset_descriptions` |
 | `assign_governance_roles` | Resolve target → confirm → `update_governance_roles` |
-| `assess_cde_dq_coverage` | CDE assess → lookup → associate / `create_dq_rules` with confirm gate |
-| `create_custom_sql_dq_workflow` | Custom SQL path: `generate_dq_queries` → `validate_dq_queries` → `create_sql_dq_rule` |
+| `assess_cde_dq_coverage` | CDE assess → lookup → associate / `dq_rule_manager` step=create_standard with confirm gate |
+| `create_custom_sql_dq_workflow` | Custom SQL path: `dq_rule_advisor` step=generate_query → `dq_rule_advisor` step=validate_query → `dq_rule_manager` step=create_custom_sql |
 
 ## Update CDE associations (`update_cde_associations`)
 
 Mark or unmark **Critical Data Element (CDE)** on catalog objects — tables, columns, files, file columns, schemas, charts, APIs, and queries. Resolve targets via `asset_explorer` first.
 
-**Required before auto-create:** `create_dq_rules` skips objects that are not **CDE=Yes** (per-row message explains this).
+**Required before auto-create:** `dq_rule_manager` step=create_standard skips objects that are not **CDE=Yes** (per-row message explains this).
 
 **Confirm gate:** call without `write_confirmed_by_user` for `confirm_update` preview → user approval → re-call with `write_confirmed_by_user=true` and `confirmation_token` from the preview.
 
-Often used before DQ workflows when the user wants to mark a table or column as CDE, or change CDE coverage after `assess_cde_dq`.
+Often used before DQ workflows when the user wants to mark a table or column as CDE, or change CDE coverage after `dq_rule_advisor` step=assess.
 
 ## Human confirmation before write (MCP-only)
 
-`create_glossary_term`, `create_tag`, `update_asset_descriptions`, `update_governance_roles`, `update_custom_field_value`, `update_cde_associations`, `associate_dq_rule_objects`, `create_dq_rules`, `validate_dq_queries`, and `create_sql_dq_rule` require **`write_confirmed_by_user=true`** on the call that performs the OvalEdge POST (unless `dry_run=true` on update tools). Earlier calls return **`confirm_create`** or **`confirm_update`** previews (`doNotCreate` / `doNotUpdate`) with `formattedResponse` and **`confirmationToken`** — the agent must show them and wait for explicit user approval.
+`create_glossary_term`, `create_tag`, `update_asset_descriptions`, `update_governance_roles`, `update_custom_field_value`, `update_cde_associations`, `dq_rule_manager` step=associate, `dq_rule_manager` step=create_standard, `dq_rule_advisor` step=validate_query, and `dq_rule_manager` step=create_custom_sql require **`write_confirmed_by_user=true`** on the call that performs the OvalEdge POST (unless `dry_run=true` on update tools). Earlier calls return **`confirm_create`** or **`confirm_update`** previews (`doNotCreate` / `doNotUpdate`) with `formattedResponse` and **`confirmationToken`** — the agent must show them and wait for explicit user approval.
 
-This gate is enforced in the MCP server (preview tokens, `write_confirmed_by_user`). The OvalEdge backend enforces RBAC and business rules on the actual POST (e.g. CDE prerequisite and skip reasons on `create_dq_rules`).
+This gate is enforced in the MCP server (preview tokens, `write_confirmed_by_user`). The OvalEdge backend enforces RBAC and business rules on the actual POST (e.g. CDE prerequisite and skip reasons on `dq_rule_manager` step=create_standard).
 
 See also: [governance](governance), [asset_types](asset_types), [overview](overview), [rdam_source_access](rdam_source_access).
 
@@ -338,19 +333,19 @@ End-to-end routing for function-based and custom-SQL data quality workflows.
 
 ### Read-only path
 
-1. `asset_explorer` with `critical_data_element=Yes` (types: `oetable`, `oecolumn`, `oefile`, `oefilecolumn`), **or** pass known `objects` to `assess_cde_dq`.
-2. `assess_cde_dq` — recommended function and `existingRulesForFunction` (all active rules using that function, purpose-ranked but never filtered by purpose).
-3. Optional: `lookup_dq_rule` when the user names an existing rule (rules are not in catalog search).
+1. `asset_explorer` with `critical_data_element=Yes` (types: `oetable`, `oecolumn`, `oefile`, `oefilecolumn`), **or** pass known `objects` to `dq_rule_advisor` step=assess.
+2. `dq_rule_advisor` step=assess — recommended function and `existingRulesForFunction` (all active rules using that function, purpose-ranked but never filtered by purpose).
+3. Optional: `dq_rule_advisor` step=lookup when the user names an existing rule (rules are not in catalog search).
 
 ### Write path (function-based auto-create / associate)
 
 | Step | Tool | Notes |
 |------|------|--------|
 | Mark CDE (prerequisite) | `update_cde_associations` | Object must be **CDE=Yes** before auto-create; tables, columns, files, schemas, charts, APIs, queries; **confirm gate** |
-| Select or create | `create_dq_rules` | Re-assesses internally; same-function rules require user selection; new create has **confirm gate** |
-| Link to known rule only | `associate_dq_rule_objects` | When `dqrule_id` is known; does not auto-create; **confirm gate** |
+| Select or create | `dq_rule_manager` step=create_standard | Re-assesses internally; same-function rules require user selection; new create has **confirm gate** |
+| Link to known rule only | `dq_rule_manager` step=associate | When `dqrule_id` is known; does not auto-create; **confirm gate** |
 
-**`create_dq_rules` routing (agent):**
+**`dq_rule_manager` step=create_standard routing (agent):**
 
 | User intent | Parameters |
 |-------------|------------|
@@ -367,13 +362,15 @@ End-to-end routing for function-based and custom-SQL data quality workflows.
 **Function recommendation (assess):**
 
 1. Match business metadata (description / rule / term text) against catalog DQ function **names and definitions** → ranked `recommendedFunctionCandidates` (top also in `recommendedFunction`).
-2. Present candidates to the user. If they reject them, re-call `assess_cde_dq` with `excluded_function_names` for the next-closest set.
-3. Only when **no** strong catalog function candidates remain → `recommendedWorkflow=custom_sql` (last resort) with the **best-match OEQUERY SQL function** when available (e.g. **SQL Exact Value** for “equal to X”, **SQL Values Contains** for `IN` / `NOT IN` or allowed-value sets, **SQL Value Range** for ranges) → `generate_dq_queries` / `create_sql_dq_rule` using that `recommendedFunction` verbatim.
-4. Weak catalog matches (low score) do **not** block the custom-SQL last resort. Preserve the returned function family through create; do not replace Values Contains or Value Range with Exact Value.
+2. Present candidates to the user using **exact OE catalog names only** (e.g. **Data Length Range**). Never invent labels such as “Max Length Check”, “Length Check”, or similar non-catalog names.
+3. If they reject candidates, re-call `dq_rule_advisor` step=assess with `excluded_function_names` for the next-closest set. Prefer `create_standard` with an exact candidate name when `recommendedFunction` is Not Identified but candidates are present.
+4. Only when **no** recommendedFunction / candidates remain → ask user to confirm custom SQL → `recommendedWorkflow=custom_sql` (last resort) with the **best-match OEQUERY** `recommendedFunction` when available (e.g. **SQL Exact Value** for “equal to X”, **SQL Values Contains** for `IN` / `NOT IN` or allowed-value sets, **SQL Value Range** for ranges) → `dq_rule_advisor` step=generate_query → validate_query → `dq_rule_manager` step=create_custom_sql using that `recommendedFunction` name verbatim (never invent SQL or placeholders like `CUSTOM_SQL`).
+5. Weak matches (low score) do **not** block the custom-SQL last resort. Preserve the returned `recommendedFunction` through create.
+6. **Retry policy:** on error, auto-retry the last successful ladder step **once**. If it still fails, **stop and ask the user** whether to retry again. Retry again only if the user explicitly says yes; if they decline, stop. Never invent SQL or `recommendedFunction` names.
 
 **`prefer_existing_rule` behavior:**
 
-- **`true` (default):** Assessment returns every active rule with the recommended function in `existingRulesForFunction`. Purpose similarity only sorts the list; it never removes a same-function rule. The MCP preview returns `select_existing_rule` without a create token. Ask the user to choose a `dqruleId`, then use `associate_dq_rule_objects`.
+- **`true` (default):** Assessment returns every active rule with the recommended function in `existingRulesForFunction`. Purpose similarity only sorts the list; it never removes a same-function rule. The MCP preview returns `select_existing_rule` without a create token. Ask the user to choose a `dqruleId`, then use `dq_rule_manager` step=associate.
 - **`false`:** Explicitly request a **new** data quality rule. The normal create confirmation gate applies.
 - Criteria are parsed from business metadata first. A create response reports `criteriaSource=business_metadata`, `business_metadata_with_defaults`, `function_default`, `not_required`, or `unresolved`; `criteriaMessage` explains partial/failed parsing, defaults applied, or required manual review.
 
@@ -388,7 +385,7 @@ End-to-end routing for function-based and custom-SQL data quality workflows.
 | Associate failed | Could not link to recommended rule |
 | Rule name exists / insert failed | Create collision or server error |
 
-Missing success/input criteria do **not** block create — function defaults are applied when metadata has none.
+Missing success/input criteria do **not** block create — Business Rule, `supplemental_criteria_text`, then function defaults are applied. Create returns `criteriaSource` / `criteriaMessage` instead of `criteria_missing`.
 
 Present skipped/failed rows and `message` to the user; fix prerequisites (CDE, flags) before re-calling.
 
@@ -396,10 +393,10 @@ Present skipped/failed rows and `message` to the user; fix prerequisites (CDE, f
 
 | Step | Tool | Notes |
 |------|------|--------|
-| Assess | `assess_cde_dq` | When workflow is `custom_sql` |
-| Generate SQL | `generate_dq_queries` | Read-only; not for function-based rules (use `create_dq_rules`) |
-| Validate | `validate_dq_queries` | Executes SELECT on connection; **confirm gate** |
-| Create rule | `create_sql_dq_rule` | After validate when `canCreateRule`; **confirm gate** |
+| Assess | `dq_rule_advisor` step=assess | When workflow is `custom_sql` |
+| Generate SQL | `dq_rule_advisor` step=generate_query | Read-only; not for function-based rules (use `dq_rule_manager` step=create_standard) |
+| Validate | `dq_rule_advisor` step=validate_query | Executes SELECT on connection; **confirm gate** |
+| Create rule | `dq_rule_manager` step=create_custom_sql | After validate when `canCreateRule`; **confirm gate** |
 
 **Workflow prompts:** `assess_cde_dq_coverage` (pass `scope` = user question or domain name); `create_custom_sql_dq_workflow` for the full custom-SQL path.
 

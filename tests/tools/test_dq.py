@@ -6,10 +6,8 @@ from server.constants import (
     MCP_PATH_CREATE_SQL_DQ_RULE,
     MCP_PATH_GENERATE_DQ_QUERIES,
     MCP_PATH_VALIDATE_DQ_QUERIES,
-    TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
-    TOOL_CREATE_SQL_DQ_RULE,
-    TOOL_GENERATE_DQ_QUERIES,
-    TOOL_VALIDATE_DQ_QUERIES,
+    TOOL_DQ_RULE_ADVISOR,
+    TOOL_DQ_RULE_MANAGER,
 )
 from server.tools import dataquality
 from tests.helpers import get_tool_fn
@@ -28,13 +26,13 @@ class TestGenerateDqQueries:
         }
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_GENERATE_DQ_QUERIES)
-        out = await fn(objects=[{"objectId": 101, "objectType": "oecolumn"}])
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        out = await fn(step="generate_query", objects=[{"objectId": 101, "objectType": "oecolumn"}])
         assert out["workflowPhase"] == "generate_queries"
         assert out["connectionId"] == 1
         assert out["schemaId"] == 2
         assert "**connection_id:** 1" in out["formattedResponse"]
-        assert "validate_dq_queries" in out["agentInstruction"]
+        assert "validate_query" in out["agentInstruction"]
         mock_oe_client.post.assert_called_once_with(
             MCP_PATH_GENERATE_DQ_QUERIES,
             {
@@ -56,10 +54,10 @@ class TestGenerateDqQueries:
         }
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_GENERATE_DQ_QUERIES)
-        out = await fn(objects=[{"objectId": 101, "objectType": "oecolumn"}])
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        out = await fn(step="generate_query", objects=[{"objectId": 101, "objectType": "oecolumn"}])
         assert out["workflowPhase"] == "generate_queries"
-        assert "create_dq_rules" in out.get("agentInstruction", "")
+        assert "create_standard" in out.get("agentInstruction", "")
 
     async def test_generate_queries_code_found_routes_to_associate(
         self, mock_oe_client: AsyncMock
@@ -76,9 +74,9 @@ class TestGenerateDqQueries:
         }
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_GENERATE_DQ_QUERIES)
-        out = await fn(objects=[{"objectId": 101, "objectType": "oecolumn"}])
-        assert TOOL_ASSOCIATE_DQ_RULE_OBJECTS in out["agentInstruction"]
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        out = await fn(step="generate_query", objects=[{"objectId": 101, "objectType": "oecolumn"}])
+        assert TOOL_DQ_RULE_MANAGER in out["agentInstruction"]
         assert "dqrule_id=77" in out["agentInstruction"]
         assert "Do not call" in out["agentInstruction"]
 
@@ -96,9 +94,9 @@ class TestGenerateDqQueries:
         }
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_GENERATE_DQ_QUERIES)
-        out = await fn(objects=[{"objectId": 101, "objectType": "oecolumn"}])
-        assert TOOL_CREATE_SQL_DQ_RULE in out["agentInstruction"]
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        out = await fn(step="generate_query", objects=[{"objectId": 101, "objectType": "oecolumn"}])
+        assert "create_custom_sql" in out["agentInstruction"]
         assert "code_object_id=555" in out["agentInstruction"]
         assert "connection_id=3" in out["agentInstruction"]
 
@@ -115,16 +113,16 @@ class TestGenerateDqQueries:
         }
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_GENERATE_DQ_QUERIES)
-        out = await fn(objects=[{"objectId": 101, "objectType": "oecolumn"}])
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        out = await fn(step="generate_query", objects=[{"objectId": 101, "objectType": "oecolumn"}])
         assert "already associated" in out["agentInstruction"].lower()
-        assert f"Do not call {TOOL_VALIDATE_DQ_QUERIES}" in out["agentInstruction"]
+        assert "validate_query" in out["agentInstruction"]
 
     async def test_generate_queries_requires_objects(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_GENERATE_DQ_QUERIES)
-        out = await fn(objects=[])
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        out = await fn(step="generate_query", objects=[])
         assert out["status_code"] == 400
         mock_oe_client.post.assert_not_called()
 
@@ -133,8 +131,8 @@ class TestGenerateDqQueries:
     ) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_GENERATE_DQ_QUERIES)
-        out = await fn(objects=[{"objectId": 1, "objectType": "dqrule"}])
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        out = await fn(step="generate_query", objects=[{"objectId": 1, "objectType": "dqrule"}])
         assert out["status_code"] == 400
         assert "objectType" in out["error"]
         mock_oe_client.post.assert_not_called()
@@ -144,8 +142,8 @@ class TestGenerateDqQueries:
     ) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_GENERATE_DQ_QUERIES)
-        out = await fn(objects=[{"objectType": "oecolumn"}])
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        out = await fn(step="generate_query", objects=[{"objectType": "oecolumn"}])
         assert out["status_code"] == 400
         mock_oe_client.post.assert_not_called()
 
@@ -158,8 +156,8 @@ class TestGenerateDqQueries:
         }
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_GENERATE_DQ_QUERIES)
-        await fn(
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        await fn(step="generate_query", 
             objects=[{"objectId": 101, "objectType": "oecolumn"}],
             business_rule="  values must be non-null  ",
             business_description="  email column  ",
@@ -186,11 +184,11 @@ class TestGenerateDqQueries:
         }
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_GENERATE_DQ_QUERIES)
-        out = await fn(objects=[{"objectId": 101, "objectType": "oecolumn"}])
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        out = await fn(step="generate_query", objects=[{"objectId": 101, "objectType": "oecolumn"}])
         assert "Do not call" in out["agentInstruction"]
-        assert TOOL_VALIDATE_DQ_QUERIES in out["agentInstruction"]
-        assert TOOL_CREATE_SQL_DQ_RULE in out["agentInstruction"]
+        assert "validate_query" in out["agentInstruction"]
+        assert "create_custom_sql" in out["agentInstruction"]
 
     async def test_generate_function_not_identified_instruction(
         self, mock_oe_client: AsyncMock
@@ -201,8 +199,8 @@ class TestGenerateDqQueries:
         }
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_GENERATE_DQ_QUERIES)
-        out = await fn(objects=[{"objectId": 101, "objectType": "oecolumn"}])
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        out = await fn(step="generate_query", objects=[{"objectId": 101, "objectType": "oecolumn"}])
         assert "clarify" in out["agentInstruction"].lower()
 
     async def test_generate_oval_edge_error_returns_structured_dict(
@@ -213,8 +211,8 @@ class TestGenerateDqQueries:
         mock_oe_client.post.side_effect = OvalEdgeError(500, "Internal error")
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_GENERATE_DQ_QUERIES)
-        out = await fn(objects=[{"objectId": 101, "objectType": "oecolumn"}])
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        out = await fn(step="generate_query", objects=[{"objectId": 101, "objectType": "oecolumn"}])
         assert out["status_code"] == 500
         assert "500" in out["error"]
 
@@ -223,8 +221,8 @@ class TestValidateDqQueries:
     async def test_validate_preview_before_post(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_VALIDATE_DQ_QUERIES)
-        preview = await fn(
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        preview = await fn(step="validate_query", 
             connection_id=1,
             schema_id=2,
             rule_query="SELECT 1",
@@ -242,9 +240,10 @@ class TestValidateDqQueries:
         }
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_VALIDATE_DQ_QUERIES)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
         out = await invoke_write_confirmed(
             fn,
+            step="validate_query",
             connection_id=1,
             schema_id=2,
             rule_query="SELECT 1",
@@ -267,15 +266,15 @@ class TestValidateDqQueries:
     async def test_validate_rejects_tampered_token(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_VALIDATE_DQ_QUERIES)
-        preview = await fn(
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        preview = await fn(step="validate_query", 
             connection_id=1,
             schema_id=2,
             rule_query="SELECT 1",
             stats_query="SELECT 2",
             failed_values_query="SELECT 3",
         )
-        out = await fn(
+        out = await fn(step="validate_query", 
             connection_id=1,
             schema_id=2,
             rule_query="SELECT 9",
@@ -293,8 +292,8 @@ class TestValidateDqQueries:
     ) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_VALIDATE_DQ_QUERIES)
-        out = await fn(
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        out = await fn(step="validate_query", 
             connection_id=0,
             schema_id=2,
             rule_query="SELECT 1",
@@ -308,8 +307,8 @@ class TestValidateDqQueries:
     async def test_validate_rejects_blank_queries(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_VALIDATE_DQ_QUERIES)
-        out = await fn(
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        out = await fn(step="validate_query", 
             connection_id=1,
             schema_id=2,
             rule_query="   ",
@@ -325,8 +324,8 @@ class TestValidateDqQueries:
     ) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_VALIDATE_DQ_QUERIES)
-        out = await fn(
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
+        out = await fn(step="validate_query", 
             connection_id=1,
             schema_id=2,
             rule_query="SELECT 1",
@@ -345,9 +344,10 @@ class TestValidateDqQueries:
         mock_oe_client.post.side_effect = OvalEdgeError(502, "Bad gateway")
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_VALIDATE_DQ_QUERIES)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
         out = await invoke_write_confirmed(
             fn,
+            step="validate_query",
             connection_id=1,
             schema_id=2,
             rule_query="SELECT 1",
@@ -362,13 +362,14 @@ class TestCreateSqlDqRule:
     async def test_create_sql_rule_confirm_preview(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_CREATE_SQL_DQ_RULE)
-        out = await fn(
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
+        out = await fn(step="create_custom_sql", 
             objects=[{"objectId": 101, "objectType": "oecolumn"}],
             rule_name="mcp_rule",
             rule_query="SELECT 1",
             stats_query="SELECT 2",
             failed_values_query="SELECT 3",
+            recommended_function="SQL Exact Value",
         )
         assert out["workflowPhase"] == "confirm_create"
         assert out.get("confirmationToken")
@@ -381,9 +382,10 @@ class TestCreateSqlDqRule:
         }
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_CREATE_SQL_DQ_RULE)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
         out = await invoke_write_confirmed(
             fn,
+            step="create_custom_sql",
             objects=[{"objectId": 101, "objectType": "oecolumn"}],
             rule_name="mcp_rule",
             rule_query="SELECT 1",
@@ -391,6 +393,7 @@ class TestCreateSqlDqRule:
             failed_values_query="SELECT 3",
             connection_id=5,
             schema_id=6,
+            recommended_function="SQL Exact Value",
         )
         assert out["workflowPhase"] == "create_sql_rule"
         mock_oe_client.post.assert_called_once_with(
@@ -404,6 +407,7 @@ class TestCreateSqlDqRule:
                 "failedValuesQuery": "SELECT 3",
                 "connectionId": 5,
                 "schemaId": 6,
+                "recommendedFunction": "SQL Exact Value",
             },
         )
 
@@ -414,14 +418,16 @@ class TestCreateSqlDqRule:
         }
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_CREATE_SQL_DQ_RULE)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
         out = await invoke_write_confirmed(
             fn,
+            step="create_custom_sql",
             objects=[{"objectId": 101, "objectType": "oecolumn"}],
             rule_name="mcp_reuse",
             code_object_id=555,
             connection_id=5,
             schema_id=6,
+            recommended_function="SQL Exact Value",
         )
         assert out["workflowPhase"] == "create_sql_rule"
         mock_oe_client.post.assert_called_once_with(
@@ -433,21 +439,23 @@ class TestCreateSqlDqRule:
                 "connectionId": 5,
                 "schemaId": 6,
                 "codeObjectId": 555,
+                "recommendedFunction": "SQL Exact Value",
             },
         )
 
     async def test_create_sql_rule_rejects_tampered_token(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_CREATE_SQL_DQ_RULE)
-        preview = await fn(
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
+        preview = await fn(step="create_custom_sql", 
             objects=[{"objectId": 101, "objectType": "oecolumn"}],
             rule_name="mcp_rule",
             rule_query="SELECT 1",
             stats_query="SELECT 2",
             failed_values_query="SELECT 3",
+            recommended_function="SQL Exact Value",
         )
-        out = await fn(
+        out = await fn(step="create_custom_sql", 
             objects=[{"objectId": 101, "objectType": "oecolumn"}],
             rule_name="tampered_rule",
             rule_query="SELECT 1",
@@ -455,6 +463,7 @@ class TestCreateSqlDqRule:
             failed_values_query="SELECT 3",
             write_confirmed_by_user=True,
             confirmation_token=preview["confirmationToken"],
+            recommended_function="SQL Exact Value",
         )
         assert out["status_code"] == 400
         assert out.get("error_code") == "confirmation_token_mismatch"
@@ -463,13 +472,14 @@ class TestCreateSqlDqRule:
     async def test_create_sql_rejects_empty_objects(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_CREATE_SQL_DQ_RULE)
-        out = await fn(
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
+        out = await fn(step="create_custom_sql", 
             objects=[],
             rule_name="mcp_rule",
             rule_query="SELECT 1",
             stats_query="SELECT 2",
             failed_values_query="SELECT 3",
+            recommended_function="SQL Exact Value",
         )
         assert out["status_code"] == 400
         mock_oe_client.post.assert_not_called()
@@ -479,13 +489,14 @@ class TestCreateSqlDqRule:
     ) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_CREATE_SQL_DQ_RULE)
-        out = await fn(
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
+        out = await fn(step="create_custom_sql", 
             objects=[{"objectId": 101, "objectType": "oecolumn"}],
             rule_name="  ",
             rule_query="SELECT 1",
             stats_query="SELECT 2",
             failed_values_query="SELECT 3",
+            recommended_function="SQL Exact Value",
         )
         assert out["status_code"] == 400
         assert "rule_name" in out["error"]
@@ -496,10 +507,11 @@ class TestCreateSqlDqRule:
     ) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_CREATE_SQL_DQ_RULE)
-        out = await fn(
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
+        out = await fn(step="create_custom_sql", 
             objects=[{"objectId": 101, "objectType": "oecolumn"}],
             rule_name="mcp_rule",
+            recommended_function="SQL Exact Value",
         )
         assert out["status_code"] == 400
         assert "rule_query or code_object_id" in out["error"]
@@ -510,12 +522,13 @@ class TestCreateSqlDqRule:
     ) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_CREATE_SQL_DQ_RULE)
-        out = await fn(
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
+        out = await fn(step="create_custom_sql", 
             objects=[{"objectId": 101, "objectType": "oecolumn"}],
             rule_name="mcp_rule",
             rule_query="SELECT 1",
             failed_values_query="SELECT 3",
+            recommended_function="SQL Exact Value",
         )
         assert out["status_code"] == 400
         assert "stats_query" in out["error"]
@@ -526,11 +539,12 @@ class TestCreateSqlDqRule:
     ) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_CREATE_SQL_DQ_RULE)
-        out = await fn(
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
+        out = await fn(step="create_custom_sql", 
             objects=[{"objectId": 101, "objectType": "glossary"}],
             rule_name="mcp_rule",
             code_object_id=555,
+            recommended_function="SQL Exact Value",
         )
         assert out["status_code"] == 400
         mock_oe_client.post.assert_not_called()
@@ -544,9 +558,10 @@ class TestCreateSqlDqRule:
         }
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_CREATE_SQL_DQ_RULE)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
         out = await invoke_write_confirmed(
             fn,
+            step="create_custom_sql",
             objects=[
                 {"objectId": 101, "objectType": "oecolumn"},
                 {"objectId": 202, "objectType": "oecolumn"},
@@ -568,6 +583,44 @@ class TestCreateSqlDqRule:
         assert body["purpose"] == "detect nulls"
         assert body["recommendedFunction"] == "Non-Null Validation"
 
+    async def test_create_sql_rejects_missing_recommended_function(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
+        out = await fn(
+            step="create_custom_sql",
+            objects=[{"objectId": 101, "objectType": "oecolumn"}],
+            rule_name="mcp_rule",
+            rule_query="SELECT 1",
+            stats_query="SELECT 2",
+            failed_values_query="SELECT 3",
+        )
+        assert out["status_code"] == 400
+        assert "recommended_function" in out["error"]
+        assert "generate_query" in out["error"]
+        mock_oe_client.post.assert_not_called()
+
+    async def test_create_sql_rejects_placeholder_recommended_function(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
+        out = await fn(
+            step="create_custom_sql",
+            objects=[{"objectId": 101, "objectType": "oecolumn"}],
+            rule_name="mcp_rule",
+            rule_query="SELECT 1",
+            stats_query="SELECT 2",
+            failed_values_query="SELECT 3",
+            recommended_function="CUSTOM_SQL",
+        )
+        assert out["status_code"] == 400
+        assert out.get("error_code") == "validation_invalid"
+        mock_oe_client.post.assert_not_called()
+
     async def test_create_sql_oval_edge_error_returns_structured_dict(
         self, mock_oe_client: AsyncMock
     ) -> None:
@@ -576,14 +629,16 @@ class TestCreateSqlDqRule:
         mock_oe_client.post.side_effect = OvalEdgeError(403, "Forbidden")
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, TOOL_CREATE_SQL_DQ_RULE)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
         out = await invoke_write_confirmed(
             fn,
+            step="create_custom_sql",
             objects=[{"objectId": 101, "objectType": "oecolumn"}],
             rule_name="mcp_rule",
             code_object_id=555,
             connection_id=5,
             schema_id=6,
+            recommended_function="SQL Exact Value",
         )
         assert out["status_code"] == 403
         assert "403" in out["error"]

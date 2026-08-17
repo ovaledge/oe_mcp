@@ -25,8 +25,8 @@ class TestLookupDqRule:
         }
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_dq_rule")
-        out = await fn(rule_name="Null Data Density")
+        fn = await get_tool_fn(mcp, "dq_rule_advisor")
+        out = await fn(step="lookup", rule_name="Null Data Density")
         assert out["ok"] is True
         mock_oe_client.get.assert_called_once_with(
             MCP_PATH_LOOKUP_DQ_RULES,
@@ -36,8 +36,8 @@ class TestLookupDqRule:
     async def test_rejects_both_id_and_name(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_dq_rule")
-        out = await fn(object_id=1, rule_name="x")
+        fn = await get_tool_fn(mcp, "dq_rule_advisor")
+        out = await fn(step="lookup", object_id=1, rule_name="x")
         assert out["status_code"] == 400
         mock_oe_client.get.assert_not_called()
 
@@ -45,16 +45,16 @@ class TestLookupDqRule:
         mock_oe_client.get.side_effect = OvalEdgeError(404, "Rule not found")
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_dq_rule")
-        out = await fn(rule_name="missing-rule")
+        fn = await get_tool_fn(mcp, "dq_rule_advisor")
+        out = await fn(step="lookup", rule_name="missing-rule")
         assert out["status_code"] == 404
         assert "404" in out["error"]
 
     async def test_rejects_neither_id_nor_name(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_dq_rule")
-        out = await fn()
+        fn = await get_tool_fn(mcp, "dq_rule_advisor")
+        out = await fn(step="lookup")
         assert out["status_code"] == 400
         assert out.get("error_code") == "validation_required"
         mock_oe_client.get.assert_not_called()
@@ -64,8 +64,8 @@ class TestLookupDqRule:
     ) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_dq_rule")
-        out = await fn(rule_name="   ")
+        fn = await get_tool_fn(mcp, "dq_rule_advisor")
+        out = await fn(step="lookup", rule_name="   ")
         assert out["status_code"] == 400
         mock_oe_client.get.assert_not_called()
 
@@ -76,8 +76,8 @@ class TestLookupDqRule:
         }
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_dq_rule")
-        out = await fn(object_id=42)
+        fn = await get_tool_fn(mcp, "dq_rule_advisor")
+        out = await fn(step="lookup", object_id=42)
         assert out["ok"] is True
         mock_oe_client.get.assert_called_once_with(
             MCP_PATH_LOOKUP_DQ_RULES,
@@ -90,7 +90,7 @@ class TestLookupDqRule:
         mock_oe_client.get.return_value = {"ok": True, "data": []}
         mcp = FastMCP(name="test", version="0.0.1")
         dataquality.register(mcp)
-        fn = await get_tool_fn(mcp, "lookup_dq_rule")
-        await fn(rule_name="Null Check", limit=999)
+        fn = await get_tool_fn(mcp, "dq_rule_advisor")
+        await fn(step="lookup", rule_name="Null Check", limit=999)
         params = mock_oe_client.get.call_args[1]["params"]
         assert params["limit"] == MCP_GLOSSARY_TAGS_LIMIT_MAX
