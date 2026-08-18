@@ -60,6 +60,16 @@ class TestAccessExplorerRegistration:
         assert "native_source_access" in _DESC_ACCESS_EXPLORER
         assert "What tables/schemas/columns can I see/view/access" in _DESC_ACCESS_EXPLORER
 
+    async def test_object_id_schema_covers_rdam_id_path(self) -> None:
+        mcp = FastMCP("test")
+        access.register(mcp)
+        tool = await get_tool_object(mcp, TOOL_ACCESS_EXPLORER)
+        props = (tool.parameters or {}).get("properties", {})
+        desc = (props.get("object_id") or {}).get("description", "").lower()
+        assert "source_system_access" in desc
+        assert "objectid" in desc or "object_id" in desc
+        assert "skip catalog resolve" in desc or "dam" in desc
+
 
 class TestAccessExplorerValidation:
     def test_catalog_validate_requires_direction(self) -> None:
@@ -328,7 +338,7 @@ class TestAccessExplorerSourceSystemPath:
         )
 
 
-class TestAccessExplorerResolvesViaAssetExplorerThenDam:
+class TestAccessExplorerCatalogResolveForSourceSystem:
     async def test_object_id_skips_asset_explorer_and_sends_catalog_id(
         self, mock_oe_client: AsyncMock
     ) -> None:

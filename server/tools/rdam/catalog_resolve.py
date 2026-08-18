@@ -86,7 +86,8 @@ def should_resolve_via_asset_explorer(
 
     DAM API only.
     """
-    _ = query_direction
+    if query_direction.strip().lower() == "browse":
+        return False
     _ = connection_id
     has_type = bool(resolve_single_object_type(object_type))
     if object_id is not None and object_id > 0 and has_type:
@@ -136,6 +137,53 @@ def _details_map(body: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _connection_id_from_hit(
+    hit: dict[str, Any], details: dict[str, Any] | None = None
+) -> int | None:
+    src = details or {}
+    return _int_field(src.get("connectionInfoId") or src.get("connectionId")) or _int_field(
+        hit.get("connectionInfoId") or hit.get("connectionId")
+    )
+
+
+def _hit_matches_connection_id(
+    hit: dict[str, Any],
+    *,
+    details: dict[str, Any] | None,
+    connection_id: int | None,
+) -> bool:
+    if connection_id is None or connection_id <= 0:
+        return True
+    hit_conn = _connection_id_from_hit(hit, details)
+    # Unknown connection on the hit is not a mismatch; reject only a known other connector.
+    return hit_conn is None or hit_conn == connection_id
+
+
+async def _filter_hits_for_connection(
+    client: Any,
+    items: list[dict[str, Any]],
+    *,
+    catalog_type: str | None,
+    connection_id: int | None,
+) -> list[tuple[dict[str, Any], dict[str, Any] | None]]:
+    if connection_id is None or connection_id <= 0:
+        return [(hit, None) for hit in items]
+    matched: list[tuple[dict[str, Any], dict[str, Any] | None]] = []
+    for hit in items:
+        listed_conn = _connection_id_from_hit(hit, None)
+        if listed_conn is not None and listed_conn != connection_id:
+            continue
+        if listed_conn == connection_id:
+            matched.append((hit, None))
+            continue
+        hit_id = _int_field(hit.get("objectId"))
+        hit_type = _str_field(hit.get("objectType"), catalog_type)
+        details = await _load_details(client, hit_id, hit_type)
+        if _hit_matches_connection_id(hit, details=details, connection_id=connection_id):
+            matched.append((hit, details))
+    return matched
+
+
 def _scope_from_hit(
     hit: dict[str, Any],
     *,
@@ -157,11 +205,9 @@ def _scope_from_hit(
         hit.get("objectName"),
         name,
     )
-    conn = (
-        _int_field(src.get("connectionInfoId") or src.get("connectionId"))
-        or _int_field(hit.get("connectionInfoId") or hit.get("connectionId"))
-        or connection_id
-    )
+    conn = _connection_id_from_hit(hit, details)
+    if conn is None and connection_id is not None and connection_id > 0:
+        conn = connection_id
     resolved_name = _str_field(src.get("objectName"), hit.get("objectName"), name)
     rdam_type = rdam_object_type_from_catalog(hit_type) or normalize_rdam_object_type(object_type)
     return CatalogResolvedScope(
@@ -235,12 +281,23 @@ async def resolve_rdam_scope_via_asset_explorer(
     if not items:
         return None
 
-    if resolve_all_matches and len(items) > 1:
+    filtered_hits = await _filter_hits_for_connection(
+        client,
+        items,
+        catalog_type=catalog_type,
+        connection_id=connection_id,
+    )
+    if not filtered_hits:
+        return None
+
+    if resolve_all_matches and len(filtered_hits) > 1:
         scopes: list[CatalogResolvedScope] = []
-        for hit in items:
+        for hit, cached_details in filtered_hits:
             hit_id = _int_field(hit.get("objectId"))
             hit_type = _str_field(hit.get("objectType"), catalog_type)
-            details = await _load_details(client, hit_id, hit_type)
+            details = cached_details
+            if details is None:
+                details = await _load_details(client, hit_id, hit_type)
             scopes.append(
                 _scope_from_hit(
                     hit,
@@ -254,23 +311,31 @@ async def resolve_rdam_scope_via_asset_explorer(
             )
         paths_out = [s.object_path for s in scopes if isinstance(s.object_path, str)]
         fqns = [s.fully_qualified_name for s in scopes if s.fully_qualified_name]
+        connection_ids = {
+            s.connection_id
+            for s in scopes
+            if isinstance(s.connection_id, int) and s.connection_id > 0
+        }
+        merged_connection_id = connection_ids.pop() if len(connection_ids) == 1 else None
         first = scopes[0]
         return CatalogResolvedScope(
             object_path=paths_out or first.object_path,
             object_type=first.object_type,
-            connection_id=first.connection_id,
+            connection_id=merged_connection_id,
             object_id=first.object_id if len(scopes) == 1 else None,
             fully_qualified_name=fqns[0] if len(fqns) == 1 else None,
             object_name=first.object_name if len(scopes) == 1 else None,
         )
 
-    if len(items) != 1:
+    if len(filtered_hits) != 1:
         return None
 
-    hit = items[0]
+    hit, cached_details = filtered_hits[0]
     hit_id = _int_field(hit.get("objectId"))
     hit_type = _str_field(hit.get("objectType"), catalog_type)
-    details = await _load_details(client, hit_id, hit_type)
+    details = cached_details
+    if details is None:
+        details = await _load_details(client, hit_id, hit_type)
     return _scope_from_hit(
         hit,
         details=details,

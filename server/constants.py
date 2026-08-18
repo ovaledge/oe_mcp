@@ -206,6 +206,8 @@ MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES_DOC = ", ".join(
 # Native source-system access (access_explorer operation=source_system_access).
 # Examples only — oasis validates whether the connector is RDAM-supported (APP-229).
 MCP_SOURCE_SYSTEMS = frozenset({"redshift", "snowflake", "tableau"})
+MCP_SOURCE_SYSTEM_UNSUPPORTED_CODE = "mcp.source.system.unsupported"
+MCP_SOURCE_SYSTEM_HINT_MISMATCH_CODE = "mcp.source.system.hint.mismatch"
 MCP_SOURCE_SYSTEMS_DOC = (
     "redshift, snowflake, tableau (examples; oasis accepts additional RDAM connectors)"
 )

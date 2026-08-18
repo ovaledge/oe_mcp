@@ -38,6 +38,27 @@ from server.tools.rdam.helpers import (
 )
 
 
+def _map_dam_error_with_catalog_context(
+    exc: OvalEdgeError,
+    *,
+    resolved_object_id: int | None,
+    normalized_type: str | None,
+    resolved_fqn: str | None,
+    resolved_object_name: str | list[str] | None,
+    composed_path: str | list[str] | None,
+) -> dict[str, Any]:
+    from server.tools.access.helpers import attach_catalog_fallback_context
+
+    return attach_catalog_fallback_context(
+        map_ovaledge_error(exc),
+        object_id=resolved_object_id,
+        object_type=normalized_type,
+        fully_qualified_name=resolved_fqn,
+        object_name=resolved_object_name,
+        object_path=composed_path,
+    )
+
+
 async def _invoke_source_system_access(
     source_system: str | list[str],
     query_direction: str,
@@ -185,7 +206,14 @@ async def _invoke_source_system_access(
             async with ovaledge_client() as client:
                 return await client.get(MCP_PATH_ACCESS_EXPLORER, params=params)
         except OvalEdgeError as e:
-            return map_ovaledge_error(e)
+            return _map_dam_error_with_catalog_context(
+                e,
+                resolved_object_id=resolved_object_id,
+                normalized_type=normalized_type,
+                resolved_fqn=resolved_fqn,
+                resolved_object_name=resolved_object_name,
+                composed_path=composed_path,
+            )
     incomplete_table_lookup = (
         qd == "object_to_users"
         and normalized_type == "table"
@@ -194,11 +222,7 @@ async def _invoke_source_system_access(
         and is_incomplete_table_object_path(normalize_string_list(composed_path)[0])
         and not resolve_all_matches
     )
-    filter_level = (
-        None
-        if normalized_type in (None, MCP_RDAM_OBJECT_TYPE_ALL)
-        else normalized_type
-    )
+    filter_level = None if normalized_type in (None, MCP_RDAM_OBJECT_TYPE_ALL) else normalized_type
     try:
         async with ovaledge_client() as client:
             initial_error: OvalEdgeError | None = None
@@ -206,7 +230,14 @@ async def _invoke_source_system_access(
                 result = await client.get(MCP_PATH_ACCESS_EXPLORER, params=params)
             except OvalEdgeError as e:
                 if not incomplete_table_lookup:
-                    return map_ovaledge_error(e)
+                    return _map_dam_error_with_catalog_context(
+                        e,
+                        resolved_object_id=resolved_object_id,
+                        normalized_type=normalized_type,
+                        resolved_fqn=resolved_fqn,
+                        resolved_object_name=resolved_object_name,
+                        composed_path=composed_path,
+                    )
                 initial_error = e
                 result = {"ok": False, "message": str(e), "data": None}
             if qd == "user_to_objects" and not descendants_scope:
@@ -229,7 +260,14 @@ async def _invoke_source_system_access(
                 if enriched.get("ok"):
                     result = enriched
                 elif initial_error is not None:
-                    return map_ovaledge_error(initial_error)
+                    return _map_dam_error_with_catalog_context(
+                        initial_error,
+                        resolved_object_id=resolved_object_id,
+                        normalized_type=normalized_type,
+                        resolved_fqn=resolved_fqn,
+                        resolved_object_name=resolved_object_name,
+                        composed_path=composed_path,
+                    )
                 else:
                     result = enriched
                 result = await enrich_column_grants_fallback(
@@ -249,8 +287,22 @@ async def _invoke_source_system_access(
                 if shaped.get("ok"):
                     result = shaped
                 elif initial_error is not None:
-                    return map_ovaledge_error(initial_error)
+                    return _map_dam_error_with_catalog_context(
+                        initial_error,
+                        resolved_object_id=resolved_object_id,
+                        normalized_type=normalized_type,
+                        resolved_fqn=resolved_fqn,
+                        resolved_object_name=resolved_object_name,
+                        composed_path=composed_path,
+                    )
             result = filter_grants_by_privileges(result, privileges)
             return annotate_multi_connection_advisory(result, resolved_connection_id)
     except OvalEdgeError as e:
-        return map_ovaledge_error(e)
+        return _map_dam_error_with_catalog_context(
+            e,
+            resolved_object_id=resolved_object_id,
+            normalized_type=normalized_type,
+            resolved_fqn=resolved_fqn,
+            resolved_object_name=resolved_object_name,
+            composed_path=composed_path,
+        )

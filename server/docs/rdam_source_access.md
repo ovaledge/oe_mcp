@@ -15,7 +15,11 @@ Deep routing reference for **`access_explorer`** with **`operation=source_system
 
 ## Unsupported connector type (continue with catalog_access)
 
-If the API returns **400** `mcp.source.system.unsupported` (`Connector type {0} is not supported for native DAM access. Supported connector types: {1}. Continue with operation=catalog_access.`), `{0}` is the requested connector type / `servertype` and `{1}` is the DAM registry CSV. New DAM connectors register as a Spring `McpSourceSystemAccessCapabilities` bean. **Continue with `operation=catalog_access`** — native DAM is not available for that connector.
+If the API returns **400** `mcp.source.system.unsupported` (`Connector type {0} is not supported for native DAM access. Supported connector types: {1}. Continue with operation=catalog_access.`), `{0}` is the requested connector type / `servertype` and `{1}` is the DAM registry CSV. **Continue with `operation=catalog_access`** — native DAM is not available for that connector.
+
+Do **not** treat `mcp.source.system.hint.mismatch` as unsupported. That 400 means `source_system` does not match `connection_id` (e.g. Snowflake hint with a Redshift connection). Both connectors may be DAM-supported; fix the params. Do not continue with `catalog_access`.
+
+`McpSourceSystemAccessCapabilities` extra beans are **validation-only** (object types / mechanism flags). They do not add grant execution. Grant SQL remains RDBMS `rdam_*privilege` harvest tables or Tableau project/report privilege tables. Registering a new connector so `require()` succeeds does not mean native grant rows will be correct.
 
 ## No catalog fallback for empty RDAM
 

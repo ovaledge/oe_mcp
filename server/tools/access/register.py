@@ -55,7 +55,14 @@ def register(mcp: FastMCP) -> None:
         ] = None,
         object_id: Annotated[
             int | None,
-            Field(description="Catalog object id (catalog_access; from asset_explorer)."),
+            Field(
+                description=(
+                    "Catalog object id (from asset_explorer). "
+                    "catalog_access: preferred with object_type. "
+                    "source_system_access: when set with object_type, skip catalog "
+                    "resolve and send objectId to the DAM API."
+                ),
+            ),
         ] = None,
         object_type: Annotated[
             str | list[str] | None,

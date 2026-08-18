@@ -9,6 +9,7 @@ from server.constants import (
     MCP_OPERATION_CATALOG_ACCESS,
     MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
     MCP_PATH_ACCESS_EXPLORER,
+    MCP_SOURCE_SYSTEM_UNSUPPORTED_CODE,
 )
 from server.tools.common.descriptions import classify_tool_desc
 from server.tools.common.errors import error_payload
@@ -17,6 +18,8 @@ _DAM_UNSUPPORTED_MARKERS = (
     "not supported for native DAM",
     "Continue with operation=catalog_access",
 )
+# Hint vs connectionId mismatch uses mcp.source.system.hint.mismatch and must not match
+# these markers (both connectors may be DAM-supported).
 _RDAM_TO_CATALOG_OBJECT_TYPE = {
     "database": "oedatabase",
     "schema": "oeschema",
@@ -25,8 +28,10 @@ _RDAM_TO_CATALOG_OBJECT_TYPE = {
     "project": "oedomain",
     "report": "oechart",
 }
+# object_to_users → object_to_principals is identity-safe (catalog principals on the object).
+# user_to_objects must not map to user_to_object: RDAM username is a source login, not an
+# OvalEdge user id.
 _SOURCE_TO_CATALOG_DIRECTION = {
-    "user_to_objects": "user_to_object",
     "object_to_users": "object_to_principals",
 }
 
@@ -131,8 +136,45 @@ def enrich_get_user_object_access_response(result: dict[str, Any]) -> dict[str, 
 def is_dam_connector_unsupported(result: dict[str, Any]) -> bool:
     if not isinstance(result, dict) or result.get("status_code") != 400:
         return False
+    if result.get("error_code") == MCP_SOURCE_SYSTEM_UNSUPPORTED_CODE:
+        return True
     err = str(result.get("error") or "")
     return any(marker.lower() in err.lower() for marker in _DAM_UNSUPPORTED_MARKERS)
+
+
+def attach_catalog_fallback_context(
+    result: dict[str, Any],
+    *,
+    object_id: int | None = None,
+    object_type: str | None = None,
+    fully_qualified_name: str | None = None,
+    object_name: str | list[str] | None = None,
+    object_path: str | list[str] | None = None,
+) -> dict[str, Any]:
+    """Keep catalog identifiers from pre-DAM resolution for catalog_access fallback."""
+    from server.tools.common import drop_none
+
+    name: str | None
+    if isinstance(object_name, str):
+        name = object_name.strip() or None
+    elif isinstance(object_name, list):
+        name = object_name[0].strip() if object_name and str(object_name[0]).strip() else None
+    else:
+        name = None
+    ctx = drop_none(
+        object_id=object_id if object_id is not None and object_id > 0 else None,
+        object_type=object_type,
+        fully_qualified_name=fully_qualified_name.strip()
+        if isinstance(fully_qualified_name, str) and fully_qualified_name.strip()
+        else None,
+        object_name=name,
+        object_path=object_path,
+    )
+    if not ctx:
+        return result
+    out = dict(result)
+    out["_catalog_fallback"] = ctx
+    return out
 
 
 def catalog_direction_for_unsupported_dam(query_direction: str | None) -> str | None:

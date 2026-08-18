@@ -77,6 +77,51 @@ def _first_str(value: str | list[str] | None) -> str | None:
     return value[0] if value else None
 
 
+def _catalog_fqns_for_fallback(
+    effective_fqn: str | None,
+    effective_object_path: str | list[str] | None,
+) -> list[str]:
+    paths: list[str] = []
+    if isinstance(effective_object_path, list):
+        seen: set[str] = set()
+        for item in effective_object_path:
+            if not isinstance(item, str):
+                continue
+            token = item.strip()
+            if token and token not in seen:
+                seen.add(token)
+                paths.append(token)
+        if len(paths) > 1:
+            return paths
+    if isinstance(effective_fqn, str) and effective_fqn.strip():
+        return [effective_fqn.strip()]
+    if paths:
+        return paths
+    if isinstance(effective_object_path, str):
+        token = effective_object_path.strip()
+        return [token] if token else []
+    return []
+
+
+def _merge_catalog_access_results(results: list[dict[str, Any]]) -> dict[str, Any] | None:
+    ok_results = [item for item in results if isinstance(item, dict) and item.get("ok")]
+    if not ok_results:
+        return None
+    if len(ok_results) == 1:
+        return ok_results[0]
+    objects: list[Any] = []
+    for item in ok_results:
+        data = item.get("data")
+        if data is not None:
+            objects.append(data)
+    merged = dict(ok_results[0])
+    query_direction = None
+    if objects and isinstance(objects[0], dict):
+        query_direction = objects[0].get("queryDirection")
+    merged["data"] = {"queryDirection": query_direction, "objects": objects}
+    return merged
+
+
 @logged_tool_invocation
 async def _invoke_access_explorer(
     operation: str,
@@ -133,7 +178,6 @@ async def _invoke_access_explorer(
         return await _continue_catalog_access_if_dam_unsupported(
             result,
             query_direction=query_direction,
-            username=username,
             object_id=object_id,
             object_type=object_type,
             fully_qualified_name=fully_qualified_name,
@@ -148,7 +192,6 @@ async def _continue_catalog_access_if_dam_unsupported(
     result: dict[str, Any],
     *,
     query_direction: str | None,
-    username: str | list[str] | None,
     object_id: int | None,
     object_type: str | list[str] | None,
     fully_qualified_name: str | None,
@@ -161,24 +204,51 @@ async def _continue_catalog_access_if_dam_unsupported(
     catalog_qd = catalog_direction_for_unsupported_dam(query_direction)
     if catalog_qd is None:
         return result
-    catalog_type = catalog_object_type_for_fallback(object_type)
-    catalog_name = _first_str(object_name)
-    catalog_fqn = fully_qualified_name or _first_str(object_path)
-    has_id = object_id is not None and object_id > 0 and bool(catalog_type)
-    has_fqn = bool(catalog_fqn and str(catalog_fqn).strip())
+    fallback_ctx = result.get("_catalog_fallback")
+    if not isinstance(fallback_ctx, dict):
+        fallback_ctx = {}
+    effective_object_id = fallback_ctx.get("object_id") or object_id
+    effective_object_type = fallback_ctx.get("object_type") or object_type
+    effective_fqn = fallback_ctx.get("fully_qualified_name") or fully_qualified_name
+    effective_object_name = fallback_ctx.get("object_name") or object_name
+    effective_object_path = fallback_ctx.get("object_path") or object_path
+    catalog_type = catalog_object_type_for_fallback(effective_object_type)
+    catalog_name = _first_str(effective_object_name)
+    catalog_fqns = _catalog_fqns_for_fallback(effective_fqn, effective_object_path)
+    has_id = effective_object_id is not None and effective_object_id > 0 and bool(catalog_type)
+    has_fqn = bool(catalog_fqns)
     has_name = bool(catalog_name and str(catalog_name).strip())
     if not (has_id or has_fqn or has_name):
         return result
-    fallback = await _invoke_catalog_access(
-        query_direction=catalog_qd,
-        username=_first_str(username),
-        object_id=object_id if has_id else None,
-        object_type=catalog_type if has_id else None,
-        fully_qualified_name=None if has_id else (catalog_fqn if has_fqn else None),
-        object_name=None if has_id or has_fqn else catalog_name,
-        resolve_all_matches=resolve_all_matches,
-        access_intent_confirmed=MCP_ACCESS_INTENT_CATALOG_ACL,
-    )
-    if fallback.get("ok"):
-        return annotate_catalog_fallback(fallback)
+    if has_id or not has_fqn or len(catalog_fqns) == 1:
+        fallback = await _invoke_catalog_access(
+            query_direction=catalog_qd,
+            username=None,
+            object_id=effective_object_id if has_id else None,
+            object_type=catalog_type if has_id else None,
+            fully_qualified_name=None if has_id else (catalog_fqns[0] if has_fqn else None),
+            object_name=None if has_id or has_fqn else catalog_name,
+            resolve_all_matches=resolve_all_matches,
+            access_intent_confirmed=MCP_ACCESS_INTENT_CATALOG_ACL,
+        )
+        if fallback.get("ok"):
+            return annotate_catalog_fallback(fallback)
+        return result
+    fallbacks: list[dict[str, Any]] = []
+    for catalog_fqn in catalog_fqns:
+        fallbacks.append(
+            await _invoke_catalog_access(
+                query_direction=catalog_qd,
+                username=None,
+                object_id=None,
+                object_type=None,
+                fully_qualified_name=catalog_fqn,
+                object_name=None,
+                resolve_all_matches=resolve_all_matches,
+                access_intent_confirmed=MCP_ACCESS_INTENT_CATALOG_ACL,
+            )
+        )
+    merged = _merge_catalog_access_results(fallbacks)
+    if merged is not None:
+        return annotate_catalog_fallback(merged)
     return result
