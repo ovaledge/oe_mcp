@@ -120,7 +120,7 @@ Do **not** treat generic first-person catalog inventory (“What tables can I se
 
 Use **`access_explorer`** with **`operation=source_system_access`** for **native** grants harvested from Redshift, Snowflake, or Tableau (RDAM SQL only — **no Elasticsearch**). This is **not** OvalEdge catalog permissions (`operation=catalog_access`) and **not** catalog discovery.
 
-Named objects without `connection_id` (e.g. “Who has access to SUPERSTORE.SUPERSTORE in Snowflake?”) are resolved via `asset_explorer` inside `access_explorer`, then always RDAM (DAM MCP API). Catalog empty, ambiguous, not-found, or errors still call DAM with the original identifiers — do not return catalog search as the answer. **Never fall back to `asset_explorer`** when RDAM is empty, not-found, or errors — catalog search cannot return native grants. Report the RDAM/API outcome instead. Explicit `object_path` + `connection_id` skips catalog resolve.
+Named objects: `asset_explorer` this tool fills `object_id`, `object_type`, `connection_id`, FQN/`object_path`, `object_name`, then DAM API. Known `object_id` and `object_type` → DAM API only. **Never fall back to `asset_explorer`** after RDAM is empty, not-found, or errors — report the DAM/API outcome.
 
 Bare first-person “What can I access?” / “What tables can I see?” **without** a named principal **and** without naming Redshift/Snowflake/Tableau → catalog discovery (`asset_explorer`). First-person **with** a named source (e.g. “What tables can I access in Redshift?”) → this RDAM path (ask for remote `username` / `connection_id` as needed). Named-principal questions (e.g. “What can `svc_analytics` access?”) stay here.
 

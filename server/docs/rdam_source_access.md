@@ -19,7 +19,7 @@ If the API returns **400** `mcp.source.system.unsupported` (`Connector type {0} 
 
 ## No catalog fallback for empty RDAM
 
-`access_explorer` source_system_access reads RDAM SQL metadata only. Never call `asset_explorer`, `asset_details`, or other catalog tools as a substitute when RDAM returns empty grants, other 4xx/5xx, not-found, or not-harvested — catalog search cannot answer native Redshift/Snowflake/Tableau grants. Report the RDAM result (or API error) and suggest RDAM harvest, DAA, object_path / object_type, or native SQL (e.g. Snowflake `SHOW GRANTS`) — do not invoke catalog search.
+Named objects: `asset_explorer` this tool fills `object_id`, `object_type`, `connection_id`, FQN/`object_path`, `object_name`, then DAM API. Known `object_id` and `object_type` → DAM API only. Never call `asset_explorer` **after** RDAM returns empty grants, other 4xx/5xx, not-found, or not-harvested — catalog search cannot answer native grants. Report the RDAM result instead.
 
 ## Mandatory API fields
 

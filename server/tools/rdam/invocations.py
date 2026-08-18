@@ -85,6 +85,11 @@ async def _invoke_source_system_access(
     composed_path = merge_rdam_object_path(object_path, object_name, fully_qualified_name)
     if resolved_object_id is not None and not normalize_string_list(object_path):
         composed_path = None
+    normalized_type: str | None = None
+    if raw_object_type is not None:
+        normalized_type, type_err = validate_and_normalize_object_type(source, raw_object_type)
+        if type_err is not None:
+            return type_err
     if should_resolve_via_asset_explorer(
         qd,
         object_id,
@@ -121,11 +126,12 @@ async def _invoke_source_system_access(
                 resolved_fqn = resolved.fully_qualified_name
             if resolved.object_name:
                 resolved_object_name = resolved.object_name
-    normalized_type: str | None = None
-    if raw_object_type is not None:
-        normalized_type, type_err = validate_and_normalize_object_type(source, raw_object_type)
-        if type_err is not None:
-            return type_err
+            if resolved.object_type:
+                normalized_type, type_err = validate_and_normalize_object_type(
+                    source, resolved.object_type
+                )
+                if type_err is not None:
+                    return type_err
     if normalized_type is not None and composed_path is not None:
         path_err = validate_resolved_rdam_paths(
             composed_path,

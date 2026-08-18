@@ -347,6 +347,7 @@ class TestGetSourceSystemAccess:
         self, mock_oe_client: AsyncMock
     ) -> None:
         mock_oe_client.get.side_effect = [
+            {"ok": True, "data": {"items": []}},
             OvalEdgeError(
                 400,
                 "Connector type postgres is not supported for native DAM access. "
@@ -461,10 +462,13 @@ class TestGetSourceSystemAccess:
             })
 
     async def test_oval_edge_error(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.side_effect = OvalEdgeError(
-            404,
-            "username not found in harvested metadata",
-        )
+        mock_oe_client.get.side_effect = [
+            {"ok": True, "data": {"items": []}},
+            OvalEdgeError(
+                404,
+                "username not found in harvested metadata",
+            ),
+        ]
         mcp = FastMCP(name="test", version="0.0.1")
         access.register(mcp)
         fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
