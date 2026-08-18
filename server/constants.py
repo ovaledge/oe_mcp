@@ -204,9 +204,13 @@ MCP_GOVERNANCE_NON_CATALOG_OBJECT_TYPES_DOC = ", ".join(
 )
 
 # Native source-system access (access_explorer operation=source_system_access).
-# Must match backend McpSourceSystemAccessReadService.
+# Examples only — oasis validates whether the connector is RDAM-supported (APP-229).
 MCP_SOURCE_SYSTEMS = frozenset({"redshift", "snowflake", "tableau"})
-MCP_SOURCE_SYSTEMS_DOC = ", ".join(sorted(MCP_SOURCE_SYSTEMS))
+MCP_SOURCE_SYSTEM_UNSUPPORTED_CODE = "mcp.source.system.unsupported"
+MCP_SOURCE_SYSTEM_HINT_MISMATCH_CODE = "mcp.source.system.hint.mismatch"
+MCP_SOURCE_SYSTEMS_DOC = (
+    "redshift, snowflake, tableau (examples; oasis accepts additional RDAM connectors)"
+)
 MCP_QUERY_DIRECTIONS = frozenset({"user_to_objects", "object_to_users", "browse"})
 MCP_QUERY_DIRECTIONS_DOC = "user_to_objects | object_to_users | browse"
 MCP_CATALOG_QUERY_DIRECTIONS = frozenset({"user_to_object", "object_to_principals"})
@@ -328,7 +332,7 @@ MCP_SOURCE_SYSTEM_ACCESS_OVERVIEW_DOC = (
     "|---|---|---|\n"
     "| Access layer | OvalEdge catalog permissions | Native source-system grants |\n"
     "| Grant mechanisms | OvalEdge user grants + OvalEdge roles | Redshift (direct / group / "
-    "role), Snowflake (role), Tableau (direct / group) |\n"
+    "role), Snowflake (role), Tableau (direct / indirect group / direct role) |\n"
     "| Permission model | metadata-read/write + data permission levels | Native privileges "
     "(SELECT, INSERT, ALL, …) |\n"
     "| Object scope | All OvalEdge asset types | RS/SF database/schema/table/column; "

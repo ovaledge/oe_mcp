@@ -35,7 +35,7 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 | Create custom SQL data quality rule | `dq_rule_manager` step=create_custom_sql (confirm gate; after validate when `canCreateRule`) |
 | CDE / custom SQL DQ workflow (prompt) | `create_custom_sql_dq_workflow` or `assess_cde_dq_coverage` |
 | Metadata drift between crawls | `metadata_changes_between_crawls`; prompt `metadata_drift` |
-| Native Redshift/Snowflake/Tableau grants | `access_explorer` with `operation=source_system_access`; prompts `native_source_access`, `dam_object_browse` |
+| Native Redshift/Snowflake/Tableau grants | `access_explorer` with `operation=source_system_access`; prompts `native_source_access`, `dam_object_browse`. If 400 unsupported connector type / servertype (`mcp.source.system.unsupported`), continue with `operation=catalog_access`. If 400 `mcp.source.system.hint.mismatch`, fix `source_system` vs `connection_id` — do not switch to catalog_access |
 | OvalEdge catalog permissions (user/role on catalog objects) | `access_explorer` with `operation=catalog_access`; prompt `catalog_object_access` |
 | Lineage | `asset_lineage` (Trace data lineage); prompt `trace_data_lineage` |
 | Column stats / table relationships | `asset_details` (automatic for `oetable`/`oefile`; relationships for `oetable`); prompt `find_related_assets` |
@@ -120,7 +120,7 @@ Do **not** treat generic first-person catalog inventory (“What tables can I se
 
 Use **`access_explorer`** with **`operation=source_system_access`** for **native** grants harvested from Redshift, Snowflake, or Tableau (RDAM SQL only — **no Elasticsearch**). This is **not** OvalEdge catalog permissions (`operation=catalog_access`) and **not** catalog discovery.
 
-**Never fall back to `asset_explorer`** when RDAM is empty, not-found, or errors — catalog search cannot return native grants. Report the RDAM/API outcome instead.
+Named objects: `asset_explorer` this tool fills `object_id`, `object_type`, `connection_id`, FQN/`object_path`, `object_name`, then DAM API. Known `object_id` and `object_type` → DAM API only. **Never fall back to `asset_explorer`** after RDAM is empty, not-found, or errors — report the DAM/API outcome.
 
 Bare first-person “What can I access?” / “What tables can I see?” **without** a named principal **and** without naming Redshift/Snowflake/Tableau → catalog discovery (`asset_explorer`). First-person **with** a named source (e.g. “What tables can I access in Redshift?”) → this RDAM path (ask for remote `username` / `connection_id` as needed). Named-principal questions (e.g. “What can `svc_analytics` access?”) stay here.
 

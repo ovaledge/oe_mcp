@@ -15,6 +15,11 @@ from server.constants import (
 )
 from server.tools.access.disambiguation import validate_access_intent_confirmed
 from server.tools.common import drop_none, map_ovaledge_error, ovaledge_client
+from server.tools.rdam.catalog_resolve import (
+    CatalogResolvedScope,
+    resolve_rdam_scope_via_asset_explorer,
+    should_resolve_via_asset_explorer,
+)
 from server.tools.rdam.helpers import (
     annotate_multi_connection_advisory,
     enrich_column_grants_fallback,
@@ -33,6 +38,27 @@ from server.tools.rdam.helpers import (
 )
 
 
+def _map_dam_error_with_catalog_context(
+    exc: OvalEdgeError,
+    *,
+    resolved_object_id: int | None,
+    normalized_type: str | None,
+    resolved_fqn: str | None,
+    resolved_object_name: str | list[str] | None,
+    composed_path: str | list[str] | None,
+) -> dict[str, Any]:
+    from server.tools.access.helpers import attach_catalog_fallback_context
+
+    return attach_catalog_fallback_context(
+        map_ovaledge_error(exc),
+        object_id=resolved_object_id,
+        object_type=normalized_type,
+        fully_qualified_name=resolved_fqn,
+        object_name=resolved_object_name,
+        object_path=composed_path,
+    )
+
+
 async def _invoke_source_system_access(
     source_system: str | list[str],
     query_direction: str,
@@ -46,6 +72,7 @@ async def _invoke_source_system_access(
     resolve_all_matches: bool,
     scope_mode: str = MCP_RDAM_SCOPE_MODE_EXACT,
     fully_qualified_name: str | None = None,
+    object_id: int | None = None,
     access_intent_confirmed: str | None = None,
 ) -> dict[str, Any]:
     intent_err = validate_access_intent_confirmed(
@@ -64,6 +91,7 @@ async def _invoke_source_system_access(
         connection_id,
         object_name=object_name,
         fully_qualified_name=fully_qualified_name,
+        object_id=object_id,
         scope_mode=scope_mode,
     )
     if err is not None:
@@ -71,13 +99,60 @@ async def _invoke_source_system_access(
     source = normalize_string_list(source_system)[0]
     resolved_connection_id = resolve_single_connection_id(connection_id)
     raw_object_type = resolve_single_object_type(object_type)
+    resolved_object_id = object_id if object_id is not None and object_id > 0 else None
+    resolved_object_name = object_name
+    resolved_fqn = fully_qualified_name
+    qd = query_direction.strip().lower()
+    composed_path = merge_rdam_object_path(object_path, object_name, fully_qualified_name)
+    if resolved_object_id is not None and not normalize_string_list(object_path):
+        composed_path = None
     normalized_type: str | None = None
     if raw_object_type is not None:
         normalized_type, type_err = validate_and_normalize_object_type(source, raw_object_type)
         if type_err is not None:
             return type_err
-    qd = query_direction.strip().lower()
-    composed_path = merge_rdam_object_path(object_path, object_name, fully_qualified_name)
+    if should_resolve_via_asset_explorer(
+        qd,
+        object_id,
+        object_type,
+        object_path,
+        object_name,
+        fully_qualified_name,
+        resolved_connection_id,
+    ):
+        try:
+            async with ovaledge_client() as client:
+                resolved = await resolve_rdam_scope_via_asset_explorer(
+                    client,
+                    source_system=source,
+                    object_id=object_id,
+                    object_type=raw_object_type,
+                    object_name=object_name,
+                    fully_qualified_name=fully_qualified_name,
+                    resolve_all_matches=resolve_all_matches,
+                    connection_id=resolved_connection_id,
+                    object_path=object_path,
+                )
+        except OvalEdgeError:
+            resolved = None
+        if isinstance(resolved, CatalogResolvedScope):
+            composed_path = resolved.object_path
+            if resolved.object_type:
+                raw_object_type = resolved.object_type
+            if resolved.connection_id is not None:
+                resolved_connection_id = resolved.connection_id
+            if resolved.object_id is not None:
+                resolved_object_id = resolved.object_id
+            if resolved.fully_qualified_name:
+                resolved_fqn = resolved.fully_qualified_name
+            if resolved.object_name:
+                resolved_object_name = resolved.object_name
+            if resolved.object_type:
+                normalized_type, type_err = validate_and_normalize_object_type(
+                    source, resolved.object_type
+                )
+                if type_err is not None:
+                    return type_err
     if normalized_type is not None and composed_path is not None:
         path_err = validate_resolved_rdam_paths(
             composed_path,
@@ -102,6 +177,9 @@ async def _invoke_source_system_access(
         wire_object_path = object_paths[0]
     else:
         wire_object_path = object_paths
+    names = normalize_string_list(resolved_object_name)
+    wire_object_name = names[0] if names else None
+    wire_fqn = resolved_fqn.strip() if resolved_fqn else None
     descendants_scope = scope_mode == MCP_RDAM_SCOPE_MODE_DESCENDANTS
     browse_mode = qd == "browse"
     params: dict[str, object] = drop_none(
@@ -109,6 +187,13 @@ async def _invoke_source_system_access(
         sourceSystem=source.strip().lower(),
         queryDirection=qd,
         username=wire_username,
+        objectId=(
+            resolved_object_id
+            if resolved_object_id is not None and resolved_object_id > 0
+            else None
+        ),
+        fullyQualifiedName=wire_fqn,
+        objectName=wire_object_name if wire_object_path is None else None,
         objectPath=wire_object_path,
         objectType=None if normalized_type == MCP_RDAM_OBJECT_TYPE_ALL else normalized_type,
         includeColumns=include_columns if include_columns else None,
@@ -121,7 +206,14 @@ async def _invoke_source_system_access(
             async with ovaledge_client() as client:
                 return await client.get(MCP_PATH_ACCESS_EXPLORER, params=params)
         except OvalEdgeError as e:
-            return map_ovaledge_error(e)
+            return _map_dam_error_with_catalog_context(
+                e,
+                resolved_object_id=resolved_object_id,
+                normalized_type=normalized_type,
+                resolved_fqn=resolved_fqn,
+                resolved_object_name=resolved_object_name,
+                composed_path=composed_path,
+            )
     incomplete_table_lookup = (
         qd == "object_to_users"
         and normalized_type == "table"
@@ -130,11 +222,7 @@ async def _invoke_source_system_access(
         and is_incomplete_table_object_path(normalize_string_list(composed_path)[0])
         and not resolve_all_matches
     )
-    filter_level = (
-        None
-        if normalized_type in (None, MCP_RDAM_OBJECT_TYPE_ALL)
-        else normalized_type
-    )
+    filter_level = None if normalized_type in (None, MCP_RDAM_OBJECT_TYPE_ALL) else normalized_type
     try:
         async with ovaledge_client() as client:
             initial_error: OvalEdgeError | None = None
@@ -142,7 +230,14 @@ async def _invoke_source_system_access(
                 result = await client.get(MCP_PATH_ACCESS_EXPLORER, params=params)
             except OvalEdgeError as e:
                 if not incomplete_table_lookup:
-                    return map_ovaledge_error(e)
+                    return _map_dam_error_with_catalog_context(
+                        e,
+                        resolved_object_id=resolved_object_id,
+                        normalized_type=normalized_type,
+                        resolved_fqn=resolved_fqn,
+                        resolved_object_name=resolved_object_name,
+                        composed_path=composed_path,
+                    )
                 initial_error = e
                 result = {"ok": False, "message": str(e), "data": None}
             if qd == "user_to_objects" and not descendants_scope:
@@ -165,7 +260,14 @@ async def _invoke_source_system_access(
                 if enriched.get("ok"):
                     result = enriched
                 elif initial_error is not None:
-                    return map_ovaledge_error(initial_error)
+                    return _map_dam_error_with_catalog_context(
+                        initial_error,
+                        resolved_object_id=resolved_object_id,
+                        normalized_type=normalized_type,
+                        resolved_fqn=resolved_fqn,
+                        resolved_object_name=resolved_object_name,
+                        composed_path=composed_path,
+                    )
                 else:
                     result = enriched
                 result = await enrich_column_grants_fallback(
@@ -185,8 +287,22 @@ async def _invoke_source_system_access(
                 if shaped.get("ok"):
                     result = shaped
                 elif initial_error is not None:
-                    return map_ovaledge_error(initial_error)
+                    return _map_dam_error_with_catalog_context(
+                        initial_error,
+                        resolved_object_id=resolved_object_id,
+                        normalized_type=normalized_type,
+                        resolved_fqn=resolved_fqn,
+                        resolved_object_name=resolved_object_name,
+                        composed_path=composed_path,
+                    )
             result = filter_grants_by_privileges(result, privileges)
             return annotate_multi_connection_advisory(result, resolved_connection_id)
     except OvalEdgeError as e:
-        return map_ovaledge_error(e)
+        return _map_dam_error_with_catalog_context(
+            e,
+            resolved_object_id=resolved_object_id,
+            normalized_type=normalized_type,
+            resolved_fqn=resolved_fqn,
+            resolved_object_name=resolved_object_name,
+            composed_path=composed_path,
+        )

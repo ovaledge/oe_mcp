@@ -35,9 +35,13 @@ from server.constants import (
 from server.tools.common import error_payload
 
 _RDAM_OBJECT_TYPE_ALIASES = {
+    "oedatabase": "database",
     "oeschema": "schema",
     "oetable": "table",
     "oecolumn": "column",
+    "oechart": "report",
+    "chartchild": "report",
+    "oedomain": "project",
 }
 
 _GRANT_SUMMARY_LEVELS = ("database", "schema", "table", "column", "project", "report")
@@ -952,9 +956,10 @@ def validate_and_normalize_object_type(
             f"object_type must be one of {sorted(MCP_RDAM_OBJECT_TYPES)} "
             f"(catalog aliases oeschema/oetable/oecolumn accepted), got {object_type!r}",
         )
-    if normalized_type == "column" and ss != "redshift":
+    known = ss in MCP_SOURCE_SYSTEMS
+    if known and normalized_type == "column" and ss != "redshift":
         return None, error_payload("object_type=column is supported for redshift only.")
-    if normalized_type in {"project", "report"} and ss != "tableau":
+    if known and normalized_type in {"project", "report"} and ss != "tableau":
         return None, error_payload(
             f"object_type={normalized_type!r} is supported for tableau only.",
         )
@@ -1014,6 +1019,7 @@ def validate_source_system_access_args(
     *,
     object_name: str | list[str] | None = None,
     fully_qualified_name: str | None = None,
+    object_id: int | None = None,
     scope_mode: str = MCP_RDAM_SCOPE_MODE_EXACT,
 ) -> dict[str, Any] | None:
     multi_source_err = reject_multiple_source_system(source_system)
@@ -1028,10 +1034,8 @@ def validate_source_system_access_args(
 
     source_values = normalize_string_list(source_system)
     source = source_values[0] if source_values else str(source_system).strip()
-    if source.lower() not in MCP_SOURCE_SYSTEMS:
-        return error_payload(
-            f"source_system must be one of {sorted(MCP_SOURCE_SYSTEMS)}, got {source!r}",
-        )
+    if not source:
+        return error_payload("source_system is required for operation=source_system_access.")
     qd = query_direction.strip().lower()
     if qd not in MCP_QUERY_DIRECTIONS:
         return error_payload(
@@ -1075,8 +1079,11 @@ def validate_source_system_access_args(
             "object_path is required for user_to_objects with scope_mode=descendants.",
         )
 
+    has_catalog_id = object_id is not None and object_id > 0
+    if has_catalog_id and normalized_type is None:
+        return error_payload(MCP_SOURCE_SYSTEM_OBJECT_TYPE_REQUIRED_ERROR)
     if qd == "object_to_users":
-        if not object_paths:
+        if not object_paths and not has_catalog_id:
             if normalized_scope == MCP_RDAM_SCOPE_MODE_DESCENDANTS:
                 if resolved_connection_id is None:
                     return error_payload(

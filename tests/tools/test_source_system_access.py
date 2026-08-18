@@ -4,6 +4,7 @@ from fastmcp import FastMCP
 
 from server.client import OvalEdgeError
 from server.constants import (
+    MCP_OPERATION_CATALOG_ACCESS,
     MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
     MCP_PATH_ACCESS_EXPLORER,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_CONNECTION_ERROR,
@@ -85,6 +86,8 @@ class TestGetSourceSystemAccess:
         assert "what tables/schemas/columns can i see/view/access" in _DESC_ACCESS_EXPLORER.lower()
         assert "named principal" in _DESC_ACCESS_EXPLORER.lower()
         assert "not `access_explorer`" in _DESC_ACCESS_EXPLORER
+        assert "mcp.source.system.hint.mismatch" in rdam_doc
+        assert "validation-only" in rdam_doc.lower()
 
         assert "filteredToObjectLevel" not in _DESC_ACCESS_EXPLORER
 
@@ -133,12 +136,11 @@ class TestGetSourceSystemAccess:
         )
         assert err is not None
 
-    def test_validate_rejects_invalid_source_system_or_direction(self) -> None:
+    def test_validate_rejects_invalid_direction_not_unknown_source_system(self) -> None:
         err = validate_source_system_access_args(
             "postgres", "user_to_objects", "u", "prod_db.t", "table", 1000
         )
-        assert err is not None
-        assert "source_system" in err["error"]
+        assert err is None
 
         err = validate_source_system_access_args(
             "redshift", "invalid", "u", "prod_db.t", "table", 1000
@@ -149,6 +151,30 @@ class TestGetSourceSystemAccess:
     def test_validate_username_not_required_for_object_to_users(self) -> None:
         err = validate_source_system_access_args(
             "snowflake", "object_to_users", None, "BUSINESS.BANKING", "schema", 1360
+        )
+        assert err is None
+
+    def test_object_to_users_object_id_requires_object_type(self) -> None:
+        err = validate_source_system_access_args(
+            "snowflake",
+            "object_to_users",
+            None,
+            None,
+            None,
+            None,
+            object_id=42,
+        )
+        assert err is not None
+        assert "objectType" in err["error"]
+
+        err = validate_source_system_access_args(
+            "snowflake",
+            "object_to_users",
+            None,
+            None,
+            "table",
+            None,
+            object_id=42,
         )
         assert err is None
 
@@ -319,7 +345,213 @@ class TestGetSourceSystemAccess:
         )
         assert out["status_code"] == 400
 
-    async def test_rejects_invalid_source_system(self, mock_oe_client: AsyncMock) -> None:
+    async def test_unsupported_source_system_continues_with_catalog_access(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.side_effect = [
+            {"ok": True, "data": {"items": []}},
+            OvalEdgeError(
+                400,
+                "Connector type postgres is not supported for native DAM access. "
+                "Supported connector types: redshift, snowflake, tableau. "
+                "Continue with operation=catalog_access.",
+            ),
+            {"ok": True, "data": {"principals": []}},
+        ]
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="postgres",
+            query_direction="object_to_users",
+            access_intent_confirmed="native",
+            object_path=_REQ["object_path"],
+            object_type=_REQ["object_type"],
+            connection_id=_REQ["connection_id"],
+        )
+        assert out["ok"] is True
+        assert "catalog_access" in (out.get("data") or {}).get("advisoryMessage", "")
+        catalog_call = mock_oe_client.get.await_args_list[-1]
+        catalog_params = catalog_call.kwargs["params"]
+        assert catalog_call.args[0] == MCP_PATH_ACCESS_EXPLORER
+        assert catalog_params["operation"] == MCP_OPERATION_CATALOG_ACCESS
+        assert catalog_params["queryDirection"] == "object_to_principals"
+        assert "username" not in catalog_params
+
+    async def test_unsupported_source_system_fallback_uses_resolved_object_id(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.side_effect = [
+            {
+                "ok": True,
+                "data": {
+                    "items": [
+                        {
+                            "objectId": 42,
+                            "objectType": "oetable",
+                            "fullyQualifiedName": "prod.public.orders",
+                        }
+                    ]
+                },
+            },
+            {
+                "ok": True,
+                "data": {
+                    "details": {
+                        "objectId": 42,
+                        "objectType": "oetable",
+                        "fullyQualifiedName": "prod.public.orders",
+                    }
+                },
+            },
+            OvalEdgeError(
+                400,
+                "source_system no compatible. Valores admitidos: redshift, snowflake, tableau.",
+                body={
+                    "ok": False,
+                    "code": "mcp.source.system.unsupported",
+                    "message": (
+                        "source_system no compatible. Valores admitidos: "
+                        "redshift, snowflake, tableau."
+                    ),
+                },
+            ),
+            {"ok": True, "data": {"principals": []}},
+        ]
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="postgres",
+            query_direction="object_to_users",
+            access_intent_confirmed="native",
+            object_name="orders",
+            object_type="table",
+            connection_id=_REQ["connection_id"],
+        )
+        assert out["ok"] is True
+        catalog_call = mock_oe_client.get.await_args_list[-1]
+        catalog_params = catalog_call.kwargs["params"]
+        assert catalog_params["operation"] == MCP_OPERATION_CATALOG_ACCESS
+        assert catalog_params["objectId"] == 42
+        assert catalog_params["objectType"] == "oetable"
+
+    async def test_unsupported_source_system_fallback_covers_all_resolved_paths(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.side_effect = [
+            {
+                "ok": True,
+                "data": {
+                    "items": [
+                        {
+                            "objectId": 1,
+                            "objectType": "oeschema",
+                            "fullyQualifiedName": "DB.SCHEMA_A",
+                        },
+                        {
+                            "objectId": 2,
+                            "objectType": "oeschema",
+                            "fullyQualifiedName": "DB.SCHEMA_B",
+                        },
+                    ]
+                },
+            },
+            {
+                "ok": True,
+                "data": {
+                    "details": {
+                        "fullyQualifiedName": "DB.SCHEMA_A",
+                        "objectType": "oeschema",
+                    }
+                },
+            },
+            {
+                "ok": True,
+                "data": {
+                    "details": {
+                        "fullyQualifiedName": "DB.SCHEMA_B",
+                        "objectType": "oeschema",
+                    }
+                },
+            },
+            OvalEdgeError(
+                400,
+                "Connector type postgres is not supported for native DAM access. "
+                "Supported connector types: redshift, snowflake, tableau. "
+                "Continue with operation=catalog_access.",
+                body={
+                    "ok": False,
+                    "code": "mcp.source.system.unsupported",
+                    "message": (
+                        "Connector type postgres is not supported for native DAM access. "
+                        "Supported connector types: redshift, snowflake, tableau. "
+                        "Continue with operation=catalog_access."
+                    ),
+                },
+            ),
+            {
+                "ok": True,
+                "data": {
+                    "queryDirection": "object_to_principals",
+                    "fullyQualifiedName": "DB.SCHEMA_A",
+                    "principals": [{"principal": "ANALYST_A"}],
+                },
+            },
+            {
+                "ok": True,
+                "data": {
+                    "queryDirection": "object_to_principals",
+                    "fullyQualifiedName": "DB.SCHEMA_B",
+                    "principals": [{"principal": "ANALYST_B"}],
+                },
+            },
+        ]
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="postgres",
+            query_direction="object_to_users",
+            access_intent_confirmed="native",
+            fully_qualified_name="SCHEMA",
+            object_type="schema",
+            resolve_all_matches=True,
+        )
+        assert out["ok"] is True
+        objects = (out.get("data") or {}).get("objects")
+        assert objects is not None
+        assert [item["fullyQualifiedName"] for item in objects] == [
+            "DB.SCHEMA_A",
+            "DB.SCHEMA_B",
+        ]
+        catalog_calls = [
+            call
+            for call in mock_oe_client.get.await_args_list
+            if call.args
+            and call.args[0] == MCP_PATH_ACCESS_EXPLORER
+            and call.kwargs.get("params", {}).get("operation") == MCP_OPERATION_CATALOG_ACCESS
+        ]
+        assert [call.kwargs["params"].get("fullyQualifiedName") for call in catalog_calls] == [
+            "DB.SCHEMA_A",
+            "DB.SCHEMA_B",
+        ]
+
+    async def test_unsupported_source_system_does_not_fallback_user_to_objects(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.side_effect = [
+            {"ok": True, "data": {"items": []}},
+            OvalEdgeError(
+                400,
+                "Connector type postgres is not supported for native DAM access. "
+                "Supported connector types: redshift, snowflake, tableau. "
+                "Continue with operation=catalog_access.",
+            ),
+        ]
         mcp = FastMCP(name="test", version="0.0.1")
         access.register(mcp)
         fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
@@ -329,8 +561,46 @@ class TestGetSourceSystemAccess:
             query_direction="user_to_objects",
             **_REQ,
         )
-        assert out["status_code"] == 400
-        mock_oe_client.get.assert_not_called()
+        assert out.get("ok") is not True
+        assert out.get("status_code") == 400
+        catalog_calls = [
+            call
+            for call in mock_oe_client.get.await_args_list
+            if call.args and call.args[0] == MCP_PATH_ACCESS_EXPLORER
+            and call.kwargs.get("params", {}).get("operation") == MCP_OPERATION_CATALOG_ACCESS
+        ]
+        assert catalog_calls == []
+
+    async def test_source_system_hint_mismatch_does_not_continue_with_catalog_access(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.side_effect = OvalEdgeError(
+            400,
+            "sourceSystem snowflake does not match connectionId type redshift. "
+            "Pass a matching sourceSystem or omit sourceSystem.",
+        )
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="snowflake",
+            query_direction="browse",
+            object_type="database",
+            connection_id=_REQ["connection_id"],
+        )
+        assert out.get("ok") is not True
+        assert out.get("status_code") == 400
+        err = str(out.get("error") or "")
+        assert "does not match connectionId" in err
+        assert "catalog_access" not in err.lower()
+        catalog_calls = [
+            call
+            for call in mock_oe_client.get.await_args_list
+            if call.args and call.args[0] == MCP_PATH_ACCESS_EXPLORER
+            and call.kwargs.get("params", {}).get("operation") == MCP_OPERATION_CATALOG_ACCESS
+        ]
+        assert catalog_calls == []
 
     async def test_forwards_without_object_type(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
@@ -422,10 +692,13 @@ class TestGetSourceSystemAccess:
             })
 
     async def test_oval_edge_error(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.side_effect = OvalEdgeError(
-            404,
-            "username not found in harvested metadata",
-        )
+        mock_oe_client.get.side_effect = [
+            {"ok": True, "data": {"items": []}},
+            OvalEdgeError(
+                404,
+                "username not found in harvested metadata",
+            ),
+        ]
         mcp = FastMCP(name="test", version="0.0.1")
         access.register(mcp)
         fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
@@ -637,6 +910,40 @@ class TestGetSourceSystemAccess:
         group_grant = out["data"]["grants"][0]
         assert group_grant["grantMechanism"] == "group"
         assert group_grant["contributingGroup"] == "Analysts"
+
+    async def test_tableau_user_to_objects_direct_role(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {
+                        "objectPath": "Finance/Headcount",
+                        "objectLevel": "report",
+                        "grantMechanism": "role",
+                        "principalType": "user",
+                        "principalName": "jane.doe",
+                        "contributingRole": "Explorer",
+                        "privileges": ["READ"],
+                    },
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="tableau",
+            query_direction="user_to_objects",
+            username="jane.doe",
+            object_path="Finance/Headcount",
+            object_type="report",
+            connection_id=2000,
+        )
+        assert out["ok"] is True
+        role_grant = out["data"]["grants"][0]
+        assert role_grant["grantMechanism"] == "role"
+        assert role_grant["contributingRole"] == "Explorer"
 
     async def test_forwards_connection_prefixed_object_path(
         self, mock_oe_client: AsyncMock

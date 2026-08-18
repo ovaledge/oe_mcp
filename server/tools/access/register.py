@@ -55,7 +55,14 @@ def register(mcp: FastMCP) -> None:
         ] = None,
         object_id: Annotated[
             int | None,
-            Field(description="Catalog object id (catalog_access; from asset_explorer)."),
+            Field(
+                description=(
+                    "Catalog object id (from asset_explorer). "
+                    "catalog_access: preferred with object_type. "
+                    "source_system_access: when set with object_type, skip catalog "
+                    "resolve and send objectId to the DAM API."
+                ),
+            ),
         ] = None,
         object_type: Annotated[
             str | list[str] | None,
@@ -79,7 +86,7 @@ def register(mcp: FastMCP) -> None:
             Field(description="Resolve all ambiguous name matches (default false)."),
         ] = False,
         source_system: Annotated[
-            Literal["redshift", "snowflake", "tableau"] | None,
+            str | None,
             Field(
                 description="Required for source_system_access: " + MCP_SOURCE_SYSTEMS_DOC + ".",
             ),

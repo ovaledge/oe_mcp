@@ -10,6 +10,8 @@ from server.constants import (
     MCP_OPERATION_CATALOG_ACCESS,
     MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
     MCP_PATH_ACCESS_EXPLORER,
+    MCP_PATH_ASSET_DETAILS,
+    MCP_PATH_ASSET_EXPLORER,
     TOOL_ACCESS_EXPLORER,
 )
 from server.tools import access
@@ -58,6 +60,16 @@ class TestAccessExplorerRegistration:
         assert "native_source_access" in _DESC_ACCESS_EXPLORER
         assert "What tables/schemas/columns can I see/view/access" in _DESC_ACCESS_EXPLORER
 
+    async def test_object_id_schema_covers_rdam_id_path(self) -> None:
+        mcp = FastMCP("test")
+        access.register(mcp)
+        tool = await get_tool_object(mcp, TOOL_ACCESS_EXPLORER)
+        props = (tool.parameters or {}).get("properties", {})
+        desc = (props.get("object_id") or {}).get("description", "").lower()
+        assert "source_system_access" in desc
+        assert "objectid" in desc or "object_id" in desc
+        assert "skip catalog resolve" in desc or "dam" in desc
+
 
 class TestAccessExplorerValidation:
     def test_catalog_validate_requires_direction(self) -> None:
@@ -84,12 +96,11 @@ class TestAccessExplorerValidation:
         assert err is not None
         assert "one object resolution" in err["error"]
 
-    def test_rdam_validate_rejects_invalid_source(self) -> None:
+    def test_rdam_validate_allows_unknown_source_for_java_registry(self) -> None:
         err = validate_source_system_access_args(
             "postgres", "user_to_objects", "u", "prod_db.t", "table", 1000
         )
-        assert err is not None
-        assert "source_system" in err["error"]
+        assert err is None
 
     async def test_unknown_operation_rejected_without_http(self) -> None:
         from server.tools.access.invocations import _invoke_access_explorer
@@ -325,3 +336,164 @@ class TestAccessExplorerSourceSystemPath:
                 "connectionId": 1000,
             },
         )
+
+
+class TestAccessExplorerCatalogResolveForSourceSystem:
+    async def test_object_id_skips_asset_explorer_and_sends_catalog_id(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation=MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
+            source_system="redshift",
+            query_direction="object_to_users",
+            access_intent_confirmed="native",
+            object_id=42,
+            object_type="oetable",
+        )
+        assert out["ok"] is True
+        mock_oe_client.get.assert_awaited_once()
+        assert mock_oe_client.get.await_args.args[0] == MCP_PATH_ACCESS_EXPLORER
+        params = mock_oe_client.get.await_args.kwargs["params"]
+        assert params["objectId"] == 42
+        assert params["objectType"] == "table"
+
+    async def test_named_fqn_uses_asset_explorer_then_dam(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.side_effect = [
+            {
+                "ok": True,
+                "data": {
+                    "items": [
+                        {
+                            "objectId": 77,
+                            "objectType": "oeschema",
+                            "objectName": "SUPERSTORE",
+                            "fullyQualifiedName": "SUPERSTORE.SUPERSTORE",
+                        }
+                    ]
+                },
+            },
+            {
+                "ok": True,
+                "data": {
+                    "details": {
+                        "objectId": 77,
+                        "objectType": "oeschema",
+                        "objectName": "SUPERSTORE",
+                        "fullyQualifiedName": "SUPERSTORE.SUPERSTORE",
+                        "connectionInfoId": 2000,
+                    }
+                },
+            },
+            {"ok": True, "data": {"grants": [{"principal": "ANALYST"}]}},
+        ]
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation=MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
+            source_system="snowflake",
+            query_direction="object_to_users",
+            access_intent_confirmed="native",
+            fully_qualified_name="SUPERSTORE.SUPERSTORE",
+            object_type="schema",
+        )
+        assert out["ok"] is True
+        paths = [call.args[0] for call in mock_oe_client.get.await_args_list]
+        assert paths[0] == MCP_PATH_ASSET_EXPLORER
+        assert paths[1] == MCP_PATH_ASSET_DETAILS
+        assert paths[2] == MCP_PATH_ACCESS_EXPLORER
+        params = mock_oe_client.get.await_args_list[2].kwargs["params"]
+        assert params["objectId"] == 77
+        assert params["objectType"] == "schema"
+        assert params["connectionId"] == 2000
+        assert params["objectPath"] == "SUPERSTORE.SUPERSTORE"
+        assert params["fullyQualifiedName"] == "SUPERSTORE.SUPERSTORE"
+
+    async def test_resolve_all_matches_forwards_catalog_paths_to_dam(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.side_effect = [
+            {
+                "ok": True,
+                "data": {
+                    "items": [
+                        {
+                            "objectId": 1,
+                            "objectType": "oeschema",
+                            "fullyQualifiedName": "DB.SCHEMA_A",
+                        },
+                        {
+                            "objectId": 2,
+                            "objectType": "oeschema",
+                            "fullyQualifiedName": "DB.SCHEMA_B",
+                        },
+                    ]
+                },
+            },
+            {
+                "ok": True,
+                "data": {
+                    "details": {
+                        "fullyQualifiedName": "DB.SCHEMA_A",
+                        "objectType": "oeschema",
+                    }
+                },
+            },
+            {
+                "ok": True,
+                "data": {
+                    "details": {
+                        "fullyQualifiedName": "DB.SCHEMA_B",
+                        "objectType": "oeschema",
+                    }
+                },
+            },
+            {"ok": True, "data": {"grants": [{"principal": "ANALYST"}]}},
+        ]
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation=MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
+            source_system="snowflake",
+            query_direction="object_to_users",
+            access_intent_confirmed="native",
+            fully_qualified_name="SCHEMA",
+            object_type="schema",
+            resolve_all_matches=True,
+        )
+        assert out["ok"] is True
+        rdam_params = mock_oe_client.get.await_args_list[-1].kwargs["params"]
+        assert rdam_params["objectPath"] == ["DB.SCHEMA_A", "DB.SCHEMA_B"]
+        assert rdam_params["objectType"] == "schema"
+        assert rdam_params["resolveAllMatches"] is True
+
+    async def test_empty_catalog_resolve_still_calls_dam(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.side_effect = [
+            {"ok": True, "data": {"items": []}},
+            {"ok": True, "data": {"grants": []}},
+        ]
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation=MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
+            source_system="snowflake",
+            query_direction="object_to_users",
+            access_intent_confirmed="native",
+            object_path="SUPERSTORE.SUPERSTORE",
+            object_type="schema",
+        )
+        assert out["ok"] is True
+        assert out["data"]["grants"] == []
+        paths = [call.args[0] for call in mock_oe_client.get.await_args_list]
+        assert paths[0] == MCP_PATH_ASSET_EXPLORER
+        assert paths[-1] == MCP_PATH_ACCESS_EXPLORER

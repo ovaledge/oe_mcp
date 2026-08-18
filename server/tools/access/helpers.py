@@ -9,9 +9,31 @@ from server.constants import (
     MCP_OPERATION_CATALOG_ACCESS,
     MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
     MCP_PATH_ACCESS_EXPLORER,
+    MCP_SOURCE_SYSTEM_UNSUPPORTED_CODE,
 )
 from server.tools.common.descriptions import classify_tool_desc
 from server.tools.common.errors import error_payload
+
+_DAM_UNSUPPORTED_MARKERS = (
+    "not supported for native DAM",
+    "Continue with operation=catalog_access",
+)
+# Hint vs connectionId mismatch uses mcp.source.system.hint.mismatch and must not match
+# these markers (both connectors may be DAM-supported).
+_RDAM_TO_CATALOG_OBJECT_TYPE = {
+    "database": "oedatabase",
+    "schema": "oeschema",
+    "table": "oetable",
+    "column": "oecolumn",
+    "project": "oedomain",
+    "report": "oechart",
+}
+# object_to_users → object_to_principals is identity-safe (catalog principals on the object).
+# user_to_objects must not map to user_to_object: RDAM username is a source login, not an
+# OvalEdge user id.
+_SOURCE_TO_CATALOG_DIRECTION = {
+    "object_to_users": "object_to_principals",
+}
 
 _DESC_ACCESS_EXPLORER = classify_tool_desc(
     "Explore access permissions: OvalEdge **catalog permissions** or **native** RDAM "
@@ -30,11 +52,18 @@ _DESC_ACCESS_EXPLORER = classify_tool_desc(
     "redirectUrl. Prompt: `catalog_object_access`.\n\n"
     f"**`operation={MCP_OPERATION_SOURCE_SYSTEM_ACCESS}`** — native RDAM grants / DAM browse. "
     "Required: `source_system`, `query_direction` (user_to_objects | object_to_users | "
-    "browse). **Not** catalog permissions or `asset_explorer` — never fall back to "
-    "`asset_explorer` when RDAM is empty or errors. Do not probe `connection_id` — ask "
-    "the user. **browse:** connection_id + object_type. **user_to_objects:** username "
-    "required; with connection_id + object_type=table, omit `object_path` to list tables. "
-    "**object_to_users:** object_path + object_type. Optional object_name composes path. "
+    "browse). Named objects: `asset_explorer` this tool fills object_id, "
+    "object_type, connection_id, FQN/object_path, object_name, then DAM API. "
+    "Known object_id and object_type → DAM API only. Never fall back to `asset_explorer` "
+    "after RDAM is empty or errors. "
+    "If Java returns 400 `mcp.source.system.unsupported` (connector type / servertype not "
+    "in the DAM registry), continue with `operation=catalog_access` — that is not an empty "
+    "RDAM result. **Not** catalog permissions otherwise — never fall back to "
+    "`asset_explorer` when RDAM is empty or other errors. Do not probe `connection_id` — "
+    "ask the user. **browse:** connection_id + "
+    "object_type. **user_to_objects:** username required; with connection_id + "
+    "object_type=table, omit `object_path` to list tables. **object_to_users:** "
+    "object_path + object_type, or catalog object_id. Optional object_name composes path. "
     "**scope_mode:** exact | descendants (default exact). Partial paths may return "
     "matchCandidates or requiresSchemaSelection. Grant rows include grant_mechanism "
     "(direct / contributing_role/group) and privileges. "
@@ -101,4 +130,78 @@ def enrich_get_user_object_access_response(result: dict[str, Any]) -> dict[str, 
                 f"Data story access is inherited from Story Zone '{zone_name}' "
                 f"({zone_type}); the story has no direct catalog permissions."
             )
+    return result
+
+
+def is_dam_connector_unsupported(result: dict[str, Any]) -> bool:
+    if not isinstance(result, dict) or result.get("status_code") != 400:
+        return False
+    if result.get("error_code") == MCP_SOURCE_SYSTEM_UNSUPPORTED_CODE:
+        return True
+    err = str(result.get("error") or "")
+    return any(marker.lower() in err.lower() for marker in _DAM_UNSUPPORTED_MARKERS)
+
+
+def attach_catalog_fallback_context(
+    result: dict[str, Any],
+    *,
+    object_id: int | None = None,
+    object_type: str | None = None,
+    fully_qualified_name: str | None = None,
+    object_name: str | list[str] | None = None,
+    object_path: str | list[str] | None = None,
+) -> dict[str, Any]:
+    """Keep catalog identifiers from pre-DAM resolution for catalog_access fallback."""
+    from server.tools.common import drop_none
+
+    name: str | None
+    if isinstance(object_name, str):
+        name = object_name.strip() or None
+    elif isinstance(object_name, list):
+        name = object_name[0].strip() if object_name and str(object_name[0]).strip() else None
+    else:
+        name = None
+    ctx = drop_none(
+        object_id=object_id if object_id is not None and object_id > 0 else None,
+        object_type=object_type,
+        fully_qualified_name=fully_qualified_name.strip()
+        if isinstance(fully_qualified_name, str) and fully_qualified_name.strip()
+        else None,
+        object_name=name,
+        object_path=object_path,
+    )
+    if not ctx:
+        return result
+    out = dict(result)
+    out["_catalog_fallback"] = ctx
+    return out
+
+
+def catalog_direction_for_unsupported_dam(query_direction: str | None) -> str | None:
+    qd = (query_direction or "").strip().lower()
+    return _SOURCE_TO_CATALOG_DIRECTION.get(qd)
+
+
+def catalog_object_type_for_fallback(object_type: str | list[str] | None) -> str | None:
+    if isinstance(object_type, list):
+        raw = object_type[0] if object_type else None
+    else:
+        raw = object_type
+    if not raw or not str(raw).strip():
+        return None
+    key = str(raw).strip().lower()
+    if key.startswith("oe"):
+        return key
+    return _RDAM_TO_CATALOG_OBJECT_TYPE.get(key, key)
+
+
+def annotate_catalog_fallback(result: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(result, dict) or not result.get("ok"):
+        return result
+    data = result.get("data")
+    if isinstance(data, dict) and not data.get("advisoryMessage"):
+        data["advisoryMessage"] = (
+            "Connector type is not supported for native DAM access; "
+            "continued with operation=catalog_access."
+        )
     return result

@@ -9,13 +9,21 @@ Deep routing reference for **`access_explorer`** with **`operation=source_system
 | | access_explorer catalog_access | access_explorer source_system_access |
 |---|---|---|
 | Access layer | OvalEdge catalog permissions | Native source-system grants |
-| Grant mechanisms | OvalEdge user grants + OvalEdge roles | Redshift (direct / group / role), Snowflake (role), Tableau (direct / group) |
+| Grant mechanisms | OvalEdge user grants + OvalEdge roles | Redshift (direct / group / role), Snowflake (role), Tableau (direct / indirect group / direct role) |
 | Permission model | metadata-read/write + data permission levels | Native privileges (SELECT, INSERT, ALL, …) |
 | Object scope | All OvalEdge asset types | RS/SF database/schema/table/column; Tableau project/report |
 
-## No catalog / Elasticsearch fallback
+## Unsupported connector type (continue with catalog_access)
 
-`access_explorer` source_system_access reads RDAM SQL metadata only. Never call `asset_explorer`, `asset_details`, or other catalog tools as a substitute when RDAM returns empty grants, 4xx/5xx, not-found, or not-harvested — catalog search cannot answer native Redshift/Snowflake/Tableau grants. Report the RDAM result (or API error) and suggest RDAM harvest, DAA, object_path / object_type, or native SQL (e.g. Snowflake `SHOW GRANTS`) — do not invoke catalog search.
+If the API returns **400** `mcp.source.system.unsupported` (`Connector type {0} is not supported for native DAM access. Supported connector types: {1}. Continue with operation=catalog_access.`), `{0}` is the requested connector type / `servertype` and `{1}` is the DAM registry CSV. **Continue with `operation=catalog_access`** — native DAM is not available for that connector.
+
+Do **not** treat `mcp.source.system.hint.mismatch` as unsupported. That 400 means `source_system` does not match `connection_id` (e.g. Snowflake hint with a Redshift connection). Both connectors may be DAM-supported; fix the params. Do not continue with `catalog_access`.
+
+`McpSourceSystemAccessCapabilities` extra beans are **validation-only** (object types / mechanism flags). They do not add grant execution. Grant SQL remains RDBMS `rdam_*privilege` harvest tables or Tableau project/report privilege tables. Registering a new connector so `require()` succeeds does not mean native grant rows will be correct.
+
+## No catalog fallback for empty RDAM
+
+Named objects: `asset_explorer` this tool fills `object_id`, `object_type`, `connection_id`, FQN/`object_path`, `object_name`, then DAM API. Known `object_id` and `object_type` → DAM API only. Never call `asset_explorer` **after** RDAM returns empty grants, other 4xx/5xx, not-found, or not-harvested — catalog search cannot answer native grants. Report the RDAM result instead.
 
 ## Mandatory API fields
 
@@ -55,7 +63,8 @@ Do not guess `connection_id`, `object_type`, or `object_path` — ask the user, 
 |-------------|---------------------|
 | project | `rdam_reportgroup_privilege` |
 | report | `rdam_report_privilege` |
-| group expansion | `rdam_usergroup` (site-group membership for indirect grants) |
+| group expansion | `rdam_workspace_usergroup` (site-group membership for **indirect** grants) |
+| role expansion | `rdam_userrole` + `rdam_role` (direct role grants on project/report) |
 
 ## object_path formats
 
