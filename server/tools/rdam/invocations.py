@@ -160,7 +160,11 @@ async def _invoke_source_system_access(
         sourceSystem=source.strip().lower(),
         queryDirection=qd,
         username=wire_username,
-        objectId=resolved_object_id if resolved_object_id is not None and resolved_object_id > 0 else None,
+        objectId=(
+            resolved_object_id
+            if resolved_object_id is not None and resolved_object_id > 0
+            else None
+        ),
         fullyQualifiedName=wire_fqn,
         objectName=wire_object_name if wire_object_path is None else None,
         objectPath=wire_object_path,
