@@ -17,6 +17,7 @@ from server.constants import (
     TOOL_ASSET_EXPLORER,
     TOOL_ASSET_LINEAGE,
     TOOL_CREATE_GLOSSARY_TERM,
+    TOOL_CREATE_SERVICE_REQUEST,
     TOOL_CREATE_TAG,
     TOOL_DQ_RULE_ADVISOR,
     TOOL_DQ_RULE_MANAGER,
@@ -36,6 +37,7 @@ MCP_TOOL_NAMES: frozenset[str] = frozenset(
         TOOL_METADATA_CHANGES_BETWEEN_CRAWLS,
         TOOL_CREATE_GLOSSARY_TERM,
         TOOL_CREATE_TAG,
+        TOOL_CREATE_SERVICE_REQUEST,
         TOOL_KNOWLEDGE_SEARCH,
         TOOL_UPDATE_ASSET_DESCRIPTIONS,
         TOOL_UPDATE_CDE_ASSOCIATIONS,
@@ -70,6 +72,7 @@ MCP_WORKFLOW_PROMPT_NAMES: frozenset[str] = frozenset(
         "assign_governance_roles",
         "assess_cde_dq_coverage",
         "create_custom_sql_dq_workflow",
+        "create_service_desk_request",
     }
 )
 

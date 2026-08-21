@@ -25,7 +25,7 @@ Certification is enforced and interpreted in OvalEdge; the MCP surfaces values a
 
 Access to catalog assets, glossary content, lineage nodes, and previews is enforced **only** by OvalEdge. The MCP does not bypass, broaden, or reinterpret permissions. If a user cannot see an object in the OvalEdge UI, they should not expect to retrieve it via MCP.
 
-Write tools (e.g. `create_tag`, `create_glossary_term`, `update_asset_descriptions`, `update_governance_roles`) invoke the same OvalEdge APIs as the UI; they succeed only when the authenticated user has the required governance privileges.
+Write tools (e.g. `create_tag`, `create_glossary_term`, `create_service_request`, `update_asset_descriptions`, `update_governance_roles`) invoke the same OvalEdge APIs as the UI; they succeed only when the authenticated user has the required governance privileges.
 
 The MCP adds **human-in-the-loop** steps for governed writes: picker responses (`formattedResponse`) on creates, explicit confirmation flags, a **`confirmationToken`** that binds the confirmed POST to the previewed payload, and a final **`write_confirmed_by_user`** gate before POST (creates and updates). Agents must not skip pickers or auto-confirm on behalf of users.
 

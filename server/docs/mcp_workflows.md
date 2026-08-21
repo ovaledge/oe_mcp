@@ -4,7 +4,7 @@ This document is the **agent routing guide** for the OvalEdge MCP server. It is 
 
 **Agents must read this resource** at session start and before multi-step workflows, governed writes, native source access (RDAM), catalog permissions checks, or DQ operations. Server instructions (`server/app.py`) and tool descriptions link here; workflow prompts assume you have loaded this guide or an equivalent section.
 
-Canonical inventories (used by tests): **`server/mcp_surface.py`** — `MCP_TOOL_NAMES` (19 tools), `MCP_WORKFLOW_PROMPT_NAMES` (21 prompts), `MCP_OVALEDGE_RESOURCE_TEMPLATES` (5 object-detail templates).
+Canonical inventories (used by tests): **`server/mcp_surface.py`** — `MCP_TOOL_NAMES` (15 tools), `MCP_WORKFLOW_PROMPT_NAMES` (22 prompts), `MCP_OVALEDGE_RESOURCE_TEMPLATES` (5 object-detail templates).
 
 There is **no MCP protocol “tool priority” field**. Routing is guided by:
 
@@ -43,6 +43,7 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 | Domain overview (terms, tables, stories) | prompt `explore_data_domain` |
 | Create glossary term | `create_glossary_term` (guided; human confirms); prompt `create_business_glossary_term` |
 | Create tag | `create_tag` (guided; human confirms); prompt `create_governance_tag` |
+| “I want/need access to [table]”, “raise an access request”, content-change request, or “Data Quality Rule Recommendation request” | `create_service_request` (prompt `create_service_desk_request`) — **not** `access_explorer` and **not** `dq_rule_advisor`. “Who has access?” stays `resolve_object_access` |
 | Update descriptions | `update_asset_descriptions`; prompt `document_asset_descriptions` |
 | Update governance roles | `update_governance_roles`; prompt `assign_governance_roles` |
 | Update CDE flag on tables/columns/files | `update_cde_associations` (confirm gate) |
@@ -62,6 +63,7 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 | Catalog | `update_cde_associations` | confirm gate |
 | Governance | `create_glossary_term` | confirm gate |
 | Governance | `create_tag` | confirm gate |
+| Service desk | `create_service_request` | confirm gate |
 | Governance | `update_governance_roles` | confirm gate |
 | Governance | `update_custom_field_value` | confirm gate |
 | Data quality | `dq_rule_advisor` | validate_query confirm gate |
@@ -259,7 +261,7 @@ Static platform markdown (this folder): `docs://ovaledge/{filename}`:
 
 ## Workflow prompts
 
-Invoke by name from the MCP client when supported. Each prompt returns instruction text that tells the agent which tools to call in order. **21 prompts** registered (see `MCP_WORKFLOW_PROMPT_NAMES` in `server/mcp_surface.py`).
+Invoke by name from the MCP client when supported. Each prompt returns instruction text that tells the agent which tools to call in order. **22 prompts** registered (see `MCP_WORKFLOW_PROMPT_NAMES` in `server/mcp_surface.py`).
 
 ### Discovery
 
@@ -304,6 +306,7 @@ Invoke by name from the MCP client when supported. Each prompt returns instructi
 |--------|---------|
 | `create_business_glossary_term` | Guided `create_glossary_term` with pickers and confirm gate |
 | `create_governance_tag` | Guided `create_tag` (secure/open) with confirm gate |
+| `create_service_desk_request` | Resolve asset → look up template → confirm → `create_service_request` |
 | `document_asset_descriptions` | Draft + user confirm → `update_asset_descriptions` |
 | `assign_governance_roles` | Resolve target → confirm → `update_governance_roles` |
 | `assess_cde_dq_coverage` | CDE assess → lookup → associate / `dq_rule_manager` step=create_standard with confirm gate |
@@ -319,9 +322,42 @@ Mark or unmark **Critical Data Element (CDE)** on catalog objects — tables, co
 
 Often used before DQ workflows when the user wants to mark a table or column as CDE, or change CDE coverage after `dq_rule_advisor` step=assess.
 
+## Create a service request (`create_service_request`)
+
+File an OvalEdge service desk ticket from user intent (access, content change, data quality).
+
+**Sample prompts (trigger `create_service_request` / `create_service_desk_request`):**
+
+| User says | Route |
+|-----------|--------|
+| “I want access to Loan_Data table” | `request_type=access`, resolve `Loan_Data` via `asset_explorer` |
+| “I need Data Read access for Customer table” | `access`; set **Permission** to `Data Read` (do not ask if the user already named it) |
+| “Create a content change request for Employee table” | `request_type=content` |
+| “Raise a Data Quality Rule Recommendation request” | `request_type=dataquality` — this is a **service desk ticket**, not `dq_rule_advisor`. Ask which table/file if none is named |
+| “I want access for Loan_Data, Employee_Details and Sales_Target” | Resolve each table; one ticket with comma-separated object ids when Select Table `allowMultiple` is true, otherwise one ticket per table |
+| “Raise an access request for these tables” | Use the prior shortlist; if none, ask which tables |
+
+1. Infer **request_type** (`access`, `content`, `dataquality`) and **object_type** (`table` → `oetable`).
+2. Call `asset_explorer` to resolve `object_id`, `object_type`, `connection_id`, and connection name/type. Do not invent ids.
+3. Call `create_service_request` **without** `summary` to look up the **Published and Active** template for that request type + object type (optional `connection_type` / `connection_name` / `connection_id`). Present `formattedResponse`. Fill **summary** yourself. Use **fieldData / defaultValue** for dropdowns (Priority, Permission) unless the user already named a value. **Requested By** and **Requested for User** are the logged-in user. Ask only for required fields that have no default. If the user later asks to change a default, override it.
+4. **Do not invent** Business Description, Technical Description, tags, terms, or additional fields. Ask the user; if they skip, omit those fields.
+5. **Tags and terms:** if the user names any, pass those names in `ticket_fields` (Associated Tags / Associated Term). The backend checks whether they exist. Valid names are included; unknown names are omitted with a warning — still create the request. Do not block on invalid tags or terms.
+6. **Additional fields:** optional. When lookup returns `fieldData.additionalFields`, present each as **name (type)** plus allowed options for code fields. Ask `Field name = value` only for fields the user wants; skip the rest. Pass those as `custom_fields` keyed by fieldName. Do not invent field names or values. Validate values: text maxlength, code = configured options only, number = numeric, date requires **date and time**, URL = valid hyperlink.
+7. **Field validations:** honor each field's `validations` and `fieldData.options` from lookup. If a value exceeds the character limit, tell the user: “The entered value exceeds the maximum allowed character limit. Please provide a shorter response.” If a dropdown value is not configured, tell the user: “The selected value is not available. Please choose one of the configured options.” and list the valid options. Author Users / Viewer Users / Author Roles / Viewer Roles / Teams must be valid OvalEdge principals of that type.
+8. Re-call with `ticket_template_id`, `object_id`, `summary`, and any user-supplied `ticket_fields` for **confirm_create**.
+9. After explicit user approval, re-call with `write_confirmed_by_user=true` and `confirmation_token`. Show any `warnings` from the created ticket.
+
+**Published / Active only.** Lookup returns only templates that are Published and Active. Draft, unpublished, or inactive templates are not usable from MCP. **Field dependencies:** templates whose fields use `dependsOn` during create are skipped, except **Tags, Terms, Business Description, Technical Description, and Additional Fields**. If lookup fails for Depends-On fields, show that error to the user and **stop** — do not try to create the request. If lookup finds no Published and Active template, show the error, tell the user to publish and activate a template in OvalEdge (Service Desk admin), and **stop**.
+
+**Never change template status from MCP.** If the user asks you to publish, activate, or otherwise update template status from this chat, refuse. That is not a legal MCP action — there is no tool for it, and you must not attempt it via other APIs.
+
+**Not** `access_explorer` — this creates a ticket; it does not list native grants or catalog permissions.
+
+**Workflow prompt:** `create_service_desk_request`.
+
 ## Human confirmation before write (MCP-only)
 
-`create_glossary_term`, `create_tag`, `update_asset_descriptions`, `update_governance_roles`, `update_custom_field_value`, `update_cde_associations`, `dq_rule_manager` step=associate, `dq_rule_manager` step=create_standard, `dq_rule_advisor` step=validate_query, and `dq_rule_manager` step=create_custom_sql require **`write_confirmed_by_user=true`** on the call that performs the OvalEdge POST (unless `dry_run=true` on update tools). Earlier calls return **`confirm_create`** or **`confirm_update`** previews (`doNotCreate` / `doNotUpdate`) with `formattedResponse` and **`confirmationToken`** — the agent must show them and wait for explicit user approval.
+`create_glossary_term`, `create_tag`, `create_service_request`, `update_asset_descriptions`, `update_governance_roles`, `update_custom_field_value`, `update_cde_associations`, `dq_rule_manager` step=associate, `dq_rule_manager` step=create_standard, `dq_rule_advisor` step=validate_query, and `dq_rule_manager` step=create_custom_sql require **`write_confirmed_by_user=true`** on the call that performs the OvalEdge POST (unless `dry_run=true` on update tools). Earlier calls return **`confirm_create`** or **`confirm_update`** previews (`doNotCreate` / `doNotUpdate`) with `formattedResponse` and **`confirmationToken`** — the agent must show them and wait for explicit user approval.
 
 This gate is enforced in the MCP server (preview tokens, `write_confirmed_by_user`). The OvalEdge backend enforces RBAC and business rules on the actual POST (e.g. CDE prerequisite and skip reasons on `dq_rule_manager` step=create_standard).
 

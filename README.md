@@ -65,13 +65,13 @@ These rules apply to every MCP session (also exposed to clients as server **inst
 | **Native DB/BI access** | Use **`access_explorer`** with **`operation=source_system_access`** only (RDAM SQL). Never fall back to **`asset_explorer`** when RDAM is empty or errors. |
 | **Catalog permissions** | Use **`access_explorer`** with **`operation=catalog_access`** for OvalEdge user/role grants on catalog objects — not source_system_access. |
 | **Deep links** | Use **`ovaledge://...` resources** when you already have object ids; prefer lookup tools for rich formatted output. |
-| **Governed writes** | **`create_glossary_term`**, **`create_tag`**, **`update_asset_descriptions`**, **`update_governance_roles`**, **`update_cde_associations`**, **`update_custom_field_value`**, **`dq_rule_manager`**, **`dq_rule_advisor`** (validate_query): show **`confirm_create`** / **`confirm_update`** preview, then POST only with **`write_confirmed_by_user=true`** (`dry_run` skips confirm on updates). |
+| **Governed writes** | **`create_glossary_term`**, **`create_tag`**, **`create_service_request`**, **`update_asset_descriptions`**, **`update_governance_roles`**, **`update_cde_associations`**, **`update_custom_field_value`**, **`dq_rule_manager`**, **`dq_rule_advisor`** (validate_query): show **`confirm_create`** / **`confirm_update`** preview, then POST only with **`write_confirmed_by_user=true`** (`dry_run` skips confirm on updates). |
 | **Glossary placement** | Domain → category (when categories exist) → subcategory; never invent **`description`**; pass **`domain_name`** on first call when the user names a domain in natural language. |
 | **Workflows** | Optional MCP **prompts** (discovery, lineage, stories, tags, drift, native access, creates, DQ, roles) — see [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md). |
 
 ## Tools, resources, and prompts
 
-### Tools (`server/tools/`) — 14 tools
+### Tools (`server/tools/`) — 15 tools
 
 Canonical inventory: `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 
@@ -83,7 +83,7 @@ Canonical inventory: `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 
 **Governance**
 
-- `create_glossary_term`, `create_tag`, `update_governance_roles`, `update_custom_field_value`
+- `create_glossary_term`, `create_tag`, `create_service_request`, `update_governance_roles`, `update_custom_field_value`
 
 **Native access (RDAM)**
 
@@ -100,6 +100,8 @@ Canonical inventory: `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 **`create_glossary_term` workflow:** (1) `term_name` → domain picker; (2) `term_name` + `domain_id` → category picker when categories exist (skip only after user says skip: `skip_category=true` + `category_skip_confirmed=true`); (3) subcategory picker when applicable; (4) non-blank `description` required; (5) `confirm_create` preview; (6) POST with `write_confirmed_by_user=true`. Manual pickers: `search_on=oeglobaldomain|category|subcategory`.
 
 **`create_tag` workflow:** OPEN or SECURE mode from create-options; master/parent pickers with user confirmation flags; `confirm_create` preview; POST with `write_confirmed_by_user=true`. See [server/docs/governance.md](server/docs/governance.md).
+
+**`create_service_request` workflow:** `asset_explorer` first to resolve the object; then look up the template by request_type + object_type (and optional connection filters); collect summary; confirm_create; POST with `write_confirmed_by_user=true`.
 
 **`update_asset_descriptions` / `update_governance_roles` / `update_cde_associations` / `update_custom_field_value`:** Same confirm gate (`confirm_update`, `write_confirmed_by_user=true`) before POST; `dry_run=true` validates without confirm.
 
@@ -119,7 +121,7 @@ Canonical inventory: `server/mcp_surface.py` (`MCP_TOOL_NAMES`).
 
 Static product docs: `docs://ovaledge/...` (all `server/docs/*.md`, including `mcp_workflows`, `governance`, `asset_types`).
 
-### Prompts (`server/prompts/workflows/`) — 21 prompts
+### Prompts (`server/prompts/workflows/`) — 22 prompts
 
 Full list: [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md#workflow-prompts). Inventory: `server/mcp_surface.py` (`MCP_WORKFLOW_PROMPT_NAMES`).
 
@@ -127,7 +129,7 @@ Discovery: `data_discovery`, `explore_data_domain`, `find_related_assets`.
 Knowledge: `explain_business_term`, `organizational_knowledge`, `explain_tag`, `explain_dq_rule`, `platform_help`.  
 Lineage & quality: `trust_assessment`, `trace_data_lineage`, `metadata_drift`, `assess_cde_dq_coverage`.  
 Access: `resolve_object_access`, `native_source_access`, `catalog_object_access`, `dam_object_browse`.  
-Writes (human-in-the-loop): `create_business_glossary_term`, `create_governance_tag`, `document_asset_descriptions`, `assign_governance_roles`.  
+Writes (human-in-the-loop): `create_business_glossary_term`, `create_governance_tag`, `create_service_desk_request`, `document_asset_descriptions`, `assign_governance_roles`.  
 DQ writes (user-approved after `dq_rule_advisor` step=assess): use `dq_rule_manager` (create_standard / associate) directly.
 
 ## Development

@@ -16,6 +16,7 @@ from server.constants import (
     TOOL_ASSET_EXPLORER,
     TOOL_ASSET_LINEAGE,
     TOOL_CREATE_GLOSSARY_TERM,
+    TOOL_CREATE_SERVICE_REQUEST,
     TOOL_CREATE_TAG,
     TOOL_DQ_RULE_ADVISOR,
     TOOL_DQ_RULE_MANAGER,
@@ -94,6 +95,7 @@ _PROMPT_REQUIRED_TOOLS: dict[str, tuple[str, ...]] = {
         TOOL_DQ_RULE_ADVISOR,
         TOOL_DQ_RULE_MANAGER,
     ),
+    "create_service_desk_request": (TOOL_ASSET_EXPLORER, TOOL_CREATE_SERVICE_REQUEST),
 }
 
 
@@ -116,6 +118,45 @@ class TestWorkflowPromptRegistration:
         assert "IN/NOT IN set-membership is SQL Values Contains" in text
         assert "auto-retry" in text.lower() or "ask the user" in text.lower()
         assert "stop" in text.lower()
+
+    async def test_service_desk_prompt_refuses_template_status_change(self) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        register_workflow_prompts(mcp)
+        prompt = await mcp.get_prompt("create_service_desk_request")
+        assert isinstance(prompt, FunctionPrompt)
+
+        text = prompt.fn("I want access on tickettemplate table")[0].content.text
+        lowered = text.lower()
+
+        assert "published and active" in lowered
+        assert "never publish" in lowered
+        assert "not a legal action" in lowered
+        assert "stop" in lowered
+        assert "data read" in lowered
+        assert "allowmultiple" in lowered
+        assert "dq_rule_advisor" in lowered
+        assert "these tables" in lowered
+        assert "invalid names" in lowered
+        assert "additional fields" in lowered
+        assert "never invent" in lowered
+        assert "dependson" in lowered
+        assert "field validations" in lowered
+
+    async def test_service_desk_prompt_docstring_includes_sample_triggers(self) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        register_workflow_prompts(mcp)
+        prompt = await mcp.get_prompt("create_service_desk_request")
+        assert isinstance(prompt, FunctionPrompt)
+        doc = prompt.fn.__doc__ or ""
+        for sample in (
+            "I want access to Loan_Data table",
+            "I need Data Read access for Customer table",
+            "Create a content change request for Employee table",
+            "Raise a Data Quality Rule Recommendation request",
+            "I want access for Loan_Data, Employee_Details and Sales_Target",
+            "Raise an access request for these tables",
+        ):
+            assert sample in doc
 
 
 @pytest.mark.parametrize("prompt_name", WORKFLOW_PROMPT_NAMES)

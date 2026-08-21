@@ -11,6 +11,7 @@ TOOL_KNOWLEDGE_SEARCH = "knowledge_search"
 TOOL_METADATA_CHANGES_BETWEEN_CRAWLS = "metadata_changes_between_crawls"
 TOOL_CREATE_GLOSSARY_TERM = "create_glossary_term"
 TOOL_CREATE_TAG = "create_tag"
+TOOL_CREATE_SERVICE_REQUEST = "create_service_request"
 TOOL_UPDATE_ASSET_DESCRIPTIONS = "update_asset_descriptions"
 TOOL_UPDATE_CDE_ASSOCIATIONS = "update_cde_associations"
 TOOL_UPDATE_GOVERNANCE_ROLES = "update_governance_roles"
@@ -138,6 +139,49 @@ NAV_GLOSSARY_TERM_HASH = "#nav/glossary?id="
 MCP_PATH_TAGS = "/api/v1/mcp/tags"  # POST create only
 MCP_PATH_TAGS_CREATE_OPTIONS = "/api/v1/mcp/tags/create-options"
 MCP_PATH_TAGS_PARENT_OPTIONS = "/api/v1/mcp/tags/parent-options"
+MCP_PATH_SERVICE_REQUEST_TEMPLATES = "/api/v1/mcp/service-request-templates"
+MCP_PATH_SERVICE_REQUESTS = "/api/v1/mcp/service-requests"
+MCP_SERVICE_REQUEST_OBJECT_TYPE_ALIASES: dict[str, str] = {
+    "table": "oetable",
+    "oetable": "oetable",
+    "schema": "oeschema",
+    "oeschema": "oeschema",
+    "column": "oecolumn",
+    "oecolumn": "oecolumn",
+    "file": "oefile",
+    "oefile": "oefile",
+    "chart": "oechart",
+    "report": "oechart",
+    "oechart": "oechart",
+    "api": "oeapi",
+    "oeapi": "oeapi",
+    "glossary": "glossary",
+    "term": "glossary",
+    "oetag": "oetag",
+    "tag": "oetag",
+}
+MCP_SERVICE_REQUEST_TYPE_ALIASES: dict[str, str] = {
+    "access": "access",
+    "access request": "access",
+    "access_request": "access",
+    "accessrequest": "access",
+    "content": "content",
+    "content change": "content",
+    "content_change": "content",
+    "contentchange": "content",
+    "content change request": "content",
+    "content_change_request": "content",
+    "contentchangerequest": "content",
+    "dataquality": "dataquality",
+    "data quality": "dataquality",
+    "data quality issue": "dataquality",
+    "dataqualityissue": "dataquality",
+    "data quality rule recommendation": "dataquality",
+    "dataqualityrulerecommendation": "dataquality",
+    "dq recommendation": "dataquality",
+    "dq_recommendation": "dataquality",
+    "dqrecommendation": "dataquality",
+}
 MCP_PATH_ACCESS_EXPLORER = "/api/v1/mcp/access-explorer"
 MCP_OPERATION_CATALOG_ACCESS = "catalog_access"
 MCP_OPERATION_SOURCE_SYSTEM_ACCESS = "source_system_access"

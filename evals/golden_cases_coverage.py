@@ -20,6 +20,7 @@ from server.constants import (
     TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
     TOOL_CREATE_DQ_RULES,
     TOOL_CREATE_GLOSSARY_TERM,
+    TOOL_CREATE_SERVICE_REQUEST,
     TOOL_CREATE_SQL_DQ_RULE,
     TOOL_CREATE_TAG,
     TOOL_GENERATE_DQ_QUERIES,
@@ -122,6 +123,20 @@ _TAG_CREATE_POST_BODY: dict[str, object] = {
     "description": "<p>Logistics</p>",
 }
 _TAG_CREATE_TOKEN = compute_confirmation_token(_TAG_CREATE_POST_BODY)
+
+_SERVICE_REQUEST_POST_BODY: dict[str, object] = {
+    "ticketTemplateId": 1005,
+    "summary": "Need access to tickettemplate",
+    "objectId": 3337,
+    "objectType": "oetable",
+}
+_SERVICE_REQUEST_TOKEN = compute_confirmation_token(_SERVICE_REQUEST_POST_BODY)
+
+_CREATE_SERVICE_REQUEST_PROMPT_TEXT = (
+    "Create a service request with human confirmation.\n\n"
+    "Intent: access on tickettemplate table.\n"
+    "Resolve the table, look up the template, preview, then confirm with confirmation_token."
+)
 
 _ROLES_POST_BODY: dict[str, object] = {
     "target": {"objectId": 99, "objectType": "oetable"},
@@ -623,6 +638,87 @@ def golden_governed_tag_create_two_step() -> ConversationalTestCase:
                 ],
             ),
             Turn(role="assistant", content="Tag Logistics created."),
+        ],
+    )
+
+
+def golden_governed_service_request_create_two_step() -> ConversationalTestCase:
+    srv = ovaledge_eval_mcp_server(
+        tool_names=frozenset({TOOL_ASSET_EXPLORER, TOOL_CREATE_SERVICE_REQUEST}),
+        prompt_names=frozenset({"create_service_desk_request"}),
+    )
+    prompt_result = GetPromptResult(
+        messages=[
+            PromptMessage(
+                role="user",
+                content=TextContent(type="text", text=_CREATE_SERVICE_REQUEST_PROMPT_TEXT),
+            )
+        ],
+    )
+    preview = tool_call_result(
+        {
+            "workflowPhase": "confirm_create",
+            "doNotCreate": True,
+            "confirmationToken": _SERVICE_REQUEST_TOKEN,
+            "formattedResponse": "**Confirm service request creation**",
+        }
+    )
+    post = tool_call_result(
+        {"ok": True, "data": {"ticketId": 88, "displayTicketId": "SR-88"}},
+    )
+    return ConversationalTestCase(
+        name="governed_service_request_create_two_step",
+        scenario="User requests table access; agent files a service request after confirmation.",
+        expected_outcome=(
+            "Preview create_service_request, then POST with matching confirmation_token."
+        ),
+        mcp_servers=[srv],
+        turns=[
+            Turn(role="user", content="I want access to Loan_Data table"),
+            Turn(
+                role="assistant",
+                content="Using create_service_desk_request workflow.",
+                mcp_prompts_called=[
+                    MCPPromptCall(name="create_service_desk_request", result=prompt_result),
+                ],
+            ),
+            Turn(
+                role="assistant",
+                content="Preview create_service_request — waiting for user approval.",
+                mcp_tools_called=[
+                    MCPToolCall(
+                        name=TOOL_CREATE_SERVICE_REQUEST,
+                        args={
+                            "ticket_template_id": 1005,
+                            "summary": "Need access to tickettemplate",
+                            "object_id": 3337,
+                            "object_type": "oetable",
+                            "write_confirmed_by_user": False,
+                        },
+                        result=preview,
+                    ),
+                ],
+            ),
+            Turn(role="user", content="Confirm."),
+            Turn(
+                role="assistant",
+                content="POSTing service request with bound confirmation_token.",
+                mcp_tools_called=[
+                    MCPToolCall(
+                        name=TOOL_CREATE_SERVICE_REQUEST,
+                        args={
+                            "ticket_template_id": 1005,
+                            "summary": "Need access to tickettemplate",
+                            "object_id": 3337,
+                            "object_type": "oetable",
+                            "write_confirmed_by_user": True,
+                            "confirmation_token": _SERVICE_REQUEST_TOKEN,
+                        },
+                        result=post,
+                    ),
+                ],
+            ),
+            Turn(role="assistant", content="Service request SR-88 created."),
         ],
     )
 
@@ -1232,6 +1328,7 @@ COVERAGE_MCP_USE_GOLDEN_FNS: list[str] = [
 COVERAGE_CONVERSATIONAL_GOLDEN_FNS: list[str] = [
     "golden_governed_glossary_create_two_step",
     "golden_governed_tag_create_two_step",
+    "golden_governed_service_request_create_two_step",
     "golden_governed_roles_confirm_two_step",
     "golden_governed_cde_confirm_two_step",
     "golden_governed_custom_field_confirm_two_step",

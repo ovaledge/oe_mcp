@@ -32,6 +32,7 @@ class TestMcpClientTools:
         assert "create_glossary_term" in names
         assert "knowledge_search" in names
         assert "create_tag" in names
+        assert "create_service_request" in names
 
     async def test_call_tool_asset_explorer(
         self,
