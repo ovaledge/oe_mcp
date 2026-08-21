@@ -22,6 +22,8 @@ class TestCreateDqRules:
         assert "create_standard" in desc
         assert "dq_rule_advisor" in desc
         assert MCP_PATH_CREATE_DQ_RULES in desc
+        assert "docs://ovaledge/mcp_workflows" in desc
+        assert "Ladder (do not skip)" not in desc
 
     async def test_stringified_objects_json_accepted(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.post.return_value = {"rows": []}

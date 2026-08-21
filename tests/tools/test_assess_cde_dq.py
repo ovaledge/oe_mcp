@@ -82,6 +82,8 @@ class TestAssessCdeDq:
         assert "assess" in desc
         assert MCP_PATH_ASSESS_CDE_DQ in desc
         assert "Read/recommend" in desc or "no rule create" in desc
+        assert "docs://ovaledge/mcp_workflows" in desc
+        assert "Ladder (do not skip)" not in desc
 
     def test_build_payload_includes_description_term_name(self) -> None:
         payload = dataquality_helpers.build_assess_cde_dq_payload(

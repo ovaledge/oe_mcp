@@ -34,7 +34,7 @@ from server.constants import (
 )
 from server.tools.common import error_payload
 
-_RDAM_OBJECT_TYPE_ALIASES = {
+CATALOG_TO_RDAM_OBJECT_TYPE = {
     "oedatabase": "database",
     "oeschema": "schema",
     "oetable": "table",
@@ -42,6 +42,14 @@ _RDAM_OBJECT_TYPE_ALIASES = {
     "oechart": "report",
     "chartchild": "report",
     "oedomain": "project",
+}
+RDAM_TO_CATALOG_OBJECT_TYPE = {
+    "database": "oedatabase",
+    "schema": "oeschema",
+    "table": "oetable",
+    "column": "oecolumn",
+    "report": "oechart",
+    "project": "oedomain",
 }
 
 _GRANT_SUMMARY_LEVELS = ("database", "schema", "table", "column", "project", "report")
@@ -776,7 +784,7 @@ def normalize_rdam_object_type(object_type: str | None) -> str | None:
         return None
     if normalized == MCP_RDAM_OBJECT_TYPE_ALL:
         return MCP_RDAM_OBJECT_TYPE_ALL
-    return _RDAM_OBJECT_TYPE_ALIASES.get(normalized, normalized)
+    return CATALOG_TO_RDAM_OBJECT_TYPE.get(normalized, normalized)
 
 
 def _grants_at_level(result: dict[str, Any], object_level: str) -> list[dict[str, Any]]:
@@ -927,9 +935,6 @@ def filter_grants_by_object_level(
             "filteredToObjectLevel": object_type,
         },
     }
-
-
-
 
 
 def validate_and_normalize_object_type(

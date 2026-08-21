@@ -371,6 +371,7 @@ class TestGetSourceSystemAccess:
             connection_id=_REQ["connection_id"],
         )
         assert out["ok"] is True
+        assert "_catalog_fallback" not in out
         assert "catalog_access" in (out.get("data") or {}).get("advisoryMessage", "")
         catalog_call = mock_oe_client.get.await_args_list[-1]
         catalog_params = catalog_call.kwargs["params"]
@@ -563,6 +564,7 @@ class TestGetSourceSystemAccess:
         )
         assert out.get("ok") is not True
         assert out.get("status_code") == 400
+        assert "_catalog_fallback" not in out
         catalog_calls = [
             call
             for call in mock_oe_client.get.await_args_list

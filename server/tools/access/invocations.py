@@ -19,6 +19,7 @@ from server.tools.access.helpers import (
     catalog_object_type_for_fallback,
     enrich_get_user_object_access_response,
     is_dam_connector_unsupported,
+    strip_catalog_fallback,
     validate_get_user_object_access_args,
 )
 from server.tools.common import drop_none, error_payload, map_ovaledge_error, ovaledge_client
@@ -175,15 +176,17 @@ async def _invoke_access_explorer(
             object_id=object_id,
             access_intent_confirmed=access_intent_confirmed,
         )
-        return await _continue_catalog_access_if_dam_unsupported(
-            result,
-            query_direction=query_direction,
-            object_id=object_id,
-            object_type=object_type,
-            fully_qualified_name=fully_qualified_name,
-            object_name=object_name,
-            object_path=object_path,
-            resolve_all_matches=resolve_all_matches,
+        return strip_catalog_fallback(
+            await _continue_catalog_access_if_dam_unsupported(
+                result,
+                query_direction=query_direction,
+                object_id=object_id,
+                object_type=object_type,
+                fully_qualified_name=fully_qualified_name,
+                object_name=object_name,
+                object_path=object_path,
+                resolve_all_matches=resolve_all_matches,
+            )
         )
     return error_payload(f"operation must be one of: {MCP_ACCESS_OPERATIONS_DOC}.")
 
@@ -205,6 +208,7 @@ async def _continue_catalog_access_if_dam_unsupported(
     if catalog_qd is None:
         return result
     fallback_ctx = result.get("_catalog_fallback")
+    result = strip_catalog_fallback(result)
     if not isinstance(fallback_ctx, dict):
         fallback_ctx = {}
     effective_object_id = fallback_ctx.get("object_id") or object_id

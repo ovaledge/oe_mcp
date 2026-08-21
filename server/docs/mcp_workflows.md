@@ -331,6 +331,8 @@ See also: [governance](governance), [asset_types](asset_types), [overview](overv
 
 End-to-end routing for function-based and custom-SQL data quality workflows.
 
+**Ladder (do not skip):** (1) `dq_rule_advisor` step=assess → present `recommendedFunction` / `recommendedFunctionCandidates` and `existingRulesForFunction`; (2) if same-function rules exist → user picks → `dq_rule_manager` step=associate; (3) else → `dq_rule_manager` step=create_standard with `preferred_function_name` = exact candidate / `recommendedFunction` name; (4) only when `recommendedFunction` is Not Identified **and** no usable catalog candidates remain **and** the user confirms custom SQL → generate_query → validate_query → create_custom_sql with the `recommendedFunction` name from generate/assess. Use exact OvalEdge catalog function names only — never invent labels such as “Max Length Check”. Retry policy: auto-retry the last successful ladder step once; if it still fails, stop and ask the user.
+
 ### Read-only path
 
 1. `asset_explorer` with `critical_data_element=Yes` (types: `oetable`, `oecolumn`, `oefile`, `oefilecolumn`), **or** pass known `objects` to `dq_rule_advisor` step=assess.
