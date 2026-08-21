@@ -239,7 +239,7 @@ class TestCreateServiceRequest:
             },
         )
 
-    async def test_confirmed_create_normalizes_expiration_date(
+    async def test_confirmed_create_does_not_rewrite_dates_without_lookup(
         self, mock_oe_client: AsyncMock
     ) -> None:
         mock_oe_client.post.return_value = _CREATED
@@ -252,11 +252,12 @@ class TestCreateServiceRequest:
             summary="Need access",
             object_id=3337,
             object_type="oetable",
-            ticket_fields={"Expiration Date": "25-10-2026"},
+            ticket_fields={"Expiration Date": "25-10-2026", "Mandate": "yes"},
         )
         assert out["workflowPhase"] == "created"
         posted = mock_oe_client.post.call_args.kwargs["body"]
-        assert posted["ticketFields"]["Expiration Date"] == "2026/10/25 00:00:00"
+        assert posted["ticketFields"]["Expiration Date"] == "25-10-2026"
+        assert posted["ticketFields"]["Mandate"] == "yes"
 
     async def test_preview_hides_internal_ids_and_formats_dates(
         self, mock_oe_client: AsyncMock
@@ -329,7 +330,7 @@ class TestCreateServiceRequest:
         assert "SD for CCF (code): SD for CCF1, SD for CCF2" in out["formattedResponse"]
         assert "invalid names are omitted" in out["agentInstruction"]
         assert "never invent" in out["agentInstruction"].lower()
-        assert "honor each field's validations" in out["agentInstruction"].lower()
+        assert "show that error" in out["agentInstruction"].lower()
         mock_oe_client.get.assert_called_once_with(
             MCP_PATH_SERVICE_REQUEST_TEMPLATES,
             params={
@@ -383,7 +384,199 @@ class TestCreateServiceRequest:
         assert "docs://ovaledge/mcp_workflows" in _DESC_CREATE_SERVICE_REQUEST
         assert "asset_explorer" in _DESC_CREATE_SERVICE_REQUEST
         assert "never publish or activate a template from MCP" in _DESC_CREATE_SERVICE_REQUEST
-        assert "dependsOn" in _DESC_CREATE_SERVICE_REQUEST
-        assert "I want access to Loan_Data table" in _DESC_CREATE_SERVICE_REQUEST
-        assert "Data Quality Rule Recommendation" in _DESC_CREATE_SERVICE_REQUEST
-        assert "these tables" in _DESC_CREATE_SERVICE_REQUEST
+        assert "access_explorer" in _DESC_CREATE_SERVICE_REQUEST
+        assert "dq_rule_advisor" in _DESC_CREATE_SERVICE_REQUEST
+        assert "write_confirmed_by_user" in _DESC_CREATE_SERVICE_REQUEST
+        assert "allowMultiple" in _DESC_CREATE_SERVICE_REQUEST
+        assert "I want access to Loan_Data table" not in _DESC_CREATE_SERVICE_REQUEST
+        assert "these tables" not in _DESC_CREATE_SERVICE_REQUEST
+
+    async def test_lookup_skips_non_positive_connection_id(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = _LOOKUP
+        mcp = FastMCP(name="test", version="0.0.1")
+        servicedesk.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_SERVICE_REQUEST)
+        await fn(request_type="access", object_type="oetable", connection_id=0)
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_SERVICE_REQUEST_TEMPLATES,
+            params={"requestType": "access", "requestObjectType": "oetable"},
+        )
+
+    async def test_summary_without_returned_template_id_is_template_not_found(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {"ok": True, "data": {"fields": []}}
+        mcp = FastMCP(name="test", version="0.0.1")
+        servicedesk.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_SERVICE_REQUEST)
+        out = await fn(
+            request_type="access",
+            object_type="oetable",
+            summary="Need access",
+        )
+        assert out["error_code"] == "template_not_found"
+        mock_oe_client.post.assert_not_called()
+
+    async def test_multi_object_ids_join_when_allow_multiple(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        lookup = {
+            "ok": True,
+            "data": {
+                **_LOOKUP["data"],
+                "fields": [
+                    {
+                        **_LOOKUP["data"]["fields"][1],
+                        "allowMultiple": True,
+                    },
+                    *_LOOKUP["data"]["fields"][2:],
+                ],
+            },
+        }
+        mock_oe_client.get.return_value = lookup
+        mcp = FastMCP(name="test", version="0.0.1")
+        servicedesk.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_SERVICE_REQUEST)
+        out = await fn(
+            request_type="access",
+            object_type="oetable",
+            object_id=[3337, 3338, 3339],
+            summary="Need access",
+        )
+        assert out["workflowPhase"] == "confirm_create"
+        pending = out["pendingCreate"]["ticketFields"]
+        assert pending["Select table"] == "3337,3338,3339"
+        assert out["pendingCreate"]["objectId"] == 3337
+        assert "3337,3338,3339" not in out["formattedResponse"]
+        mock_oe_client.get.assert_called_once_with(
+            MCP_PATH_SERVICE_REQUEST_TEMPLATES,
+            params={
+                "requestType": "access",
+                "requestObjectType": "oetable",
+                "objectId": 3337,
+            },
+        )
+
+    async def test_comma_separated_object_ids_join_when_allow_multiple(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        lookup = {
+            "ok": True,
+            "data": {
+                **_LOOKUP["data"],
+                "fields": [
+                    {
+                        **_LOOKUP["data"]["fields"][1],
+                        "fieldData": {"allowMultiple": True},
+                    },
+                    *_LOOKUP["data"]["fields"][2:],
+                ],
+            },
+        }
+        mock_oe_client.get.return_value = lookup
+        mcp = FastMCP(name="test", version="0.0.1")
+        servicedesk.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_SERVICE_REQUEST)
+        out = await fn(
+            request_type="access",
+            object_type="oetable",
+            object_id="3337, 3338",
+            summary="Need access",
+        )
+        assert out["pendingCreate"]["ticketFields"]["Select table"] == "3337,3338"
+
+    async def test_multi_object_ids_keep_first_when_not_allow_multiple(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = _LOOKUP
+        mcp = FastMCP(name="test", version="0.0.1")
+        servicedesk.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_SERVICE_REQUEST)
+        out = await fn(
+            request_type="access",
+            object_type="oetable",
+            object_id=[3337, 3338],
+            summary="Need access",
+        )
+        assert out["pendingCreate"]["ticketFields"]["Select table"] == 3337
+
+    async def test_lookup_date_field_normalizes_datetime_not_name_matches(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        lookup = {
+            "ok": True,
+            "data": {
+                **_LOOKUP["data"],
+                "fields": [
+                    *_LOOKUP["data"]["fields"],
+                    {
+                        "fieldName": "Expiration Date",
+                        "fieldCode": "expiration",
+                        "fieldType": "date",
+                        "requiredOnCreate": False,
+                    },
+                ],
+            },
+        }
+        mock_oe_client.get.return_value = lookup
+        mcp = FastMCP(name="test", version="0.0.1")
+        servicedesk.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_SERVICE_REQUEST)
+        out = await fn(
+            request_type="access",
+            object_type="oetable",
+            object_id=3337,
+            summary="Need access",
+            ticket_fields={
+                "Expiration Date": "25-10-2026 14:30:00",
+                "Mandate": "yes",
+            },
+        )
+        pending = out["pendingCreate"]["ticketFields"]
+        assert pending["Expiration Date"] == "2026/10/25 14:30:00"
+        assert pending["Mandate"] == "yes"
+        preview = out["formattedResponse"]
+        assert "25-10-2026 14:30:00" in preview
+        assert "2026/10/25" not in preview
+
+
+class TestCreateServiceRequestHelpers:
+    def test_normalize_object_ids_accepts_int_list_and_csv(self) -> None:
+        from server.tools.servicedesk.helpers import normalize_object_ids
+
+        assert normalize_object_ids(12) == [12]
+        assert normalize_object_ids([12, 13, 12]) == [12, 13]
+        assert normalize_object_ids("12, 13, 0, x") == [12, 13]
+        assert normalize_object_ids(None) == []
+        assert normalize_object_ids(-1) == []
+
+    def test_normalize_date_ticket_fields_only_typed_date(self) -> None:
+        from server.tools.servicedesk.helpers import normalize_date_ticket_fields
+
+        fields = [{"fieldName": "Expiration Date", "fieldType": "date"}]
+        out = normalize_date_ticket_fields(
+            fields,
+            {
+                "Expiration Date": "25-10-2026",
+                "Invalidate": "keep",
+                "Mandate": "yes",
+            },
+        )
+        assert out["Expiration Date"] == "25-10-2026"
+        assert out["Invalidate"] == "keep"
+        assert out["Mandate"] == "yes"
+
+        typed = normalize_date_ticket_fields(
+            fields,
+            {"Expiration Date": "25-10-2026 14:30:00"},
+        )
+        assert typed["Expiration Date"] == "2026/10/25 14:30:00"
+
+        untyped = normalize_date_ticket_fields(
+            None,
+            {"Expiration Date": "25-10-2026 14:30:00"},
+        )
+        assert untyped["Expiration Date"] == "25-10-2026 14:30:00"
+

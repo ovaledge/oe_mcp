@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from server.tools.common.confirm_gate import CREATE_CONFIRM_AGENT_INSTRUCTION
+from server.tools.common.formatting import cell
+
 
 def _cell(value: object) -> str:
-    if value is None:
-        return ""
-    return str(value).replace("|", "\\|").replace("\n", " ").strip()
+    return cell(value)
 
 
 def _positive_int(value: object) -> int | None:
@@ -19,12 +20,8 @@ def _positive_int(value: object) -> int | None:
     return None
 
 
-_CREATE_CONFIRM_AGENT_INSTRUCTION = (
-    "Show formattedResponse and wait for explicit user approval. "
-    "Do not set write_confirmed_by_user=true until the user confirms. "
-    "Then re-call with write_confirmed_by_user=true, confirmation_token from the "
-    "preview, and the same parameters."
-)
+_CREATE_CONFIRM_AGENT_INSTRUCTION = CREATE_CONFIRM_AGENT_INSTRUCTION
+
 
 _ROLE_KEYS_CANONICAL: dict[str, str] = {
     "owner": "owner",

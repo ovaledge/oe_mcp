@@ -29,8 +29,13 @@ def register(mcp: FastMCP) -> None:
             Field(description="Catalog object type, e.g. table or oetable."),
         ] = None,
         object_id: Annotated[
-            int | None,
-            Field(description="Catalog object id from asset_explorer (required on create)."),
+            int | list[int] | str | None,
+            Field(
+                description=(
+                    "Catalog object id(s) from asset_explorer; list or comma-separated "
+                    "when allowMultiple."
+                ),
+            ),
         ] = None,
         connection_type: Annotated[
             str | None,

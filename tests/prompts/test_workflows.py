@@ -140,7 +140,7 @@ class TestWorkflowPromptRegistration:
         assert "additional fields" in lowered
         assert "never invent" in lowered
         assert "dependson" in lowered
-        assert "field validations" in lowered
+        assert "show that error" in lowered
 
     async def test_service_desk_prompt_docstring_includes_sample_triggers(self) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
@@ -227,6 +227,7 @@ class TestMcpServerInstructions:
             TOOL_ACCESS_EXPLORER,
             TOOL_ASSET_DETAILS,
             TOOL_ASSET_EXPLORER,
+            TOOL_CREATE_SERVICE_REQUEST,
             TOOL_KNOWLEDGE_SEARCH,
         )
         from server.mcp_surface import MCP_TOOL_NAMES
@@ -237,6 +238,7 @@ class TestMcpServerInstructions:
         assert TOOL_ASSET_EXPLORER in instructions
         assert TOOL_ASSET_DETAILS in instructions
         assert TOOL_ACCESS_EXPLORER in instructions
+        assert TOOL_CREATE_SERVICE_REQUEST in instructions
         assert "write_confirmed_by_user" in instructions
         assert "never show ovaledge://" in instructions
         assert "find data assets" in instructions

@@ -13,6 +13,7 @@ from server.tools.common.confirm_gate import verify_write_confirmation
 from server.tools.common.errors import error_payload
 from server.tools.common.tool_logging import logged_tool_invocation
 from server.tools.servicedesk.helpers import (
+    ObjectIdArg,
     build_create_body,
     build_lookup_params,
     enrich_create_response,
@@ -20,9 +21,11 @@ from server.tools.servicedesk.helpers import (
     format_template_lookup_response,
     merge_default_ticket_fields,
     normalize_date_ticket_fields,
+    normalize_object_ids,
     normalize_object_type,
     normalize_request_type,
-    validate_lookup_args,
+    primary_object_id,
+    resolve_lookup_args,
 )
 
 
@@ -36,7 +39,7 @@ def _positive_id(value: int | None) -> int | None:
 async def _invoke_create_service_request(
     request_type: str | None = None,
     object_type: str | None = None,
-    object_id: int | None = None,
+    object_id: ObjectIdArg = None,
     connection_type: str | None = None,
     connection_name: str | None = None,
     connection_id: int | None = None,
@@ -54,22 +57,24 @@ async def _invoke_create_service_request(
     template_id = _positive_id(ticket_template_id)
     summary_text = str(summary).strip() if not _blank(summary) else None
     template_name: str | None = None
+    object_ids = normalize_object_ids(object_id)
+    primary_id = primary_object_id(object_ids)
+    template_fields: list[dict[str, Any]] = []
 
     needs_lookup = template_id is None or summary_text is None
     if needs_lookup:
-        err = validate_lookup_args(req_type, obj_type)
-        if err is not None:
-            return err
-        assert req_type is not None
-        assert obj_type is not None
+        resolved = resolve_lookup_args(req_type, obj_type)
+        if not isinstance(resolved, tuple):
+            return resolved
+        req_type, obj_type = resolved
         params = build_lookup_params(
             request_type=req_type,
             object_type=obj_type,
             connection_type=connection_type,
             connection_name=connection_name,
-            connection_id=connection_id,
+            connection_id=_positive_id(connection_id),
             ticket_template_id=template_id,
-            object_id=_positive_id(object_id),
+            object_id=primary_id,
         )
         try:
             async with ovaledge_client() as client:
@@ -78,13 +83,16 @@ async def _invoke_create_service_request(
             return map_ovaledge_error(e)
         shaped = format_template_lookup_response(
             body if isinstance(body, dict) else {},
-            object_id=_positive_id(object_id),
+            object_ids=object_ids,
         )
         data = _as_dict(shaped.get("data"))
-        resolved = data.get("ticketTemplateId")
-        if isinstance(resolved, int) and resolved > 0:
-            template_id = resolved
+        resolved_template = data.get("ticketTemplateId")
+        if isinstance(resolved_template, int) and resolved_template > 0:
+            template_id = resolved_template
         template_name = str(data.get("ticketTemplateName") or "") or None
+        template_fields = [
+            row for row in (data.get("fields") or []) if isinstance(row, dict)
+        ]
         if summary_text is None:
             return shaped
         if template_id is None:
@@ -96,9 +104,9 @@ async def _invoke_create_service_request(
                 error_code="template_not_found",
             )
         ticket_fields = merge_default_ticket_fields(
-            [row for row in (data.get("fields") or []) if isinstance(row, dict)],
+            template_fields,
             ticket_fields,
-            object_id=_positive_id(object_id),
+            object_ids=object_ids,
             current_user_id=str(data.get("currentUserId") or "") or None,
         )
 
@@ -115,13 +123,13 @@ async def _invoke_create_service_request(
             error_code="summary_required",
         )
 
-    ticket_fields = normalize_date_ticket_fields(None, ticket_fields)
+    ticket_fields = normalize_date_ticket_fields(template_fields, ticket_fields)
 
     post_body = build_create_body(
         ticket_template_id=template_id,
         summary=summary_text,
         description=description,
-        object_id=_positive_id(object_id),
+        object_id=primary_id,
         object_type=obj_type,
         ticket_fields=ticket_fields,
         custom_fields=custom_fields,
@@ -129,10 +137,11 @@ async def _invoke_create_service_request(
     if not write_confirmed_by_user:
         return format_create_confirmation_preview(
             template_name=template_name,
-            object_id=_positive_id(object_id),
+            object_ids=object_ids,
             summary=summary_text,
             description=description,
             post_body=post_body,
+            fields=template_fields,
         )
     confirm_err = verify_write_confirmation(
         post_body,

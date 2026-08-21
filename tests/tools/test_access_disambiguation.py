@@ -77,6 +77,7 @@ class TestDisambiguationUserMessage:
             MCP_CATALOG_DISCOVERY_VS_ACCESS_DOC,
             TOOL_ACCESS_EXPLORER,
             TOOL_ASSET_EXPLORER,
+            TOOL_CREATE_SERVICE_REQUEST,
         )
 
         assert TOOL_ASSET_EXPLORER in MCP_CATALOG_DISCOVERY_VS_ACCESS_DOC
@@ -88,6 +89,9 @@ class TestDisambiguationUserMessage:
         assert MCP_CATALOG_DISCOVERY_VS_ACCESS_DOC in MCP_ACCESS_DISAMBIGUATION_SEARCH_GUARD_DOC
         assert MCP_CATALOG_DISCOVERY_VS_ACCESS_DOC in MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC
         assert MCP_CATALOG_DISCOVERY_VS_ACCESS_DOC in MCP_ACCESS_DISAMBIGUATION_RULE_DOC
+        assert TOOL_CREATE_SERVICE_REQUEST in MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC
+        lowered = MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC.lower()
+        assert "first-person request for access" in lowered
 
 
 class TestValidateAccessIntentConfirmed:

@@ -439,6 +439,9 @@ MCP_ACCESS_DISAMBIGUATION_INSTRUCTION_DOC = (
     + MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC
     + " "
     + MCP_CATALOG_DISCOVERY_VS_ACCESS_DOC
+    + f" First-person request for access, content change, or a DQ-recommendation "
+    f"ticket → `{TOOL_CREATE_SERVICE_REQUEST}`; who-has-access stays "
+    "resolve_object_access."
 )
 MCP_ACCESS_DISAMBIGUATION_TOOL_LEAD_DOC = (
     "**Who-has-access:** `resolve_object_access` then `access_intent_confirmed` "
