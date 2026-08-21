@@ -13,6 +13,7 @@ from server.constants import (
 )
 from server.tools.common.descriptions import classify_tool_desc
 from server.tools.common.errors import error_payload
+from server.tools.rdam.helpers import RDAM_TO_CATALOG_OBJECT_TYPE
 
 _DAM_UNSUPPORTED_MARKERS = (
     "not supported for native DAM",
@@ -20,14 +21,7 @@ _DAM_UNSUPPORTED_MARKERS = (
 )
 # Hint vs connectionId mismatch uses mcp.source.system.hint.mismatch and must not match
 # these markers (both connectors may be DAM-supported).
-_RDAM_TO_CATALOG_OBJECT_TYPE = {
-    "database": "oedatabase",
-    "schema": "oeschema",
-    "table": "oetable",
-    "column": "oecolumn",
-    "project": "oedomain",
-    "report": "oechart",
-}
+_CATALOG_FALLBACK_KEY = "_catalog_fallback"
 # object_to_users → object_to_principals is identity-safe (catalog principals on the object).
 # user_to_objects must not map to user_to_object: RDAM username is a source login, not an
 # OvalEdge user id.
@@ -173,7 +167,16 @@ def attach_catalog_fallback_context(
     if not ctx:
         return result
     out = dict(result)
-    out["_catalog_fallback"] = ctx
+    out[_CATALOG_FALLBACK_KEY] = ctx
+    return out
+
+
+def strip_catalog_fallback(result: dict[str, Any]) -> dict[str, Any]:
+    """Drop internal fallback context before the payload leaves the MCP tool."""
+    if not isinstance(result, dict) or _CATALOG_FALLBACK_KEY not in result:
+        return result
+    out = dict(result)
+    out.pop(_CATALOG_FALLBACK_KEY, None)
     return out
 
 
@@ -192,7 +195,7 @@ def catalog_object_type_for_fallback(object_type: str | list[str] | None) -> str
     key = str(raw).strip().lower()
     if key.startswith("oe"):
         return key
-    return _RDAM_TO_CATALOG_OBJECT_TYPE.get(key, key)
+    return RDAM_TO_CATALOG_OBJECT_TYPE.get(key, key)
 
 
 def annotate_catalog_fallback(result: dict[str, Any]) -> dict[str, Any]:

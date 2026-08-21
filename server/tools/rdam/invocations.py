@@ -14,6 +14,7 @@ from server.constants import (
     MCP_RDAM_SCOPE_MODE_EXACT,
 )
 from server.tools.access.disambiguation import validate_access_intent_confirmed
+from server.tools.access.helpers import attach_catalog_fallback_context
 from server.tools.common import drop_none, map_ovaledge_error, ovaledge_client
 from server.tools.rdam.catalog_resolve import (
     CatalogResolvedScope,
@@ -47,8 +48,6 @@ def _map_dam_error_with_catalog_context(
     resolved_object_name: str | list[str] | None,
     composed_path: str | list[str] | None,
 ) -> dict[str, Any]:
-    from server.tools.access.helpers import attach_catalog_fallback_context
-
     return attach_catalog_fallback_context(
         map_ovaledge_error(exc),
         object_id=resolved_object_id,
@@ -118,7 +117,6 @@ async def _invoke_source_system_access(
         object_path,
         object_name,
         fully_qualified_name,
-        resolved_connection_id,
     ):
         try:
             async with ovaledge_client() as client:

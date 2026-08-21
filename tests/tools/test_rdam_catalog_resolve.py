@@ -46,7 +46,6 @@ class TestShouldResolveViaAssetExplorer:
                 "BUSINESS.BANKING",
                 None,
                 None,
-                1000,
             )
             is False
         )

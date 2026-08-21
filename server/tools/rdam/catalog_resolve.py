@@ -15,31 +15,14 @@ from server.constants import (
 )
 from server.tools.common import drop_none
 from server.tools.rdam.helpers import (
+    CATALOG_TO_RDAM_OBJECT_TYPE,
+    RDAM_TO_CATALOG_OBJECT_TYPE,
     normalize_rdam_object_type,
     normalize_string_list,
     resolve_single_object_type,
 )
 
-_CATALOG_TO_RDAM_TYPE = {
-    "oeschema": "schema",
-    "oetable": "table",
-    "oecolumn": "column",
-    "oechart": "report",
-    "chartchild": "report",
-    "oedomain": "project",
-    "oedatabase": "database",
-}
-
-_RDAM_TO_CATALOG_TYPE = {
-    "schema": "oeschema",
-    "table": "oetable",
-    "column": "oecolumn",
-    "report": "oechart",
-    "project": "oedomain",
-    "database": "oedatabase",
-}
-
-_CATALOG_OBJECT_TYPES = frozenset(_CATALOG_TO_RDAM_TYPE)
+_CATALOG_OBJECT_TYPES = frozenset(CATALOG_TO_RDAM_OBJECT_TYPE)
 
 
 @dataclass(frozen=True)
@@ -61,15 +44,15 @@ def catalog_object_type_for_explorer(object_type: str | None) -> str | None:
     if raw in _CATALOG_OBJECT_TYPES:
         return raw
     rdam = normalize_rdam_object_type(raw)
-    return _RDAM_TO_CATALOG_TYPE.get(rdam) if rdam else None
+    return RDAM_TO_CATALOG_OBJECT_TYPE.get(rdam) if rdam else None
 
 
 def rdam_object_type_from_catalog(object_type: str | None) -> str | None:
     if object_type is None:
         return None
     raw = object_type.strip().lower()
-    if raw in _CATALOG_TO_RDAM_TYPE:
-        return _CATALOG_TO_RDAM_TYPE[raw]
+    if raw in CATALOG_TO_RDAM_OBJECT_TYPE:
+        return CATALOG_TO_RDAM_OBJECT_TYPE[raw]
     return normalize_rdam_object_type(raw)
 
 
@@ -80,15 +63,13 @@ def should_resolve_via_asset_explorer(
     object_path: str | list[str] | None,
     object_name: str | list[str] | None,
     fully_qualified_name: str | None,
-    connection_id: int | None = None,
 ) -> bool:
     """Look up identifiers via asset_explorer unless object_id and object_type are known.
 
-    DAM API only.
+    DAM API only. Browse parent paths are sent to DAM as-is.
     """
     if query_direction.strip().lower() == "browse":
         return False
-    _ = connection_id
     has_type = bool(resolve_single_object_type(object_type))
     if object_id is not None and object_id > 0 and has_type:
         return False

@@ -46,29 +46,18 @@ _DQ_OE_FUNCTION_ONLY = (
     "Never invent labels such as Max Length Check, Length Check, or similar."
 )
 
-_DQ_LADDER = (
-    "Ladder (do not skip): (1) assess → present recommendedFunction / "
-    "recommendedFunctionCandidates and existingRulesForFunction; "
-    "(2) if same-function rules exist → user picks → manager associate; "
-    "(3) else → manager create_standard with preferred_function_name = exact "
-    "recommendedFunction / candidate name; "
-    "(4) only when recommendedFunction is Not Identified AND user confirms "
-    "custom SQL → generate_query → validate_query → create_custom_sql with the "
-    "recommendedFunction name from generate/assess. "
-    f"{_DQ_OE_FUNCTION_ONLY} {_DQ_RETRY_POLICY}"
-)
-
 _DESC_DQ_RULE_ADVISOR = classify_tool_desc(
     "Read/recommend DQ workflow (no rule create/associate).\n\n"
     f"step: assess | generate_query | validate_query | lookup\n"
     f"Backends: POST {MCP_PATH_ASSESS_CDE_DQ}, {MCP_PATH_GENERATE_DQ_QUERIES}, "
     f"{MCP_PATH_VALIDATE_DQ_QUERIES}; GET {MCP_PATH_LOOKUP_DQ_RULES}\n\n"
     f"**Not** {TOOL_DQ_RULE_MANAGER} — writes (create/associate) live there.\n\n"
-    f"{_DQ_LADDER}\n\n"
+    "Use exact recommendedFunction / candidate names from the tool; never invent "
+    "labels. Ladder and retry policy: docs://ovaledge/mcp_workflows "
+    "(CDE / DQ intelligence).\n\n"
     "lookup: resolve existing dqrule by rule_name or object_id (not asset search).\n\n"
     f"**objectType**: {MCP_DQ_APPLICABLE_OBJECT_TYPES_DOC}. "
-    "validate_query confirm gate before running SQL. "
-    "Details: docs://ovaledge/mcp_workflows"
+    "validate_query confirm gate before running SQL."
 )
 
 _DESC_DQ_RULE_MANAGER = classify_tool_desc(
@@ -77,7 +66,9 @@ _DESC_DQ_RULE_MANAGER = classify_tool_desc(
     f"Backends: POST {MCP_PATH_CREATE_DQ_RULES}, {MCP_PATH_CREATE_SQL_DQ_RULE}, "
     f"{MCP_PATH_ASSOCIATE_DQ_RULE_OBJECTS}\n\n"
     f"**Not** {TOOL_DQ_RULE_ADVISOR} — assessment/SQL draft/validate/lookup live there.\n\n"
-    f"{_DQ_LADDER}\n\n"
+    "Use exact recommendedFunction / candidate names from the tool; never invent "
+    "labels. Ladder and retry policy: docs://ovaledge/mcp_workflows "
+    "(CDE / DQ intelligence).\n\n"
     "create_custom_sql requires recommended_function = recommendedFunction name from "
     "generate_query/assess (reject blank/CUSTOM_SQL). "
     "associate: dqrule_id or rule_name + objects.\n\n"

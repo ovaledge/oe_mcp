@@ -2,8 +2,11 @@
 
 from server.constants import MCP_SOURCE_SYSTEM_UNSUPPORTED_CODE
 from server.tools.access.helpers import (
+    attach_catalog_fallback_context,
+    catalog_object_type_for_fallback,
     enrich_get_user_object_access_response,
     is_dam_connector_unsupported,
+    strip_catalog_fallback,
 )
 
 
@@ -71,3 +74,23 @@ class TestIsDamConnectorUnsupported:
             ),
         }
         assert is_dam_connector_unsupported(result) is False
+
+
+class TestCatalogFallbackContext:
+    def test_strip_removes_internal_key(self) -> None:
+        attached = attach_catalog_fallback_context(
+            {"status_code": 400, "error": "unsupported"},
+            object_id=42,
+            object_type="table",
+            object_path="db.schema.orders",
+        )
+        assert "_catalog_fallback" in attached
+        cleaned = strip_catalog_fallback(attached)
+        assert "_catalog_fallback" not in cleaned
+        assert cleaned["status_code"] == 400
+        assert "_catalog_fallback" in attached
+
+    def test_catalog_object_type_for_fallback_uses_shared_map(self) -> None:
+        assert catalog_object_type_for_fallback("table") == "oetable"
+        assert catalog_object_type_for_fallback("oeschema") == "oeschema"
+        assert catalog_object_type_for_fallback(["report"]) == "oechart"
