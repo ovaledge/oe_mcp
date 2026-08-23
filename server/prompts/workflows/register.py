@@ -11,6 +11,7 @@ from server.constants import (
     TOOL_ASSET_EXPLORER,
     TOOL_ASSET_LINEAGE,
     TOOL_CREATE_GLOSSARY_TERM,
+    TOOL_CREATE_SERVICE_REQUEST,
     TOOL_CREATE_TAG,
     TOOL_DQ_RULE_ADVISOR,
     TOOL_DQ_RULE_MANAGER,
@@ -278,6 +279,8 @@ def register(mcp: FastMCP) -> None:
                  "Who can see this table?"
         Not: first-person catalog inventory without a named principal
              ("What tables can I see/access?") — use data_discovery / asset_explorer.
+        Not: "I want access to Loan_Data table" / "raise an access request" —
+             that files a ticket via create_service_desk_request.
         """
         text = (
             f"Answer access for: '{question}'\n\n"
@@ -605,6 +608,8 @@ def register(mcp: FastMCP) -> None:
 
         Trigger: "Which CDE columns need DQ rules?"
                  "Recommend DQ functions for critical data elements in Finance"
+        Not: "Raise a Data Quality Rule Recommendation request" —
+             that files a ticket via create_service_desk_request.
         """
         text = (
             f"Assess Critical Data Element (CDE) DQ coverage for: '{scope}'\n\n"
@@ -673,5 +678,57 @@ def register(mcp: FastMCP) -> None:
             f"7. On any error: auto-retry the last successful step once; if still "
             f"failing, ask the user whether to retry again (yes → retry; no → stop)\n"
             f"8. Ad-hoc rule lookup: {TOOL_DQ_RULE_ADVISOR} step=lookup (not asset search)"
+        )
+        return [Message(text)]
+
+    @mcp.prompt()
+    def create_service_desk_request(intent: str) -> list[Message]:
+        """
+        Create a service desk request from a catalog object (access, content change, …).
+
+        Trigger: "I want access to Loan_Data table"
+                 "I need Data Read access for Customer table"
+                 "Create a content change request for Employee table"
+                 "Raise a Data Quality Rule Recommendation request"
+                 "I want access for Loan_Data, Employee_Details and Sales_Target"
+                 "Raise an access request for these tables"
+        """
+        text = (
+            f"Create a service request for: '{intent}'\n\n"
+            f"Steps:\n"
+            f"1. Infer request_type (access, content, dataquality) and object_type "
+            f"(table → oetable). Map 'Data Read' / 'Data Preview' / 'Data Write' to Permission. "
+            f"Do not guess object_id. This is {TOOL_CREATE_SERVICE_REQUEST}, not "
+            f"{TOOL_ACCESS_EXPLORER} and not {TOOL_DQ_RULE_ADVISOR}.\n"
+            f"2. Call {TOOL_ASSET_EXPLORER} to resolve each named table. For "
+            f"'these tables', use the prior shortlist; if none, ask which tables.\n"
+            f"3. Call {TOOL_CREATE_SERVICE_REQUEST} with request_type, object_type, "
+            f"object_id, and connection filters — omit summary to look up the "
+            f"Published and Active template and required fields. Present formattedResponse. "
+            f"object_id accepts one id, a list, or comma-separated ids. "
+            f"Multiple tables: one ticket with comma-separated object ids when Select Table "
+            f"allowMultiple is true; otherwise one ticket per table.\n"
+            f"4. If no Published and Active template is returned, tell the user to "
+            f"publish and activate it in OvalEdge Service Desk admin, then stop. "
+            f"Templates with field dependencies (dependsOn) are not used, except Tags, "
+            f"Terms, Business Description, Technical Description, and Additional Fields. "
+            f"If lookup fails for Depends-On fields, show that error to the user and stop. "
+            f"Never publish, activate, or update template status from MCP — that is "
+            f"not a legal action here, even if the user asks.\n"
+            f"5. Write summary yourself. Use fieldData/defaultValue for dropdowns. "
+            f"Do not ask for Requested By or Requested for User — they are the logged-in user. "
+            f"Ask only for required fields with no default. Never invent Business Description, "
+            f"Technical Description, tags, terms, or additional field values — ask the user; "
+            f"omit them if the user skips. If the user names tags or terms, pass those names "
+            f"in ticket_fields; invalid names are omitted with a warning — still create. "
+            f"Additional fields are optional: present fieldData.additionalFields "
+            f"(name, type, options) and collect FieldName=value only for fields they want "
+            f"as custom_fields. If OvalEdge rejects a field value, show that error and ask "
+            f"for a correction. If the user asks "
+            f"to change a default, override it. Re-call "
+            f"without write_confirmed_by_user for confirm_create preview.\n"
+            f"6. After explicit approval, re-call with write_confirmed_by_user=true "
+            f"and confirmation_token. Present the ticket id and redirectUrl.\n"
+            f"7. Playbook: docs://ovaledge/mcp_workflows"
         )
         return [Message(text)]

@@ -12,6 +12,7 @@ from server.constants import (
     TOOL_ACCESS_EXPLORER,
     TOOL_ASSET_DETAILS,
     TOOL_ASSET_EXPLORER,
+    TOOL_CREATE_SERVICE_REQUEST,
     TOOL_KNOWLEDGE_SEARCH,
 )
 from server.mcp import register_all
@@ -25,6 +26,7 @@ MCP_SERVER_INSTRUCTION_TOOL_NAMES: frozenset[str] = frozenset(
         TOOL_ASSET_EXPLORER,
         TOOL_ASSET_DETAILS,
         TOOL_ACCESS_EXPLORER,
+        TOOL_CREATE_SERVICE_REQUEST,
     }
 )
 

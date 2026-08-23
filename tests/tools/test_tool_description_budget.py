@@ -58,8 +58,10 @@ class TestToolDescriptionBudget:
 
     def test_confidential_classification_on_access_tools(self) -> None:
         from server.tools.access.helpers import _DESC_ACCESS_EXPLORER
+        from server.tools.servicedesk.helpers import _DESC_CREATE_SERVICE_REQUEST
 
         assert MCP_TOOL_CLASSIFICATION_CONFIDENTIAL in _DESC_ACCESS_EXPLORER
+        assert MCP_TOOL_CLASSIFICATION_CONFIDENTIAL in _DESC_CREATE_SERVICE_REQUEST
 
     def test_internal_classification_on_asset_explorer(self) -> None:
         from server.tools.catalog.helpers import _DESC_ASSET_EXPLORER
@@ -85,12 +87,16 @@ class TestToolDescriptionBudget:
         from server.tools.catalog.helpers import _DESC_UPDATE_DESCRIPTIONS
         from server.tools.governance.glossary_helpers import _DESC_CREATE_GLOSSARY
         from server.tools.governance.tag_helpers import _DESC_CREATE_TAG
+        from server.tools.servicedesk.helpers import _DESC_CREATE_SERVICE_REQUEST
 
         assert "docs://ovaledge/glossary_guide" not in _DESC_CREATE_GLOSSARY
         assert "docs://ovaledge/governance" in _DESC_CREATE_GLOSSARY
         assert "docs://ovaledge/tags_guide" not in _DESC_CREATE_TAG
         assert "docs://ovaledge/governance" in _DESC_CREATE_TAG
         assert "docs://ovaledge/mcp_workflows" in _DESC_UPDATE_DESCRIPTIONS
+        assert "docs://ovaledge/mcp_workflows" in _DESC_CREATE_SERVICE_REQUEST
+        assert "I want access to Loan_Data table" not in _DESC_CREATE_SERVICE_REQUEST
         assert len(_DESC_CREATE_GLOSSARY) <= MCP_TOOL_DESC_MAX_CHARS
         assert len(_DESC_CREATE_TAG) <= MCP_TOOL_DESC_MAX_CHARS
         assert len(_DESC_UPDATE_DESCRIPTIONS) <= MCP_TOOL_DESC_MAX_CHARS
+        assert len(_DESC_CREATE_SERVICE_REQUEST) <= MCP_TOOL_DESC_MAX_CHARS

@@ -12,6 +12,7 @@ from fastmcp import FastMCP
 
 from server.constants import (
     TOOL_CREATE_GLOSSARY_TERM,
+    TOOL_CREATE_SERVICE_REQUEST,
     TOOL_CREATE_TAG,
     TOOL_DQ_RULE_ADVISOR,
     TOOL_DQ_RULE_MANAGER,
@@ -20,7 +21,7 @@ from server.constants import (
     TOOL_UPDATE_CUSTOM_FIELD_VALUE,
     TOOL_UPDATE_GOVERNANCE_ROLES,
 )
-from server.tools import catalog, dataquality, governance
+from server.tools import catalog, dataquality, governance, servicedesk
 from server.tools.common.confirm_gate import compute_confirmation_token
 from tests.helpers import get_tool_fn
 
@@ -82,6 +83,17 @@ STALE_TOKEN_CASES: tuple[StaleTokenCase, ...] = (
             "category_skip_confirmed": True,
         },
         tamper_kwargs={"description": "Tampered definition"},
+    ),
+    StaleTokenCase(
+        tool_name=TOOL_CREATE_SERVICE_REQUEST,
+        register=servicedesk.register,
+        preview_kwargs={
+            "ticket_template_id": 1005,
+            "summary": "Original access request",
+            "object_id": 3337,
+            "object_type": "oetable",
+        },
+        tamper_kwargs={"summary": "Tampered access request"},
     ),
     StaleTokenCase(
         tool_name=TOOL_UPDATE_GOVERNANCE_ROLES,

@@ -1400,6 +1400,55 @@
       ]
     },
     {
+      "name": "example_create_service_request_preview",
+      "input": "I want access to Loan_Data table \u2014 preview the service request first.",
+      "actual_output": "I previewed create_service_request (confirm_create, doNotCreate=true) before any POST.",
+      "mcp_tools_called": [
+        {
+          "name": "create_service_request",
+          "args": {
+            "ticket_template_id": 1005,
+            "summary": "Need access to tickettemplate",
+            "object_id": 3337,
+            "object_type": "oetable",
+            "write_confirmed_by_user": false
+          },
+          "result": {
+            "workflowPhase": "confirm_create",
+            "doNotCreate": true,
+            "confirmationToken": "preview-token-placeholder",
+            "formattedResponse": "**Confirm service request creation**"
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_create_service_request_happy",
+      "input": "User approved creating the access service request.",
+      "actual_output": "I POSTed create_service_request with confirmation; ticket SR-88 created.",
+      "mcp_tools_called": [
+        {
+          "name": "create_service_request",
+          "args": {
+            "ticket_template_id": 1005,
+            "summary": "Need access to tickettemplate",
+            "object_id": 3337,
+            "object_type": "oetable",
+            "write_confirmed_by_user": true,
+            "confirmation_token": "preview-token-placeholder"
+          },
+          "result": {
+            "ok": true,
+            "data": {
+              "ticketId": 88,
+              "displayTicketId": "SR-88"
+            },
+            "formattedResponse": "Service request SR-88 created."
+          }
+        }
+      ]
+    },
+    {
       "name": "example_search_rejects_invalid_object_type",
       "input": "Search catalog with object_type=not_a_real_type.",
       "actual_output": "asset_explorer returned 400 for invalid object_type.",
