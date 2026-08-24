@@ -141,9 +141,9 @@ Token exchange failures (`INVALID_TOKEN`, duplicate issuance): [infra/TROUBLESHO
 
 After the server starts, clients see:
 
-- **Tools** — catalog, governance (glossary, tags, data stories, writes), platform docs, native access (RDAM)
-- **Resources** — `ovaledge://catalog/table|file/{id}`, `ovaledge://governance/glossary-term|data-story|tag/{id}`
-- **Workflow prompts** — e.g. `data_discovery`, `organizational_knowledge`, `create_governance_tag`, `metadata_drift`, `native_source_access` (21 total; see [mcp_workflows.md](server/docs/mcp_workflows.md))
+- **Tools** — catalog, governance (glossary, tags, data stories, writes), service desk (`create_service_request`), platform docs, native access (RDAM)
+- **Resources** — `ovaledge://catalog/table|file/{id}`, `ovaledge://governance/glossary-term|data-story|tag/{id}` (tickets are not object resources)
+- **Workflow prompts** — e.g. `data_discovery`, `organizational_knowledge`, `create_governance_tag`, `create_service_desk_request`, `metadata_drift`, `native_source_access` (22 total; see [mcp_workflows.md](server/docs/mcp_workflows.md))
 - **Doc resources** — `docs://ovaledge/{name}` from `server/docs/*.md` (`mcp_workflows`, `governance`, `asset_types`, `overview`, `rdam_source_access`, …)
 
 **Agent behavior** (from `server/app.py` instructions): use **`knowledge_search`** for organizational knowledge and product how-to; **`write_confirmed_by_user=true`** after user approves create or update previews; native grants via **`access_explorer`** (`operation=source_system_access`). Full tool list and routing: [README.md](README.md#tools-resources-and-prompts) · [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md).

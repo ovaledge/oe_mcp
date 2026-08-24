@@ -46,7 +46,7 @@ description-budget, and in-process transport tests.
 | Registration orchestration | `server/mcp/bootstrap.py` |
 | Tool names, paths, allow-lists, URI constants | `server/constants.py` |
 | Canonical tool and workflow-prompt inventory | `server/mcp_surface.py` |
-| Domain tools | `server/tools/{catalog,access,governance,dataquality,docs,rdam}/` |
+| Domain tools | `server/tools/{catalog,access,governance,servicedesk,dataquality,docs,rdam}/` |
 | Shared validation, errors, annotations, confirm gate | `server/tools/common/` |
 | Resource packages | `server/resources/{catalog,governance}/` |
 | Agent routing and workflow documentation | `server/docs/mcp_workflows.md` |
@@ -114,6 +114,9 @@ Maintain these routing distinctions:
 - Native DB/BI grants: `access_explorer` with `operation=source_system_access` and
   native intent—never substitute catalog search or catalog-permissions tools.
 - OvalEdge catalog permissions: `access_explorer` with `operation=catalog_access`, not RDAM.
+- File access, content-change, or DQ-recommendation tickets: `create_service_request`
+  (prompt `create_service_desk_request`) — not `access_explorer` and not
+  `dq_rule_advisor`. Who-has-access stays `resolve_object_access`.
 - For user-facing links, use `navLink` or `redirectUrl`; never show an
   `ovaledge://` URI.
 

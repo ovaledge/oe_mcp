@@ -45,7 +45,7 @@ Enable the **CodeGraph** MCP server in Cursor Settings → MCP. Pass `projectPat
 | App / server instructions | `server/app.py` |
 | Paths, allow-lists, `TOOL_*` names | `server/constants.py` |
 | Canonical tool/prompt inventory | `server/mcp_surface.py` |
-| Tool packages | `server/tools/{catalog,access,governance,dataquality,docs,rdam}/` |
+| Tool packages | `server/tools/{catalog,access,governance,servicedesk,dataquality,docs,rdam}/` |
 | Shared helpers / annotations / confirm gate | `server/tools/common/` |
 | Agent routing docs | `server/docs/mcp_workflows.md` (`docs://ovaledge/mcp_workflows`) |
 | Governance guide | `server/docs/governance.md` |
@@ -76,6 +76,7 @@ Consolidated read family: `asset_explorer`, `asset_details`, `asset_lineage`, `k
 | Find physical / catalog assets | `asset_explorer` → `asset_details` |
 | Native DB/BI grants (RDAM) | `access_explorer` operation=source_system_access only — never fall back to explorer |
 | Catalog permissions (OE user/role grants) | `access_explorer` operation=catalog_access — not RDAM |
+| File access/content/DQ-recommendation tickets | `create_service_request` — not `access_explorer` / `dq_rule_advisor` |
 | User-facing links | `navLink` / `redirectUrl` — never show `ovaledge://` URIs to users |
 
 Full playbooks: `server/docs/mcp_workflows.md`.

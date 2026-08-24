@@ -14,22 +14,18 @@ from mcp.types import GetPromptResult, PromptMessage, TextContent
 from evals.mcp_eval_helpers import ovaledge_eval_mcp_server, tool_call_result
 from server.constants import (
     MCP_DQ_ASSESS_LIMIT_DEFAULT,
-    TOOL_ASSESS_CDE_DQ,
+    TOOL_ACCESS_EXPLORER,
     TOOL_ASSET_DETAILS,
     TOOL_ASSET_EXPLORER,
-    TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
-    TOOL_CREATE_DQ_RULES,
     TOOL_CREATE_GLOSSARY_TERM,
     TOOL_CREATE_SERVICE_REQUEST,
-    TOOL_CREATE_SQL_DQ_RULE,
     TOOL_CREATE_TAG,
-    TOOL_GENERATE_DQ_QUERIES,
-    TOOL_LOOKUP_DQ_RULE,
+    TOOL_DQ_RULE_ADVISOR,
+    TOOL_DQ_RULE_MANAGER,
     TOOL_METADATA_CHANGES_BETWEEN_CRAWLS,
     TOOL_UPDATE_CDE_ASSOCIATIONS,
     TOOL_UPDATE_CUSTOM_FIELD_VALUE,
     TOOL_UPDATE_GOVERNANCE_ROLES,
-    TOOL_VALIDATE_DQ_QUERIES,
 )
 from server.tools.common.confirm_gate import compute_confirmation_token
 
@@ -58,7 +54,7 @@ _EXPLAIN_TAG_PROMPT_TEXT = (
 _EXPLAIN_DQ_RULE_PROMPT_TEXT = (
     "Explain a data quality rule.\n\n"
     "Rule: Null Data Density Check\n\n"
-    "Call lookup_dq_rule with rule_name."
+    "Call dq_rule_advisor step=lookup with rule_name."
 )
 
 _METADATA_DRIFT_PROMPT_TEXT = (
@@ -94,18 +90,19 @@ _ASSIGN_ROLES_PROMPT_TEXT = (
 _ASSESS_CDE_DQ_PROMPT_TEXT = (
     "Assess CDE DQ coverage.\n\n"
     "Steps:\n"
-    "1. assess_cde_dq for CDE columns on target tables.\n"
-    "2. lookup_dq_rule for matching rules.\n"
-    "3. associate_dq_rule_objects or create_dq_rules with confirm gate "
+    "1. dq_rule_advisor step=assess for CDE columns on target tables.\n"
+    "2. dq_rule_advisor step=lookup for matching rules.\n"
+    "3. dq_rule_manager step=associate or step=create_standard with confirm gate "
     "(preview, then write_confirmed_by_user=true + confirmation_token)."
 )
 
 _CUSTOM_SQL_DQ_PROMPT_TEXT = (
     "Custom SQL DQ workflow for CDE column.\n\n"
     "Steps:\n"
-    "1. generate_dq_queries for the column (custom_sql path)\n"
-    "2. validate_dq_queries with confirm gate using connection_id/schema_id from context\n"
-    "3. create_sql_dq_rule with confirm gate when canCreateRule is true"
+    "1. dq_rule_advisor step=generate_query for the column (custom_sql path)\n"
+    "2. dq_rule_advisor step=validate_query with confirm gate "
+    "using connection_id/schema_id from context\n"
+    "3. dq_rule_manager step=create_custom_sql with confirm gate when canCreateRule is true"
 )
 
 _GLOSSARY_CREATE_POST_BODY: dict[str, object] = {
@@ -349,7 +346,7 @@ def golden_mcp_use_explain_tag() -> LLMTestCase:
 
 def golden_mcp_use_explain_dq_rule() -> LLMTestCase:
     srv = ovaledge_eval_mcp_server(
-        tool_names=frozenset({TOOL_LOOKUP_DQ_RULE, TOOL_UPDATE_GOVERNANCE_ROLES}),
+        tool_names=frozenset({TOOL_DQ_RULE_ADVISOR, TOOL_UPDATE_GOVERNANCE_ROLES}),
         prompt_names=frozenset({"explain_dq_rule"}),
     )
     prompt_result = GetPromptResult(
@@ -364,15 +361,16 @@ def golden_mcp_use_explain_dq_rule() -> LLMTestCase:
         name="mcp_use_explain_dq_rule",
         input="Explain our Null Data Density Check DQ rule.",
         actual_output=(
-            "I called lookup_dq_rule with rule_name='Null Data Density Check'. I did not "
+            "I called dq_rule_advisor step=lookup with "
+            "rule_name='Null Data Density Check'. I did not "
             "POST update_governance_roles because the user asked for an explanation only."
         ),
         mcp_servers=[srv],
         mcp_prompts_called=[MCPPromptCall(name="explain_dq_rule", result=prompt_result)],
         mcp_tools_called=[
             MCPToolCall(
-                name=TOOL_LOOKUP_DQ_RULE,
-                args={"rule_name": "Null Data Density Check"},
+                name=TOOL_DQ_RULE_ADVISOR,
+                args={"step": "lookup", "rule_name": "Null Data Density Check"},
                 result=tool_call_result(
                     {
                         "objectId": 42,
@@ -655,6 +653,13 @@ def golden_governed_service_request_create_two_step() -> ConversationalTestCase:
             )
         ],
     )
+    lookup = tool_call_result(
+        {
+            "workflowPhase": "collect_fields",
+            "formattedResponse": "**Service request template**",
+            "data": {"ticketTemplateId": 1005, "ticketTemplateName": "Table Access"},
+        }
+    )
     preview = tool_call_result(
         {
             "workflowPhase": "confirm_create",
@@ -670,7 +675,8 @@ def golden_governed_service_request_create_two_step() -> ConversationalTestCase:
         name="governed_service_request_create_two_step",
         scenario="User requests table access; agent files a service request after confirmation.",
         expected_outcome=(
-            "Preview create_service_request, then POST with matching confirmation_token."
+            "Resolve the table, look up the template, preview create_service_request, "
+            "then POST with matching confirmation_token."
         ),
         mcp_servers=[srv],
         turns=[
@@ -680,6 +686,43 @@ def golden_governed_service_request_create_two_step() -> ConversationalTestCase:
                 content="Using create_service_desk_request workflow.",
                 mcp_prompts_called=[
                     MCPPromptCall(name="create_service_desk_request", result=prompt_result),
+                ],
+            ),
+            Turn(
+                role="assistant",
+                content="Resolving Loan_Data via asset_explorer.",
+                mcp_tools_called=[
+                    MCPToolCall(
+                        name=TOOL_ASSET_EXPLORER,
+                        args={"search_terms": ["Loan_Data"], "object_type": "oetable"},
+                        result=tool_call_result(
+                            {
+                                "total": 1,
+                                "results": [
+                                    {
+                                        "objectId": 3337,
+                                        "name": "Loan_Data",
+                                        "objectType": "oetable",
+                                    }
+                                ],
+                            }
+                        ),
+                    ),
+                ],
+            ),
+            Turn(
+                role="assistant",
+                content="Looking up the Published and Active access template.",
+                mcp_tools_called=[
+                    MCPToolCall(
+                        name=TOOL_CREATE_SERVICE_REQUEST,
+                        args={
+                            "request_type": "access",
+                            "object_type": "oetable",
+                            "object_id": 3337,
+                        },
+                        result=lookup,
+                    ),
                 ],
             ),
             Turn(
@@ -719,6 +762,57 @@ def golden_governed_service_request_create_two_step() -> ConversationalTestCase:
                 ],
             ),
             Turn(role="assistant", content="Service request SR-88 created."),
+        ],
+    )
+
+
+def golden_mcp_use_request_access_not_access_explorer() -> LLMTestCase:
+    """First-person access request files a ticket; it does not query grants."""
+    srv = ovaledge_eval_mcp_server(
+        tool_names=frozenset(
+            {TOOL_ASSET_EXPLORER, TOOL_ACCESS_EXPLORER, TOOL_CREATE_SERVICE_REQUEST}
+        ),
+    )
+    return LLMTestCase(
+        name="mcp_use_request_access_not_access_explorer",
+        input="I want access to Loan_Data table",
+        actual_output=(
+            "This is a request to obtain access, not a who-has-access question. "
+            "I resolved Loan_Data with asset_explorer and called create_service_request "
+            "to look up the access template. I did not call access_explorer."
+        ),
+        mcp_servers=[srv],
+        mcp_tools_called=[
+            MCPToolCall(
+                name=TOOL_ASSET_EXPLORER,
+                args={"search_terms": ["Loan_Data"], "object_type": "oetable"},
+                result=tool_call_result(
+                    {
+                        "total": 1,
+                        "results": [
+                            {
+                                "objectId": 3337,
+                                "name": "Loan_Data",
+                                "objectType": "oetable",
+                            }
+                        ],
+                    }
+                ),
+            ),
+            MCPToolCall(
+                name=TOOL_CREATE_SERVICE_REQUEST,
+                args={
+                    "request_type": "access",
+                    "object_type": "oetable",
+                    "object_id": 3337,
+                },
+                result=tool_call_result(
+                    {
+                        "workflowPhase": "collect_fields",
+                        "formattedResponse": "**Service request template**",
+                    }
+                ),
+            ),
         ],
     )
 
@@ -957,10 +1051,10 @@ def golden_dq_coverage_workflow() -> ConversationalTestCase:
     srv = ovaledge_eval_mcp_server(
         tool_names=frozenset({
             TOOL_ASSET_EXPLORER,
-            TOOL_ASSESS_CDE_DQ,
-            TOOL_LOOKUP_DQ_RULE,
-            TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
-            TOOL_CREATE_DQ_RULES,
+            TOOL_DQ_RULE_ADVISOR,
+            TOOL_DQ_RULE_ADVISOR,
+            TOOL_DQ_RULE_MANAGER,
+            TOOL_DQ_RULE_MANAGER,
         }),
         prompt_names=frozenset({"assess_cde_dq_coverage"}),
     )
@@ -1006,8 +1100,9 @@ def golden_dq_coverage_workflow() -> ConversationalTestCase:
                         ),
                     ),
                     MCPToolCall(
-                        name=TOOL_ASSESS_CDE_DQ,
+                        name=TOOL_DQ_RULE_ADVISOR,
                         args={
+                            "step": "assess",
                             "objects": [
                                 {"object_id": 10, "object_type": "oetable"},
                             ],
@@ -1031,15 +1126,16 @@ def golden_dq_coverage_workflow() -> ConversationalTestCase:
                 content="Looking up DQ rule, then previewing association.",
                 mcp_tools_called=[
                     MCPToolCall(
-                        name=TOOL_LOOKUP_DQ_RULE,
-                        args={"rule_name": "Null Data Density Check"},
+                        name=TOOL_DQ_RULE_ADVISOR,
+                        args={"step": "lookup", "rule_name": "Null Data Density Check"},
                         result=tool_call_result(
                             {"objectId": 42, "objectName": "Null Data Density Check"},
                         ),
                     ),
                     MCPToolCall(
-                        name=TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
+                        name=TOOL_DQ_RULE_MANAGER,
                         args={
+                            "step": "associate",
                             "dqrule_id": 42,
                             "objects": [{"object_id": 101, "object_type": "oecolumn"}],
                             "write_confirmed_by_user": False,
@@ -1060,8 +1156,9 @@ def golden_dq_coverage_workflow() -> ConversationalTestCase:
                 content="POSTing association with preview token.",
                 mcp_tools_called=[
                     MCPToolCall(
-                        name=TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
+                        name=TOOL_DQ_RULE_MANAGER,
                         args={
+                            "step": "associate",
                             "dqrule_id": 42,
                             "objects": [{"object_id": 101, "object_type": "oecolumn"}],
                             "write_confirmed_by_user": True,
@@ -1082,8 +1179,9 @@ def golden_dq_coverage_workflow() -> ConversationalTestCase:
                 content="Previewing create_dq_rules in discover mode.",
                 mcp_tools_called=[
                     MCPToolCall(
-                        name=TOOL_CREATE_DQ_RULES,
+                        name=TOOL_DQ_RULE_MANAGER,
                         args={
+                            "step": "create_standard",
                             "discover_cde_columns": True,
                             "prefer_existing_rule": True,
                             "write_confirmed_by_user": False,
@@ -1104,8 +1202,9 @@ def golden_dq_coverage_workflow() -> ConversationalTestCase:
                 content="POSTing create_dq_rules with preview token.",
                 mcp_tools_called=[
                     MCPToolCall(
-                        name=TOOL_CREATE_DQ_RULES,
+                        name=TOOL_DQ_RULE_MANAGER,
                         args={
+                            "step": "create_standard",
                             "discover_cde_columns": True,
                             "prefer_existing_rule": True,
                             "write_confirmed_by_user": True,
@@ -1125,9 +1224,9 @@ def golden_dq_coverage_workflow() -> ConversationalTestCase:
 def golden_custom_sql_dq_workflow() -> ConversationalTestCase:
     srv = ovaledge_eval_mcp_server(
         tool_names=frozenset({
-            TOOL_GENERATE_DQ_QUERIES,
-            TOOL_VALIDATE_DQ_QUERIES,
-            TOOL_CREATE_SQL_DQ_RULE,
+            TOOL_DQ_RULE_ADVISOR,
+            TOOL_DQ_RULE_ADVISOR,
+            TOOL_DQ_RULE_MANAGER,
         }),
         prompt_names=frozenset({"create_custom_sql_dq_workflow"}),
     )
@@ -1192,8 +1291,9 @@ def golden_custom_sql_dq_workflow() -> ConversationalTestCase:
                 ],
                 mcp_tools_called=[
                     MCPToolCall(
-                        name=TOOL_GENERATE_DQ_QUERIES,
+                        name=TOOL_DQ_RULE_ADVISOR,
                         args={
+                            "step": "generate_query",
                             "objects": [{"object_id": 101, "object_type": "oecolumn"}],
                         },
                         result=tool_call_result(
@@ -1228,8 +1328,9 @@ def golden_custom_sql_dq_workflow() -> ConversationalTestCase:
                 content="Previewing validate_dq_queries — no execution yet.",
                 mcp_tools_called=[
                     MCPToolCall(
-                        name=TOOL_VALIDATE_DQ_QUERIES,
+                        name=TOOL_DQ_RULE_ADVISOR,
                         args={
+                            "step": "validate_query",
                             "connection_id": 1,
                             "schema_id": 2,
                             "rule_query": _VALIDATE_DQ_QUERIES_POST_BODY["ruleQuery"],
@@ -1249,8 +1350,9 @@ def golden_custom_sql_dq_workflow() -> ConversationalTestCase:
                 content="Executing validate_dq_queries with preview token.",
                 mcp_tools_called=[
                     MCPToolCall(
-                        name=TOOL_VALIDATE_DQ_QUERIES,
+                        name=TOOL_DQ_RULE_ADVISOR,
                         args={
+                            "step": "validate_query",
                             "connection_id": 1,
                             "schema_id": 2,
                             "rule_query": _VALIDATE_DQ_QUERIES_POST_BODY["ruleQuery"],
@@ -1270,8 +1372,9 @@ def golden_custom_sql_dq_workflow() -> ConversationalTestCase:
                 content="Previewing create_sql_dq_rule.",
                 mcp_tools_called=[
                     MCPToolCall(
-                        name=TOOL_CREATE_SQL_DQ_RULE,
+                        name=TOOL_DQ_RULE_MANAGER,
                         args={
+                            "step": "create_custom_sql",
                             "objects": [{"object_id": 101, "object_type": "oecolumn"}],
                             "rule_name": "revenue_null_check",
                             "rule_query": _CREATE_SQL_DQ_RULE_POST_BODY["ruleQuery"],
@@ -1293,8 +1396,9 @@ def golden_custom_sql_dq_workflow() -> ConversationalTestCase:
                 content="POSTing create_sql_dq_rule with preview token.",
                 mcp_tools_called=[
                     MCPToolCall(
-                        name=TOOL_CREATE_SQL_DQ_RULE,
+                        name=TOOL_DQ_RULE_MANAGER,
                         args={
+                            "step": "create_custom_sql",
                             "objects": [{"object_id": 101, "object_type": "oecolumn"}],
                             "rule_name": "revenue_null_check",
                             "rule_query": _CREATE_SQL_DQ_RULE_POST_BODY["ruleQuery"],
@@ -1323,6 +1427,7 @@ COVERAGE_MCP_USE_GOLDEN_FNS: list[str] = [
     "golden_mcp_use_explain_dq_rule",
     "golden_mcp_use_metadata_drift",
     "golden_mcp_use_find_related_assets",
+    "golden_mcp_use_request_access_not_access_explorer",
 ]
 
 COVERAGE_CONVERSATIONAL_GOLDEN_FNS: list[str] = [

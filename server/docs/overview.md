@@ -31,7 +31,7 @@ OvalEdge is a data governance platform that helps organizations find, understand
 | **`asset_lineage`** | Trace lineage for a table or file. |
 | **`knowledge_search`** | Search org stories and OvalEdge product docs. |
 
-Present **`formattedResponse`** (and **`storyCitation`** for stories) when provided. Do not invent glossary descriptions. Full routing: [mcp_workflows](mcp_workflows). Governance / glossary / tags / stories: [governance](governance). Types: [asset_types](asset_types).
+Present **`formattedResponse`** (and **`storyCitation`** for stories) when provided. Do not invent glossary descriptions. Filing an access, content-change, or DQ-recommendation **ticket** is **`create_service_request`**, not `access_explorer`. Full routing: [mcp_workflows](mcp_workflows). Governance / glossary / tags / stories: [governance](governance). Types: [asset_types](asset_types).
 
 ## Bridge Client
 

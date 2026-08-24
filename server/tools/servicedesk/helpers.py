@@ -388,6 +388,85 @@ def merge_default_ticket_fields(
     return merged
 
 
+def _is_summary_field(field: dict[str, Any]) -> bool:
+    code = str(field.get("fieldCode") or "").strip().lower()
+    name = str(field.get("fieldName") or "").strip().lower()
+    return code == "summary" or name == "summary"
+
+
+def remaining_required_ticket_fields(
+    fields: list[dict[str, Any]],
+    ticket_fields: dict[str, Any] | None,
+) -> list[str]:
+    """Required create fields still empty after merge (summary is a top-level arg)."""
+    merged = ticket_fields or {}
+    missing: list[str] = []
+    for field in fields:
+        if not field.get("requiredOnCreate") or _is_summary_field(field):
+            continue
+        name = str(field.get("fieldName") or "").strip()
+        if not name:
+            continue
+        if name in merged and not _blank(merged[name]):
+            continue
+        missing.append(name)
+    return missing
+
+
+def _dropdown_allowed_values(field: dict[str, Any]) -> list[str] | None:
+    if str(field.get("fieldType") or "").strip().lower() != "dropdown":
+        return None
+    data = field.get("fieldData") or field.get("fielddata") or {}
+    if not isinstance(data, dict):
+        return None
+    options = data.get("options")
+    if not isinstance(options, list) or not options:
+        return None
+    allowed: list[str] = []
+    for option in options:
+        if isinstance(option, dict):
+            value = option.get("value")
+            if value not in (None, ""):
+                allowed.append(str(value))
+        elif option not in (None, ""):
+            allowed.append(str(option))
+    return allowed or None
+
+
+def validate_ticket_field_values(
+    fields: list[dict[str, Any]],
+    ticket_fields: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Reject dropdown/date values that cannot be posted; None means ok."""
+    if not fields or not ticket_fields:
+        return None
+    by_name = {
+        str(field.get("fieldName") or "").strip(): field
+        for field in fields
+        if str(field.get("fieldName") or "").strip()
+    }
+    for name, value in ticket_fields.items():
+        field = by_name.get(str(name).strip())
+        if field is None or value in (None, ""):
+            continue
+        allowed = _dropdown_allowed_values(field)
+        if allowed is not None and str(value) not in allowed:
+            return error_payload(
+                f"{name} value '{value}' is not one of: {', '.join(allowed)}.",
+                status_code=400,
+                error_code="invalid_ticket_field",
+            )
+        if str(field.get("fieldType") or "").strip().lower() == "date":
+            text = str(value).strip()
+            if text and _parse_ticket_date(text) is None:
+                return error_payload(
+                    f"{name} is not a recognized date.",
+                    status_code=400,
+                    error_code="invalid_ticket_field",
+                )
+    return None
+
+
 def format_template_lookup_response(
     body: dict[str, Any], *, object_ids: list[int] | None = None
 ) -> dict[str, Any]:
