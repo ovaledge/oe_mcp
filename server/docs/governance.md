@@ -29,6 +29,10 @@ Write tools (e.g. `create_tag`, `create_glossary_term`, `create_service_request`
 
 The MCP adds **human-in-the-loop** steps for governed writes: picker responses (`formattedResponse`) on creates, explicit confirmation flags, a **`confirmationToken`** that binds the confirmed POST to the previewed payload, and a final **`write_confirmed_by_user`** gate before POST (creates and updates). Agents must not skip pickers or auto-confirm on behalf of users.
 
+## Service desk tickets
+
+Filing an access, content-change, or data-quality-recommendation **ticket** is **`create_service_request`** (prompt **`create_service_desk_request`**). That is not who-has-access (`access_explorer` / `resolve_object_access`) and not `dq_rule_advisor`. Tickets are not catalog objects — there is no `ovaledge://` resource for a request. Playbook: [mcp_workflows](mcp_workflows#create-a-service-request-create_service_request).
+
 ## Critical Data Element (CDE)
 
 Catalog assets (schemas, tables, columns, files, reports, APIs, codes) support a **Critical Data Element** designation. Use the `update_cde_associations` MCP tool to set `Yes`, `No`, or `None`, with optional category and justification — matching the catalog UI shutter. Resolve assets via `asset_explorer` first; updates require meta-write permission and are audited in asset history.

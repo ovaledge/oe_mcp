@@ -25,7 +25,9 @@ from server.tools.servicedesk.helpers import (
     normalize_object_type,
     normalize_request_type,
     primary_object_id,
+    remaining_required_ticket_fields,
     resolve_lookup_args,
+    validate_ticket_field_values,
 )
 
 
@@ -60,6 +62,7 @@ async def _invoke_create_service_request(
     object_ids = normalize_object_ids(object_id)
     primary_id = primary_object_id(object_ids)
     template_fields: list[dict[str, Any]] = []
+    shaped_lookup: dict[str, Any] | None = None
 
     needs_lookup = template_id is None or summary_text is None
     if needs_lookup:
@@ -81,11 +84,11 @@ async def _invoke_create_service_request(
                 body = await client.get(MCP_PATH_SERVICE_REQUEST_TEMPLATES, params=params)
         except OvalEdgeError as e:
             return map_ovaledge_error(e)
-        shaped = format_template_lookup_response(
+        shaped_lookup = format_template_lookup_response(
             body if isinstance(body, dict) else {},
             object_ids=object_ids,
         )
-        data = _as_dict(shaped.get("data"))
+        data = _as_dict(shaped_lookup.get("data"))
         resolved_template = data.get("ticketTemplateId")
         if isinstance(resolved_template, int) and resolved_template > 0:
             template_id = resolved_template
@@ -93,8 +96,6 @@ async def _invoke_create_service_request(
         template_fields = [
             row for row in (data.get("fields") or []) if isinstance(row, dict)
         ]
-        if summary_text is None:
-            return shaped
         if template_id is None:
             return error_payload(
                 "No Published and Active template was returned. Show the error, "
@@ -103,6 +104,8 @@ async def _invoke_create_service_request(
                 status_code=404,
                 error_code="template_not_found",
             )
+        if summary_text is None:
+            return shaped_lookup
         ticket_fields = merge_default_ticket_fields(
             template_fields,
             ticket_fields,
@@ -124,6 +127,19 @@ async def _invoke_create_service_request(
         )
 
     ticket_fields = normalize_date_ticket_fields(template_fields, ticket_fields)
+    if template_fields:
+        invalid = validate_ticket_field_values(template_fields, ticket_fields)
+        if invalid is not None:
+            return invalid
+        missing = remaining_required_ticket_fields(template_fields, ticket_fields)
+        if missing:
+            if shaped_lookup is not None:
+                return shaped_lookup
+            return error_payload(
+                "Required ticket fields are missing: " + ", ".join(missing) + ".",
+                status_code=400,
+                error_code="required_ticket_fields_missing",
+            )
 
     post_body = build_create_body(
         ticket_template_id=template_id,

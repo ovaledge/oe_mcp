@@ -21,10 +21,16 @@ from evals.golden_cases import (  # noqa: E402
     golden_mcp_use_open_catalog_search,
     golden_multi_turn_explore_details_lineage,
 )
+from evals.golden_cases_coverage import (  # noqa: E402
+    golden_governed_service_request_create_two_step,
+    golden_mcp_use_request_access_not_access_explorer,
+)
 from server.constants import (  # noqa: E402
+    TOOL_ACCESS_EXPLORER,
     TOOL_ASSET_DETAILS,
     TOOL_ASSET_EXPLORER,
     TOOL_ASSET_LINEAGE,
+    TOOL_CREATE_SERVICE_REQUEST,
     TOOL_KNOWLEDGE_SEARCH,
     TOOL_UPDATE_ASSET_DESCRIPTIONS,
 )
@@ -155,3 +161,37 @@ def test_governed_write_golden_preview_blocks_post_semantics() -> None:
     payload = _structured_result(preview_call)
     assert payload["workflowPhase"] == "confirm_update"
     assert payload["doNotUpdate"] is True
+
+
+def test_service_request_golden_uses_real_tool_parameters() -> None:
+    case = golden_governed_service_request_create_two_step()
+    calls = [
+        c
+        for c in _tool_calls_from_turns(case.turns)
+        if c.name == TOOL_CREATE_SERVICE_REQUEST
+    ]
+    assert len(calls) >= 2
+    lookup_call = calls[0]
+    assert lookup_call.args.get("request_type") == "access"
+    assert "summary" not in lookup_call.args
+    preview_call = next(
+        c for c in calls if c.args.get("write_confirmed_by_user") is False and "summary" in c.args
+    )
+    confirm_call = next(c for c in calls if c.args.get("write_confirmed_by_user") is True)
+    assert preview_call.args.get("ticket_template_id") == 1005
+    assert preview_call.args.get("object_type") == "oetable"
+    assert preview_call.args.get("write_confirmed_by_user") is False
+    assert preview_call.args.get("confirmation_token") is None
+    preview_token = _structured_result(preview_call)["confirmationToken"]
+    assert confirm_call.args.get("confirmation_token") == preview_token
+    assert confirm_call.args.get("ticket_template_id") == preview_call.args.get(
+        "ticket_template_id"
+    )
+
+
+def test_request_access_golden_does_not_call_access_explorer() -> None:
+    case = golden_mcp_use_request_access_not_access_explorer()
+    names = [c.name for c in (case.mcp_tools_called or [])]
+    assert TOOL_ACCESS_EXPLORER not in names
+    assert TOOL_CREATE_SERVICE_REQUEST in names
+    assert TOOL_ASSET_EXPLORER in names

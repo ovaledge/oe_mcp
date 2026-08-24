@@ -141,6 +141,7 @@ class TestWorkflowPromptRegistration:
         assert "never invent" in lowered
         assert "dependson" in lowered
         assert "show that error" in lowered
+        assert "access_explorer" in lowered
 
     async def test_service_desk_prompt_docstring_includes_sample_triggers(self) -> None:
         mcp = FastMCP(name="test", version="0.0.1")

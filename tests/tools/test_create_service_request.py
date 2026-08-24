@@ -419,6 +419,73 @@ class TestCreateServiceRequest:
         assert out["error_code"] == "template_not_found"
         mock_oe_client.post.assert_not_called()
 
+    async def test_lookup_without_template_id_is_template_not_found(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {"ok": True, "data": {"fields": []}}
+        mcp = FastMCP(name="test", version="0.0.1")
+        servicedesk.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_SERVICE_REQUEST)
+        out = await fn(request_type="access", object_type="oetable")
+        assert out["error_code"] == "template_not_found"
+        mock_oe_client.post.assert_not_called()
+
+    async def test_summary_without_object_id_stays_collect_fields(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = _LOOKUP
+        mcp = FastMCP(name="test", version="0.0.1")
+        servicedesk.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_SERVICE_REQUEST)
+        out = await fn(
+            request_type="access",
+            object_type="oetable",
+            summary="Need access",
+        )
+        assert out["workflowPhase"] == "collect_fields"
+        assert "Select table" in out["formattedResponse"]
+        mock_oe_client.get.assert_called_once()
+        mock_oe_client.post.assert_not_called()
+
+    async def test_invalid_dropdown_value_rejected_before_preview(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = _LOOKUP
+        mcp = FastMCP(name="test", version="0.0.1")
+        servicedesk.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_SERVICE_REQUEST)
+        out = await fn(
+            request_type="access",
+            object_type="oetable",
+            object_id=3337,
+            summary="Need access",
+            ticket_fields={"Priority": "Urgent"},
+        )
+        assert out["error_code"] == "invalid_ticket_field"
+        assert "Priority" in out["error"]
+        mock_oe_client.post.assert_not_called()
+
+    async def test_confirmed_create_posts_joined_selector_from_ticket_fields(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = _CREATED
+        mcp = FastMCP(name="test", version="0.0.1")
+        servicedesk.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_SERVICE_REQUEST)
+        out = await invoke_write_confirmed(
+            fn,
+            ticket_template_id=1005,
+            summary="Need access",
+            object_id=[3337, 3338],
+            object_type="oetable",
+            ticket_fields={"Select table": "3337,3338"},
+        )
+        assert out["workflowPhase"] == "created"
+        mock_oe_client.get.assert_not_called()
+        posted = mock_oe_client.post.call_args.kwargs["body"]
+        assert posted["objectId"] == 3337
+        assert posted["ticketFields"]["Select table"] == "3337,3338"
+
     async def test_multi_object_ids_join_when_allow_multiple(
         self, mock_oe_client: AsyncMock
     ) -> None:
@@ -579,4 +646,36 @@ class TestCreateServiceRequestHelpers:
             {"Expiration Date": "25-10-2026 14:30:00"},
         )
         assert untyped["Expiration Date"] == "25-10-2026 14:30:00"
+
+    def test_remaining_required_skips_summary_and_filled_values(self) -> None:
+        from server.tools.servicedesk.helpers import remaining_required_ticket_fields
+
+        fields = [
+            {"fieldName": "Summary", "fieldCode": "summary", "requiredOnCreate": True},
+            {"fieldName": "Select table", "requiredOnCreate": True},
+            {"fieldName": "Priority", "requiredOnCreate": True},
+        ]
+        assert remaining_required_ticket_fields(fields, {"Priority": "Medium"}) == [
+            "Select table"
+        ]
+        assert remaining_required_ticket_fields(
+            fields, {"Select table": 3337, "Priority": "Medium"}
+        ) == []
+
+    def test_validate_ticket_field_values_rejects_unknown_dropdown(self) -> None:
+        from server.tools.servicedesk.helpers import validate_ticket_field_values
+
+        fields = [
+            {
+                "fieldName": "Priority",
+                "fieldType": "dropdown",
+                "fieldData": {
+                    "options": [{"label": "High", "value": "High"}],
+                },
+            }
+        ]
+        err = validate_ticket_field_values(fields, {"Priority": "Urgent"})
+        assert err is not None
+        assert err["error_code"] == "invalid_ticket_field"
+        assert validate_ticket_field_values(fields, {"Priority": "High"}) is None
 

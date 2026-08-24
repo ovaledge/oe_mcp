@@ -126,7 +126,7 @@ poetry run python -m evals.run_evals --output evals/out/report.json
 
 Defined in `golden_cases.py`:
 
-- `MCPUseMetric` — single-turn goldens: asset exploration, `data_discovery` prompt + search, `knowledge_search`, `organizational_knowledge` prompt + knowledge search, `access_explorer` (`operation=source_system_access` and `operation=catalog_access`).
+- `MCPUseMetric` — single-turn goldens: asset exploration, `data_discovery` prompt + search, `knowledge_search`, `organizational_knowledge` prompt + knowledge search, `access_explorer` (`operation=source_system_access` and `operation=catalog_access`), first-person “I want access…” → `create_service_request` (not `access_explorer`).
 - `MCPTaskCompletionMetric` — conversational discovery with expected outcome.
 - `MultiTurnMCPUseMetric` — follow-up user turn with resource read.
 
