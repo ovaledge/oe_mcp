@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/ovaledge/oe_mcp/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/ovaledge/oe_mcp/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
-[![Version](https://img.shields.io/badge/version-1.0.4-blue)](pyproject.toml)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue)](pyproject.toml)
 [![FastMCP](https://img.shields.io/badge/FastMCP-3.4-00C7B7)](https://gofastmcp.com)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
