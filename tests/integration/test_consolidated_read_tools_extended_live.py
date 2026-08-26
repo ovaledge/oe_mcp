@@ -1,10 +1,11 @@
 """
 Extended live integration coverage for the four consolidated MCP read tools.
 
-Fifteen tests per tool (60 total), complementing the smoke suite in
+Sixteen explorer tests plus fifteen each for details, lineage, and knowledge
+search (61 total), complementing the smoke suite in
 `test_consolidated_read_tools_live.py`:
 
-  - asset_explorer   → GET /api/v1/mcp/asset-explorer
+  - asset_explorer   → POST /api/v1/mcp/asset-explorer
   - asset_details    → GET /api/v1/mcp/asset-details
   - asset_lineage    → GET /api/v1/mcp/asset-lineage
   - knowledge_search → GET /api/v1/mcp/knowledge-search
@@ -40,7 +41,6 @@ from tests.integration.helpers import (
     explore,
     hit_name,
     items,
-    json_array,
     object_ids,
     require_column,
     require_file,
@@ -64,24 +64,24 @@ NO_MATCH_TERM = "zzq-no-such-asset-anywhere-1a2b3c"
 
 
 # ══════════════════════════════════════════════════════════════════
-# asset_explorer (15)
+# asset_explorer (16)
 # ══════════════════════════════════════════════════════════════════
-async def test_explorer_context_query_alone_ranks_results(mcp_get) -> None:
-    r = await explore(mcp_get, contextQuery="Which tables hold customer information?")
+async def test_explorer_context_query_alone_ranks_results(mcp_post) -> None:
+    r = await explore(mcp_post, contextQuery="Which tables hold customer information?")
     assert r.status_code == 200, r.text[:500]
     for hit in items(r):
         assert hit.get("objectId") is not None
         assert hit.get("objectType")
 
 
-async def test_explorer_multiple_search_terms(mcp_get) -> None:
-    r = await explore(mcp_get, searchTerms=json_array("customer", "order"))
+async def test_explorer_multiple_search_terms(mcp_post) -> None:
+    r = await explore(mcp_post, searchTerms=["customer", "order"])
     assert r.status_code == 200, r.text[:500]
     assert isinstance(data(r), dict)
 
 
-async def test_explorer_owner_filter_returns_only_matching_owner(mcp_get) -> None:
-    r = await explore(mcp_get, owner=OWNER)
+async def test_explorer_owner_filter_returns_only_matching_owner(mcp_post) -> None:
+    r = await explore(mcp_post, owner=OWNER)
     assert r.status_code in READ_OK, r.text[:500]
     if r.status_code != 200:
         return
@@ -91,19 +91,19 @@ async def test_explorer_owner_filter_returns_only_matching_owner(mcp_get) -> Non
             assert OWNER.lower() in str(owner).lower()
 
 
-async def test_explorer_steward_filter(mcp_get) -> None:
-    r = await explore(mcp_get, steward=STEWARD)
+async def test_explorer_steward_filter(mcp_post) -> None:
+    r = await explore(mcp_post, steward=STEWARD)
     assert r.status_code in READ_OK, r.text[:500]
     if r.status_code == 200:
         assert isinstance(data(r), dict)
 
 
-async def test_explorer_connection_name_filter_scopes_to_connection(mcp_get) -> None:
-    table = await require_table(mcp_get)
+async def test_explorer_connection_name_filter_scopes_to_connection(mcp_get, mcp_post) -> None:
+    table = await require_table(mcp_post)
     connection = await connection_hint_from_details(mcp_get, table)
     if not connection:
         pytest.skip("Could not resolve connectionName via explorer/details")
-    r = await explore(mcp_get, connectionName=connection, limit=10)
+    r = await explore(mcp_post, connectionName=connection, limit=10)
     assert r.status_code in READ_OK, r.text[:500]
     if r.status_code != 200:
         return
@@ -113,12 +113,12 @@ async def test_explorer_connection_name_filter_scopes_to_connection(mcp_get) -> 
             assert str(hit_conn).lower() == str(connection).lower()
 
 
-async def test_explorer_server_type_filter_uses_real_connector(mcp_get) -> None:
-    table = await require_table(mcp_get)
+async def test_explorer_server_type_filter_uses_real_connector(mcp_get, mcp_post) -> None:
+    table = await require_table(mcp_post)
     server_type = await server_type_hint_from_details(mcp_get, table)
     if not server_type:
         pytest.skip("Could not resolve serverType via explorer/details")
-    r = await explore(mcp_get, serverType=server_type, limit=10)
+    r = await explore(mcp_post, serverType=server_type, limit=10)
     assert r.status_code in READ_OK, r.text[:500]
     if r.status_code != 200:
         return
@@ -128,35 +128,35 @@ async def test_explorer_server_type_filter_uses_real_connector(mcp_get) -> None:
             assert str(hit_type).lower() == str(server_type).lower()
 
 
-async def test_explorer_critical_data_element_filter(mcp_get) -> None:
-    r = await explore(mcp_get, criticalDataElement=json_array("Yes"), limit=10)
+async def test_explorer_critical_data_element_filter(mcp_post) -> None:
+    r = await explore(mcp_post, criticalDataElement=["Yes"], limit=10)
     assert r.status_code in READ_OK, r.text[:500]
     assert_never_500(r, "criticalDataElement filter")
 
 
-async def test_explorer_glossary_terms_exact_filter(mcp_get) -> None:
-    term = await require_glossary_term(mcp_get)
+async def test_explorer_glossary_terms_exact_filter(mcp_post) -> None:
+    term = await require_glossary_term(mcp_post)
     name = hit_name(term)
     if not name:
         pytest.skip("Glossary hit has no usable name for exact filter")
-    r = await explore(mcp_get, glossaryTerms=json_array(name), limit=10)
+    r = await explore(mcp_post, glossaryTerms=[name], limit=10)
     assert r.status_code in READ_OK, r.text[:500]
     assert_never_500(r, "glossaryTerms filter")
 
 
-async def test_explorer_tags_exact_filter(mcp_get) -> None:
-    tag = await require_tag(mcp_get)
+async def test_explorer_tags_exact_filter(mcp_post) -> None:
+    tag = await require_tag(mcp_post)
     name = hit_name(tag)
     if not name:
         pytest.skip("Tag hit has no usable name for exact filter")
-    r = await explore(mcp_get, tags=json_array(name), limit=10)
+    r = await explore(mcp_post, tags=[name], limit=10)
     assert r.status_code in READ_OK, r.text[:500]
     assert_never_500(r, "tags filter")
 
 
-async def test_explorer_page_two_returns_different_hits(mcp_get) -> None:
-    first = await explore(mcp_get, searchTerms=json_array("a"), page=1, limit=5)
-    second = await explore(mcp_get, searchTerms=json_array("a"), page=2, limit=5)
+async def test_explorer_page_two_returns_different_hits(mcp_post) -> None:
+    first = await explore(mcp_post, searchTerms=["a"], page=1, limit=5)
+    second = await explore(mcp_post, searchTerms=["a"], page=2, limit=5)
     assert first.status_code == 200, first.text[:500]
     assert second.status_code == 200, second.text[:500]
     page_one, page_two = object_ids(first), object_ids(second)
@@ -165,9 +165,9 @@ async def test_explorer_page_two_returns_different_hits(mcp_get) -> None:
     assert not set(page_one) & set(page_two), "page 2 repeated page 1 hits"
 
 
-async def test_explorer_limit_never_exceeds_requested_page_size(mcp_get) -> None:
+async def test_explorer_limit_never_exceeds_requested_page_size(mcp_post) -> None:
     """Within the client's 50-row cap the server must never over-return."""
-    r = await explore(mcp_get, searchTerms=json_array("a"), limit=50)
+    r = await explore(mcp_post, searchTerms=["a"], limit=50)
     assert r.status_code == 200, r.text[:500]
     assert len(items(r)) <= 50
 
@@ -183,13 +183,13 @@ async def test_explorer_limit_never_exceeds_requested_page_size(mcp_get) -> None
     ),
     strict=False,
 )
-async def test_explorer_large_page_size_does_not_break_the_response(mcp_get) -> None:
-    r = await explore(mcp_get, searchTerms=json_array("a"), limit=200)
+async def test_explorer_large_page_size_does_not_break_the_response(mcp_post) -> None:
+    r = await explore(mcp_post, searchTerms=["a"], limit=200)
     assert_never_500(r, "limit=200")
 
 
-async def test_explorer_column_object_type_returns_only_columns(mcp_get) -> None:
-    r = await explore(mcp_get, objectType="oecolumn", searchTerms=json_array("id"), limit=10)
+async def test_explorer_column_object_type_returns_only_columns(mcp_post) -> None:
+    r = await explore(mcp_post, objectType="oecolumn", searchTerms=["id"], limit=10)
     assert r.status_code in READ_OK, r.text[:500]
     if r.status_code != 200:
         return
@@ -197,13 +197,13 @@ async def test_explorer_column_object_type_returns_only_columns(mcp_get) -> None
         assert hit.get("objectType") == "oecolumn"
 
 
-async def test_explorer_tag_include_children_returns_hierarchy(mcp_get) -> None:
-    tag = await require_tag(mcp_get)
+async def test_explorer_tag_include_children_returns_hierarchy(mcp_post) -> None:
+    tag = await require_tag(mcp_post)
     name = hit_name(tag)
     if not name:
         pytest.skip("Tag hit has no usable name for includeChildren")
     r = await explore(
-        mcp_get, name=name, objectType="oetag", includeChildren="true", limit=5
+        mcp_post, name=name, objectType="oetag", includeChildren="true", limit=5
     )
     assert r.status_code in READ_OK, r.text[:500]
     if r.status_code != 200:
@@ -213,13 +213,13 @@ async def test_explorer_tag_include_children_returns_hierarchy(mcp_get) -> None:
     assert as_list(payload.get("tags")) or payload.get("tags") is not None
 
 
-async def test_explorer_nonsense_term_stays_well_formed(mcp_get) -> None:
+async def test_explorer_nonsense_term_stays_well_formed(mcp_post) -> None:
     """Search is semantic, so a nonsense term still returns nearest neighbours.
 
     The contract is not "zero hits" — it is that the response stays a valid,
     well-formed result set rather than erroring.
     """
-    r = await explore(mcp_get, searchTerms=json_array(NO_MATCH_TERM))
+    r = await explore(mcp_post, searchTerms=[NO_MATCH_TERM])
     assert r.status_code in READ_OK, r.text[:500]
     assert_never_500(r, "nonsense-term search")
     if r.status_code != 200:
@@ -229,24 +229,47 @@ async def test_explorer_nonsense_term_stays_well_formed(mcp_get) -> None:
         assert hit.get("objectType")
 
 
-async def test_explorer_hits_expose_navigation_link(mcp_get) -> None:
-    r = await explore(mcp_get, searchTerms=json_array("a"), limit=5)
+async def test_explorer_hits_expose_navigation_link(mcp_post) -> None:
+    r = await explore(mcp_post, searchTerms=["a"], limit=5)
     assert r.status_code == 200, r.text[:500]
     hits = items(r)
     if not hits:
         pytest.skip("No catalog hits to inspect")
     for hit in hits:
         assert hit.get("navLink") or hit.get("hyperlink") or hit.get("redirectUrl"), (
-            f"hit without a navigation link: {hit!r}"
+            f"explorer hit missing navigation link: {hit}"
         )
+
+
+async def test_explorer_nested_range_filters_are_well_formed(mcp_post) -> None:
+    """POST nested rating/dqIndex/popularity/createdDate filters must not 500."""
+    r = await explore(
+        mcp_post,
+        objectType="oetable",
+        filters={
+            "rating": {"min": 4.01},
+            "dqIndex": {"min": 80},
+            "popularity": {"min": 70},
+            "createdDate": {"from": "2024-01-01", "to": "2024-12-31"},
+        },
+    )
+    assert_never_500(r, "nested range filters")
+    assert r.status_code in READ_OK, r.text[:500]
+    if r.status_code != 200:
+        return
+    payload = data(r)
+    assert isinstance(payload, dict)
+    for hit in items(r):
+        assert hit.get("objectId") is not None
+        assert hit.get("objectType")
 
 
 # ══════════════════════════════════════════════════════════════════
 # asset_details (15)
 # ══════════════════════════════════════════════════════════════════
-async def test_details_table_name_matches_explorer_hit(mcp_get) -> None:
+async def test_details_table_name_matches_explorer_hit(mcp_get, mcp_post) -> None:
     """asset_details must describe the same table asset_explorer returned."""
-    table = await require_table(mcp_get)
+    table = await require_table(mcp_post)
     name = hit_name(table)
     r = await mcp_get(
         MCP_PATH_ASSET_DETAILS,
@@ -259,8 +282,8 @@ async def test_details_table_name_matches_explorer_hit(mcp_get) -> None:
         )
 
 
-async def test_details_schema_name_matches_explorer_hit(mcp_get) -> None:
-    schema = await require_schema(mcp_get)
+async def test_details_schema_name_matches_explorer_hit(mcp_get, mcp_post) -> None:
+    schema = await require_schema(mcp_post)
     name = hit_name(schema)
     r = await mcp_get(
         MCP_PATH_ASSET_DETAILS,
@@ -271,8 +294,8 @@ async def test_details_schema_name_matches_explorer_hit(mcp_get) -> None:
         assert name.lower() in text_values(data(r))
 
 
-async def test_details_view_is_served_like_a_table(mcp_get) -> None:
-    view = await require_view(mcp_get)
+async def test_details_view_is_served_like_a_table(mcp_get, mcp_post) -> None:
+    view = await require_view(mcp_post, mcp_get)
     r = await mcp_get(
         MCP_PATH_ASSET_DETAILS,
         {"objectId": int(view["objectId"]), "objectType": "oetable"},
@@ -282,8 +305,8 @@ async def test_details_view_is_served_like_a_table(mcp_get) -> None:
         assert isinstance(detail_block(data(r)), dict)
 
 
-async def test_details_glossary_term(mcp_get) -> None:
-    term = await require_glossary_term(mcp_get)
+async def test_details_glossary_term(mcp_get, mcp_post) -> None:
+    term = await require_glossary_term(mcp_post)
     name = hit_name(term)
     r = await mcp_get(
         MCP_PATH_ASSET_DETAILS,
@@ -294,8 +317,8 @@ async def test_details_glossary_term(mcp_get) -> None:
         assert name.lower() in text_values(data(r))
 
 
-async def test_details_file(mcp_get) -> None:
-    file_hit = await require_file(mcp_get)
+async def test_details_file(mcp_get, mcp_post) -> None:
+    file_hit = await require_file(mcp_post)
     r = await mcp_get(
         MCP_PATH_ASSET_DETAILS,
         {"objectId": int(file_hit["objectId"]), "objectType": "oefile"},
@@ -304,8 +327,8 @@ async def test_details_file(mcp_get) -> None:
     assert_never_500(r, "file details")
 
 
-async def test_details_echoes_requested_object_id(mcp_get) -> None:
-    table = await require_table(mcp_get)
+async def test_details_echoes_requested_object_id(mcp_get, mcp_post) -> None:
+    table = await require_table(mcp_post)
     object_id = int(table["objectId"])
     r = await mcp_get(
         MCP_PATH_ASSET_DETAILS, {"objectId": object_id, "objectType": "oetable"}
@@ -317,8 +340,8 @@ async def test_details_echoes_requested_object_id(mcp_get) -> None:
         assert int(echoed) == object_id
 
 
-async def test_details_exposes_navigation_link(mcp_get) -> None:
-    table = await require_table(mcp_get)
+async def test_details_exposes_navigation_link(mcp_get, mcp_post) -> None:
+    table = await require_table(mcp_post)
     r = await mcp_get(
         MCP_PATH_ASSET_DETAILS,
         {"objectId": int(table["objectId"]), "objectType": "oetable"},
@@ -328,8 +351,8 @@ async def test_details_exposes_navigation_link(mcp_get) -> None:
     assert detail.get("navLink") or detail.get("hyperlink") or detail.get("redirectUrl")
 
 
-async def test_details_column_references_parent_table(mcp_get) -> None:
-    column = await require_column(mcp_get)
+async def test_details_column_references_parent_table(mcp_get, mcp_post) -> None:
+    column = await require_column(mcp_post)
     name = hit_name(column)
     r = await mcp_get(
         MCP_PATH_ASSET_DETAILS,
@@ -340,8 +363,8 @@ async def test_details_column_references_parent_table(mcp_get) -> None:
         assert name.lower() in text_values(data(r))
 
 
-async def test_details_table_reports_profile_or_explains_absence(mcp_get) -> None:
-    table = await require_table(mcp_get)
+async def test_details_table_reports_profile_or_explains_absence(mcp_get, mcp_post) -> None:
+    table = await require_table(mcp_post)
     r = await mcp_get(
         MCP_PATH_ASSET_DETAILS,
         {"objectId": int(table["objectId"]), "objectType": "oetable"},
@@ -374,8 +397,8 @@ async def test_details_non_numeric_object_id_rejected(mcp_get) -> None:
     assert_never_500(r, "non-numeric objectId")
 
 
-async def test_details_invalid_object_type_rejected(mcp_get) -> None:
-    table = await require_table(mcp_get)
+async def test_details_invalid_object_type_rejected(mcp_get, mcp_post) -> None:
+    table = await require_table(mcp_post)
     r = await mcp_get(
         MCP_PATH_ASSET_DETAILS,
         {"objectId": int(table["objectId"]), "objectType": "oenosuchtype"},
@@ -388,9 +411,9 @@ async def test_details_missing_object_id_rejected(mcp_get) -> None:
     assert r.status_code in CLIENT_REJECT, r.text[:500]
 
 
-async def test_details_round_trips_an_explorer_hit(mcp_get) -> None:
+async def test_details_round_trips_an_explorer_hit(mcp_get, mcp_post) -> None:
     """Every id asset_explorer hands back must be resolvable by asset_details."""
-    search = await explore(mcp_get, searchTerms=json_array("a"), objectType="oetable", limit=3)
+    search = await explore(mcp_post, searchTerms=["a"], objectType="oetable", limit=3)
     assert search.status_code == 200, search.text[:500]
     hits = [h for h in items(search) if h.get("objectId") is not None]
     if not hits:
@@ -409,9 +432,9 @@ async def test_details_round_trips_an_explorer_hit(mcp_get) -> None:
 # ══════════════════════════════════════════════════════════════════
 # asset_lineage (15)
 # ══════════════════════════════════════════════════════════════════
-async def test_lineage_returns_graph_for_known_lineage_table(mcp_get) -> None:
+async def test_lineage_returns_graph_for_known_lineage_table(mcp_get, mcp_post) -> None:
     """API probing found a table with a lineage graph — details must stay available."""
-    table = await require_table_with_lineage(mcp_get)
+    table = await require_table_with_lineage(mcp_post, mcp_get)
     r = await mcp_get(
         MCP_PATH_ASSET_LINEAGE,
         {"objectId": int(table["objectId"]), "objectType": "oetable", "depth": 2},
@@ -423,8 +446,8 @@ async def test_lineage_returns_graph_for_known_lineage_table(mcp_get) -> None:
     assert isinstance(data(r), dict)
 
 
-async def test_lineage_depth_zero(mcp_get) -> None:
-    table = await require_table_with_lineage(mcp_get)
+async def test_lineage_depth_zero(mcp_get, mcp_post) -> None:
+    table = await require_table_with_lineage(mcp_post, mcp_get)
     r = await mcp_get(
         MCP_PATH_ASSET_LINEAGE,
         {"objectId": int(table["objectId"]), "objectType": "oetable", "depth": 0},
@@ -433,8 +456,8 @@ async def test_lineage_depth_zero(mcp_get) -> None:
     assert_never_500(r, "depth=0")
 
 
-async def test_lineage_depth_three(mcp_get) -> None:
-    table = await require_table_with_lineage(mcp_get)
+async def test_lineage_depth_three(mcp_get, mcp_post) -> None:
+    table = await require_table_with_lineage(mcp_post, mcp_get)
     r = await mcp_get(
         MCP_PATH_ASSET_LINEAGE,
         {"objectId": int(table["objectId"]), "objectType": "oetable", "depth": 3},
@@ -444,8 +467,8 @@ async def test_lineage_depth_three(mcp_get) -> None:
         assert isinstance(data(r), dict)
 
 
-async def test_lineage_very_large_depth_is_handled(mcp_get) -> None:
-    table = await require_table_with_lineage(mcp_get)
+async def test_lineage_very_large_depth_is_handled(mcp_get, mcp_post) -> None:
+    table = await require_table_with_lineage(mcp_post, mcp_get)
     r = await mcp_get(
         MCP_PATH_ASSET_LINEAGE,
         {"objectId": int(table["objectId"]), "objectType": "oetable", "depth": 999},
@@ -454,8 +477,8 @@ async def test_lineage_very_large_depth_is_handled(mcp_get) -> None:
     assert r.status_code in (200, *CLIENT_REJECT), r.text[:500]
 
 
-async def test_lineage_graph_exposes_nodes_or_edges(mcp_get) -> None:
-    table = await require_table_with_lineage(mcp_get)
+async def test_lineage_graph_exposes_nodes_or_edges(mcp_get, mcp_post) -> None:
+    table = await require_table_with_lineage(mcp_post, mcp_get)
     r = await mcp_get(
         MCP_PATH_ASSET_LINEAGE,
         {"objectId": int(table["objectId"]), "objectType": "oetable", "depth": 2},
@@ -469,8 +492,8 @@ async def test_lineage_graph_exposes_nodes_or_edges(mcp_get) -> None:
     ), f"no recognizable lineage graph keys in {sorted(payload)}"
 
 
-async def test_lineage_depth_one_is_subset_of_depth_three(mcp_get) -> None:
-    table = await require_table_with_lineage(mcp_get)
+async def test_lineage_depth_one_is_subset_of_depth_three(mcp_get, mcp_post) -> None:
+    table = await require_table_with_lineage(mcp_post, mcp_get)
     params = {"objectId": int(table["objectId"]), "objectType": "oetable"}
     shallow = await mcp_get(MCP_PATH_ASSET_LINEAGE, {**params, "depth": 1})
     deep = await mcp_get(MCP_PATH_ASSET_LINEAGE, {**params, "depth": 3})
@@ -483,8 +506,8 @@ async def test_lineage_depth_one_is_subset_of_depth_three(mcp_get) -> None:
     assert len(deep_nodes) >= len(shallow_nodes), "deeper traversal returned fewer nodes"
 
 
-async def test_lineage_table_without_edges_returns_empty_not_error(mcp_get) -> None:
-    table = await require_table_without_lineage(mcp_get)
+async def test_lineage_table_without_edges_returns_empty_not_error(mcp_get, mcp_post) -> None:
+    table = await require_table_without_lineage(mcp_post, mcp_get)
     r = await mcp_get(
         MCP_PATH_ASSET_LINEAGE,
         {"objectId": int(table["objectId"]), "objectType": "oetable", "depth": 2},
@@ -493,8 +516,8 @@ async def test_lineage_table_without_edges_returns_empty_not_error(mcp_get) -> N
     assert r.status_code in READ_OK, r.text[:500]
 
 
-async def test_lineage_file(mcp_get) -> None:
-    file_hit = await require_file(mcp_get)
+async def test_lineage_file(mcp_get, mcp_post) -> None:
+    file_hit = await require_file(mcp_post)
     r = await mcp_get(
         MCP_PATH_ASSET_LINEAGE,
         {"objectId": int(file_hit["objectId"]), "objectType": "oefile", "depth": 2},
@@ -527,8 +550,8 @@ async def test_lineage_non_numeric_object_id_rejected(mcp_get) -> None:
     assert_never_500(r, "non-numeric lineage objectId")
 
 
-async def test_lineage_rejects_schema_object_type(mcp_get) -> None:
-    schema = await require_schema(mcp_get)
+async def test_lineage_rejects_schema_object_type(mcp_get, mcp_post) -> None:
+    schema = await require_schema(mcp_post)
     r = await mcp_get(
         MCP_PATH_ASSET_LINEAGE,
         {"objectId": int(schema["objectId"]), "objectType": "oeschema", "depth": 2},
@@ -536,8 +559,8 @@ async def test_lineage_rejects_schema_object_type(mcp_get) -> None:
     assert r.status_code in CLIENT_REJECT, r.text[:500]
 
 
-async def test_lineage_rejects_glossary_object_type(mcp_get) -> None:
-    term = await require_glossary_term(mcp_get)
+async def test_lineage_rejects_glossary_object_type(mcp_get, mcp_post) -> None:
+    term = await require_glossary_term(mcp_post)
     r = await mcp_get(
         MCP_PATH_ASSET_LINEAGE,
         {"objectId": int(term["objectId"]), "objectType": "glossary", "depth": 2},
@@ -545,8 +568,8 @@ async def test_lineage_rejects_glossary_object_type(mcp_get) -> None:
     assert r.status_code in CLIENT_REJECT, r.text[:500]
 
 
-async def test_lineage_rejects_negative_depth(mcp_get) -> None:
-    table = await require_table_with_lineage(mcp_get)
+async def test_lineage_rejects_negative_depth(mcp_get, mcp_post) -> None:
+    table = await require_table_with_lineage(mcp_post, mcp_get)
     r = await mcp_get(
         MCP_PATH_ASSET_LINEAGE,
         {"objectId": int(table["objectId"]), "objectType": "oetable", "depth": -1},
@@ -555,8 +578,8 @@ async def test_lineage_rejects_negative_depth(mcp_get) -> None:
     assert r.status_code in (200, *CLIENT_REJECT), r.text[:500]
 
 
-async def test_lineage_response_identifies_the_requested_object(mcp_get) -> None:
-    table = await require_table_with_lineage(mcp_get)
+async def test_lineage_response_identifies_the_requested_object(mcp_get, mcp_post) -> None:
+    table = await require_table_with_lineage(mcp_post, mcp_get)
     object_id = int(table["objectId"])
     name = hit_name(table)
     r = await mcp_get(
@@ -587,9 +610,9 @@ async def test_knowledge_content_query_alias(mcp_get) -> None:
     assert_never_500(r, "contentQuery alias")
 
 
-async def test_knowledge_story_name_lookup_matches_discovered_story(mcp_get) -> None:
+async def test_knowledge_story_name_lookup_matches_discovered_story(mcp_get, mcp_post) -> None:
     """A story discovered via API must be findable by its exact title."""
-    story = await require_story(mcp_get)
+    story = await require_story(mcp_post, mcp_get)
     name = hit_name(story)
     if not name:
         pytest.skip("Discovered story has no usable name")
@@ -599,8 +622,8 @@ async def test_knowledge_story_name_lookup_matches_discovered_story(mcp_get) -> 
         assert name.lower() in text_values(data(r))
 
 
-async def test_knowledge_story_object_id_lookup(mcp_get) -> None:
-    story = await require_story(mcp_get)
+async def test_knowledge_story_object_id_lookup(mcp_get, mcp_post) -> None:
+    story = await require_story(mcp_post, mcp_get)
     r = await mcp_get(MCP_PATH_KNOWLEDGE_SEARCH, {"objectId": int(story["objectId"])})
     assert r.status_code in READ_OK, r.text[:500]
     assert_never_500(r, "story objectId lookup")
@@ -646,8 +669,8 @@ async def test_knowledge_no_parameters_rejected(mcp_get) -> None:
     assert_never_500(r, "empty knowledge_search")
 
 
-async def test_knowledge_story_results_carry_a_citation(mcp_get) -> None:
-    story = await require_story(mcp_get)
+async def test_knowledge_story_results_carry_a_citation(mcp_get, mcp_post) -> None:
+    story = await require_story(mcp_post, mcp_get)
     name = hit_name(story) or "policy"
     r = await mcp_get(MCP_PATH_KNOWLEDGE_SEARCH, {"query": name, "limit": 5})
     if r.status_code != 200:

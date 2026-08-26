@@ -11,7 +11,12 @@
             "search_terms": [
               "revenue"
             ],
-            "object_type": "oetable"
+            "object_type": "oetable",
+            "filters": {
+              "certification": [
+                "certified"
+              ]
+            }
           },
           "result": {
             "total": 1,
@@ -43,6 +48,241 @@
           "result": {
             "total": 0,
             "results": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_catalog_filters_certified_views",
+      "input": "List certified database views.",
+      "actual_output": "I called asset_explorer with nested filters for certification and tableType=VIEW (no search_terms). Backend is POST /api/v1/mcp/asset-explorer.",
+      "mcp_tools_called": [
+        {
+          "name": "asset_explorer",
+          "args": {
+            "object_type": "oetable",
+            "filters": {
+              "certification": [
+                "certified"
+              ],
+              "tableType": [
+                "VIEW"
+              ]
+            }
+          },
+          "result": {
+            "total": 1,
+            "items": [
+              {
+                "objectId": 77,
+                "objectType": "oetable",
+                "objectName": "v_customer"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_catalog_dq_index_range",
+      "input": "Find CUSTOMER tables with DQ index 80 or higher.",
+      "actual_output": "I called asset_explorer with nested filters tableName and dqIndex min only rather than stuffing those into search_terms. I omitted max because at least 80 is open-ended.",
+      "mcp_tools_called": [
+        {
+          "name": "asset_explorer",
+          "args": {
+            "filters": {
+              "tableName": [
+                "CUSTOMER"
+              ],
+              "dqIndex": {
+                "min": 80
+              }
+            }
+          },
+          "result": {
+            "total": 2,
+            "items": [
+              {
+                "objectId": 11,
+                "objectType": "oetable",
+                "objectName": "CUSTOMER"
+              },
+              {
+                "objectId": 12,
+                "objectType": "oecolumn",
+                "objectName": "CUSTOMER_ID"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_catalog_rating_min_filter",
+      "input": "Find tables rated at least 4.",
+      "actual_output": "I called asset_explorer with object_type=oetable and filters.rating min 4 only. I omitted max rather than inventing a 5-star ceiling.",
+      "mcp_tools_called": [
+        {
+          "name": "asset_explorer",
+          "args": {
+            "object_type": "oetable",
+            "filters": {
+              "rating": {
+                "min": 4
+              }
+            }
+          },
+          "result": {
+            "total": 1,
+            "items": [
+              {
+                "objectId": 23592,
+                "objectType": "oetable",
+                "objectName": "Customer"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_catalog_rating_more_than_filter",
+      "input": "Find tables whose rating is more than 4.",
+      "actual_output": "I called asset_explorer with object_type=oetable and filters.rating min 4.01 because more than 4 is exclusive and min is inclusive. I omitted max rather than inventing a 5-star ceiling.",
+      "mcp_tools_called": [
+        {
+          "name": "asset_explorer",
+          "args": {
+            "object_type": "oetable",
+            "filters": {
+              "rating": {
+                "min": 4.01
+              }
+            }
+          },
+          "result": {
+            "total": 1,
+            "items": [
+              {
+                "objectId": 23592,
+                "objectType": "oetable",
+                "objectName": "Customer"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_catalog_rating_max_filter",
+      "input": "Find tables rated at most 3.",
+      "actual_output": "I called asset_explorer with object_type=oetable and filters.rating max 3 only. I omitted min because at most 3 is open-ended on the low side.",
+      "mcp_tools_called": [
+        {
+          "name": "asset_explorer",
+          "args": {
+            "object_type": "oetable",
+            "filters": {
+              "rating": {
+                "max": 3
+              }
+            }
+          },
+          "result": {
+            "total": 1,
+            "items": [
+              {
+                "objectId": 11,
+                "objectType": "oetable",
+                "objectName": "legacy_orders"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_catalog_popularity_min_filter",
+      "input": "Find tables with popularity of at least 70.",
+      "actual_output": "I called asset_explorer with object_type=oetable and filters.popularity min 70 only. I omitted max because at least 70 is open-ended.",
+      "mcp_tools_called": [
+        {
+          "name": "asset_explorer",
+          "args": {
+            "object_type": "oetable",
+            "filters": {
+              "popularity": {
+                "min": 70
+              }
+            }
+          },
+          "result": {
+            "total": 1,
+            "items": [
+              {
+                "objectId": 88,
+                "objectType": "oetable",
+                "objectName": "orders_fact"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_catalog_created_date_filter",
+      "input": "Find tables created between 2024-01-01 and 2024-12-31.",
+      "actual_output": "I called asset_explorer with object_type=oetable and filters.createdDate from/to ISO dates rather than min/max.",
+      "mcp_tools_called": [
+        {
+          "name": "asset_explorer",
+          "args": {
+            "object_type": "oetable",
+            "filters": {
+              "createdDate": {
+                "from": "2024-01-01",
+                "to": "2024-12-31"
+              }
+            }
+          },
+          "result": {
+            "total": 1,
+            "items": [
+              {
+                "objectId": 91,
+                "objectType": "oetable",
+                "objectName": "new_customers"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_catalog_filters_no_match",
+      "input": "Any certified MATERIALIZED_VIEW tables named DARK_MATTER?",
+      "actual_output": "Filter-only catalog search returned no items.",
+      "mcp_tools_called": [
+        {
+          "name": "asset_explorer",
+          "args": {
+            "object_type": "oetable",
+            "filters": {
+              "tableType": [
+                "MATERIALIZED_VIEW"
+              ],
+              "tableName": [
+                "DARK_MATTER"
+              ],
+              "certification": [
+                "certified"
+              ]
+            }
+          },
+          "result": {
+            "total": 0,
+            "items": []
           }
         }
       ]
@@ -249,7 +489,7 @@
       ]
     },
     {
-      "name": "example_column_profile_trust",
+      "name": "example_asset_details_column_profile",
       "input": "Show column statistics for customer_revenue_daily to assess data quality.",
       "actual_output": "I used asset_details on the resolved oetable for null rates and distributions.",
       "mcp_tools_called": [
@@ -337,13 +577,14 @@
       ]
     },
     {
-      "name": "example_lookup_dq_rule",
+      "name": "example_dq_rule_advisor_lookup",
       "input": "Explain the Null Data Density Check DQ rule.",
-      "actual_output": "I called lookup_dq_rule by rule_name before any write or association tools.",
+      "actual_output": "I called dq_rule_advisor step=lookup by rule_name before any write or association tools.",
       "mcp_tools_called": [
         {
-          "name": "lookup_dq_rule",
+          "name": "dq_rule_advisor",
           "args": {
+            "step": "lookup",
             "rule_name": "Null Data Density Check"
           },
           "result": {
@@ -360,13 +601,14 @@
       ]
     },
     {
-      "name": "example_assess_cde_dq",
+      "name": "example_dq_rule_advisor_assess",
       "input": "Assess DQ coverage for CDE columns on customer_profile.",
-      "actual_output": "I called assess_cde_dq with explicit table objects (read-only assessment).",
+      "actual_output": "I called dq_rule_advisor step=assess with explicit table objects (read-only assessment).",
       "mcp_tools_called": [
         {
-          "name": "assess_cde_dq",
+          "name": "dq_rule_advisor",
           "args": {
+            "step": "assess",
             "objects": [
               {
                 "object_id": 10,
@@ -391,11 +633,12 @@
     {
       "name": "example_associate_dq_rule_objects",
       "input": "Link rule 42 to column revenue_amt.",
-      "actual_output": "I previewed associate_dq_rule_objects (write_confirmed_by_user=false) before POST.",
+      "actual_output": "I previewed dq_rule_manager step=associate (write_confirmed_by_user=false) before POST.",
       "mcp_tools_called": [
         {
-          "name": "associate_dq_rule_objects",
+          "name": "dq_rule_manager",
           "args": {
+            "step": "associate",
             "dqrule_id": 42,
             "objects": [
               {
@@ -414,13 +657,14 @@
       ]
     },
     {
-      "name": "example_create_dq_rules_discover",
+      "name": "example_dq_rule_manager_create_standard_preview",
       "input": "Discover and create missing DQ rules for CDE columns.",
-      "actual_output": "I previewed create_dq_rules in discover mode before POST.",
+      "actual_output": "I previewed dq_rule_manager step=create_standard in discover mode before POST.",
       "mcp_tools_called": [
         {
-          "name": "create_dq_rules",
+          "name": "dq_rule_manager",
           "args": {
+            "step": "create_standard",
             "discover_cde_columns": true,
             "prefer_existing_rule": true,
             "write_confirmed_by_user": false
@@ -435,7 +679,7 @@
     },
     {
       "name": "example_update_descriptions_preview",
-      "input": "Update the business description on table 42 \u2014 show me a preview first.",
+      "input": "Update the business description on table 42 — show me a preview first.",
       "actual_output": "I called update_asset_descriptions with write_confirmed_by_user=false for confirm_update preview only.",
       "mcp_tools_called": [
         {
@@ -458,7 +702,7 @@
     },
     {
       "name": "example_update_cde_preview",
-      "input": "Mark schema 3337 as a CDE \u2014 preview before applying.",
+      "input": "Mark schema 3337 as a CDE — preview before applying.",
       "actual_output": "I previewed update_cde_associations without POST (write_confirmed_by_user=false).",
       "mcp_tools_called": [
         {
@@ -485,7 +729,7 @@
     },
     {
       "name": "example_update_governance_roles_preview",
-      "input": "Assign Mike as Owner on table 99 \u2014 preview the role change.",
+      "input": "Assign Mike as Owner on table 99 — preview the role change.",
       "actual_output": "I previewed update_governance_roles and waited for explicit user confirmation.",
       "mcp_tools_called": [
         {
@@ -509,7 +753,7 @@
     },
     {
       "name": "example_update_custom_field_preview",
-      "input": "Set Data Owner to John Smith on table 99 \u2014 preview only.",
+      "input": "Set Data Owner to John Smith on table 99 — preview only.",
       "actual_output": "I called update_custom_field_value for a confirm_update preview, not an immediate POST.",
       "mcp_tools_called": [
         {
@@ -536,7 +780,7 @@
     },
     {
       "name": "example_create_glossary_term_preview",
-      "input": "Create glossary term Revenue Recognition under domain 12 \u2014 preview first.",
+      "input": "Create glossary term Revenue Recognition under domain 12 — preview first.",
       "actual_output": "I previewed create_glossary_term (confirm_create, doNotCreate=true) before any POST.",
       "mcp_tools_called": [
         {
@@ -560,7 +804,7 @@
     },
     {
       "name": "example_create_tag_preview",
-      "input": "Create tag Logistics in open mode \u2014 show confirm preview.",
+      "input": "Create tag Logistics in open mode — show confirm preview.",
       "actual_output": "I previewed create_tag after parent step; no POST until user confirms with confirmation_token.",
       "mcp_tools_called": [
         {
@@ -636,17 +880,18 @@
       ]
     },
     {
-      "name": "example_generate_dq_queries_happy",
+      "name": "example_dq_rule_advisor_generate_query_happy",
       "input": "Generate custom SQL DQ queries for column revenue_amt.",
-      "actual_output": "I called generate_dq_queries and received rule/stats/failed-values SQL plus connection context.",
+      "actual_output": "I called dq_rule_advisor step=generate_query and received rule/stats/failed-values SQL plus connection context.",
       "mcp_tools_called": [
         {
-          "name": "generate_dq_queries",
+          "name": "dq_rule_advisor",
           "args": {
+            "step": "generate_query",
             "objects": [
               {
-                "objectId": 101,
-                "objectType": "oecolumn"
+                "object_id": 101,
+                "object_type": "oecolumn"
               }
             ],
             "business_rule": "values must be non-null"
@@ -667,22 +912,23 @@
       ]
     },
     {
-      "name": "example_generate_dq_queries_invalid_object",
+      "name": "example_dq_rule_advisor_generate_query_invalid_object",
       "input": "Generate DQ SQL for a glossary term object.",
-      "actual_output": "generate_dq_queries rejected the invalid objectType before POST; I asked for an oecolumn/oetable ref.",
+      "actual_output": "dq_rule_advisor step=generate_query rejected the invalid objectType before POST; I asked for an oecolumn/oetable ref.",
       "mcp_tools_called": [
         {
-          "name": "generate_dq_queries",
+          "name": "dq_rule_advisor",
           "args": {
+            "step": "generate_query",
             "objects": [
               {
-                "objectId": 1,
-                "objectType": "glossary"
+                "object_id": 1,
+                "object_type": "glossary"
               }
             ]
           },
           "result": {
-            "error": "objects[0].objectType must be one of oecolumn, oetable, \u2026, got 'glossary'.",
+            "error": "objects[0].objectType must be one of oecolumn, oetable, …, got 'glossary'.",
             "status_code": 400
           }
         }
@@ -690,13 +936,14 @@
       "llm_score": false
     },
     {
-      "name": "example_validate_dq_queries_preview",
-      "input": "Validate these three DQ SQL queries on connection 1 / schema 2 \u2014 preview first.",
-      "actual_output": "I previewed validate_dq_queries (confirm_create) and waited for user approval before executing SQL.",
+      "name": "example_dq_rule_advisor_validate_query_preview",
+      "input": "Validate these three DQ SQL queries on connection 1 / schema 2 — preview first.",
+      "actual_output": "I previewed dq_rule_advisor step=validate_query (confirm_create) and waited for user approval before executing SQL.",
       "mcp_tools_called": [
         {
-          "name": "validate_dq_queries",
+          "name": "dq_rule_advisor",
           "args": {
+            "step": "validate_query",
             "connection_id": 1,
             "schema_id": 2,
             "rule_query": "SELECT 1",
@@ -714,13 +961,14 @@
       ]
     },
     {
-      "name": "example_validate_dq_queries_happy",
-      "input": "User approved \u2014 run validate_dq_queries for connection 1 / schema 2.",
-      "actual_output": "After confirmation I POSTed validate_dq_queries; canCreateRule was true.",
+      "name": "example_dq_rule_advisor_validate_query_happy",
+      "input": "User approved — run dq_rule_advisor step=validate_query for connection 1 / schema 2.",
+      "actual_output": "After confirmation I POSTed dq_rule_advisor step=validate_query; canCreateRule was true.",
       "mcp_tools_called": [
         {
-          "name": "validate_dq_queries",
+          "name": "dq_rule_advisor",
           "args": {
+            "step": "validate_query",
             "connection_id": 1,
             "schema_id": 2,
             "rule_query": "SELECT 1",
@@ -742,13 +990,14 @@
       ]
     },
     {
-      "name": "example_validate_dq_queries_missing_connection",
+      "name": "example_dq_rule_advisor_validate_query_missing_connection",
       "input": "Validate DQ SQL without a connection id.",
-      "actual_output": "validate_dq_queries returned 400 because connection_id and schema_id are required.",
+      "actual_output": "dq_rule_advisor step=validate_query returned 400 because connection_id and schema_id are required.",
       "mcp_tools_called": [
         {
-          "name": "validate_dq_queries",
+          "name": "dq_rule_advisor",
           "args": {
+            "step": "validate_query",
             "connection_id": 0,
             "schema_id": 2,
             "rule_query": "SELECT 1",
@@ -764,17 +1013,18 @@
       "llm_score": false
     },
     {
-      "name": "example_create_sql_dq_rule_preview",
-      "input": "Create custom SQL DQ rule mcp_null_check on column 101 \u2014 preview first.",
-      "actual_output": "I previewed create_sql_dq_rule (confirm_create) and did not POST until the user approved.",
+      "name": "example_dq_rule_manager_create_custom_sql_preview",
+      "input": "Create custom SQL DQ rule mcp_null_check on column 101 — preview first.",
+      "actual_output": "I previewed dq_rule_manager step=create_custom_sql (confirm_create) and did not POST until the user approved.",
       "mcp_tools_called": [
         {
-          "name": "create_sql_dq_rule",
+          "name": "dq_rule_manager",
           "args": {
+            "step": "create_custom_sql",
             "objects": [
               {
-                "objectId": 101,
-                "objectType": "oecolumn"
+                "object_id": 101,
+                "object_type": "oecolumn"
               }
             ],
             "rule_name": "mcp_null_check",
@@ -792,17 +1042,18 @@
       ]
     },
     {
-      "name": "example_create_sql_dq_rule_happy",
-      "input": "User confirmed \u2014 create the SQL DQ rule mcp_null_check.",
-      "actual_output": "I POSTed create_sql_dq_rule with write_confirmed_by_user=true and reported dqruleId 88.",
+      "name": "example_dq_rule_manager_create_custom_sql_happy",
+      "input": "User confirmed — create the SQL DQ rule mcp_null_check.",
+      "actual_output": "I POSTed dq_rule_manager step=create_custom_sql with write_confirmed_by_user=true and reported dqruleId 88.",
       "mcp_tools_called": [
         {
-          "name": "create_sql_dq_rule",
+          "name": "dq_rule_manager",
           "args": {
+            "step": "create_custom_sql",
             "objects": [
               {
-                "objectId": 101,
-                "objectType": "oecolumn"
+                "object_id": 101,
+                "object_type": "oecolumn"
               }
             ],
             "rule_name": "mcp_null_check",
@@ -827,17 +1078,18 @@
       ]
     },
     {
-      "name": "example_create_sql_dq_rule_missing_queries",
+      "name": "example_dq_rule_manager_create_custom_sql_missing_queries",
       "input": "Create a SQL DQ rule named mcp_rule with no queries and no code_object_id.",
-      "actual_output": "create_sql_dq_rule returned 400 \u2014 rule_query or code_object_id is required.",
+      "actual_output": "dq_rule_manager step=create_custom_sql returned 400 — rule_query or code_object_id is required.",
       "mcp_tools_called": [
         {
-          "name": "create_sql_dq_rule",
+          "name": "dq_rule_manager",
           "args": {
+            "step": "create_custom_sql",
             "objects": [
               {
-                "objectId": 101,
-                "objectType": "oecolumn"
+                "object_id": 101,
+                "object_type": "oecolumn"
               }
             ],
             "rule_name": "mcp_rule"
@@ -870,7 +1122,7 @@
     {
       "name": "example_catalog_details_rejects_mixed_lookup",
       "input": "Get details with both FQN and object_id.",
-      "actual_output": "asset_details returned 400 \u2014 use FQN alone or object_id+object_type, not both.",
+      "actual_output": "asset_details returned 400 — use FQN alone or object_id+object_type, not both.",
       "mcp_tools_called": [
         {
           "name": "asset_details",
@@ -880,7 +1132,7 @@
             "object_type": "oetable"
           },
           "result": {
-            "error": "Use either fully_qualified_name alone, or object_id + object_type \u2014 not both.",
+            "error": "Use either fully_qualified_name alone, or object_id + object_type — not both.",
             "status_code": 400
           }
         }
@@ -907,7 +1159,7 @@
       "llm_score": false
     },
     {
-      "name": "example_column_profile_rejects_glossary",
+      "name": "example_asset_details_rejects_glossary",
       "input": "Profile columns for a glossary term.",
       "actual_output": "asset_details rejected glossary; only oetable/oefile are supported.",
       "mcp_tools_called": [
@@ -926,7 +1178,7 @@
       "llm_score": false
     },
     {
-      "name": "example_entity_relationships_unauthorized",
+      "name": "example_asset_details_unauthorized",
       "input": "Show entity relationships for table 99.",
       "actual_output": "asset_details returned 401; I reported authorization failure.",
       "mcp_tools_called": [
@@ -945,7 +1197,7 @@
     {
       "name": "example_metadata_drift_rejects_days_and_weeks",
       "input": "Show metadata changes for last 2 days and last 1 week together.",
-      "actual_output": "metadata_changes_between_crawls returned 400 \u2014 provide last_n_days or last_n_weeks, not both.",
+      "actual_output": "metadata_changes_between_crawls returned 400 — provide last_n_days or last_n_weeks, not both.",
       "mcp_tools_called": [
         {
           "name": "metadata_changes_between_crawls",
@@ -1010,7 +1262,7 @@
     {
       "name": "example_asset_explorer_neither_id_nor_name",
       "input": "Look up a tag without providing name or id.",
-      "actual_output": "asset_explorer returned 400 \u2014 provide tag_name or object_id.",
+      "actual_output": "asset_explorer returned 400 — provide tag_name or object_id.",
       "mcp_tools_called": [
         {
           "name": "asset_explorer",
@@ -1058,13 +1310,15 @@
       ]
     },
     {
-      "name": "example_lookup_dq_rule_neither",
+      "name": "example_dq_rule_advisor_lookup_neither",
       "input": "Look up a DQ rule without name or id.",
-      "actual_output": "lookup_dq_rule returned 400 \u2014 provide rule_name or object_id.",
+      "actual_output": "dq_rule_advisor step=lookup returned 400 — provide rule_name or object_id.",
       "mcp_tools_called": [
         {
-          "name": "lookup_dq_rule",
-          "args": {},
+          "name": "dq_rule_advisor",
+          "args": {
+            "step": "lookup"
+          },
           "result": {
             "error": "Provide rule_name or object_id.",
             "status_code": 400,
@@ -1075,13 +1329,15 @@
       "llm_score": false
     },
     {
-      "name": "example_assess_cde_dq_rejects_empty",
+      "name": "example_dq_rule_advisor_assess_rejects_empty",
       "input": "Assess CDE DQ with no objects and discover off.",
-      "actual_output": "assess_cde_dq returned 400 \u2014 provide objects or discover_cde_columns=true.",
+      "actual_output": "dq_rule_advisor step=assess returned 400 — provide objects or discover_cde_columns=true.",
       "mcp_tools_called": [
         {
-          "name": "assess_cde_dq",
-          "args": {},
+          "name": "dq_rule_advisor",
+          "args": {
+            "step": "assess"
+          },
           "result": {
             "error": "Provide objects from asset_explorer, or set discover_cde_columns=true to discover CDE columns.",
             "status_code": 400
@@ -1093,11 +1349,12 @@
     {
       "name": "example_associate_dq_rule_happy",
       "input": "User approved linking rule 42 to column 101.",
-      "actual_output": "I POSTed associate_dq_rule_objects with write_confirmed_by_user=true; association succeeded.",
+      "actual_output": "I POSTed dq_rule_manager step=associate with write_confirmed_by_user=true; association succeeded.",
       "mcp_tools_called": [
         {
-          "name": "associate_dq_rule_objects",
+          "name": "dq_rule_manager",
           "args": {
+            "step": "associate",
             "dqrule_id": 42,
             "objects": [
               {
@@ -1122,13 +1379,14 @@
       ]
     },
     {
-      "name": "example_create_dq_rules_happy",
+      "name": "example_dq_rule_manager_create_standard_happy",
       "input": "User approved discover-and-create DQ rules.",
-      "actual_output": "I POSTed create_dq_rules with confirmation and reported created/associated counts.",
+      "actual_output": "I POSTed dq_rule_manager step=create_standard with confirmation and reported created/associated counts.",
       "mcp_tools_called": [
         {
-          "name": "create_dq_rules",
+          "name": "dq_rule_manager",
           "args": {
+            "step": "create_standard",
             "discover_cde_columns": true,
             "write_confirmed_by_user": true,
             "confirmation_token": "preview-token-placeholder"
@@ -1216,7 +1474,7 @@
     {
       "name": "example_update_descriptions_rejects_no_fields",
       "input": "Update descriptions on table 42 with no description text.",
-      "actual_output": "update_asset_descriptions returned 400 \u2014 provide description fields.",
+      "actual_output": "update_asset_descriptions returned 400 — provide description fields.",
       "mcp_tools_called": [
         {
           "name": "update_asset_descriptions",
@@ -1261,7 +1519,7 @@
     {
       "name": "example_update_cde_rejects_empty_targets",
       "input": "Mark CDE with empty targets.",
-      "actual_output": "update_cde_associations returned 400 \u2014 targets must include at least one object.",
+      "actual_output": "update_cde_associations returned 400 — targets must include at least one object.",
       "mcp_tools_called": [
         {
           "name": "update_cde_associations",
@@ -1332,7 +1590,7 @@
     {
       "name": "example_update_custom_field_malformed",
       "input": "Update a custom field without a value.",
-      "actual_output": "update_custom_field_value returned 400 \u2014 each field_updates entry requires a value.",
+      "actual_output": "update_custom_field_value returned 400 — each field_updates entry requires a value.",
       "mcp_tools_called": [
         {
           "name": "update_custom_field_value",
@@ -1401,7 +1659,7 @@
     },
     {
       "name": "example_create_service_request_preview",
-      "input": "I want access to Loan_Data table \u2014 preview the service request first.",
+      "input": "I want access to Loan_Data table — preview the service request first.",
       "actual_output": "I previewed create_service_request (confirm_create, doNotCreate=true) before any POST.",
       "mcp_tools_called": [
         {
@@ -1462,7 +1720,7 @@
             "object_type": "not_a_real_type"
           },
           "result": {
-            "error": "object_type must be one of \u2026, got 'not_a_real_type'",
+            "error": "object_type must be one of …, got 'not_a_real_type'",
             "status_code": 400
           }
         }

@@ -152,6 +152,70 @@ def test_example_json_has_happy_and_adverse_path_per_tool() -> None:
     )
 
 
+def test_example_json_catalog_nested_filters() -> None:
+    """POST asset_explorer nested filters: views, dqIndex, at-least/more-than/max rating."""
+    cases = load_mcp_use_cases_from_json(_EXAMPLES)
+    by_name = {c.name: c for c in cases if c.name}
+
+    search = by_name["example_catalog_search"]
+    assert _mcp_tools_called(search)[0].args.get("filters", {}).get("certification") == [
+        "certified"
+    ]
+
+    views = by_name["example_catalog_filters_certified_views"]
+    view_args = _mcp_tools_called(views)[0].args
+    assert "search_terms" not in view_args
+    view_filters = view_args.get("filters")
+    assert isinstance(view_filters, dict)
+    assert view_filters.get("tableType") == ["VIEW"]
+    assert view_filters.get("certification") == ["certified"]
+
+    dq_case = by_name["example_catalog_dq_index_range"]
+    dq = _mcp_tools_called(dq_case)[0].args.get("filters", {}).get("dqIndex")
+    assert isinstance(dq, dict)
+    assert dq.get("min") == 80
+    assert "max" not in dq
+
+    rating_case = by_name["example_catalog_rating_min_filter"]
+    rating_args = _mcp_tools_called(rating_case)[0].args
+    assert rating_args.get("object_type") == "oetable"
+    rating = rating_args.get("filters", {}).get("rating")
+    assert isinstance(rating, dict)
+    assert rating.get("min") == 4
+    assert "max" not in rating
+
+    more_than = by_name["example_catalog_rating_more_than_filter"]
+    more_than_rating = _mcp_tools_called(more_than)[0].args.get("filters", {}).get("rating")
+    assert isinstance(more_than_rating, dict)
+    assert more_than_rating.get("min") == 4.01
+    assert "max" not in more_than_rating
+
+    max_case = by_name["example_catalog_rating_max_filter"]
+    max_rating = _mcp_tools_called(max_case)[0].args.get("filters", {}).get("rating")
+    assert isinstance(max_rating, dict)
+    assert max_rating.get("max") == 3
+    assert "min" not in max_rating
+
+    popularity = _mcp_tools_called(by_name["example_catalog_popularity_min_filter"])[0].args.get(
+        "filters", {}
+    ).get("popularity")
+    assert isinstance(popularity, dict)
+    assert popularity.get("min") == 70
+    assert "max" not in popularity
+
+    created = _mcp_tools_called(by_name["example_catalog_created_date_filter"])[0].args.get(
+        "filters", {}
+    ).get("createdDate")
+    assert isinstance(created, dict)
+    assert created.get("from") == "2024-01-01"
+    assert created.get("to") == "2024-12-31"
+    assert "min" not in created
+    assert "max" not in created
+
+    empty = by_name["example_catalog_filters_no_match"]
+    assert _tool_result_payload(_mcp_tools_called(empty)[0]).get("total") == 0
+
+
 def test_llm_only_skips_structural_validation_fixtures() -> None:
     """Intentional invalid-arg rows use llm_score=false so MCPUseMetric is not run on them."""
     all_cases = load_mcp_use_cases_from_json(_EXAMPLES)

@@ -2,18 +2,19 @@
 Catalog MCP helpers: tool descriptions, search params, description updates.
 """
 
-import json
 import re
 from typing import Any
 
 from server.constants import (
     MCP_ACCESS_DISAMBIGUATION_SEARCH_GUARD_DOC,
+    MCP_ASSET_EXPLORER_FILTER_KEYS,
     MCP_CATALOG_OBJECT_TYPES_DOC,
     MCP_PATH_ASSET_DETAILS,
     MCP_PATH_ASSET_EXPLORER,
     MCP_PATH_ASSET_LINEAGE,
     MCP_PATH_METADATA_CHANGES_BETWEEN_CRAWLS,
     MCP_PATH_UPDATE_ASSET_DESCRIPTIONS,
+    MCP_SEARCH_CATALOG_MAX_LIMIT,
     MCP_SEARCH_CLASSIFICATIONS_PARAM,
     MCP_SEARCH_CONTEXT_QUERY_PARAM,
     MCP_SEARCH_CRITICAL_DATA_ELEMENT_PARAM,
@@ -28,6 +29,7 @@ from server.constants import (
     MCP_UPDATE_ASSET_DESCRIPTION_OBJECT_TYPES_DOC,
 )
 from server.nav_links import build_absolute_nav_url, extract_hash_nav_link
+from server.tools.common import drop_none, strip_or_none
 from server.tools.common.confirm_gate import attach_confirmation_token
 from server.tools.common.descriptions import classify_tool_desc
 
@@ -43,13 +45,16 @@ _DESC_ASSET_EXPLORER = classify_tool_desc(
     "clearly asks for one kind of asset (e.g. \"tables only\", \"tagged Payments\", a named "
     "glossary term). Do not default to tables-only. After you shortlist hits, call "
     "asset_details for full metadata.\n\n"
-    f"Backend: GET {MCP_PATH_ASSET_EXPLORER}\n\n"
-    "Keyword lists (JSON array strings): "
+    f"Backend: POST {MCP_PATH_ASSET_EXPLORER}\n\n"
+    "Keyword lists are JSON arrays: "
     f"{MCP_SEARCH_TERMS_PARAM}, {MCP_SEARCH_TAGS_PARAM}, {MCP_SEARCH_GLOSSARY_TERMS_PARAM}, "
     f"{MCP_SEARCH_CUSTOM_FIELDS_PARAM}, {MCP_SEARCH_DATA_PRODUCTS_PARAM}, "
     f"{MCP_SEARCH_CLASSIFICATIONS_PARAM}, {MCP_SEARCH_CRITICAL_DATA_ELEMENT_PARAM}. "
     "Exact filters: connection_name, schema_name, server_type, owner, steward, custodian, "
     "object_type. tags/terms match exact governance names (not loose synonyms). "
+    "Extra facets (tableType, certification, ranges) go in filters; open-ended ranges "
+    "use min or max only (do not invent the other bound); more than N uses min just "
+    "above N; top-level args win if both set — matrix: docs://ovaledge/mcp_workflows. "
     f"Semantic ranking: {MCP_SEARCH_CONTEXT_QUERY_PARAM}. "
     "Look up one term/tag: name + object_type=glossary|oetag "
     "(include_parent/children for tags). "
@@ -457,8 +462,63 @@ def _resolve_server_type(raw: str | None) -> str | None:
     return MCP_SERVER_TYPES_BY_LOWER.get(value.lower())
 
 
-def _apply_lexical_search_params(
-    params: dict[str, object],
+def _filter_api_key(key: str) -> str:
+    """Map snake_case extra filter keys to the POST JSON camelCase field names."""
+    if "_" not in key:
+        return key
+    parts = [p for p in key.split("_") if p]
+    if not parts:
+        return key
+    return parts[0] + "".join(p[:1].upper() + p[1:] for p in parts[1:])
+
+
+def _clean_filter_value(value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped or None
+    if isinstance(value, list):
+        cleaned: list[Any] = []
+        for item in value:
+            if item is None:
+                continue
+            if isinstance(item, str):
+                stripped = item.strip()
+                if stripped:
+                    cleaned.append(stripped)
+            else:
+                cleaned.append(item)
+        return cleaned or None
+    if isinstance(value, dict):
+        nested = {
+            k: cleaned
+            for k, raw in value.items()
+            if (cleaned := _clean_filter_value(raw)) is not None
+        }
+        return nested or None
+    return value
+
+
+def _filters_from_extra(filters: Any) -> dict[str, Any]:
+    if filters is None:
+        return {}
+    dump = getattr(filters, "model_dump", None)
+    raw = dump(exclude_none=True) if callable(dump) else filters
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, Any] = {}
+    for key, value in raw.items():
+        api_key = _filter_api_key(str(key))
+        if api_key not in MCP_ASSET_EXPLORER_FILTER_KEYS:
+            continue
+        cleaned = _clean_filter_value(value)
+        if cleaned is not None:
+            out[api_key] = cleaned
+    return out
+
+
+def _build_asset_explorer_body(
     *,
     search_terms: list[str] | None = None,
     tags: list[str] | None = None,
@@ -467,22 +527,74 @@ def _apply_lexical_search_params(
     data_products: list[str] | None = None,
     classifications: list[str] | None = None,
     critical_data_element: list[str] | None = None,
-) -> None:
-    """Map MCP list args to API query params (each a JSON array string)."""
-    for api_key, values in (
-        (MCP_SEARCH_TERMS_PARAM, search_terms),
-        (MCP_SEARCH_TAGS_PARAM, tags),
-        (MCP_SEARCH_GLOSSARY_TERMS_PARAM, terms),
-        (MCP_SEARCH_CUSTOM_FIELDS_PARAM, custom_fields),
-        (MCP_SEARCH_DATA_PRODUCTS_PARAM, data_products),
-        (MCP_SEARCH_CLASSIFICATIONS_PARAM, classifications),
-        (MCP_SEARCH_CRITICAL_DATA_ELEMENT_PARAM, critical_data_element),
-    ):
-        normalized = _normalize_search_terms(values)
-        if normalized is not None:
-            params[api_key] = json.dumps(normalized, ensure_ascii=False)
-
-
+    context_query: str | None = None,
+    page: int = 1,
+    limit: int = 20,
+    connection_name: str | None = None,
+    resolved_server_type: str | None = None,
+    schema_name: str | None = None,
+    owner: str | None = None,
+    steward: str | None = None,
+    custodian: str | None = None,
+    object_type: str | None = None,
+    domain_id: int | None = None,
+    domain_name: str | None = None,
+    category_id: int | None = None,
+    category_name: str | None = None,
+    subcategory_id: int | None = None,
+    subcategory_name: str | None = None,
+    object_id: int | None = None,
+    name: str | None = None,
+    include_parent: bool = False,
+    include_children: bool = False,
+    filters: Any = None,
+) -> dict[str, Any]:
+    """Build POST /asset-explorer JSON. Top-level tool args win over nested filters."""
+    body: dict[str, Any] = drop_none(
+        objectId=object_id if object_id is not None and object_id > 0 else None,
+        objectType=object_type,
+        name=strip_or_none(name),
+        includeParent=True if include_parent else None,
+        includeChildren=True if include_children else None,
+    )
+    search = drop_none(
+        searchTerms=_normalize_search_terms(search_terms),
+        contextQuery=strip_or_none(context_query),
+        page=max(page, 1),
+        limit=min(max(limit, 1), MCP_SEARCH_CATALOG_MAX_LIMIT),
+    )
+    if search:
+        body["search"] = search
+    placement = drop_none(
+        domainId=domain_id if domain_id is not None and domain_id > 0 else None,
+        domainName=strip_or_none(domain_name),
+        categoryId=category_id if category_id is not None and category_id > 0 else None,
+        categoryName=strip_or_none(category_name),
+        subcategoryId=subcategory_id
+        if subcategory_id is not None and subcategory_id > 0
+        else None,
+        subcategoryName=strip_or_none(subcategory_name),
+    )
+    if placement:
+        body["glossaryPlacement"] = placement
+    top_filters = drop_none(
+        connectionName=strip_or_none(connection_name),
+        serverType=resolved_server_type,
+        schemaName=strip_or_none(schema_name),
+        owner=strip_or_none(owner),
+        steward=strip_or_none(steward),
+        custodian=strip_or_none(custodian),
+        tags=_normalize_search_terms(tags),
+        terms=_normalize_search_terms(terms),
+        customFields=_normalize_search_terms(custom_fields),
+        dataProducts=_normalize_search_terms(data_products),
+        classifications=_normalize_search_terms(classifications),
+        criticalDataElement=_normalize_search_terms(critical_data_element),
+    )
+    merged_filters = {**_filters_from_extra(filters), **top_filters}
+    if merged_filters:
+        body["filters"] = merged_filters
+    return body
 
 
 def _enrich_catalog_item_nav(item: dict[str, Any]) -> dict[str, Any]:

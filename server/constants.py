@@ -36,7 +36,7 @@ MCP_TOOL_CLASSIFICATION_CONFIDENTIAL = (
     "RBAC/DAA enforced server-side)."
 )
 
-# Lowercase objectType for MCP search-catalog and object-details (matches OvalEdge API).
+# Lowercase objectType for MCP asset-explorer and asset-details (matches OvalEdge API).
 MCP_CATALOG_OBJECT_TYPES = frozenset(
     {
         "oeschema",
@@ -596,11 +596,11 @@ MCP_SOURCE_SYSTEM_DESCENDANTS_CONNECTION_REQUIRED_ERROR = (
     "scope_mode=descendants."
 )
 
-# asset-explorer query params (GET /api/v1/mcp/asset-explorer).
+# asset-explorer POST JSON keys (POST /api/v1/mcp/asset-explorer).
 # Some OvalEdge builds return HTTP 500 when limit is very high (e.g. >= 95 on localhost).
 MCP_SEARCH_CATALOG_MAX_LIMIT = 50
 MCP_SEARCH_CONTEXT_QUERY_PARAM = "contextQuery"
-# Lexical search — each value is a JSON array string on the wire.
+# Nested search / filters lists are JSON arrays in the POST body.
 MCP_SEARCH_TERMS_PARAM = "searchTerms"
 MCP_SEARCH_TAGS_PARAM = "tags"
 MCP_SEARCH_GLOSSARY_TERMS_PARAM = "terms"
@@ -615,6 +615,47 @@ MCP_SEARCH_SUBCATEGORY_ID_PARAM = "subcategoryId"
 MCP_SEARCH_SUBCATEGORY_NAME_PARAM = "subcategoryName"
 MCP_SEARCH_CRITICAL_DATA_ELEMENT_PARAM = "criticalDataElement"
 MCP_SEARCH_SERVER_TYPE_PARAM = "serverType"
+# Allowlisted POST `filters` keys (top-level FastMCP args + extra facets).
+MCP_ASSET_EXPLORER_FILTER_KEYS = frozenset(
+    {
+        "connectionName",
+        "serverType",
+        "schemaName",
+        "owner",
+        "steward",
+        "custodian",
+        "tags",
+        "terms",
+        "customFields",
+        "dataProducts",
+        "classifications",
+        "criticalDataElement",
+        "tableName",
+        "folder",
+        "reportGroup",
+        "apiGroup",
+        "dataDomains",
+        "governanceRole4",
+        "governanceRole5",
+        "governanceRole6",
+        "tableType",
+        "reportType",
+        "reportLevel",
+        "termStatus",
+        "ticketStatus",
+        "subscriptionMode",
+        "criticality",
+        "sensitivity",
+        "deliveryAccessMode",
+        "certification",
+        "questionWalls",
+        "dqIndex",
+        "popularity",
+        "rating",
+        "curationScore",
+        "createdDate",
+    }
+)
 
 # connectionInfo.serverType values (OvalEdge connector types).
 MCP_SERVER_TYPES = frozenset(

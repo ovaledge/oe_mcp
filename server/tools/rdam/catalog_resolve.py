@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -10,8 +9,6 @@ from server.client import OvalEdgeError
 from server.constants import (
     MCP_PATH_ASSET_DETAILS,
     MCP_PATH_ASSET_EXPLORER,
-    MCP_SEARCH_SERVER_TYPE_PARAM,
-    MCP_SEARCH_TERMS_PARAM,
 )
 from server.tools.common import drop_none
 from server.tools.rdam.helpers import (
@@ -238,21 +235,22 @@ async def resolve_rdam_scope_via_asset_explorer(
     paths = normalize_string_list(object_path)
     search_term = fqn or (paths[0] if paths else None)
     use_name = object_id is None and search_term is None and name is not None
-    params = drop_none(
-        objectId=object_id if object_id is not None and object_id > 0 else None,
-        objectType=catalog_type,
-        name=name if use_name else None,
-        **{
-            MCP_SEARCH_TERMS_PARAM: json.dumps([search_term], ensure_ascii=False)
-            if search_term and object_id is None
-            else None,
-            MCP_SEARCH_SERVER_TYPE_PARAM: source_system.strip().lower(),
-        },
+    search = drop_none(
+        searchTerms=[search_term] if search_term and object_id is None else None,
         page=1,
         limit=25,
     )
+    server = source_system.strip().lower() if source_system and source_system.strip() else None
+    filters = drop_none(serverType=server)
+    body = drop_none(
+        objectId=object_id if object_id is not None and object_id > 0 else None,
+        objectType=catalog_type,
+        name=name if use_name else None,
+        search=search or None,
+        filters=filters or None,
+    )
     try:
-        explorer = await client.get(MCP_PATH_ASSET_EXPLORER, params=params)
+        explorer = await client.post(MCP_PATH_ASSET_EXPLORER, body=body)
     except OvalEdgeError:
         return None
     if not isinstance(explorer, dict) or explorer.get("ok") is False or explorer.get("error"):

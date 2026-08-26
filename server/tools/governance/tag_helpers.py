@@ -867,9 +867,9 @@ async def _lookup_tag_name_by_id(client: OvalEdgeClient, object_id: int) -> str 
     from server.constants import MCP_PATH_ASSET_EXPLORER
 
     try:
-        result = await client.get(
+        result = await client.post(
             MCP_PATH_ASSET_EXPLORER,
-            params={"objectId": object_id, "objectType": "oetag"},
+            body={"objectId": object_id, "objectType": "oetag"},
         )
     except OvalEdgeError:
         return None
@@ -1532,9 +1532,9 @@ async def _lookup_tag_after_create(
     from server.constants import MCP_PATH_ASSET_EXPLORER
 
     try:
-        body = await client.get(
+        body = await client.post(
             MCP_PATH_ASSET_EXPLORER,
-            params={"objectId": tag_id, "objectType": "oetag", "limit": 1},
+            body={"objectId": tag_id, "objectType": "oetag"},
         )
     except OvalEdgeError:
         return None
