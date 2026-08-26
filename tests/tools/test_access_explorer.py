@@ -364,20 +364,20 @@ class TestAccessExplorerCatalogResolveForSourceSystem:
     async def test_named_fqn_uses_asset_explorer_then_dam(
         self, mock_oe_client: AsyncMock
     ) -> None:
-        mock_oe_client.get.side_effect = [
-            {
-                "ok": True,
-                "data": {
-                    "items": [
-                        {
-                            "objectId": 77,
-                            "objectType": "oeschema",
-                            "objectName": "SUPERSTORE",
-                            "fullyQualifiedName": "SUPERSTORE.SUPERSTORE",
-                        }
-                    ]
-                },
+        mock_oe_client.post.return_value = {
+            "ok": True,
+            "data": {
+                "items": [
+                    {
+                        "objectId": 77,
+                        "objectType": "oeschema",
+                        "objectName": "SUPERSTORE",
+                        "fullyQualifiedName": "SUPERSTORE.SUPERSTORE",
+                    }
+                ]
             },
+        }
+        mock_oe_client.get.side_effect = [
             {
                 "ok": True,
                 "data": {
@@ -405,10 +405,10 @@ class TestAccessExplorerCatalogResolveForSourceSystem:
         )
         assert out["ok"] is True
         paths = [call.args[0] for call in mock_oe_client.get.await_args_list]
-        assert paths[0] == MCP_PATH_ASSET_EXPLORER
-        assert paths[1] == MCP_PATH_ASSET_DETAILS
-        assert paths[2] == MCP_PATH_ACCESS_EXPLORER
-        params = mock_oe_client.get.await_args_list[2].kwargs["params"]
+        assert mock_oe_client.post.await_args.args[0] == MCP_PATH_ASSET_EXPLORER
+        assert paths[0] == MCP_PATH_ASSET_DETAILS
+        assert paths[1] == MCP_PATH_ACCESS_EXPLORER
+        params = mock_oe_client.get.await_args_list[1].kwargs["params"]
         assert params["objectId"] == 77
         assert params["objectType"] == "schema"
         assert params["connectionId"] == 2000
@@ -418,24 +418,24 @@ class TestAccessExplorerCatalogResolveForSourceSystem:
     async def test_resolve_all_matches_forwards_catalog_paths_to_dam(
         self, mock_oe_client: AsyncMock
     ) -> None:
-        mock_oe_client.get.side_effect = [
-            {
-                "ok": True,
-                "data": {
-                    "items": [
-                        {
-                            "objectId": 1,
-                            "objectType": "oeschema",
-                            "fullyQualifiedName": "DB.SCHEMA_A",
-                        },
-                        {
-                            "objectId": 2,
-                            "objectType": "oeschema",
-                            "fullyQualifiedName": "DB.SCHEMA_B",
-                        },
-                    ]
-                },
+        mock_oe_client.post.return_value = {
+            "ok": True,
+            "data": {
+                "items": [
+                    {
+                        "objectId": 1,
+                        "objectType": "oeschema",
+                        "fullyQualifiedName": "DB.SCHEMA_A",
+                    },
+                    {
+                        "objectId": 2,
+                        "objectType": "oeschema",
+                        "fullyQualifiedName": "DB.SCHEMA_B",
+                    },
+                ]
             },
+        }
+        mock_oe_client.get.side_effect = [
             {
                 "ok": True,
                 "data": {
@@ -477,8 +477,8 @@ class TestAccessExplorerCatalogResolveForSourceSystem:
     async def test_empty_catalog_resolve_still_calls_dam(
         self, mock_oe_client: AsyncMock
     ) -> None:
+        mock_oe_client.post.return_value = {"ok": True, "data": {"items": []}}
         mock_oe_client.get.side_effect = [
-            {"ok": True, "data": {"items": []}},
             {"ok": True, "data": {"grants": []}},
         ]
         mcp = FastMCP(name="test", version="0.0.1")
@@ -495,5 +495,5 @@ class TestAccessExplorerCatalogResolveForSourceSystem:
         assert out["ok"] is True
         assert out["data"]["grants"] == []
         paths = [call.args[0] for call in mock_oe_client.get.await_args_list]
-        assert paths[0] == MCP_PATH_ASSET_EXPLORER
+        assert mock_oe_client.post.await_args.args[0] == MCP_PATH_ASSET_EXPLORER
         assert paths[-1] == MCP_PATH_ACCESS_EXPLORER

@@ -8,7 +8,7 @@ from pathlib import Path
 from fastmcp import FastMCP
 from fastmcp.client import Client
 
-from server.constants import DOCS_RESOURCE_URI_PREFIX
+from server.constants import DOCS_RESOURCE_URI_PREFIX, MCP_ASSET_EXPLORER_FILTER_KEYS
 from server.docs.loader import DOCS_DIR, read_doc_markdown
 from server.docs.register import register as register_doc_resources
 from server.mcp_surface import MCP_TOOL_NAMES, MCP_WORKFLOW_PROMPT_NAMES
@@ -97,3 +97,35 @@ class TestStaticDocResources:
         assert "What tables/schemas/columns can I see/view/access?" in text
         assert "without a named principal" in text
         assert "First-person **with** a named source" in text
+
+    def test_mcp_workflows_range_filters_are_open_ended(self) -> None:
+        text = read_doc_markdown("mcp_workflows")
+        compact = text.replace(" ", "")
+        assert "filters={\"rating\":{\"min\":4}}" in compact
+        assert "filters={\"rating\":{\"min\":4.01}}" in compact
+        assert "filters={\"rating\":{\"max\":3}}" in compact
+        assert "filters={\"popularity\":{\"min\":70}}" in compact
+        created = "filters={\"createdDate\":{\"from\":\"2024-01-01\",\"to\":\"2024-12-31\"}}"
+        assert created in compact
+        assert "`createdDate` uses `{from,to}` ISO dates, not min/max" in text
+        assert "Do not invent `max:5`" in text
+        assert "Omit any bound the user did not specify" in text
+        assert "this tool always sends `search.page` and `search.limit`" in text
+        assert "Backend: **POST** `/api/v1/mcp/asset-explorer`" in text
+        assert "GET `/api/v1/mcp/asset-explorer`" not in text
+        extra_facets = MCP_ASSET_EXPLORER_FILTER_KEYS - {
+            "connectionName",
+            "serverType",
+            "schemaName",
+            "owner",
+            "steward",
+            "custodian",
+            "tags",
+            "terms",
+            "customFields",
+            "dataProducts",
+            "classifications",
+            "criticalDataElement",
+        }
+        for key in extra_facets:
+            assert key in text, f"mcp_workflows missing nested filter key {key}"

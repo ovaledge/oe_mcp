@@ -2,7 +2,7 @@
 Live integration tests for the four consolidated MCP read tools.
 
 Five tests per tool (20 total):
-  - asset_explorer   → GET /api/v1/mcp/asset-explorer
+  - asset_explorer   → POST /api/v1/mcp/asset-explorer
   - asset_details    → GET /api/v1/mcp/asset-details
   - asset_lineage    → GET /api/v1/mcp/asset-lineage
   - knowledge_search → GET /api/v1/mcp/knowledge-search
@@ -21,7 +21,6 @@ Requires OvalEdge at OVALEDGE_BASE_URL and valid credentials in .env
 
 from __future__ import annotations
 
-import json
 import os
 from typing import Any
 
@@ -58,22 +57,22 @@ _DISCOVERED: dict[str, dict[str, Any] | None] = {}
 
 # ── Helpers ──────────────────────────────────────────────────────
 async def _discover(
-    mcp_get, kind: str, object_type: str, search_term: str
+    mcp_post, kind: str, object_type: str, search_term: str
 ) -> dict[str, Any] | None:
     """Find the first live catalog hit of `object_type`, caching by `kind`."""
     if kind in _DISCOVERED:
         return _DISCOVERED[kind]
 
     attempts = [
-        {"objectType": object_type, "searchTerms": json.dumps([search_term]),
+        {"objectType": object_type, "searchTerms": [search_term],
          "schemaName": SCHEMA_NAME, "serverType": SERVER_TYPE},
-        {"objectType": object_type, "searchTerms": json.dumps([search_term]),
+        {"objectType": object_type, "searchTerms": [search_term],
          "serverType": SERVER_TYPE},
-        {"objectType": object_type, "searchTerms": json.dumps([search_term])},
+        {"objectType": object_type, "searchTerms": [search_term]},
     ]
     found: dict[str, Any] | None = None
     for params in attempts:
-        r = await _explore(mcp_get, **params)
+        r = await _explore(mcp_post, **params)
         if r.status_code != 200:
             continue
         for item in _items(r):
@@ -90,8 +89,8 @@ async def _discover(
 # asset_explorer (5)
 # ══════════════════════════════════════════════════════════════════
 @pytest.mark.asyncio
-async def test_explorer_open_catalog_search(mcp_get) -> None:
-    r = await _explore(mcp_get, searchTerms=json.dumps([TABLE_SEARCH_TERM]))
+async def test_explorer_open_catalog_search(mcp_post) -> None:
+    r = await _explore(mcp_post, searchTerms=[TABLE_SEARCH_TERM])
     assert r.status_code == 200, r.text[:500]
     items = _items(r)
     for hit in items:
@@ -100,9 +99,9 @@ async def test_explorer_open_catalog_search(mcp_get) -> None:
 
 
 @pytest.mark.asyncio
-async def test_explorer_schema_and_type_filter(mcp_get) -> None:
+async def test_explorer_schema_and_type_filter(mcp_post) -> None:
     r = await _explore(
-        mcp_get, schemaName=SCHEMA_NAME, serverType=SERVER_TYPE, objectType="oetable"
+        mcp_post, schemaName=SCHEMA_NAME, serverType=SERVER_TYPE, objectType="oetable"
     )
     assert r.status_code == 200, r.text[:500]
     data = _data(r)
@@ -112,8 +111,8 @@ async def test_explorer_schema_and_type_filter(mcp_get) -> None:
 
 
 @pytest.mark.asyncio
-async def test_explorer_glossary_name_mode(mcp_get) -> None:
-    r = await _explore(mcp_get, name=GLOSSARY_TERM, objectType="glossary", limit=5)
+async def test_explorer_glossary_name_mode(mcp_post) -> None:
+    r = await _explore(mcp_post, name=GLOSSARY_TERM, objectType="glossary", limit=5)
     assert r.status_code in (200, 404), r.text[:500]
     if r.status_code == 200:
         data = _data(r)
@@ -122,9 +121,9 @@ async def test_explorer_glossary_name_mode(mcp_get) -> None:
 
 
 @pytest.mark.asyncio
-async def test_explorer_tag_name_mode(mcp_get) -> None:
+async def test_explorer_tag_name_mode(mcp_post) -> None:
     r = await _explore(
-        mcp_get, name=TAG_NAME, objectType="oetag", includeChildren="true", limit=5
+        mcp_post, name=TAG_NAME, objectType="oetag", includeChildren="true", limit=5
     )
     assert r.status_code in (200, 404), r.text[:500]
     if r.status_code == 200:
@@ -134,8 +133,8 @@ async def test_explorer_tag_name_mode(mcp_get) -> None:
 
 
 @pytest.mark.asyncio
-async def test_explorer_pagination_limit_respected(mcp_get) -> None:
-    r = await _explore(mcp_get, searchTerms=json.dumps([TABLE_SEARCH_TERM]), limit=3)
+async def test_explorer_pagination_limit_respected(mcp_post) -> None:
+    r = await _explore(mcp_post, searchTerms=[TABLE_SEARCH_TERM], limit=3)
     assert r.status_code == 200, r.text[:500]
     assert len(_items(r)) <= 3
 
@@ -144,8 +143,8 @@ async def test_explorer_pagination_limit_respected(mcp_get) -> None:
 # asset_details (5)
 # ══════════════════════════════════════════════════════════════════
 @pytest.mark.asyncio
-async def test_details_table_composite(mcp_get) -> None:
-    table = await _discover(mcp_get, "table", "oetable", TABLE_SEARCH_TERM)
+async def test_details_table_composite(mcp_get, mcp_post) -> None:
+    table = await _discover(mcp_post, "table", "oetable", TABLE_SEARCH_TERM)
     if not table:
         pytest.skip("No oetable discovered in catalog")
     r = await mcp_get(
@@ -161,8 +160,8 @@ async def test_details_table_composite(mcp_get) -> None:
 
 
 @pytest.mark.asyncio
-async def test_details_column_details_only(mcp_get) -> None:
-    column = await _discover(mcp_get, "column", "oecolumn", COLUMN_SEARCH_TERM)
+async def test_details_column_details_only(mcp_get, mcp_post) -> None:
+    column = await _discover(mcp_post, "column", "oecolumn", COLUMN_SEARCH_TERM)
     if not column:
         pytest.skip("No oecolumn discovered in catalog")
     r = await mcp_get(
@@ -178,8 +177,8 @@ async def test_details_column_details_only(mcp_get) -> None:
 
 
 @pytest.mark.asyncio
-async def test_details_file_profile_no_relationships(mcp_get) -> None:
-    file_obj = await _discover(mcp_get, "file", "oefile", FILE_SEARCH_TERM)
+async def test_details_file_profile_no_relationships(mcp_get, mcp_post) -> None:
+    file_obj = await _discover(mcp_post, "file", "oefile", FILE_SEARCH_TERM)
     if not file_obj:
         pytest.skip("No oefile discovered in catalog")
     r = await mcp_get(
@@ -194,8 +193,8 @@ async def test_details_file_profile_no_relationships(mcp_get) -> None:
 
 
 @pytest.mark.asyncio
-async def test_details_rejects_missing_object_type(mcp_get) -> None:
-    table = await _discover(mcp_get, "table", "oetable", TABLE_SEARCH_TERM)
+async def test_details_rejects_missing_object_type(mcp_get, mcp_post) -> None:
+    table = await _discover(mcp_post, "table", "oetable", TABLE_SEARCH_TERM)
     object_id = int(table["objectId"]) if table else 1
     r = await mcp_get(MCP_PATH_ASSET_DETAILS, {"objectId": object_id})
     # Missing objectType is validated in McpApiService → MCP 400 envelope.
@@ -212,8 +211,8 @@ async def test_details_rejects_invalid_object_id(mcp_get) -> None:
 # asset_lineage (5)
 # ══════════════════════════════════════════════════════════════════
 @pytest.mark.asyncio
-async def test_lineage_table(mcp_get) -> None:
-    table = await _discover(mcp_get, "table", "oetable", TABLE_SEARCH_TERM)
+async def test_lineage_table(mcp_get, mcp_post) -> None:
+    table = await _discover(mcp_post, "table", "oetable", TABLE_SEARCH_TERM)
     if not table:
         pytest.skip("No oetable discovered in catalog")
     r = await mcp_get(
@@ -229,8 +228,8 @@ async def test_lineage_table(mcp_get) -> None:
 
 
 @pytest.mark.asyncio
-async def test_lineage_depth_one(mcp_get) -> None:
-    table = await _discover(mcp_get, "table", "oetable", TABLE_SEARCH_TERM)
+async def test_lineage_depth_one(mcp_get, mcp_post) -> None:
+    table = await _discover(mcp_post, "table", "oetable", TABLE_SEARCH_TERM)
     if not table:
         pytest.skip("No oetable discovered in catalog")
     r = await mcp_get(
@@ -244,8 +243,8 @@ async def test_lineage_depth_one(mcp_get) -> None:
 
 
 @pytest.mark.asyncio
-async def test_lineage_file(mcp_get) -> None:
-    file_obj = await _discover(mcp_get, "file", "oefile", FILE_SEARCH_TERM)
+async def test_lineage_file(mcp_get, mcp_post) -> None:
+    file_obj = await _discover(mcp_post, "file", "oefile", FILE_SEARCH_TERM)
     if not file_obj:
         pytest.skip("No oefile discovered in catalog")
     r = await mcp_get(
@@ -256,8 +255,8 @@ async def test_lineage_file(mcp_get) -> None:
 
 
 @pytest.mark.asyncio
-async def test_lineage_rejects_unsupported_type(mcp_get) -> None:
-    column = await _discover(mcp_get, "column", "oecolumn", COLUMN_SEARCH_TERM)
+async def test_lineage_rejects_unsupported_type(mcp_get, mcp_post) -> None:
+    column = await _discover(mcp_post, "column", "oecolumn", COLUMN_SEARCH_TERM)
     object_id = int(column["objectId"]) if column else 1
     r = await mcp_get(
         MCP_PATH_ASSET_LINEAGE,
@@ -267,8 +266,8 @@ async def test_lineage_rejects_unsupported_type(mcp_get) -> None:
 
 
 @pytest.mark.asyncio
-async def test_lineage_rejects_missing_object_type(mcp_get) -> None:
-    table = await _discover(mcp_get, "table", "oetable", TABLE_SEARCH_TERM)
+async def test_lineage_rejects_missing_object_type(mcp_get, mcp_post) -> None:
+    table = await _discover(mcp_post, "table", "oetable", TABLE_SEARCH_TERM)
     object_id = int(table["objectId"]) if table else 1
     r = await mcp_get(MCP_PATH_ASSET_LINEAGE, {"objectId": object_id})
     # Missing objectType is validated in McpApiService → MCP 400 envelope.

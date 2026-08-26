@@ -72,7 +72,7 @@ def auth_headers(api_available: bool) -> dict[str, str]:
 async def mcp_get(
     auth_headers: dict[str, str],
 ) -> Callable[[str, dict[str, object] | None], Awaitable[httpx.Response]]:
-    """GET any OvalEdge MCP path under OVALEDGE_BASE_URL."""
+    """GET any OvalEdge MCP path under OVALEDGE_BASE_URL (not asset-explorer)."""
     base = settings.ovaledge_base_url.rstrip("/")
 
     async def _get(path: str, params: dict[str, object] | None = None) -> httpx.Response:
@@ -84,6 +84,24 @@ async def mcp_get(
             return await client.get(url, params=params or {}, headers=auth_headers)
 
     return _get
+
+
+@pytest.fixture
+async def mcp_post(
+    auth_headers: dict[str, str],
+) -> Callable[[str, dict[str, object] | None], Awaitable[httpx.Response]]:
+    """POST any OvalEdge MCP path under OVALEDGE_BASE_URL."""
+    base = settings.ovaledge_base_url.rstrip("/")
+
+    async def _post(path: str, body: dict[str, object] | None = None) -> httpx.Response:
+        url = base + path
+        async with httpx.AsyncClient(
+            timeout=float(settings.ovaledge_timeout_seconds),
+            follow_redirects=True,
+        ) as client:
+            return await client.post(url, json=body or {}, headers=auth_headers)
+
+    return _post
 
 
 @pytest.fixture

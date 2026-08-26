@@ -94,7 +94,9 @@ async def _verify(token: str) -> bool:
     url = settings.ovaledge_base_url.rstrip("/") + MCP_PATH_ASSET_EXPLORER
     headers = {"Authorization": f"{settings.ovaledge_http_auth_scheme} {token}"}
     async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
-        response = await client.get(url, params={"page": 1, "limit": 1}, headers=headers)
+        response = await client.post(
+            url, json={"search": {"page": 1, "limit": 1}}, headers=headers
+        )
     if response.status_code == 200:
         print(f"Verified against {MCP_PATH_ASSET_EXPLORER} (HTTP 200).", file=sys.stderr)
         return True

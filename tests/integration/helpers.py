@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 import httpx
@@ -59,15 +58,118 @@ def as_list(value: Any) -> list[Any]:
     return []
 
 
-def json_array(*values: str) -> str:
-    """Encode a keyword list the way the asset-explorer wire format expects."""
-    return json.dumps(list(values), ensure_ascii=False)
+_EXPLORER_IDENTITY = frozenset(
+    {"objectId", "objectType", "name", "includeParent", "includeChildren"}
+)
+_EXPLORER_SEARCH = frozenset({"searchTerms", "contextQuery", "page", "limit"})
+_EXPLORER_PLACEMENT = frozenset(
+    {
+        "domainId",
+        "domainName",
+        "categoryId",
+        "categoryName",
+        "subcategoryId",
+        "subcategoryName",
+    }
+)
+_EXPLORER_LIST_KEYS = frozenset(
+    {
+        "searchTerms",
+        "tags",
+        "terms",
+        "glossaryTerms",
+        "customFields",
+        "dataProducts",
+        "classifications",
+        "criticalDataElement",
+        "tableName",
+        "tableType",
+        "certification",
+        "dataDomains",
+        "questionWalls",
+    }
+)
+_EXPLORER_SCALAR_FILTER_KEYS = frozenset(
+    {
+        "connectionName",
+        "serverType",
+        "schemaName",
+        "owner",
+        "steward",
+        "custodian",
+    }
+)
 
 
-async def explore(mcp_get: Any, **params: Any) -> httpx.Response:
-    payload: dict[str, Any] = {"page": 1, "limit": 10}
-    payload.update({k: v for k, v in params.items() if v is not None})
-    return await mcp_get(MCP_PATH_ASSET_EXPLORER, payload)
+def _as_filter_list(value: Any) -> Any:
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        stripped = value.strip()
+        return [stripped] if stripped else None
+    return value
+
+
+def _as_bool(value: Any) -> Any:
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "1", "yes"}:
+            return True
+        if lowered in {"false", "0", "no"}:
+            return False
+    return value
+
+
+def _to_asset_explorer_post_body(params: dict[str, Any]) -> dict[str, Any]:
+    """Map live-test kwargs to the explorer POST JSON body."""
+    raw = {k: v for k, v in params.items() if v is not None}
+    search: dict[str, Any] = dict(raw.pop("search", None) or {})
+    placement: dict[str, Any] = dict(raw.pop("glossaryPlacement", None) or {})
+    filters: dict[str, Any] = dict(raw.pop("filters", None) or {})
+    body: dict[str, Any] = {}
+    for key, value in raw.items():
+        if key in _EXPLORER_IDENTITY:
+            if key in {"includeParent", "includeChildren"}:
+                flag = _as_bool(value)
+                if flag:
+                    body[key] = True
+            else:
+                body[key] = value
+        elif key in _EXPLORER_SEARCH:
+            search[key] = _as_filter_list(value) if key == "searchTerms" else value
+        elif key in _EXPLORER_PLACEMENT:
+            placement[key] = value
+        elif key == "glossaryTerms":
+            parsed = _as_filter_list(value)
+            if parsed:
+                filters["terms"] = parsed
+        elif key in _EXPLORER_LIST_KEYS:
+            parsed = _as_filter_list(value)
+            if parsed:
+                filters[key] = parsed
+        elif key in _EXPLORER_SCALAR_FILTER_KEYS:
+            if isinstance(value, str):
+                stripped = value.strip()
+                if stripped:
+                    filters[key] = stripped
+            else:
+                filters[key] = value
+        else:
+            filters[key] = value
+    search.setdefault("page", 1)
+    search.setdefault("limit", 10)
+    if search:
+        body["search"] = search
+    if placement:
+        body["glossaryPlacement"] = placement
+    if filters:
+        body["filters"] = filters
+    return body
+
+
+async def explore(mcp_post: Any, **params: Any) -> httpx.Response:
+    payload = _to_asset_explorer_post_body(params)
+    return await mcp_post(MCP_PATH_ASSET_EXPLORER, payload)
 
 
 def assert_never_500(response: httpx.Response, context: str) -> None:
@@ -99,9 +201,9 @@ def hit_name(hit: dict[str, Any]) -> str:
     )
 
 
-async def first_explorer_hit(mcp_get: Any, **params: Any) -> dict[str, Any] | None:
+async def first_explorer_hit(mcp_post: Any, **params: Any) -> dict[str, Any] | None:
     """Return the first asset_explorer hit, or None when the catalog has no match."""
-    response = await explore(mcp_get, **params)
+    response = await explore(mcp_post, **params)
     if response.status_code != 200:
         return None
     hits = [
@@ -110,51 +212,51 @@ async def first_explorer_hit(mcp_get: Any, **params: Any) -> dict[str, Any] | No
     return hits[0] if hits else None
 
 
-async def require_explorer_hit(mcp_get: Any, what: str, **params: Any) -> dict[str, Any]:
+async def require_explorer_hit(mcp_post: Any, what: str, **params: Any) -> dict[str, Any]:
     """Discover a live catalog object via asset_explorer or skip the test."""
-    hit = await first_explorer_hit(mcp_get, **params)
+    hit = await first_explorer_hit(mcp_post, **params)
     if hit is None:
         pytest.skip(f"No {what} found via asset_explorer (API-only discovery)")
     return hit
 
 
-async def require_table(mcp_get: Any) -> dict[str, Any]:
+async def require_table(mcp_post: Any) -> dict[str, Any]:
     return await require_explorer_hit(
-        mcp_get, "oetable", objectType="oetable", searchTerms=json_array("a"), limit=20
+        mcp_post, "oetable", objectType="oetable", searchTerms=["a"], limit=20
     )
 
 
-async def require_column(mcp_get: Any) -> dict[str, Any]:
+async def require_column(mcp_post: Any) -> dict[str, Any]:
     return await require_explorer_hit(
-        mcp_get, "oecolumn", objectType="oecolumn", searchTerms=json_array("id"), limit=20
+        mcp_post, "oecolumn", objectType="oecolumn", searchTerms=["id"], limit=20
     )
 
 
-async def require_file(mcp_get: Any) -> dict[str, Any]:
+async def require_file(mcp_post: Any) -> dict[str, Any]:
     return await require_explorer_hit(
-        mcp_get, "oefile", objectType="oefile", searchTerms=json_array("a"), limit=20
+        mcp_post, "oefile", objectType="oefile", searchTerms=["a"], limit=20
     )
 
 
-async def require_schema(mcp_get: Any) -> dict[str, Any]:
+async def require_schema(mcp_post: Any) -> dict[str, Any]:
     return await require_explorer_hit(
-        mcp_get, "oeschema", objectType="oeschema", searchTerms=json_array("a"), limit=20
+        mcp_post, "oeschema", objectType="oeschema", searchTerms=["a"], limit=20
     )
 
 
-async def require_glossary_term(mcp_get: Any) -> dict[str, Any]:
+async def require_glossary_term(mcp_post: Any) -> dict[str, Any]:
     return await require_explorer_hit(
-        mcp_get,
+        mcp_post,
         "glossary term",
         objectType="glossary",
-        searchTerms=json_array("a"),
+        searchTerms=["a"],
         limit=20,
     )
 
 
-async def require_tag(mcp_get: Any) -> dict[str, Any]:
+async def require_tag(mcp_post: Any) -> dict[str, Any]:
     return await require_explorer_hit(
-        mcp_get, "oetag", objectType="oetag", searchTerms=json_array("a"), limit=20
+        mcp_post, "oetag", objectType="oetag", searchTerms=["a"], limit=20
     )
 
 
@@ -166,10 +268,10 @@ def _looks_like_view(detail: dict[str, Any], blob: str) -> bool:
     return "view" in blob and "tabletype" in blob.replace(" ", "")
 
 
-async def require_view(mcp_get: Any) -> dict[str, Any]:
+async def require_view(mcp_post: Any, mcp_get: Any) -> dict[str, Any]:
     """Probe explorer tables until asset_details indicates a VIEW."""
     search = await explore(
-        mcp_get, objectType="oetable", searchTerms=json_array("a"), limit=20
+        mcp_post, objectType="oetable", searchTerms=["a"], limit=20
     )
     if search.status_code != 200:
         pytest.skip("Could not discover tables while looking for a VIEW")
@@ -189,10 +291,10 @@ async def require_view(mcp_get: Any) -> dict[str, Any]:
     pytest.skip("No VIEW found via asset_explorer + asset_details probing")
 
 
-async def require_story(mcp_get: Any) -> dict[str, Any]:
+async def require_story(mcp_post: Any, mcp_get: Any) -> dict[str, Any]:
     """Prefer explorer oestory; fall back to knowledge_search story hits."""
     hit = await first_explorer_hit(
-        mcp_get, objectType="oestory", searchTerms=json_array("a"), limit=20
+        mcp_post, objectType="oestory", searchTerms=["a"], limit=20
     )
     if hit is not None:
         return hit
@@ -225,10 +327,10 @@ def lineage_has_graph(payload: Any) -> bool:
     return False
 
 
-async def require_table_with_lineage(mcp_get: Any) -> dict[str, Any]:
+async def require_table_with_lineage(mcp_post: Any, mcp_get: Any) -> dict[str, Any]:
     """Probe explorer tables until asset_lineage returns a recognizable graph."""
     search = await explore(
-        mcp_get, objectType="oetable", searchTerms=json_array("a"), limit=20
+        mcp_post, objectType="oetable", searchTerms=["a"], limit=20
     )
     if search.status_code != 200:
         pytest.skip("Could not discover tables for lineage probing")
@@ -244,10 +346,10 @@ async def require_table_with_lineage(mcp_get: Any) -> dict[str, Any]:
     pytest.skip("No oetable with lineage graph found via API probing")
 
 
-async def require_table_without_lineage(mcp_get: Any) -> dict[str, Any]:
+async def require_table_without_lineage(mcp_post: Any, mcp_get: Any) -> dict[str, Any]:
     """Probe explorer tables until asset_lineage returns empty/no graph."""
     search = await explore(
-        mcp_get, objectType="oetable", searchTerms=json_array("a"), limit=20
+        mcp_post, objectType="oetable", searchTerms=["a"], limit=20
     )
     if search.status_code != 200:
         pytest.skip("Could not discover tables for empty-lineage probing")

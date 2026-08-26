@@ -126,7 +126,8 @@ poetry run python -m evals.run_evals --output evals/out/report.json
 
 Defined in `golden_cases.py`:
 
-- `MCPUseMetric` — single-turn goldens: asset exploration, `data_discovery` prompt + search, `knowledge_search`, `organizational_knowledge` prompt + knowledge search, `access_explorer` (`operation=source_system_access` and `operation=catalog_access`), first-person “I want access…” → `create_service_request` (not `access_explorer`).
+- `MCPUseMetric` — single-turn goldens: asset exploration (keywords + `context_query`; nested `filters` for certification / `tableType` / open-ended `dqIndex`, `rating`, or `popularity` min, plus `createdDate` `{from,to}` — backend **POST** `/api/v1/mcp/asset-explorer`), `data_discovery` prompt + search, `knowledge_search`, `organizational_knowledge` prompt + knowledge search, `access_explorer` (`operation=source_system_access` and `operation=catalog_access`), first-person “I want access…” → `create_service_request` (not `access_explorer`).
+- Filter-only catalog search is a valid `asset_explorer` call: omit `search_terms`, pass `filters` (and optional `object_type`). Do not flatten extra global-search facets into extra FastMCP fields. JSON examples: `example_catalog_filters_certified_views`, `example_catalog_dq_index_range`, `example_catalog_rating_min_filter`, `example_catalog_rating_more_than_filter`, `example_catalog_rating_max_filter`, `example_catalog_popularity_min_filter`, `example_catalog_created_date_filter`, `example_catalog_filters_no_match`.
 - `MCPTaskCompletionMetric` — conversational discovery with expected outcome.
 - `MultiTurnMCPUseMetric` — follow-up user turn with resource read.
 

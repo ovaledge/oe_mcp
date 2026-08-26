@@ -2,6 +2,7 @@
 
 from unittest.mock import AsyncMock
 
+from server.constants import MCP_PATH_ASSET_EXPLORER
 from server.tools.rdam.catalog_resolve import (
     catalog_object_type_for_explorer,
     rdam_object_type_from_catalog,
@@ -64,20 +65,20 @@ class TestCatalogTypeMapping:
 class TestResolveRdamScopeViaAssetExplorer:
     async def test_resolves_hit_on_matching_connection_id(self) -> None:
         client = AsyncMock()
-        client.get.side_effect = [
-            {
-                "ok": True,
-                "data": {
-                    "items": [
-                        {
-                            "objectId": 42,
-                            "objectType": "oetable",
-                            "fullyQualifiedName": "prod_db.public.orders",
-                            "connectionInfoId": 1000,
-                        }
-                    ]
-                },
+        client.post.return_value = {
+            "ok": True,
+            "data": {
+                "items": [
+                    {
+                        "objectId": 42,
+                        "objectType": "oetable",
+                        "fullyQualifiedName": "prod_db.public.orders",
+                        "connectionInfoId": 1000,
+                    }
+                ]
             },
+        }
+        client.get.side_effect = [
             {
                 "ok": True,
                 "data": {
@@ -106,10 +107,16 @@ class TestResolveRdamScopeViaAssetExplorer:
         assert resolved is not None
         assert resolved.connection_id == 1000
         assert resolved.object_id == 42
+        client.post.assert_awaited()
+        posted = client.post.await_args
+        assert posted.args[0] == MCP_PATH_ASSET_EXPLORER
+        body = posted.kwargs["body"]
+        assert body["filters"]["serverType"] == "redshift"
+        assert isinstance(body["filters"]["serverType"], str)
 
     async def test_mismatched_connection_id_returns_none(self) -> None:
         client = AsyncMock()
-        client.get.return_value = {
+        client.post.return_value = {
             "ok": True,
             "data": {
                 "items": [
@@ -139,19 +146,19 @@ class TestResolveRdamScopeViaAssetExplorer:
 
     async def test_unknown_connection_id_keeps_caller_connection(self) -> None:
         client = AsyncMock()
-        client.get.side_effect = [
-            {
-                "ok": True,
-                "data": {
-                    "items": [
-                        {
-                            "objectId": 42,
-                            "objectType": "oetable",
-                            "fullyQualifiedName": "prod_db.public.orders",
-                        }
-                    ]
-                },
+        client.post.return_value = {
+            "ok": True,
+            "data": {
+                "items": [
+                    {
+                        "objectId": 42,
+                        "objectType": "oetable",
+                        "fullyQualifiedName": "prod_db.public.orders",
+                    }
+                ]
             },
+        }
+        client.get.side_effect = [
             {
                 "ok": True,
                 "data": {
@@ -182,26 +189,26 @@ class TestResolveRdamScopeViaAssetExplorer:
 
     async def test_multi_match_filters_to_connection_id(self) -> None:
         client = AsyncMock()
-        client.get.side_effect = [
-            {
-                "ok": True,
-                "data": {
-                    "items": [
-                        {
-                            "objectId": 42,
-                            "objectType": "oetable",
-                            "fullyQualifiedName": "prod.public.orders",
-                            "connectionInfoId": 2000,
-                        },
-                        {
-                            "objectId": 84,
-                            "objectType": "oetable",
-                            "fullyQualifiedName": "prod.public.orders_archive",
-                            "connectionInfoId": 3000,
-                        },
-                    ]
-                },
+        client.post.return_value = {
+            "ok": True,
+            "data": {
+                "items": [
+                    {
+                        "objectId": 42,
+                        "objectType": "oetable",
+                        "fullyQualifiedName": "prod.public.orders",
+                        "connectionInfoId": 2000,
+                    },
+                    {
+                        "objectId": 84,
+                        "objectType": "oetable",
+                        "fullyQualifiedName": "prod.public.orders_archive",
+                        "connectionInfoId": 3000,
+                    },
+                ]
             },
+        }
+        client.get.side_effect = [
             {
                 "ok": True,
                 "data": {
@@ -234,26 +241,26 @@ class TestResolveRdamScopeViaAssetExplorer:
 
     async def test_multi_match_drops_connection_id_when_hits_span_connectors(self) -> None:
         client = AsyncMock()
-        client.get.side_effect = [
-            {
-                "ok": True,
-                "data": {
-                    "items": [
-                        {
-                            "objectId": 42,
-                            "objectType": "oetable",
-                            "fullyQualifiedName": "prod.public.orders",
-                            "connectionInfoId": 2000,
-                        },
-                        {
-                            "objectId": 84,
-                            "objectType": "oetable",
-                            "fullyQualifiedName": "prod.public.orders_archive",
-                            "connectionInfoId": 3000,
-                        },
-                    ]
-                },
+        client.post.return_value = {
+            "ok": True,
+            "data": {
+                "items": [
+                    {
+                        "objectId": 42,
+                        "objectType": "oetable",
+                        "fullyQualifiedName": "prod.public.orders",
+                        "connectionInfoId": 2000,
+                    },
+                    {
+                        "objectId": 84,
+                        "objectType": "oetable",
+                        "fullyQualifiedName": "prod.public.orders_archive",
+                        "connectionInfoId": 3000,
+                    },
+                ]
             },
+        }
+        client.get.side_effect = [
             {
                 "ok": True,
                 "data": {

@@ -21,6 +21,32 @@ from server.tools.governance import helpers as governance_helpers
 from tests.helpers import get_tool_fn
 from tests.tools.confirm_test_helpers import invoke_write_confirmed
 
+
+def _route_create_tag_posts(
+    create_response: dict,
+    *,
+    lookup: dict | None = None,
+    lookup_error: BaseException | None = None,
+):
+    async def _post(path: str, body: dict | None = None, **kwargs: object) -> dict:
+        if path == MCP_PATH_ASSET_EXPLORER:
+            if lookup_error is not None:
+                raise lookup_error
+            return lookup if lookup is not None else {"ok": True, "data": {}}
+        return create_response
+
+    return _post
+
+
+def _tags_post_body(mock_oe_client: AsyncMock) -> dict:
+    for call in mock_oe_client.post.call_args_list:
+        if call.args and call.args[0] == MCP_PATH_TAGS:
+            if call.kwargs.get("body") is not None:
+                return call.kwargs["body"]
+            if len(call.args) > 1 and isinstance(call.args[1], dict):
+                return call.args[1]
+    raise AssertionError("expected POST /mcp/tags")
+
 _MOCK_DOMAIN_PICKER = {
     "ok": True,
     "data": {
@@ -726,7 +752,7 @@ def _clear_parent_picker_pending() -> None:
 
 class TestCreateTag:
     async def test_forwards_create_body(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.post.return_value = {
+        create_response = {
             "ok": True,
             "data": {"tagId": 99, "tagName": "Confidential"},
         }
@@ -753,6 +779,9 @@ class TestCreateTag:
                 "fullQualifiedName": "Governance > Confidential",
             },
         }
+        mock_oe_client.post.side_effect = _route_create_tag_posts(
+            create_response, lookup=tag_lookup
+        )
         secure_gets = [
             secure_opts,
             secure_opts,
@@ -765,7 +794,6 @@ class TestCreateTag:
         mock_oe_client.get.side_effect = [
             *secure_gets,
             *secure_gets,
-            tag_lookup,
         ]
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
@@ -800,19 +828,16 @@ class TestCreateTag:
             confirmation_token=confirm["confirmationToken"],
         )
         assert out["ok"] is True
-        mock_oe_client.post.assert_called_once_with(
-            MCP_PATH_TAGS,
-            body={
-                "tagName": "Confidential",
-                "description": "<p>secret</p>",
-                "masterTagId": 10,
-                "parentTagId": 20,
-            },
-        )
+        assert _tags_post_body(mock_oe_client) == {
+            "tagName": "Confidential",
+            "description": "<p>secret</p>",
+            "masterTagId": 10,
+            "parentTagId": 20,
+        }
         assert mock_oe_client.get.call_args_list[0].args == (MCP_PATH_TAGS_CREATE_OPTIONS,)
-        mock_oe_client.get.assert_any_call(
+        mock_oe_client.post.assert_any_call(
             MCP_PATH_ASSET_EXPLORER,
-            params={"objectId": 99, "objectType": "oetag", "limit": 1},
+            body={"objectId": 99, "objectType": "oetag"},
         )
         assert out["data"]["redirectUrl"].endswith("#nav/tag?id=99")
         assert out["data"]["navLink"].endswith(
@@ -838,10 +863,13 @@ class TestCreateTag:
     async def test_open_root_uses_mastertag_summary_url(
         self, mock_oe_client: AsyncMock
     ) -> None:
-        mock_oe_client.post.return_value = {
-            "ok": True,
-            "data": {"tagId": 77, "tagName": "Ranchi", "tagSecurityMode": "open"},
-        }
+        mock_oe_client.post.side_effect = _route_create_tag_posts(
+            {
+                "ok": True,
+                "data": {"tagId": 77, "tagName": "Ranchi", "tagSecurityMode": "open"},
+            },
+            lookup_error=OvalEdgeError(404, "Not found"),
+        )
         open_create_opts = {
             "ok": True,
             "data": {
@@ -884,18 +912,12 @@ class TestCreateTag:
         assert "[Tag summary]" in out["formattedResponse"]
 
     async def test_fallback_nav_when_lookup_missing(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.post.return_value = {
-            "ok": True,
-            "data": {"tagId": 5, "tagName": "PII"},
-        }
+        mock_oe_client.post.side_effect = _route_create_tag_posts(
+            {"ok": True, "data": {"tagId": 5, "tagName": "PII"}},
+            lookup_error=OvalEdgeError(404, "Not found"),
+        )
         open_opts = {"ok": True, "data": {"tagSecurityMode": "open", "parentTagChoices": []}}
-
-        async def open_get(path: str, **kwargs: object) -> dict[str, object]:
-            if path == MCP_PATH_ASSET_EXPLORER:
-                raise OvalEdgeError(404, "Not found")
-            return open_opts
-
-        mock_oe_client.get.side_effect = open_get
+        mock_oe_client.get.return_value = open_opts
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)
         fn = await get_tool_fn(mcp, "create_tag")
@@ -1229,10 +1251,13 @@ class TestCreateTag:
     async def test_open_mode_tag_name_only_shows_parents_then_create(
         self, mock_oe_client: AsyncMock
     ) -> None:
-        mock_oe_client.post.return_value = {
-            "ok": True,
-            "data": {"tagId": 50, "tagName": "SkipTest", "tagSecurityMode": "open"},
-        }
+        mock_oe_client.post.side_effect = _route_create_tag_posts(
+            {
+                "ok": True,
+                "data": {"tagId": 50, "tagName": "SkipTest", "tagSecurityMode": "open"},
+            },
+            lookup_error=OvalEdgeError(404, "Not found"),
+        )
         open_create_opts = {
             "ok": True,
             "data": {
@@ -1270,21 +1295,24 @@ class TestCreateTag:
             confirmation_token=preview["confirmationToken"],
         )
         assert out["ok"] is True
-        mock_oe_client.post.assert_called_once()
+        assert any(call.args[0] == MCP_PATH_TAGS for call in mock_oe_client.post.call_args_list)
 
     async def test_open_mode_parent_tag_id_post_matches_ui(
         self, mock_oe_client: AsyncMock
     ) -> None:
         """Open mode under a parent → POST parentTagId only (same as tag/addNewTag UI)."""
-        mock_oe_client.post.return_value = {
-            "ok": True,
-            "data": {
-                "tagId": 200,
-                "tagName": "Child",
-                "parentTagId": 1055,
-                "tagSecurityMode": "open",
+        mock_oe_client.post.side_effect = _route_create_tag_posts(
+            {
+                "ok": True,
+                "data": {
+                    "tagId": 200,
+                    "tagName": "Child",
+                    "parentTagId": 1055,
+                    "tagSecurityMode": "open",
+                },
             },
-        }
+            lookup_error=OvalEdgeError(404, "Not found"),
+        )
         open_opts = {
             "ok": True,
             "data": {
@@ -1317,7 +1345,7 @@ class TestCreateTag:
             confirmation_token=preview["confirmationToken"],
         )
         assert out["ok"] is True
-        body = mock_oe_client.post.call_args.kwargs.get("body") or {}
+        body = _tags_post_body(mock_oe_client)
         assert body.get("parentTagId") == 1055
         assert body.get("masterTagId") is None
 
@@ -1399,10 +1427,13 @@ class TestCreateTag:
         mock_oe_client.post.assert_not_called()
 
     async def test_open_mode_create_without_parent(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.post.return_value = {
-            "ok": True,
-            "data": {"tagId": 88, "tagName": "OpenChild", "tagSecurityMode": "open"},
-        }
+        mock_oe_client.post.side_effect = _route_create_tag_posts(
+            {
+                "ok": True,
+                "data": {"tagId": 88, "tagName": "OpenChild", "tagSecurityMode": "open"},
+            },
+            lookup_error=OvalEdgeError(404, "Not found"),
+        )
         open_opts = {
             "ok": True,
             "data": {
@@ -1433,8 +1464,8 @@ class TestCreateTag:
             confirmation_token=preview["confirmationToken"],
         )
         assert out["ok"] is True
-        mock_oe_client.post.assert_called_once()
-        body = mock_oe_client.post.call_args.kwargs.get("body") or {}
+        assert any(call.args[0] == MCP_PATH_TAGS for call in mock_oe_client.post.call_args_list)
+        body = _tags_post_body(mock_oe_client)
         assert body.get("tagName") == "OpenChild"
         assert body.get("parentTagId") is None
         desc = body.get("description") or ""
@@ -1444,10 +1475,13 @@ class TestCreateTag:
     async def test_secure_create_auto_description_when_omitted(
         self, mock_oe_client: AsyncMock
     ) -> None:
-        mock_oe_client.post.return_value = {
-            "ok": True,
-            "data": {"tagId": 50, "tagName": "Pouse", "masterTagId": 1031},
-        }
+        mock_oe_client.post.side_effect = _route_create_tag_posts(
+            {"ok": True, "data": {"tagId": 50, "tagName": "Pouse", "masterTagId": 1031}},
+            lookup={
+                "ok": True,
+                "data": {"tags": {"objectId": 50, "objectName": "Pouse"}},
+            },
+        )
         secure_opts = {
             "ok": True,
             "data": {
@@ -1470,11 +1504,6 @@ class TestCreateTag:
         async def secure_get(path: str, **kwargs: object) -> dict[str, object]:
             if path == MCP_PATH_TAGS_PARENT_OPTIONS:
                 return parent_opts
-            if path == MCP_PATH_ASSET_EXPLORER:
-                return {
-                    "ok": True,
-                    "data": {"tags": {"objectId": 50, "objectName": "Pouse"}},
-                }
             return secure_opts
 
         mock_oe_client.get.side_effect = secure_get
@@ -1505,7 +1534,7 @@ class TestCreateTag:
             confirmation_token=preview["confirmationToken"],
         )
         assert out["ok"] is True
-        body = mock_oe_client.post.call_args.kwargs.get("body") or {}
+        body = _tags_post_body(mock_oe_client)
         desc = body.get("description") or ""
         assert "Pouse" in desc
         assert "Savings Accounts" in desc

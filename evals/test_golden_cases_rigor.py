@@ -17,6 +17,13 @@ from evals.golden_cases import (  # noqa: E402
     _GOVERNED_WRITE_POST_BODY,
     golden_governed_write_confirm_two_step,
     golden_mcp_use_asset_details_after_shortlist,
+    golden_mcp_use_catalog_created_date_filter,
+    golden_mcp_use_catalog_dq_range_filter,
+    golden_mcp_use_catalog_filters_only,
+    golden_mcp_use_catalog_popularity_min_filter,
+    golden_mcp_use_catalog_rating_min_filter,
+    golden_mcp_use_catalog_rating_more_than_filter,
+    golden_mcp_use_catalog_search,
     golden_mcp_use_knowledge_not_catalog_for_policy,
     golden_mcp_use_open_catalog_search,
     golden_multi_turn_explore_details_lineage,
@@ -82,6 +89,102 @@ def _hit_ids(tool_call: MCPToolCall) -> set[int]:
     payload = _structured_result(tool_call)
     hits = payload.get("items") or payload.get("results") or []
     return {h["objectId"] for h in hits if isinstance(h, dict) and "objectId" in h}
+
+
+def test_catalog_search_golden_passes_nested_certification_filter() -> None:
+    """Certified-tables prompt must put certification on nested filters, not search_terms."""
+    case = golden_mcp_use_catalog_search()
+    explorer = next(c for c in (case.mcp_tools_called or []) if c.name == TOOL_ASSET_EXPLORER)
+    args = explorer.args
+    filters = args.get("filters")
+    assert isinstance(filters, dict)
+    assert filters.get("certification") == ["certified"]
+    assert args.get("search_terms") == ["customer", "revenue"]
+    assert args.get("object_type") == "oetable"
+
+
+def test_catalog_filters_only_golden_omits_search_terms_and_glossary() -> None:
+    """Facet-only discovery is POST nested filters, not keyword or glossary lookup."""
+    case = golden_mcp_use_catalog_filters_only()
+    explorer = next(c for c in (case.mcp_tools_called or []) if c.name == TOOL_ASSET_EXPLORER)
+    args = explorer.args
+    assert "search_terms" not in args
+    assert "name" not in args
+    assert "glossary_placement" not in args
+    filters = args.get("filters")
+    assert isinstance(filters, dict)
+    assert filters.get("certification") == ["certified"]
+    assert filters.get("tableType") == ["VIEW"]
+    assert args.get("object_type") == "oetable"
+
+
+def test_catalog_dq_range_filter_golden_uses_nested_range() -> None:
+    """DQ score + parent table belong on nested filters, not flattened FastMCP fields."""
+    case = golden_mcp_use_catalog_dq_range_filter()
+    explorer = next(c for c in (case.mcp_tools_called or []) if c.name == TOOL_ASSET_EXPLORER)
+    args = explorer.args
+    assert "object_type" not in args
+    filters = args.get("filters")
+    assert isinstance(filters, dict)
+    assert filters.get("tableName") == ["CUSTOMER"]
+    dq = filters.get("dqIndex")
+    assert isinstance(dq, dict)
+    assert dq.get("min") == 80
+    assert "max" not in dq
+
+
+def test_catalog_rating_min_filter_golden_omits_invented_max() -> None:
+    """Star rating lower bound only — do not invent rating max 5."""
+    case = golden_mcp_use_catalog_rating_min_filter()
+    explorer = next(c for c in (case.mcp_tools_called or []) if c.name == TOOL_ASSET_EXPLORER)
+    args = explorer.args
+    assert args.get("object_type") == "oetable"
+    filters = args.get("filters")
+    assert isinstance(filters, dict)
+    rating = filters.get("rating")
+    assert isinstance(rating, dict)
+    assert rating.get("min") == 4
+    assert "max" not in rating
+    assert "more than" not in (case.input or "").lower()
+
+
+def test_catalog_rating_more_than_filter_golden_uses_min_just_above() -> None:
+    """'More than 4' is exclusive — inclusive min just above 4, no invented max."""
+    case = golden_mcp_use_catalog_rating_more_than_filter()
+    explorer = next(c for c in (case.mcp_tools_called or []) if c.name == TOOL_ASSET_EXPLORER)
+    args = explorer.args
+    assert args.get("object_type") == "oetable"
+    filters = args.get("filters")
+    assert isinstance(filters, dict)
+    rating = filters.get("rating")
+    assert isinstance(rating, dict)
+    assert rating.get("min") == 4.01
+    assert "max" not in rating
+    assert rating.get("min") != 4
+
+
+def test_catalog_popularity_min_filter_golden_omits_invented_max() -> None:
+    """Popularity lower bound only — do not invent an upper bound."""
+    case = golden_mcp_use_catalog_popularity_min_filter()
+    explorer = next(c for c in (case.mcp_tools_called or []) if c.name == TOOL_ASSET_EXPLORER)
+    args = explorer.args
+    assert args.get("object_type") == "oetable"
+    popularity = args.get("filters", {}).get("popularity")
+    assert isinstance(popularity, dict)
+    assert popularity.get("min") == 70
+    assert "max" not in popularity
+
+
+def test_catalog_created_date_filter_golden_uses_from_to() -> None:
+    """createdDate uses from/to ISO dates, not min/max."""
+    case = golden_mcp_use_catalog_created_date_filter()
+    explorer = next(c for c in (case.mcp_tools_called or []) if c.name == TOOL_ASSET_EXPLORER)
+    created = explorer.args.get("filters", {}).get("createdDate")
+    assert isinstance(created, dict)
+    assert created.get("from") == "2024-01-01"
+    assert created.get("to") == "2024-12-31"
+    assert "min" not in created
+    assert "max" not in created
 
 
 def test_open_catalog_search_golden_omits_object_type() -> None:

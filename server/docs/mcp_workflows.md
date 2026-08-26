@@ -73,15 +73,25 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 
 ## Asset explorer (`asset_explorer`)
 
+Backend: **POST** `/api/v1/mcp/asset-explorer`. Tool args map to a JSON body (`search`, `glossaryPlacement`, `filters`). OvalEdge accepts an empty `{}`; this tool always sends `search.page` and `search.limit` (defaults 1 and 20).
+
 Extended parameter patterns (tool description keeps a short summary; use this section when disambiguating filters):
 
 | User intent | Suggested parameters |
 |-------------|---------------------|
-| Certified tables in a schema | `object_type=oetable`, `schema_name`, optional `search_terms` |
+| Certified tables in a schema | `object_type=oetable`, `schema_name`, `filters={"certification":["certified"]}` |
+| Views only | `object_type=oetable`, `filters={"tableType":["VIEW"]}` |
+| DQ score at least N | `filters={"dqIndex":{"min":80}}` — omit `max`; scale 0–100, inclusive |
+| Closed DQ band | `filters={"dqIndex":{"min":80,"max":100}}` only when the user named both ends |
+| Tables rated at least 4 | `object_type=oetable`, `filters={"rating":{"min":4}}` — omit `max`; 1–5 stars, inclusive. Do not invent `max:5` |
+| Tables rated more than 4 | `object_type=oetable`, `filters={"rating":{"min":4.01}}` — inclusive min just above 4 (no exclusive `gt`). Omit `max`. Do not use `{min:4}` (that includes 4-star) |
+| Tables rated at most 3 | `object_type=oetable`, `filters={"rating":{"max":3}}` — omit `min` |
+| Popularity at least N | `filters={"popularity":{"min":70}}` — omit `max` |
+| Created between two dates | `filters={"createdDate":{"from":"2024-01-01","to":"2024-12-31"}}` ISO dates; omit `from` or `to` if the user did not name that end |
 | Assets by connector technology | `server_type` (e.g. mysql, snowflake, tableau) + `context_query` |
 | Data products | `data_products=[...]`, `context_query` |
 | Custom field values | `custom_fields=[...]` or `search_terms` fallback |
-| Data Domains (not glossary Global Domain) | `object_type=dp_domain` alone — do not combine with other types |
+| Data Domains (not glossary Global Domain) | `object_type=dp_domain` alone — do not combine with other types; or `filters.dataDomains` names |
 | Report Groups | `object_type=oedomain` alone — do not combine with other types |
 | PII / classification | `classifications=["PII"]`, `context_query` |
 | Assets by exact tag name | `tags=["Customer and Sales"]` — exact tag name (case-insensitive), not FQN/description contains |
@@ -89,6 +99,10 @@ Extended parameter patterns (tool description keeps a short summary; use this se
 | Glossary terms in placement | `object_type=glossary`, `domain_name`, optional `category_name` |
 | Assets linked to domain terms | `object_type=oetable`, `domain_name` |
 | CDE columns | `object_type=oecolumn`, `critical_data_element=["Yes"]` → then `dq_rule_advisor` step=assess |
+
+**Nested `filters` (new facets):** `tableName`, `folder`, `reportGroup`, `apiGroup`, `dataDomains`, `governanceRole4`, `governanceRole5`, `governanceRole6`, `tableType`, `reportType`, `reportLevel`, `termStatus`, `ticketStatus`, `subscriptionMode`, `criticality`, `sensitivity`, `deliveryAccessMode`, `certification`, `questionWalls`, ranges `dqIndex` / `popularity` / `rating` / `curationScore`, `createdDate` `{from,to}` ISO dates. Do not duplicate keys already passed as top-level args; if both are set, **top-level wins**.
+
+**Range filters:** pass `{min}`, `{max}`, or `{min,max}`. Bounds are **inclusive**. Omit any bound the user did not specify — do not fill a scale ceiling (`rating` max 5, `dqIndex` max 100) unless they asked for an upper limit. “At least N” → `{min:N}`; “at most N” → `{max:N}`; “more than N” / “greater than N” → inclusive `min` just above N (e.g. rating `{"min":4.01}`). `createdDate` uses `{from,to}` ISO dates, not min/max. Scales: `dqIndex` 0–100, `rating` 1–5 stars; `popularity` / `curationScore` as OvalEdge returns them. There is no exclusive `gt`/`lt` operator.
 
 **Glossary placement:** `domain_id` or `domain_name` (required), plus optional category/subcategory. With `object_type=glossary`, returns terms in that placement; without `object_type`, returns catalog assets linked to terms there.
 

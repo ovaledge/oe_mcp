@@ -296,6 +296,8 @@ class TestDiscoveryPromptsOpenCatalogSearch:
         assert "find related assets" in text
         assert "omit object_type" in text
         assert TOOL_ASSET_DETAILS in text
+        assert "nested filters" in text
+        assert "docs://ovaledge/mcp_workflows" in text
         assert "blanket" not in text
 
     async def test_find_related_assets_starts_with_open_catalog_search(self) -> None:

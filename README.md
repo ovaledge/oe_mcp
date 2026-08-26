@@ -40,7 +40,7 @@ Optional OpenTelemetry trace export to [Phoenix](https://arize.com/docs/phoenix)
 
 ## What this server provides
 
-- Catalog search and asset details (`asset_explorer`, `asset_details`) — paginate with `page` when results exceed one page
+- Catalog search and asset details (`asset_explorer`, `asset_details`) — paginate with `page` when results exceed one page. `asset_explorer` maps to **POST** `/api/v1/mcp/asset-explorer` (never GET); extra global-search facets go on nested `filters` (certification, `tableType`, `dqIndex` / `rating` / `popularity` ranges, `createdDate` `{from,to}`, …). Open-ended ranges pass only `min` or only `max`. “More than N” uses inclusive `min` just above N. Filter-only calls (no `search_terms`) are valid. See [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md#asset-explorer-asset_explorer).
 - Column profile, entity relationships, lineage, metadata drift (`metadata_changes_between_crawls`)
 - Glossary/tag search and guided creation (`asset_explorer`, `create_glossary_term`, `create_tag`)
 - **Knowledge search** for organizational stories and product documentation (`knowledge_search`)
@@ -159,7 +159,7 @@ Skip CodeQL for a single commit with `CODEQL_SKIP=1`, or set `CODEQL_REQUIRED=0`
 
 See `.pre-commit-config.yaml` for hook definitions.
 
-Optional LLM-level MCP checks: `poetry install --with eval`, then see [evals/README.md](evals/README.md).
+Optional LLM-level MCP checks: `poetry install --with eval`, then see [evals/README.md](evals/README.md) (includes POST `asset_explorer` goldens for nested `filters`).
 
 **Contributors (Cursor):** optional [CodeGraph](docs/contributing/CODEGRAPH.md) index for faster structural navigation (`codegraph init -i` from repo root).
 

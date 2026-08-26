@@ -231,6 +231,18 @@ def register(mcp: FastMCP) -> None:
                 default=False,
             ),
         ] = False,
+        filters: Annotated[
+            dict[str, Any] | None,
+            Field(
+                description=(
+                    "Extra catalog facets (tableType, certification, ranges). "
+                    "Open-ended ranges: min or max only — do not invent the other bound. "
+                    "More than N uses min just above N. Top-level args win if both set. "
+                    "See docs://ovaledge/mcp_workflows."
+                ),
+                default=None,
+            ),
+        ] = None,
     ) -> dict[str, Any]:
         """Find data assets related to a business question (catalog search)."""
         return await _invoke_asset_explorer(
@@ -261,6 +273,7 @@ def register(mcp: FastMCP) -> None:
             name=name,
             include_parent=include_parent,
             include_children=include_children,
+            filters=filters,
         )
 
     @mcp.tool(title="View asset details", description=_DESC_ASSET_DETAILS, annotations=READ_ONLY)

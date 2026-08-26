@@ -39,7 +39,7 @@ class TestMcpClientTools:
         mcp_client: FastMCP,
         mock_oe_client: AsyncMock,
     ) -> None:
-        mock_oe_client.get.return_value = MOCK_SEARCH_RESPONSE
+        mock_oe_client.post.return_value = MOCK_SEARCH_RESPONSE
         async with Client(mcp_client) as client:
             result = await client.call_tool(
                 "asset_explorer",

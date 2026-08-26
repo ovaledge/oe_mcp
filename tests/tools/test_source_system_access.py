@@ -348,8 +348,8 @@ class TestGetSourceSystemAccess:
     async def test_unsupported_source_system_continues_with_catalog_access(
         self, mock_oe_client: AsyncMock
     ) -> None:
+        mock_oe_client.post.return_value = {"ok": True, "data": {"items": []}}
         mock_oe_client.get.side_effect = [
-            {"ok": True, "data": {"items": []}},
             OvalEdgeError(
                 400,
                 "Connector type postgres is not supported for native DAM access. "
@@ -383,19 +383,19 @@ class TestGetSourceSystemAccess:
     async def test_unsupported_source_system_fallback_uses_resolved_object_id(
         self, mock_oe_client: AsyncMock
     ) -> None:
-        mock_oe_client.get.side_effect = [
-            {
-                "ok": True,
-                "data": {
-                    "items": [
-                        {
-                            "objectId": 42,
-                            "objectType": "oetable",
-                            "fullyQualifiedName": "prod.public.orders",
-                        }
-                    ]
-                },
+        mock_oe_client.post.return_value = {
+            "ok": True,
+            "data": {
+                "items": [
+                    {
+                        "objectId": 42,
+                        "objectType": "oetable",
+                        "fullyQualifiedName": "prod.public.orders",
+                    }
+                ]
             },
+        }
+        mock_oe_client.get.side_effect = [
             {
                 "ok": True,
                 "data": {
@@ -442,24 +442,24 @@ class TestGetSourceSystemAccess:
     async def test_unsupported_source_system_fallback_covers_all_resolved_paths(
         self, mock_oe_client: AsyncMock
     ) -> None:
-        mock_oe_client.get.side_effect = [
-            {
-                "ok": True,
-                "data": {
-                    "items": [
-                        {
-                            "objectId": 1,
-                            "objectType": "oeschema",
-                            "fullyQualifiedName": "DB.SCHEMA_A",
-                        },
-                        {
-                            "objectId": 2,
-                            "objectType": "oeschema",
-                            "fullyQualifiedName": "DB.SCHEMA_B",
-                        },
-                    ]
-                },
+        mock_oe_client.post.return_value = {
+            "ok": True,
+            "data": {
+                "items": [
+                    {
+                        "objectId": 1,
+                        "objectType": "oeschema",
+                        "fullyQualifiedName": "DB.SCHEMA_A",
+                    },
+                    {
+                        "objectId": 2,
+                        "objectType": "oeschema",
+                        "fullyQualifiedName": "DB.SCHEMA_B",
+                    },
+                ]
             },
+        }
+        mock_oe_client.get.side_effect = [
             {
                 "ok": True,
                 "data": {
@@ -544,8 +544,8 @@ class TestGetSourceSystemAccess:
     async def test_unsupported_source_system_does_not_fallback_user_to_objects(
         self, mock_oe_client: AsyncMock
     ) -> None:
+        mock_oe_client.post.return_value = {"ok": True, "data": {"items": []}}
         mock_oe_client.get.side_effect = [
-            {"ok": True, "data": {"items": []}},
             OvalEdgeError(
                 400,
                 "Connector type postgres is not supported for native DAM access. "
@@ -694,8 +694,8 @@ class TestGetSourceSystemAccess:
             })
 
     async def test_oval_edge_error(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.return_value = {"ok": True, "data": {"items": []}}
         mock_oe_client.get.side_effect = [
-            {"ok": True, "data": {"items": []}},
             OvalEdgeError(
                 404,
                 "username not found in harvested metadata",

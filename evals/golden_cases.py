@@ -103,18 +103,20 @@ def golden_mcp_use_catalog_search() -> LLMTestCase:
         actual_output=(
             "I used asset_explorer (not knowledge_search or platform docs) because "
             "you asked for certified physical tables. I passed search_terms "
-            "['customer', 'revenue'], object_type=oetable, and context_query with your "
-            "full sentence for semantic ranking. I did not call asset_details yet "
+            "['customer', 'revenue'], object_type=oetable, filters.certification="
+            "['certified'], and context_query with your full sentence for semantic "
+            "ranking. I did not call asset_details yet "
             "because search was the correct first step to discover candidates."
         ),
         mcp_servers=[srv],
         mcp_tools_called=[
             MCPToolCall(
-                name="asset_explorer",
+                name=TOOL_ASSET_EXPLORER,
                 args={
                     "search_terms": ["customer", "revenue"],
                     "object_type": "oetable",
                     "context_query": "Find certified tables for customer revenue reporting.",
+                    "filters": {"certification": ["certified"]},
                 },
                 result=tool_call_result(
                     {
@@ -148,7 +150,7 @@ def golden_task_completion_discovery() -> ConversationalTestCase:
                 content="Searching the catalog for payroll-related tables.",
                 mcp_tools_called=[
                     MCPToolCall(
-                        name="asset_explorer",
+                        name=TOOL_ASSET_EXPLORER,
                         args={"search_terms": ["payroll"], "object_type": "oetable"},
                         result=tool_call_result(
                             {
@@ -188,7 +190,7 @@ def golden_multi_turn_lineage_followup() -> ConversationalTestCase:
                 content="Running catalog search for customer transaction tables.",
                 mcp_tools_called=[
                     MCPToolCall(
-                        name="asset_explorer",
+                        name=TOOL_ASSET_EXPLORER,
                         args={
                             "search_terms": ["customer", "transactions"],
                             "object_type": "oetable",
@@ -382,6 +384,253 @@ def golden_multi_turn_explore_details_lineage() -> ConversationalTestCase:
     )
 
 
+def golden_mcp_use_catalog_filters_only() -> LLMTestCase:
+    """Filter-only catalog search: nested filters, no search_terms (POST body)."""
+    srv = ovaledge_eval_mcp_server(
+        tool_names=frozenset({TOOL_ASSET_EXPLORER, TOOL_ASSET_DETAILS}),
+    )
+    return LLMTestCase(
+        name="mcp_use_catalog_filters_only",
+        input="Show certified database views.",
+        actual_output=(
+            "I called asset_explorer with object_type=oetable and nested filters "
+            "certification=['certified'] and tableType=['VIEW']. I omitted search_terms "
+            "because you asked to facet the catalog, not to keyword-search. Backend is "
+            "POST /api/v1/mcp/asset-explorer. I did not use glossary/tag lookup mode "
+            "and did not call access_explorer."
+        ),
+        mcp_servers=[srv],
+        mcp_tools_called=[
+            MCPToolCall(
+                name=TOOL_ASSET_EXPLORER,
+                args={
+                    "object_type": "oetable",
+                    "filters": {
+                        "certification": ["certified"],
+                        "tableType": ["VIEW"],
+                    },
+                },
+                result=tool_call_result(
+                    {
+                        "total": 1,
+                        "items": [
+                            {
+                                "objectId": 77,
+                                "objectType": "oetable",
+                                "objectName": "v_customer",
+                            }
+                        ],
+                    }
+                ),
+            ),
+        ],
+    )
+
+
+def golden_mcp_use_catalog_dq_range_filter() -> LLMTestCase:
+    """Range + parent-table facets go on nested filters (dqIndex, tableName)."""
+    srv = ovaledge_eval_mcp_server(
+        tool_names=frozenset({TOOL_ASSET_EXPLORER, TOOL_ASSET_DETAILS}),
+    )
+    return LLMTestCase(
+        name="mcp_use_catalog_dq_range_filter",
+        input="Which CUSTOMER tables have a data-quality index of at least 80?",
+        actual_output=(
+            "I called asset_explorer with nested filters tableName=['CUSTOMER'] and "
+            "dqIndex={min:80} rather than stuffing those into search_terms. "
+            "I omitted max — 'at least 80' is open-ended; I did not invent dqIndex max 100. "
+            "Top-level search_terms stay for keywords; extra global-search facets use "
+            "filters. I left object_type unset so columns and tables can both match."
+        ),
+        mcp_servers=[srv],
+        mcp_tools_called=[
+            MCPToolCall(
+                name=TOOL_ASSET_EXPLORER,
+                args={
+                    "filters": {
+                        "tableName": ["CUSTOMER"],
+                        "dqIndex": {"min": 80},
+                    },
+                },
+                result=tool_call_result(
+                    {
+                        "total": 2,
+                        "items": [
+                            {
+                                "objectId": 11,
+                                "objectType": "oetable",
+                                "objectName": "CUSTOMER",
+                            },
+                            {
+                                "objectId": 12,
+                                "objectType": "oecolumn",
+                                "objectName": "CUSTOMER_ID",
+                            },
+                        ],
+                    }
+                ),
+            ),
+        ],
+    )
+
+
+def golden_mcp_use_catalog_rating_min_filter() -> LLMTestCase:
+    """Open-ended star rating: nested rating.min only for 'at least 4' — do not invent max=5."""
+    srv = ovaledge_eval_mcp_server(
+        tool_names=frozenset({TOOL_ASSET_EXPLORER, TOOL_ASSET_DETAILS}),
+    )
+    return LLMTestCase(
+        name="mcp_use_catalog_rating_min_filter",
+        input="Find tables rated at least 4.",
+        actual_output=(
+            "I called asset_explorer with object_type=oetable and nested filters "
+            "rating={min:4} only. Catalog rating is 1–5 stars and min is inclusive, "
+            "so at least 4 is min:4. I did not set max:5 — you did not ask for an "
+            "upper bound. I did not put the rating into search_terms."
+        ),
+        mcp_servers=[srv],
+        mcp_tools_called=[
+            MCPToolCall(
+                name=TOOL_ASSET_EXPLORER,
+                args={
+                    "object_type": "oetable",
+                    "filters": {"rating": {"min": 4}},
+                },
+                result=tool_call_result(
+                    {
+                        "total": 1,
+                        "items": [
+                            {
+                                "objectId": 23592,
+                                "objectType": "oetable",
+                                "objectName": "Customer",
+                            }
+                        ],
+                    }
+                ),
+            ),
+        ],
+    )
+
+
+def golden_mcp_use_catalog_rating_more_than_filter() -> LLMTestCase:
+    """Exclusive 'more than 4' uses inclusive min just above 4 — not min:4 and not max:5."""
+    srv = ovaledge_eval_mcp_server(
+        tool_names=frozenset({TOOL_ASSET_EXPLORER, TOOL_ASSET_DETAILS}),
+    )
+    return LLMTestCase(
+        name="mcp_use_catalog_rating_more_than_filter",
+        input="Find tables whose rating is more than 4.",
+        actual_output=(
+            "I called asset_explorer with object_type=oetable and nested filters "
+            "rating={min:4.01} because more than 4 is exclusive and min is inclusive. "
+            "I did not use min:4 (that would include 4-star tables). I omitted max "
+            "rather than inventing a 5-star ceiling. I did not put the rating into "
+            "search_terms."
+        ),
+        mcp_servers=[srv],
+        mcp_tools_called=[
+            MCPToolCall(
+                name=TOOL_ASSET_EXPLORER,
+                args={
+                    "object_type": "oetable",
+                    "filters": {"rating": {"min": 4.01}},
+                },
+                result=tool_call_result(
+                    {
+                        "total": 1,
+                        "items": [
+                            {
+                                "objectId": 23592,
+                                "objectType": "oetable",
+                                "objectName": "Customer",
+                            }
+                        ],
+                    }
+                ),
+            ),
+        ],
+    )
+
+
+def golden_mcp_use_catalog_popularity_min_filter() -> LLMTestCase:
+    """Open-ended popularity: nested popularity.min only — do not invent an upper bound."""
+    srv = ovaledge_eval_mcp_server(
+        tool_names=frozenset({TOOL_ASSET_EXPLORER, TOOL_ASSET_DETAILS}),
+    )
+    return LLMTestCase(
+        name="mcp_use_catalog_popularity_min_filter",
+        input="Find tables with popularity of at least 70.",
+        actual_output=(
+            "I called asset_explorer with object_type=oetable and nested filters "
+            "popularity={min:70} only. I omitted max — at least 70 is open-ended. "
+            "I did not put popularity into search_terms."
+        ),
+        mcp_servers=[srv],
+        mcp_tools_called=[
+            MCPToolCall(
+                name=TOOL_ASSET_EXPLORER,
+                args={
+                    "object_type": "oetable",
+                    "filters": {"popularity": {"min": 70}},
+                },
+                result=tool_call_result(
+                    {
+                        "total": 1,
+                        "items": [
+                            {
+                                "objectId": 88,
+                                "objectType": "oetable",
+                                "objectName": "orders_fact",
+                            }
+                        ],
+                    }
+                ),
+            ),
+        ],
+    )
+
+
+def golden_mcp_use_catalog_created_date_filter() -> LLMTestCase:
+    """createdDate uses from/to ISO dates on nested filters, not min/max."""
+    srv = ovaledge_eval_mcp_server(
+        tool_names=frozenset({TOOL_ASSET_EXPLORER, TOOL_ASSET_DETAILS}),
+    )
+    return LLMTestCase(
+        name="mcp_use_catalog_created_date_filter",
+        input="Find tables created between 2024-01-01 and 2024-12-31.",
+        actual_output=(
+            "I called asset_explorer with object_type=oetable and nested filters "
+            "createdDate={from:2024-01-01, to:2024-12-31}. createdDate uses from/to "
+            "ISO dates, not min/max. I did not put the dates into search_terms."
+        ),
+        mcp_servers=[srv],
+        mcp_tools_called=[
+            MCPToolCall(
+                name=TOOL_ASSET_EXPLORER,
+                args={
+                    "object_type": "oetable",
+                    "filters": {
+                        "createdDate": {"from": "2024-01-01", "to": "2024-12-31"},
+                    },
+                },
+                result=tool_call_result(
+                    {
+                        "total": 1,
+                        "items": [
+                            {
+                                "objectId": 91,
+                                "objectType": "oetable",
+                                "objectName": "new_customers",
+                            }
+                        ],
+                    }
+                ),
+            ),
+        ],
+    )
+
+
 def golden_mcp_use_open_catalog_search() -> LLMTestCase:
     """Single-turn: a question that names no asset type must not be narrowed to tables."""
     srv = ovaledge_eval_mcp_server(
@@ -560,7 +809,7 @@ def golden_mcp_use_prompt_workflow() -> LLMTestCase:
         ],
         mcp_tools_called=[
             MCPToolCall(
-                name="asset_explorer",
+                name=TOOL_ASSET_EXPLORER,
                 args={
                     "search_terms": ["churn", "metrics"],
                     "object_type": "oetable",
@@ -1091,6 +1340,12 @@ def all_mcp_use_golden_fns() -> list[str]:
     """Names of single-turn LLMTestCase goldens for MCPUseMetric."""
     return [
         "golden_mcp_use_catalog_search",
+        "golden_mcp_use_catalog_filters_only",
+        "golden_mcp_use_catalog_dq_range_filter",
+        "golden_mcp_use_catalog_rating_min_filter",
+        "golden_mcp_use_catalog_rating_more_than_filter",
+        "golden_mcp_use_catalog_popularity_min_filter",
+        "golden_mcp_use_catalog_created_date_filter",
         "golden_mcp_use_open_catalog_search",
         "golden_mcp_use_asset_details_after_shortlist",
         "golden_mcp_use_knowledge_not_catalog_for_policy",
@@ -1131,6 +1386,12 @@ __all__ = [
     "all_multi_turn_mcp_use_golden_fns",
     "golden_governed_write_confirm_two_step",
     "golden_mcp_use_asset_details_after_shortlist",
+    "golden_mcp_use_catalog_dq_range_filter",
+    "golden_mcp_use_catalog_rating_min_filter",
+    "golden_mcp_use_catalog_rating_more_than_filter",
+    "golden_mcp_use_catalog_popularity_min_filter",
+    "golden_mcp_use_catalog_created_date_filter",
+    "golden_mcp_use_catalog_filters_only",
     "golden_mcp_use_catalog_object_access",
     "golden_mcp_use_catalog_search",
     "golden_mcp_use_datastory",

@@ -13,15 +13,6 @@ from server.constants import (
     MCP_PATH_METADATA_CHANGES_BETWEEN_CRAWLS,
     MCP_PATH_UPDATE_ASSET_DESCRIPTIONS,
     MCP_PATH_UPDATE_CDE_ASSOCIATIONS,
-    MCP_SEARCH_CATALOG_MAX_LIMIT,
-    MCP_SEARCH_CATEGORY_ID_PARAM,
-    MCP_SEARCH_CATEGORY_NAME_PARAM,
-    MCP_SEARCH_CONTEXT_QUERY_PARAM,
-    MCP_SEARCH_DOMAIN_ID_PARAM,
-    MCP_SEARCH_DOMAIN_NAME_PARAM,
-    MCP_SEARCH_SERVER_TYPE_PARAM,
-    MCP_SEARCH_SUBCATEGORY_ID_PARAM,
-    MCP_SEARCH_SUBCATEGORY_NAME_PARAM,
 )
 from server.tools.catalog.cde_helpers import (
     build_update_cde_body,
@@ -32,7 +23,7 @@ from server.tools.catalog.cde_helpers import (
 from server.tools.catalog.formatters import _enhance_metadata_changes_response
 from server.tools.catalog.helpers import (
     _TABLE_FILE_TYPES,
-    _apply_lexical_search_params,
+    _build_asset_explorer_body,
     _build_update_descriptions_body,
     _description_field_hint,
     _enrich_asset_explorer_response,
@@ -45,7 +36,7 @@ from server.tools.catalog.helpers import (
     _validate_description_inputs,
 )
 from server.tools.common import drop_none as _q
-from server.tools.common import map_ovaledge_error, ovaledge_client, strip_or_none
+from server.tools.common import map_ovaledge_error, ovaledge_client
 from server.tools.common.confirm_gate import verify_write_confirmation
 from server.tools.common.tool_logging import logged_tool_invocation
 
@@ -79,8 +70,9 @@ async def _invoke_asset_explorer(
     name: str | None = None,
     include_parent: bool = False,
     include_children: bool = False,
+    filters: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """GET asset-explorer — find related catalog assets; omit object_type unless inferred."""
+    """POST asset-explorer — find related catalog assets; omit object_type unless inferred."""
     if object_type is not None and object_type not in MCP_CATALOG_OBJECT_TYPES:
         return {
             "error": (
@@ -99,38 +91,7 @@ async def _invoke_asset_explorer(
             "status_code": 400,
         }
     try:
-        params: dict[str, object] = _q(
-            **{MCP_SEARCH_CONTEXT_QUERY_PARAM: context_query},
-            page=max(page, 1),
-            limit=min(max(limit, 1), MCP_SEARCH_CATALOG_MAX_LIMIT),
-            connectionName=connection_name,
-            **{MCP_SEARCH_SERVER_TYPE_PARAM: resolved_server_type},
-            schemaName=schema_name,
-            owner=owner,
-            steward=steward,
-            custodian=custodian,
-            objectType=object_type,
-            objectId=object_id if object_id is not None and object_id > 0 else None,
-            name=strip_or_none(name),
-            includeParent=True if include_parent else None,
-            includeChildren=True if include_children else None,
-            **{
-                MCP_SEARCH_DOMAIN_ID_PARAM: domain_id
-                if domain_id is not None and domain_id > 0
-                else None,
-                MCP_SEARCH_DOMAIN_NAME_PARAM: strip_or_none(domain_name),
-                MCP_SEARCH_CATEGORY_ID_PARAM: category_id
-                if category_id is not None and category_id > 0
-                else None,
-                MCP_SEARCH_CATEGORY_NAME_PARAM: strip_or_none(category_name),
-                MCP_SEARCH_SUBCATEGORY_ID_PARAM: subcategory_id
-                if subcategory_id is not None and subcategory_id > 0
-                else None,
-                MCP_SEARCH_SUBCATEGORY_NAME_PARAM: strip_or_none(subcategory_name),
-            },
-        )
-        _apply_lexical_search_params(
-            params,
+        payload = _build_asset_explorer_body(
             search_terms=search_terms,
             tags=tags,
             terms=terms,
@@ -138,9 +99,30 @@ async def _invoke_asset_explorer(
             data_products=data_products,
             classifications=classifications,
             critical_data_element=critical_data_element,
+            context_query=context_query,
+            page=page,
+            limit=limit,
+            connection_name=connection_name,
+            resolved_server_type=resolved_server_type,
+            schema_name=schema_name,
+            owner=owner,
+            steward=steward,
+            custodian=custodian,
+            object_type=object_type,
+            domain_id=domain_id,
+            domain_name=domain_name,
+            category_id=category_id,
+            category_name=category_name,
+            subcategory_id=subcategory_id,
+            subcategory_name=subcategory_name,
+            object_id=object_id,
+            name=name,
+            include_parent=include_parent,
+            include_children=include_children,
+            filters=filters,
         )
         async with ovaledge_client() as client:
-            body = await client.get(MCP_PATH_ASSET_EXPLORER, params=params)
+            body = await client.post(MCP_PATH_ASSET_EXPLORER, body=payload)
             if not isinstance(body, dict):
                 return {"data": body}
             return _enrich_asset_explorer_response(body)

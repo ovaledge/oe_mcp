@@ -1070,8 +1070,8 @@ def golden_dq_coverage_workflow() -> ConversationalTestCase:
         name="dq_coverage_workflow",
         scenario="Analyst assesses CDE DQ coverage and links rules to columns.",
         expected_outcome=(
-            "Agent runs assess_cde_dq, looks up a rule, previews and confirms association, "
-            "then previews and confirms create_dq_rules when needed."
+            "Agent runs dq_rule_advisor (assess_cde), looks up a rule, previews and confirms "
+            "association, then previews and confirms dq_rule_manager (create_standard) when needed."
         ),
         mcp_servers=[srv],
         turns=[
@@ -1176,7 +1176,7 @@ def golden_dq_coverage_workflow() -> ConversationalTestCase:
             ),
             Turn(
                 role="assistant",
-                content="Previewing create_dq_rules in discover mode.",
+                content="Previewing dq_rule_manager create_standard in discover mode.",
                 mcp_tools_called=[
                     MCPToolCall(
                         name=TOOL_DQ_RULE_MANAGER,
@@ -1199,7 +1199,7 @@ def golden_dq_coverage_workflow() -> ConversationalTestCase:
             Turn(role="user", content="Approved — create rules."),
             Turn(
                 role="assistant",
-                content="POSTing create_dq_rules with preview token.",
+                content="POSTing dq_rule_manager create_standard with preview token.",
                 mcp_tools_called=[
                     MCPToolCall(
                         name=TOOL_DQ_RULE_MANAGER,
@@ -1271,8 +1271,9 @@ def golden_custom_sql_dq_workflow() -> ConversationalTestCase:
         name="custom_sql_dq_workflow",
         scenario="Analyst generates, validates, and creates a custom SQL DQ rule.",
         expected_outcome=(
-            "Agent calls generate_dq_queries, previews and confirms validate_dq_queries, "
-            "then previews and confirms create_sql_dq_rule when validation allows."
+            "Agent calls dq_rule_advisor (generate_query), previews and confirms "
+            "dq_rule_advisor (validate_query), then previews and confirms dq_rule_manager "
+            "(create_custom_sql) when validation allows."
         ),
         mcp_servers=[srv],
         turns=[
@@ -1325,7 +1326,7 @@ def golden_custom_sql_dq_workflow() -> ConversationalTestCase:
             ),
             Turn(
                 role="assistant",
-                content="Previewing validate_dq_queries — no execution yet.",
+                content="Previewing dq_rule_advisor validate_query — no execution yet.",
                 mcp_tools_called=[
                     MCPToolCall(
                         name=TOOL_DQ_RULE_ADVISOR,
@@ -1347,7 +1348,7 @@ def golden_custom_sql_dq_workflow() -> ConversationalTestCase:
             Turn(role="user", content="Approved — run validation."),
             Turn(
                 role="assistant",
-                content="Executing validate_dq_queries with preview token.",
+                content="Executing dq_rule_advisor validate_query with preview token.",
                 mcp_tools_called=[
                     MCPToolCall(
                         name=TOOL_DQ_RULE_ADVISOR,
@@ -1369,7 +1370,7 @@ def golden_custom_sql_dq_workflow() -> ConversationalTestCase:
             ),
             Turn(
                 role="assistant",
-                content="Previewing create_sql_dq_rule.",
+                content="Previewing dq_rule_manager create_custom_sql.",
                 mcp_tools_called=[
                     MCPToolCall(
                         name=TOOL_DQ_RULE_MANAGER,
@@ -1393,7 +1394,7 @@ def golden_custom_sql_dq_workflow() -> ConversationalTestCase:
             Turn(role="user", content="Approved — create the data quality rule."),
             Turn(
                 role="assistant",
-                content="POSTing create_sql_dq_rule with preview token.",
+                content="POSTing dq_rule_manager create_custom_sql with preview token.",
                 mcp_tools_called=[
                     MCPToolCall(
                         name=TOOL_DQ_RULE_MANAGER,
