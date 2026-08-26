@@ -6,7 +6,8 @@ Security fixes are provided for the following release lines:
 
 | Version | Supported |
 | ------- | --------- |
-| 1.0.x   | Yes       |
+| 2.0.x   | Yes       |
+| 1.0.x   | No        |
 | < 1.0   | No        |
 
 The current release is declared in `pyproject.toml` (`[tool.poetry].version`).
