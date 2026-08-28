@@ -216,6 +216,33 @@ class TestAssessCdeDq:
         assert "DESCRIPTION_datalengthrange" in text
         assert "ID 1618" in text
 
+    def test_format_assess_hides_dbt_function_candidates(self) -> None:
+        text = dataquality_helpers.format_assess_cde_dq_response(
+            {
+                "assessedCount": 1,
+                "rows": [
+                    {
+                        "tableColumnName": "CHARTTYPE",
+                        "objectId": 37883,
+                        "objectType": "oecolumn",
+                        "recommendedFunction": "DBT_NOT_NULL",
+                        "recommendedFunctionCandidates": [
+                            {
+                                "functionName": "DBT_NOT_NULL",
+                                "score": 0.9,
+                            },
+                            {
+                                "functionName": "Non-Null Validation",
+                                "score": 0.72,
+                            },
+                        ],
+                    }
+                ],
+            }
+        )
+        assert "DBT_NOT_NULL" not in text
+        assert "Non-Null Validation" in text
+
     def test_format_assess_routes_sql_candidates_only_to_custom_sql_workflow(self) -> None:
         text = dataquality_helpers.format_assess_cde_dq_response(
             {

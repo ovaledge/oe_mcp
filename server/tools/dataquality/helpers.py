@@ -43,7 +43,11 @@ _DQ_RETRY_POLICY = (
 _DQ_OE_FUNCTION_ONLY = (
     "Only use exact recommendedFunction / recommendedFunctionCandidates names "
     "returned by the tool (real OvalEdge dqfunctiondef names). "
-    "Never invent labels such as Max Length Check, Length Check, or similar."
+    "Never invent labels such as Max Length Check, Length Check, or similar. "
+    "Do not recommend or create DBT_* / dbt_* functions — they are not in scope "
+    "for MCP rule creation. Use the table-column catalog name from the tool "
+    "(for example Non-Null Validation on oecolumn), not a file-column *fc variant "
+    "and not legacy internal names."
 )
 
 _DESC_DQ_RULE_ADVISOR = classify_tool_desc(
@@ -295,6 +299,11 @@ def strip_or_none_description_field(value: str | None) -> str | None:
     return trimmed or None
 
 
+def _is_dbt_function_name(name: Any) -> bool:
+    text = str(name or "").strip().lower()
+    return text.startswith("dbt_") or text.startswith("dbt ")
+
+
 def format_assess_cde_dq_response(body: dict[str, Any]) -> str:
     """Human-readable summary highlighting description gaps and function candidates."""
     data = body.get("data") if isinstance(body.get("data"), dict) else body
@@ -337,17 +346,22 @@ def format_assess_cde_dq_response(body: dict[str, Any]) -> str:
                 lines.append(f"  Available custom fields: {', '.join(str(f) for f in fields)}")
         rec_fn = row.get("recommendedFunction")
         workflow = row.get("recommendedWorkflow")
-        if isinstance(rec_fn, str) and rec_fn.strip():
+        if isinstance(rec_fn, str) and rec_fn.strip() and not _is_dbt_function_name(rec_fn):
             wf = f" [{workflow}]" if isinstance(workflow, str) and workflow.strip() else ""
             lines.append(f"  recommendedFunction: `{rec_fn}`{wf}")
         candidates = row.get("recommendedFunctionCandidates")
-        if isinstance(candidates, list) and candidates:
+        visible_candidates = [
+            cand
+            for cand in candidates
+            if isinstance(candidates, list)
+            and isinstance(cand, dict)
+            and not _is_dbt_function_name(cand.get("functionName", ""))
+        ] if isinstance(candidates, list) else []
+        if visible_candidates:
             lines.append(
                 "  recommendedFunctionCandidates (pick one, or exclude to get alternatives):"
             )
-            for cand in candidates[:5]:
-                if not isinstance(cand, dict):
-                    continue
+            for cand in visible_candidates[:5]:
                 cname = cand.get("functionName", "?")
                 score = cand.get("score")
                 reason = cand.get("matchReason", "")
@@ -994,7 +1008,11 @@ def format_generate_dq_queries_response(body: dict[str, Any]) -> dict[str, Any]:
             "workflowPhase": "generate_queries",
             "formattedResponse": "\n".join(lines),
             "data": data,
-            "agentInstruction": "Ask the user to clarify the DQ function name before retrying.",
+            "agentInstruction": (
+                "No OEQUERY function was resolved for custom SQL. "
+                f"Retry {TOOL_DQ_RULE_ADVISOR} step=generate_query once. "
+                "Do not invent a function name. If it still fails, stop and ask the user."
+            ),
         }
     context_lines = _format_sql_context_lines(data)
     if context_lines:
