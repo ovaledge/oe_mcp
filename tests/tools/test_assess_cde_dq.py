@@ -243,6 +243,36 @@ class TestAssessCdeDq:
         assert "DBT_NOT_NULL" not in text
         assert "Non-Null Validation" in text
 
+    def test_format_assess_hides_dbt_function_in_custom_sql_next_step(self) -> None:
+        text = dataquality_helpers.format_assess_cde_dq_response(
+            {
+                "assessedCount": 1,
+                "rows": [
+                    {
+                        "tableColumnName": "CHARTTYPE",
+                        "objectId": 37883,
+                        "objectType": "oecolumn",
+                        "recommendedFunction": "DBT_NOT_NULL",
+                        "recommendedWorkflow": "custom_sql",
+                        "recommendedFunctionCandidates": [
+                            {
+                                "functionName": "DBT_NOT_NULL",
+                                "score": 0.9,
+                            },
+                            {
+                                "functionName": "dbt_unique",
+                                "score": 0.8,
+                            },
+                        ],
+                    }
+                ],
+            }
+        )
+        assert "DBT_NOT_NULL" not in text
+        assert "dbt_unique" not in text
+        assert "use recommendedFunction" not in text
+        assert "generate_query" in text
+
     def test_format_assess_routes_sql_candidates_only_to_custom_sql_workflow(self) -> None:
         text = dataquality_helpers.format_assess_cde_dq_response(
             {

@@ -404,6 +404,7 @@ def format_assess_cde_dq_response(body: dict[str, Any]) -> str:
                 isinstance(rec_fn, str)
                 and rec_fn.strip()
                 and rec_fn.strip().lower() != "not identified"
+                and not _is_dbt_function_name(rec_fn)
             ):
                 lines.append(
                     f"  Next (custom SQL): use recommendedFunction `{rec_fn}` with "
