@@ -201,7 +201,8 @@ class TestGenerateDqQueries:
         dataquality.register(mcp)
         fn = await get_tool_fn(mcp, TOOL_DQ_RULE_ADVISOR)
         out = await fn(step="generate_query", objects=[{"objectId": 101, "objectType": "oecolumn"}])
-        assert "clarify" in out["agentInstruction"].lower()
+        assert "generate_query" in out["agentInstruction"]
+        assert "invent" in out["agentInstruction"].lower()
 
     async def test_generate_oval_edge_error_returns_structured_dict(
         self, mock_oe_client: AsyncMock
