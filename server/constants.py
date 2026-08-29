@@ -653,6 +653,10 @@ MCP_ASSET_EXPLORER_FILTER_KEYS = frozenset(
         "popularity",
         "rating",
         "curationScore",
+        "nullDensity",
+        "density",
+        "rowCount",
+        "columnCount",
         "createdDate",
     }
 )

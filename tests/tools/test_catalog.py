@@ -198,6 +198,10 @@ class TestAssetExplorer:
                 "dqIndex": {"min": 80},
                 "rating": {"min": 4},
                 "popularity": {"min": 70},
+                "nullDensity": {"eq": 6.7},
+                "density": {"min": 10},
+                "rowCount": {"min": 100},
+                "columnCount": {"max": 20},
                 "createdDate": {"from": "2024-01-01", "to": "2024-12-31"},
             }
         )
@@ -207,6 +211,10 @@ class TestAssetExplorer:
         assert filters["dqIndex"] == {"min": 80}
         assert filters["rating"] == {"min": 4}
         assert filters["popularity"] == {"min": 70}
+        assert filters["nullDensity"] == {"eq": 6.7}
+        assert filters["density"] == {"min": 10}
+        assert filters["rowCount"] == {"min": 100}
+        assert filters["columnCount"] == {"max": 20}
         assert filters["createdDate"] == {"from": "2024-01-01", "to": "2024-12-31"}
         assert {
             "certification",
@@ -214,6 +222,10 @@ class TestAssetExplorer:
             "dqIndex",
             "rating",
             "popularity",
+            "nullDensity",
+            "density",
+            "rowCount",
+            "columnCount",
             "createdDate",
         } <= MCP_ASSET_EXPLORER_FILTER_KEYS
 

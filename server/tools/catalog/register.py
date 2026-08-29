@@ -237,8 +237,8 @@ def register(mcp: FastMCP) -> None:
                 description=(
                     "Extra catalog facets (tableType, certification, ranges). "
                     "Open-ended ranges: min or max only — do not invent the other bound. "
-                    "More than N uses min just above N. Top-level args win if both set. "
-                    "See docs://ovaledge/mcp_workflows."
+                    "Exact metric: eq (e.g. nullDensity 6.7%). More than N uses min just "
+                    "above N. Top-level args win if both set. See docs://ovaledge/mcp_workflows."
                 ),
                 default=None,
             ),

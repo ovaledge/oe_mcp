@@ -242,7 +242,7 @@ async def test_explorer_hits_expose_navigation_link(mcp_post) -> None:
 
 
 async def test_explorer_nested_range_filters_are_well_formed(mcp_post) -> None:
-    """POST nested rating/dqIndex/popularity/createdDate filters must not 500."""
+    """POST nested rating/dqIndex/popularity/nullDensity/createdDate filters must not 500."""
     r = await explore(
         mcp_post,
         objectType="oetable",
@@ -250,6 +250,7 @@ async def test_explorer_nested_range_filters_are_well_formed(mcp_post) -> None:
             "rating": {"min": 4.01},
             "dqIndex": {"min": 80},
             "popularity": {"min": 70},
+            "nullDensity": {"eq": 6.7},
             "createdDate": {"from": "2024-01-01", "to": "2024-12-31"},
         },
     )
