@@ -26,6 +26,20 @@ AccessQueryDirection = Literal[
     "user_to_objects",
     "object_to_users",
     "browse",
+    "role_to_users",
+    "group_to_users",
+    "user_to_roles",
+    "user_to_groups",
+    "group_to_roles",
+    "role_to_groups",
+    "role_to_parent_roles",
+    "role_to_privileges",
+    "group_to_privileges",
+    "user_to_privileges",
+    "privilege_to_roles",
+    "privilege_to_groups",
+    "privilege_to_users",
+    "privilege_to_principals",
 ]
 
 
@@ -79,7 +93,13 @@ def register(mcp: FastMCP) -> None:
         ] = None,
         object_name: Annotated[
             str | list[str] | None,
-            Field(description="Catalog asset name or RDAM bare table/report name."),
+            Field(
+                description=(
+                    "Catalog asset name or RDAM bare table/report name. "
+                    "RDAM role_to_users / group_to_users: role or group name when "
+                    "object_path is omitted."
+                ),
+            ),
         ] = None,
         resolve_all_matches: Annotated[
             bool,

@@ -51,6 +51,41 @@ class TestShouldResolveViaAssetExplorer:
             is False
         )
 
+    def test_skips_membership_direction_resolution(self) -> None:
+        assert (
+            should_resolve_via_asset_explorer(
+                "role_to_users",
+                None,
+                None,
+                "SYSADMIN",
+                None,
+                None,
+            )
+            is False
+        )
+        assert (
+            should_resolve_via_asset_explorer(
+                "group_to_users",
+                None,
+                None,
+                "analysts",
+                None,
+                None,
+            )
+            is False
+        )
+        assert (
+            should_resolve_via_asset_explorer(
+                "user_to_roles",
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            is False
+        )
+
 
 class TestCatalogTypeMapping:
     def test_catalog_object_type_for_explorer_maps_rdam(self) -> None:

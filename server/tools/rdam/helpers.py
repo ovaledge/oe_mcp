@@ -13,6 +13,10 @@ from typing import Any
 
 from server.client import OvalEdgeError
 from server.constants import (
+    MCP_MEMBERSHIP_QUERY_DIRECTIONS,
+    MCP_PRIVILEGE_REVERSE_QUERY_DIRECTIONS,
+    MCP_ROLE_NAME_QUERY_DIRECTIONS,
+    MCP_USER_MEMBERSHIP_QUERY_DIRECTIONS,
     MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
     MCP_PATH_ACCESS_EXPLORER,
     MCP_QUERY_DIRECTIONS,
@@ -24,8 +28,12 @@ from server.constants import (
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_OBJECT_TYPE_ERROR,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_SOURCE_ERROR,
     MCP_SOURCE_SYSTEM_DESCENDANTS_CONNECTION_REQUIRED_ERROR,
+    MCP_SOURCE_SYSTEM_GROUP_NAME_REQUIRED_ERROR,
+    MCP_SOURCE_SYSTEM_GROUP_UNSUPPORTED_FOR_SNOWFLAKE_ERROR,
     MCP_SOURCE_SYSTEM_OBJECT_PATH_REQUIRED_ERROR,
     MCP_SOURCE_SYSTEM_OBJECT_TYPE_REQUIRED_ERROR,
+    MCP_SOURCE_SYSTEM_ROLE_NAME_REQUIRED_ERROR,
+    MCP_SOURCE_SYSTEM_PRIVILEGE_NAME_REQUIRED_ERROR,
     MCP_SOURCE_SYSTEM_USERNAME_REQUIRED_ERROR,
     MCP_SOURCE_SYSTEMS,
     MCP_TABLE_SCHEMA_DISCOVERY_EARLY_EXIT_CANDIDATES,
@@ -55,6 +63,38 @@ RDAM_TO_CATALOG_OBJECT_TYPE = {
 _GRANT_SUMMARY_LEVELS = ("database", "schema", "table", "column", "project", "report")
 _GRANT_MECHANISMS = ("direct", "group", "role")
 _FULL_TABLE_PATH_SEGMENTS = 3
+
+
+def is_membership_direction(query_direction: str) -> bool:
+    """True for role/group membership directions (principal or user centric)."""
+    return query_direction.strip().lower() in MCP_MEMBERSHIP_QUERY_DIRECTIONS
+
+
+def is_user_membership_direction(query_direction: str) -> bool:
+    """True for user_to_roles / user_to_groups / user_to_privileges."""
+    return query_direction.strip().lower() in MCP_USER_MEMBERSHIP_QUERY_DIRECTIONS
+
+
+def is_privilege_reverse_direction(query_direction: str) -> bool:
+    return query_direction.strip().lower() in MCP_PRIVILEGE_REVERSE_QUERY_DIRECTIONS
+
+
+def is_group_relationship_direction(query_direction: str) -> bool:
+    qd = query_direction.strip().lower()
+    return qd in {
+        "group_to_users",
+        "user_to_groups",
+        "group_to_roles",
+        "role_to_groups",
+        "group_to_privileges",
+        "privilege_to_groups",
+        "privilege_to_principals",
+    }
+
+
+def is_principal_membership_direction(query_direction: str) -> bool:
+    """True for role_to_users / group_to_users."""
+    return query_direction.strip().lower() in {"role_to_users", "group_to_users"}
 
 
 def _grant_privilege_set(grant: dict[str, Any]) -> set[str]:
@@ -1070,6 +1110,23 @@ def validate_source_system_access_args(
             )
         if normalized_type is None:
             return error_payload(MCP_SOURCE_SYSTEM_OBJECT_TYPE_REQUIRED_ERROR)
+        return None
+
+    if is_membership_direction(qd):
+        if is_group_relationship_direction(qd) and source.strip().lower() == "snowflake":
+            return error_payload(MCP_SOURCE_SYSTEM_GROUP_UNSUPPORTED_FOR_SNOWFLAKE_ERROR)
+        if is_user_membership_direction(qd):
+            if not usernames:
+                return error_payload(MCP_SOURCE_SYSTEM_USERNAME_REQUIRED_ERROR)
+            return None
+        if is_privilege_reverse_direction(qd):
+            if not object_paths:
+                return error_payload(MCP_SOURCE_SYSTEM_PRIVILEGE_NAME_REQUIRED_ERROR)
+            return None
+        if not object_paths:
+            if qd in MCP_ROLE_NAME_QUERY_DIRECTIONS:
+                return error_payload(MCP_SOURCE_SYSTEM_ROLE_NAME_REQUIRED_ERROR)
+            return error_payload(MCP_SOURCE_SYSTEM_GROUP_NAME_REQUIRED_ERROR)
         return None
 
     if qd == "user_to_objects" and not usernames:

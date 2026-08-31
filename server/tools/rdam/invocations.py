@@ -28,6 +28,7 @@ from server.tools.rdam.helpers import (
     filter_grants_by_object_level,
     filter_grants_by_privileges,
     is_incomplete_table_object_path,
+    is_membership_direction,
     merge_rdam_object_path,
     normalize_string_list,
     resolve_single_connection_id,
@@ -102,6 +103,7 @@ async def _invoke_source_system_access(
     resolved_object_name = object_name
     resolved_fqn = fully_qualified_name
     qd = query_direction.strip().lower()
+    membership_mode = is_membership_direction(qd)
     composed_path = merge_rdam_object_path(object_path, object_name, fully_qualified_name)
     if resolved_object_id is not None and not normalize_string_list(object_path):
         composed_path = None
@@ -151,7 +153,7 @@ async def _invoke_source_system_access(
                 )
                 if type_err is not None:
                     return type_err
-    if normalized_type is not None and composed_path is not None:
+    if normalized_type is not None and composed_path is not None and not membership_mode:
         path_err = validate_resolved_rdam_paths(
             composed_path,
             normalized_type,
@@ -193,7 +195,11 @@ async def _invoke_source_system_access(
         fullyQualifiedName=wire_fqn,
         objectName=wire_object_name if wire_object_path is None else None,
         objectPath=wire_object_path,
-        objectType=None if normalized_type == MCP_RDAM_OBJECT_TYPE_ALL else normalized_type,
+        objectType=(
+            None
+            if membership_mode or normalized_type == MCP_RDAM_OBJECT_TYPE_ALL
+            else normalized_type
+        ),
         includeColumns=include_columns if include_columns else None,
         connectionId=resolved_connection_id,
         resolveAllMatches=resolve_all_matches if resolve_all_matches else None,
@@ -212,6 +218,22 @@ async def _invoke_source_system_access(
                 resolved_object_name=resolved_object_name,
                 composed_path=composed_path,
             )
+    if membership_mode:
+        try:
+            async with ovaledge_client() as client:
+                result = await client.get(MCP_PATH_ACCESS_EXPLORER, params=params)
+                result = filter_grants_by_privileges(result, privileges)
+                return annotate_multi_connection_advisory(result, resolved_connection_id)
+        except OvalEdgeError as e:
+            return _map_dam_error_with_catalog_context(
+                e,
+                resolved_object_id=resolved_object_id,
+                normalized_type=normalized_type,
+                resolved_fqn=resolved_fqn,
+                resolved_object_name=resolved_object_name,
+                composed_path=composed_path,
+            )
+
     incomplete_table_lookup = (
         qd == "object_to_users"
         and normalized_type == "table"

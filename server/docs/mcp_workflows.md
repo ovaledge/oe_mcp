@@ -145,10 +145,10 @@ Bare first-person “What can I access?” / “What tables can I see?” **with
 | Parameter | Values / notes |
 |-----------|----------------|
 | `source_system` | **Required** — `redshift`, `snowflake`, `tableau` |
-| `query_direction` | **Required** — infer from question: `user_to_objects`, `object_to_users`, `browse` |
-| `username` | **Required** for `user_to_objects` only |
-| `object_path` | **Required** for `object_to_users` (exact). Optional parent scope for `browse`. For `user_to_objects` + `connection_id` + `object_type=table`, omit to list all tables on the connector |
-| `object_type` | **Required** for `browse` and whenever `object_path` is set |
+| `query_direction` | **Required** — infer from question: `user_to_objects`, `object_to_users`, `browse`, `role_to_users`, `group_to_users`, `user_to_roles`, `user_to_groups`, `group_to_roles`, `role_to_groups`, `role_to_parent_roles`, `role_to_privileges`, `group_to_privileges`, `user_to_privileges`, `privilege_to_roles`, `privilege_to_groups`, `privilege_to_users`, `privilege_to_principals` |
+| `username` | **Required** for `user_to_objects`, `user_to_roles`, `user_to_groups`, and `user_to_privileges` |
+| `object_path` | **Required** for `object_to_users` (exact) and membership/relationship directions that take a role, group, or privilege name (`role_to_*`, `group_to_*`, `privilege_to_*`). Optional parent scope for `browse`. For `user_to_objects` + `connection_id` + `object_type=table`, omit to list all tables on the connector |
+| `object_type` | **Required** for `browse` and grant directions whenever `object_path` is set. **Not** used for membership / relationship / privilege-reverse directions |
 | `include_columns` | Redshift only — column-level grants (default false) |
 | `connection_id` | **Required** for `browse`; strongly recommended for grants — from the user only, do not probe |
 | `resolve_all_matches` | When `object_path` is ambiguous, return all matches (max 50); default returns `matchCandidates` |
@@ -161,6 +161,20 @@ Bare first-person “What can I access?” / “What tables can I see?” **with
 | `user_to_objects` (all tables on connector) | `username`, `connection_id`, `object_type=table` (omit `object_path`) | “What **tables** can `svc_analytics` query?” |
 | `user_to_objects` (database level) | `username`, `object_path=BUSINESS`, `object_type=database`, `connection_id` | “What **database-level** permissions does `john_analyst` have?” |
 | `object_to_users` | `object_path`, `object_type`, `connection_id` recommended | “Who has native access to `prod_db.public.orders`?” (`object_type=table`) |
+| `role_to_users` | `object_path` or `object_name` (role name); optional `connection_id` | “Which users are assigned to role **SYSADMIN** in Snowflake?” |
+| `group_to_users` | `object_path` or `object_name` (group name); Redshift/Tableau only | “Which users belong to group **analysts** in Redshift?” |
+| `user_to_roles` | `username`; optional `connection_id` | “Which roles is **bhanu** assigned to?” |
+| `user_to_groups` | `username`; Redshift/Tableau only | “Which groups does **bhanu** belong to?” |
+| `group_to_roles` | `object_path` or `object_name` (group name); Redshift/Tableau only | “Which roles are linked to group **analysts**?” |
+| `role_to_groups` | `object_path` or `object_name` (role name); Redshift/Tableau only | “Which groups are linked to role **analyst_role**?” |
+| `role_to_parent_roles` | `object_path` or `object_name` (role name); direct parents only | “What are the parent roles of **SYSADMIN**?” |
+| `role_to_privileges` | `object_path` or `object_name` (role name) | “What privileges does role **SYSADMIN** have?” |
+| `group_to_privileges` | `object_path` or `object_name` (group name); Redshift/Tableau only | “What privileges does group **analysts** have?” |
+| `user_to_privileges` | `username`; optional `connection_id` | “What account privileges does **bhanu** have?” |
+| `privilege_to_roles` | `object_path` or `object_name` (privilege / perm-code name) | “Which roles have privilege **SELECT**?” |
+| `privilege_to_groups` | `object_path` or `object_name` (privilege name); Redshift/Tableau only | “Which groups have privilege **SELECT**?” |
+| `privilege_to_users` | `object_path` or `object_name` (privilege name) | “Which users have privilege **SELECT**?” |
+| `privilege_to_principals` | `object_path` or `object_name` (privilege name); Redshift/Tableau only | “Which principals have privilege **SELECT**?” |
 | `browse` | `connection_id`, `object_type`; optional `object_path` as parent | “List tables in `BUSINESS.BANKING`” |
 
 ### `object_path` formats
