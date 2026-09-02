@@ -60,7 +60,6 @@ async def _invoke_create_service_request(
     summary_text = str(summary).strip() if not _blank(summary) else None
     template_name: str | None = None
     object_ids = normalize_object_ids(object_id)
-    primary_id = primary_object_id(object_ids)
     template_fields: list[dict[str, Any]] = []
     shaped_lookup: dict[str, Any] | None = None
 
@@ -77,7 +76,7 @@ async def _invoke_create_service_request(
             connection_name=connection_name,
             connection_id=_positive_id(connection_id),
             ticket_template_id=template_id,
-            object_id=primary_id,
+            object_id=primary_object_id(object_ids),
         )
         try:
             async with ovaledge_client() as client:
@@ -145,7 +144,7 @@ async def _invoke_create_service_request(
         ticket_template_id=template_id,
         summary=summary_text,
         description=description,
-        object_id=primary_id,
+        object_ids=object_ids,
         object_type=obj_type,
         ticket_fields=ticket_fields,
         custom_fields=custom_fields,

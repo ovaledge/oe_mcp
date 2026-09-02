@@ -223,8 +223,9 @@ class TestCreateServiceRequest:
         created = out["formattedResponse"]
         assert "SR-88" in created
         assert "Open the ticket:" in created
-        assert "#nav/servicedesk?id=88" in created
-        assert "redirectUrl" not in created
+        assert "https://mock.ovaledge.com/#nav/servicedesk?id=88" in created
+        assert out["data"]["redirectUrl"].startswith("https://mock.ovaledge.com/")
+        assert out["data"]["navLink"] == "#nav/servicedesk?id=88"
         mock_oe_client.get.assert_not_called()
         mock_oe_client.post.assert_called_once_with(
             MCP_PATH_SERVICE_REQUESTS,
@@ -483,7 +484,7 @@ class TestCreateServiceRequest:
         assert out["workflowPhase"] == "created"
         mock_oe_client.get.assert_not_called()
         posted = mock_oe_client.post.call_args.kwargs["body"]
-        assert posted["objectId"] == 3337
+        assert posted["objectId"] == "3337,3338"
         assert posted["ticketFields"]["Select table"] == "3337,3338"
 
     async def test_multi_object_ids_join_when_allow_multiple(
@@ -515,7 +516,7 @@ class TestCreateServiceRequest:
         assert out["workflowPhase"] == "confirm_create"
         pending = out["pendingCreate"]["ticketFields"]
         assert pending["Select table"] == "3337,3338,3339"
-        assert out["pendingCreate"]["objectId"] == 3337
+        assert out["pendingCreate"]["objectId"] == "3337,3338,3339"
         assert "3337,3338,3339" not in out["formattedResponse"]
         mock_oe_client.get.assert_called_once_with(
             MCP_PATH_SERVICE_REQUEST_TEMPLATES,
@@ -553,6 +554,32 @@ class TestCreateServiceRequest:
             summary="Need access",
         )
         assert out["pendingCreate"]["ticketFields"]["Select table"] == "3337,3338"
+        assert out["pendingCreate"]["objectId"] == "3337,3338"
+
+    async def test_confirmed_create_posts_csv_object_ids_without_selector_field(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = _CREATED
+        mcp = FastMCP(name="test", version="0.0.1")
+        servicedesk.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_SERVICE_REQUEST)
+        out = await invoke_write_confirmed(
+            fn,
+            ticket_template_id=1000,
+            summary="Access request for ticketfield, ticket2, and tickettemplate tables",
+            object_id="1866,1858,1871",
+            object_type="oetable",
+            request_type="access",
+            ticket_fields={
+                "Priority": "Medium",
+                "Permission": "Data Read",
+                "Expiration Date": "2026-12-20",
+            },
+        )
+        assert out["workflowPhase"] == "created"
+        posted = mock_oe_client.post.call_args.kwargs["body"]
+        assert posted["objectId"] == "1866,1858,1871"
+        assert posted["ticketFields"]["Priority"] == "Medium"
 
     async def test_multi_object_ids_keep_first_when_not_allow_multiple(
         self, mock_oe_client: AsyncMock
@@ -619,6 +646,13 @@ class TestCreateServiceRequestHelpers:
         assert normalize_object_ids(None) == []
         assert normalize_object_ids(-1) == []
 
+    def test_create_object_id_payload_joins_multiple(self) -> None:
+        from server.tools.servicedesk.helpers import create_object_id_payload
+
+        assert create_object_id_payload([]) is None
+        assert create_object_id_payload([1866]) == 1866
+        assert create_object_id_payload([1866, 1858, 1871]) == "1866,1858,1871"
+
     def test_normalize_date_ticket_fields_only_typed_date(self) -> None:
         from server.tools.servicedesk.helpers import normalize_date_ticket_fields
 
@@ -646,6 +680,43 @@ class TestCreateServiceRequestHelpers:
             {"Expiration Date": "25-10-2026 14:30:00"},
         )
         assert untyped["Expiration Date"] == "25-10-2026 14:30:00"
+
+    def test_enrich_create_response_prefers_backend_redirect_url(self) -> None:
+        from server.tools.servicedesk.helpers import enrich_create_response
+
+        out = enrich_create_response(
+            {
+                "ok": True,
+                "data": {
+                    "ticketId": 88,
+                    "displayTicketId": "SR-88",
+                    "navLink": "#nav/servicedesk?id=88",
+                    "redirectUrl": "https://prod.example/ovaledge/#nav/servicedesk?id=88",
+                },
+            }
+        )
+        assert out["data"]["navLink"] == "#nav/servicedesk?id=88"
+        assert (
+            out["data"]["redirectUrl"]
+            == "https://prod.example/ovaledge/#nav/servicedesk?id=88"
+        )
+        assert "https://prod.example/ovaledge/#nav/servicedesk?id=88" in out["formattedResponse"]
+
+    def test_enrich_create_response_builds_redirect_from_nav_link(self) -> None:
+        from server.tools.servicedesk.helpers import enrich_create_response
+
+        out = enrich_create_response(
+            {
+                "ok": True,
+                "data": {
+                    "ticketId": 88,
+                    "displayTicketId": "SR-88",
+                    "navLink": "#nav/servicedesk?id=88",
+                },
+            }
+        )
+        assert out["data"]["redirectUrl"] == "https://mock.ovaledge.com/#nav/servicedesk?id=88"
+        assert out["data"]["navLink"] == "#nav/servicedesk?id=88"
 
     def test_remaining_required_skips_summary_and_filled_values(self) -> None:
         from server.tools.servicedesk.helpers import remaining_required_ticket_fields

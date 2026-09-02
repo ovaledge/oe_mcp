@@ -11,7 +11,7 @@ from server.constants import (
     MCP_SERVICE_REQUEST_OBJECT_TYPE_ALIASES,
     MCP_SERVICE_REQUEST_TYPE_ALIASES,
 )
-from server.nav_links import build_absolute_nav_url
+from server.nav_links import build_absolute_nav_url, extract_hash_nav_link
 from server.tools.common import as_dict as _as_dict
 from server.tools.common import blank as _blank
 from server.tools.common.confirm_gate import (
@@ -266,12 +266,20 @@ def build_lookup_params(
     return params
 
 
+def create_object_id_payload(object_ids: list[int]) -> int | str | None:
+    if not object_ids:
+        return None
+    if len(object_ids) == 1:
+        return object_ids[0]
+    return joined_object_ids(object_ids)
+
+
 def build_create_body(
     *,
     ticket_template_id: int,
     summary: str,
     description: str | None,
-    object_id: int | None,
+    object_ids: list[int],
     object_type: str | None,
     ticket_fields: dict[str, Any] | None,
     custom_fields: dict[str, str] | None,
@@ -282,7 +290,8 @@ def build_create_body(
     }
     if not _blank(description):
         body["description"] = str(description).strip()
-    if object_id is not None and object_id > 0:
+    object_id = create_object_id_payload(object_ids)
+    if object_id is not None:
         body["objectId"] = object_id
     if not _blank(object_type):
         body["objectType"] = object_type
@@ -614,9 +623,17 @@ def format_create_confirmation_preview(
 def enrich_create_response(body: dict[str, Any]) -> dict[str, Any]:
     out = dict(body) if isinstance(body, dict) else {"ok": True, "data": body}
     data = _as_dict(out.get("data"))
-    nav = str(data.get("navLink") or "")
+    nav = extract_hash_nav_link(str(data.get("navLink") or ""))
+    if not nav:
+        nav = extract_hash_nav_link(str(data.get("redirectUrl") or ""))
+    redirect = str(data.get("redirectUrl") or "").strip()
     if nav:
+        data["navLink"] = nav
+    if redirect.startswith(("http://", "https://")):
+        data["redirectUrl"] = redirect
+    elif nav:
         data["redirectUrl"] = build_absolute_nav_url(nav)
+    if nav or redirect:
         out["data"] = data
     display = cell(data.get("displayTicketId") or data.get("ticketId"))
     redirect = str(data.get("redirectUrl") or "").strip()
