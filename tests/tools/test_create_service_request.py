@@ -581,7 +581,7 @@ class TestCreateServiceRequest:
         assert posted["objectId"] == "1866,1858,1871"
         assert posted["ticketFields"]["Priority"] == "Medium"
 
-    async def test_multi_object_ids_keep_first_when_not_allow_multiple(
+    async def test_multi_object_ids_when_not_allow_multiple_returns_error(
         self, mock_oe_client: AsyncMock
     ) -> None:
         mock_oe_client.get.return_value = _LOOKUP
@@ -594,7 +594,27 @@ class TestCreateServiceRequest:
             object_id=[3337, 3338],
             summary="Need access",
         )
-        assert out["pendingCreate"]["ticketFields"]["Select table"] == 3337
+        assert out["error_code"] == "object_id_multiple_not_allowed"
+        assert "Select table" in out["error"]
+        mock_oe_client.post.assert_not_called()
+
+    async def test_invalid_object_id_tokens_return_error(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        servicedesk.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_CREATE_SERVICE_REQUEST)
+        out = await fn(
+            request_type="access",
+            object_type="oetable",
+            object_id="1866,abc,1858",
+            summary="Need access",
+            ticket_template_id=1005,
+        )
+        assert out["error_code"] == "invalid_object_id"
+        assert "abc" in out["error"]
+        mock_oe_client.get.assert_not_called()
+        mock_oe_client.post.assert_not_called()
 
     async def test_lookup_date_field_normalizes_datetime_not_name_matches(
         self, mock_oe_client: AsyncMock
@@ -638,15 +658,37 @@ class TestCreateServiceRequest:
 
 class TestCreateServiceRequestHelpers:
     def test_normalize_object_ids_accepts_int_list_and_csv(self) -> None:
-        from server.tools.servicedesk.helpers import normalize_object_ids
+        from server.tools.servicedesk.helpers import parse_object_ids
 
-        assert normalize_object_ids(12) == [12]
-        assert normalize_object_ids([12, 13, 12]) == [12, 13]
-        assert normalize_object_ids("12, 13, 0, x") == [12, 13]
-        assert normalize_object_ids(None) == []
-        assert normalize_object_ids(-1) == []
+        assert parse_object_ids(12).ids == [12]
+        assert parse_object_ids([12, 13, 12]).ids == [12, 13]
+        mixed = parse_object_ids("12, 13, 0, x")
+        assert mixed.ids == [12, 13]
+        assert mixed.rejected_tokens == ["0", "x"]
+        assert parse_object_ids(None).ids == []
+        assert parse_object_ids(-1).rejected_tokens == ["-1"]
+        overflow = parse_object_ids(2_147_483_648)
+        assert overflow.ids == []
+        assert overflow.rejected_tokens == ["2147483648"]
 
-    def test_create_object_id_payload_joins_multiple(self) -> None:
+    def test_merge_default_ticket_fields_overwrites_selector_from_object_ids(self) -> None:
+        from server.tools.servicedesk.helpers import merge_default_ticket_fields
+
+        fields = [
+            {
+                "fieldName": "Select table",
+                "fieldType": "catalog",
+                "objectType": "oetable",
+                "allowMultiple": True,
+            }
+        ]
+        merged = merge_default_ticket_fields(
+            fields,
+            {"Select table": 9999},
+            object_ids=[1866, 1858],
+            current_user_id=None,
+        )
+        assert merged["Select table"] == "1866,1858"
         from server.tools.servicedesk.helpers import create_object_id_payload
 
         assert create_object_id_payload([]) is None

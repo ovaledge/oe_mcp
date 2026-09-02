@@ -19,11 +19,13 @@ from server.tools.servicedesk.helpers import (
     enrich_create_response,
     format_create_confirmation_preview,
     format_template_lookup_response,
+    invalid_object_id_error,
     merge_default_ticket_fields,
+    multiple_object_ids_not_allowed_error,
     normalize_date_ticket_fields,
-    normalize_object_ids,
     normalize_object_type,
     normalize_request_type,
+    parse_object_ids,
     primary_object_id,
     remaining_required_ticket_fields,
     resolve_lookup_args,
@@ -59,7 +61,11 @@ async def _invoke_create_service_request(
     template_id = _positive_id(ticket_template_id)
     summary_text = str(summary).strip() if not _blank(summary) else None
     template_name: str | None = None
-    object_ids = normalize_object_ids(object_id)
+    parsed_object_ids = parse_object_ids(object_id)
+    invalid_ids = invalid_object_id_error(parsed_object_ids)
+    if invalid_ids is not None:
+        return invalid_ids
+    object_ids = parsed_object_ids.ids
     template_fields: list[dict[str, Any]] = []
     shaped_lookup: dict[str, Any] | None = None
 
@@ -95,6 +101,11 @@ async def _invoke_create_service_request(
         template_fields = [
             row for row in (data.get("fields") or []) if isinstance(row, dict)
         ]
+        multiple_ids = multiple_object_ids_not_allowed_error(
+            template_fields, object_ids, obj_type
+        )
+        if multiple_ids is not None:
+            return multiple_ids
         if template_id is None:
             return error_payload(
                 "No Published and Active template was returned. Show the error, "
