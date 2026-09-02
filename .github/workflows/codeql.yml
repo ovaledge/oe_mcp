@@ -38,14 +38,14 @@ jobs:
       # Python needs no compile step; build-mode none avoids empty/broken SARIF
       # from a failed or no-op autobuild.
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4.37.8
+        uses: github/codeql-action/init@v4.37.9
         with:
           languages: python
           build-mode: none
           config-file: ./.github/codeql/codeql-config.yml
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4.37.8
+        uses: github/codeql-action/analyze@v4.37.9
         with:
           # Distinct from CodeQL default-setup's "/language:python" so uploads
           # do not overwrite / collide when default setup is still enabled.

@@ -260,6 +260,62 @@
       ]
     },
     {
+      "name": "example_catalog_null_density_eq",
+      "input": "Find tables where null density is 6.7%.",
+      "actual_output": "I called asset_explorer with object_type=oetable and filters.nullDensity eq 6.7 (percent, not 0.067). I omitted search_terms so this is a metric-only listing.",
+      "mcp_tools_called": [
+        {
+          "name": "asset_explorer",
+          "args": {
+            "object_type": "oetable",
+            "filters": {
+              "nullDensity": {
+                "eq": 6.7
+              }
+            }
+          },
+          "result": {
+            "total": 1,
+            "items": [
+              {
+                "objectId": 100072,
+                "objectType": "oetable",
+                "objectName": "DQR_NULLDENSITYPERCENT_TC"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_catalog_sort_popularity_desc",
+      "input": "Show the most popular glossary terms.",
+      "actual_output": "I called asset_explorer with object_type=glossary and sort field popularity desc. I omitted search_terms and context_query so this is a filter-only listing that the backend can order.",
+      "mcp_tools_called": [
+        {
+          "name": "asset_explorer",
+          "args": {
+            "object_type": "glossary",
+            "sort": {
+              "field": "popularity",
+              "direction": "desc"
+            }
+          },
+          "result": {
+            "total": 1,
+            "items": [
+              {
+                "objectId": 2468,
+                "objectType": "glossary",
+                "objectName": "Revenue",
+                "popularity": 92
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "example_catalog_filters_no_match",
       "input": "Any certified MATERIALIZED_VIEW tables named DARK_MATTER?",
       "actual_output": "Filter-only catalog search returned no items.",

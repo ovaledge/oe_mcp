@@ -87,6 +87,9 @@ Extended parameter patterns (tool description keeps a short summary; use this se
 | Tables rated more than 4 | `object_type=oetable`, `filters={"rating":{"min":4.01}}` — inclusive min just above 4 (no exclusive `gt`). Omit `max`. Do not use `{min:4}` (that includes 4-star) |
 | Tables rated at most 3 | `object_type=oetable`, `filters={"rating":{"max":3}}` — omit `min` |
 | Popularity at least N | `filters={"popularity":{"min":70}}` — omit `max` |
+| Null density exactly 6.7% | `object_type=oetable`, `filters={"nullDensity":{"eq":6.7}}` — percents, not fractions (`6.7` not `0.067`). Omit `search_terms` for metric-only listing |
+| Density / row / column count | `filters.density` / `rowCount` / `columnCount` `{min}`, `{max}`, or `{eq}` |
+| Most popular glossary terms | `object_type=glossary`, `sort={"field":"popularity","direction":"desc"}` — omit `search_terms` / `context_query` so hybrid ranking does not override order |
 | Created between two dates | `filters={"createdDate":{"from":"2024-01-01","to":"2024-12-31"}}` ISO dates; omit `from` or `to` if the user did not name that end |
 | Assets by connector technology | `server_type` (e.g. mysql, snowflake, tableau) + `context_query` |
 | Data products | `data_products=[...]`, `context_query` |
@@ -100,9 +103,11 @@ Extended parameter patterns (tool description keeps a short summary; use this se
 | Assets linked to domain terms | `object_type=oetable`, `domain_name` |
 | CDE columns | `object_type=oecolumn`, `critical_data_element=["Yes"]` → then `dq_rule_advisor` step=assess |
 
-**Nested `filters` (new facets):** `tableName`, `folder`, `reportGroup`, `apiGroup`, `dataDomains`, `governanceRole4`, `governanceRole5`, `governanceRole6`, `tableType`, `reportType`, `reportLevel`, `termStatus`, `ticketStatus`, `subscriptionMode`, `criticality`, `sensitivity`, `deliveryAccessMode`, `certification`, `questionWalls`, ranges `dqIndex` / `popularity` / `rating` / `curationScore`, `createdDate` `{from,to}` ISO dates. Do not duplicate keys already passed as top-level args; if both are set, **top-level wins**.
+**Nested `filters` (new facets):** `tableName`, `folder`, `reportGroup`, `apiGroup`, `dataDomains`, `governanceRole4`, `governanceRole5`, `governanceRole6`, `tableType`, `reportType`, `reportLevel`, `termStatus`, `ticketStatus`, `subscriptionMode`, `criticality`, `sensitivity`, `deliveryAccessMode`, `certification`, `questionWalls`, ranges `dqIndex` / `popularity` / `rating` / `curationScore` / `nullDensity` / `density` / `rowCount` / `columnCount`, `createdDate` `{from,to}` ISO dates. Do not duplicate keys already passed as top-level args; if both are set, **top-level wins**.
 
-**Range filters:** pass `{min}`, `{max}`, or `{min,max}`. Bounds are **inclusive**. Omit any bound the user did not specify — do not fill a scale ceiling (`rating` max 5, `dqIndex` max 100) unless they asked for an upper limit. “At least N” → `{min:N}`; “at most N” → `{max:N}`; “more than N” / “greater than N” → inclusive `min` just above N (e.g. rating `{"min":4.01}`). `createdDate` uses `{from,to}` ISO dates, not min/max. Scales: `dqIndex` 0–100, `rating` 1–5 stars; `popularity` / `curationScore` as OvalEdge returns them. There is no exclusive `gt`/`lt` operator.
+**Range filters:** pass `{min}`, `{max}`, `{min,max}`, or `{eq}` for an exact value. Bounds are **inclusive**. Omit any bound the user did not specify — do not fill a scale ceiling (`rating` max 5, `dqIndex` max 100) unless they asked for an upper limit. “At least N” → `{min:N}`; “at most N” → `{max:N}`; “exactly N” → `{eq:N}`; “more than N” / “greater than N” → inclusive `min` just above N (e.g. rating `{"min":4.01}`). `createdDate` uses `{from,to}` ISO dates, not min/max. Scales: `dqIndex` 0–100, `rating` 1–5 stars; `nullDensity` / `density` are stored percents (`6.7` means 6.7%, not 0.067); `popularity` / `curationScore` / `rowCount` / `columnCount` as OvalEdge returns them. There is no exclusive `gt`/`lt` operator.
+
+**Sort (`search.sort`):** pass `sort={"field":"popularity","direction":"desc"}` to order a **filter-only** listing. Allowed `field` tokens: `relevance`, `name`, `popularity`, `rating`, `dq_index`, `curation_score`, `row_count`, `column_count`, `null_density`, `density`, `created_date` (camelCase aliases such as `dqIndex` are accepted). `direction` is `asc` or `desc` (default `desc`). Hits may include `popularity` so a popularity-ordered page can show what it ranked on. Omit `sort` when `search_terms` or `context_query` is set — hybrid ranking owns that order.
 
 **Glossary placement:** `domain_id` or `domain_name` (required), plus optional category/subcategory. With `object_type=glossary`, returns terms in that placement; without `object_type`, returns catalog assets linked to terms there.
 

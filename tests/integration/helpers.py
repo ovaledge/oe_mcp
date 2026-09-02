@@ -61,7 +61,7 @@ def as_list(value: Any) -> list[Any]:
 _EXPLORER_IDENTITY = frozenset(
     {"objectId", "objectType", "name", "includeParent", "includeChildren"}
 )
-_EXPLORER_SEARCH = frozenset({"searchTerms", "contextQuery", "page", "limit"})
+_EXPLORER_SEARCH = frozenset({"searchTerms", "contextQuery", "page", "limit", "sort"})
 _EXPLORER_PLACEMENT = frozenset(
     {
         "domainId",
