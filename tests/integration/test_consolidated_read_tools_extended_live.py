@@ -265,6 +265,24 @@ async def test_explorer_nested_range_filters_are_well_formed(mcp_post) -> None:
         assert hit.get("objectType")
 
 
+async def test_explorer_sort_is_well_formed(mcp_post) -> None:
+    """POST search.sort {field,direction} on a filter-only listing must not 500."""
+    r = await explore(
+        mcp_post,
+        objectType="glossary",
+        sort={"field": "popularity", "direction": "desc"},
+    )
+    assert_never_500(r, "search.sort popularity desc")
+    assert r.status_code in READ_OK, r.text[:500]
+    if r.status_code != 200:
+        return
+    payload = data(r)
+    assert isinstance(payload, dict)
+    for hit in items(r):
+        assert hit.get("objectId") is not None
+        assert hit.get("objectType")
+
+
 # ══════════════════════════════════════════════════════════════════
 # asset_details (15)
 # ══════════════════════════════════════════════════════════════════

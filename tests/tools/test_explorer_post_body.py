@@ -55,3 +55,14 @@ def test_nested_range_filters_pass_through() -> None:
     assert body["filters"]["nullDensity"] == {"eq": 6.7}
     assert body["filters"]["rowCount"] == {"min": 100}
     assert body["filters"]["createdDate"] == {"from": "2024-01-01", "to": "2024-12-31"}
+
+
+def test_sort_stays_on_search() -> None:
+    body = _to_asset_explorer_post_body(
+        {
+            "objectType": "glossary",
+            "sort": {"field": "popularity", "direction": "desc"},
+        }
+    )
+    assert body["objectType"] == "glossary"
+    assert body["search"]["sort"] == {"field": "popularity", "direction": "desc"}

@@ -661,6 +661,27 @@ MCP_ASSET_EXPLORER_FILTER_KEYS = frozenset(
     }
 )
 
+# POST `search.sort.field` tokens (McpCatalogSortField). CamelCase aliases are
+# accepted by the tool and normalized to these snake_case wire values.
+MCP_ASSET_EXPLORER_SORT_FIELDS = frozenset(
+    {
+        "relevance",
+        "name",
+        "popularity",
+        "rating",
+        "dq_index",
+        "curation_score",
+        "row_count",
+        "column_count",
+        "null_density",
+        "density",
+        "created_date",
+    }
+)
+MCP_ASSET_EXPLORER_SORT_FIELDS_DOC = ", ".join(sorted(MCP_ASSET_EXPLORER_SORT_FIELDS))
+MCP_ASSET_EXPLORER_SORT_DIRECTIONS = frozenset({"asc", "desc"})
+MCP_ASSET_EXPLORER_SORT_DEFAULT_DIRECTION = "desc"
+
 # connectionInfo.serverType values (OvalEdge connector types).
 MCP_SERVER_TYPES = frozenset(
     {

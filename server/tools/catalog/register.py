@@ -8,6 +8,7 @@ from fastmcp import FastMCP
 from pydantic import Field
 
 from server.constants import (
+    MCP_ASSET_EXPLORER_SORT_FIELDS_DOC,
     MCP_CATALOG_OBJECT_TYPES_DOC,
     MCP_SEARCH_CLASSIFICATIONS_PARAM,
     MCP_SEARCH_CONTEXT_QUERY_PARAM,
@@ -243,6 +244,17 @@ def register(mcp: FastMCP) -> None:
                 default=None,
             ),
         ] = None,
+        sort: Annotated[
+            dict[str, Any] | None,
+            Field(
+                description=(
+                    "Order filter-only listings: {field, direction}. field one of "
+                    f"{MCP_ASSET_EXPLORER_SORT_FIELDS_DOC}; direction asc or desc "
+                    "(default desc). Omit when search_terms or context_query is set."
+                ),
+                default=None,
+            ),
+        ] = None,
     ) -> dict[str, Any]:
         """Find data assets related to a business question (catalog search)."""
         return await _invoke_asset_explorer(
@@ -274,6 +286,7 @@ def register(mcp: FastMCP) -> None:
             include_parent=include_parent,
             include_children=include_children,
             filters=filters,
+            sort=sort,
         )
 
     @mcp.tool(title="View asset details", description=_DESC_ASSET_DETAILS, annotations=READ_ONLY)

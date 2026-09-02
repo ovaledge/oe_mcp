@@ -5,6 +5,7 @@ from fastmcp import FastMCP
 from server.client import OvalEdgeError
 from server.constants import (
     MCP_ASSET_EXPLORER_FILTER_KEYS,
+    MCP_ASSET_EXPLORER_SORT_FIELDS,
     MCP_PATH_ASSET_DETAILS,
     MCP_PATH_ASSET_EXPLORER,
     MCP_PATH_ASSET_LINEAGE,
@@ -96,6 +97,11 @@ class TestAssetExplorer:
     def test_explorer_description_uses_post_not_get(self) -> None:
         assert f"Backend: POST {MCP_PATH_ASSET_EXPLORER}" in _DESC_ASSET_EXPLORER
         assert f"Backend: GET {MCP_PATH_ASSET_EXPLORER}" not in _DESC_ASSET_EXPLORER
+
+    def test_explorer_description_routes_filter_only_sort(self) -> None:
+        desc = _DESC_ASSET_EXPLORER.lower()
+        assert "sort={field,direction}" in desc
+        assert "filter-only" in desc
 
     async def test_search_post_body(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.post.return_value = MOCK_SEARCH_RESPONSE
@@ -228,6 +234,55 @@ class TestAssetExplorer:
             "columnCount",
             "createdDate",
         } <= MCP_ASSET_EXPLORER_FILTER_KEYS
+
+    async def test_sort_forwarded_on_filter_only_listing(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = MOCK_SEARCH_RESPONSE
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "asset_explorer")
+        await tool_fn(object_type="glossary", sort={"field": "popularity", "direction": "desc"})
+        body = _explorer_body(mock_oe_client)
+        assert body["objectType"] == "glossary"
+        assert body["search"]["sort"] == {"field": "popularity", "direction": "desc"}
+        assert "popularity" in MCP_ASSET_EXPLORER_SORT_FIELDS
+
+    async def test_sort_normalizes_camelcase_field_and_defaults_direction(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = MOCK_SEARCH_RESPONSE
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "asset_explorer")
+        await tool_fn(object_type="oetable", sort={"field": "dqIndex"})
+        assert _explorer_body(mock_oe_client)["search"]["sort"] == {
+            "field": "dq_index",
+            "direction": "desc",
+        }
+
+    async def test_sort_unknown_field_rejected_without_http(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "asset_explorer")
+        result = await tool_fn(sort={"field": "invented"})
+        mock_oe_client.post.assert_not_called()
+        assert "error" in result
+        assert result["status_code"] == 400
+        assert "invented" in result["error"]
+
+    async def test_sort_invalid_direction_rejected_without_http(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "asset_explorer")
+        result = await tool_fn(sort={"field": "popularity", "direction": "up"})
+        mock_oe_client.post.assert_not_called()
+        assert result["status_code"] == 400
+        assert "direction" in result["error"]
 
     async def test_nested_filters_drop_null_range_bound(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.post.return_value = MOCK_SEARCH_RESPONSE

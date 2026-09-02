@@ -288,6 +288,34 @@
       ]
     },
     {
+      "name": "example_catalog_sort_popularity_desc",
+      "input": "Show the most popular glossary terms.",
+      "actual_output": "I called asset_explorer with object_type=glossary and sort field popularity desc. I omitted search_terms and context_query so this is a filter-only listing that the backend can order.",
+      "mcp_tools_called": [
+        {
+          "name": "asset_explorer",
+          "args": {
+            "object_type": "glossary",
+            "sort": {
+              "field": "popularity",
+              "direction": "desc"
+            }
+          },
+          "result": {
+            "total": 1,
+            "items": [
+              {
+                "objectId": 2468,
+                "objectType": "glossary",
+                "objectName": "Revenue",
+                "popularity": 92
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "example_catalog_filters_no_match",
       "input": "Any certified MATERIALIZED_VIEW tables named DARK_MATTER?",
       "actual_output": "Filter-only catalog search returned no items.",
