@@ -212,6 +212,23 @@ def test_example_json_catalog_nested_filters() -> None:
     assert "min" not in created
     assert "max" not in created
 
+    null_density = _mcp_tools_called(by_name["example_catalog_null_density_eq"])[0].args.get(
+        "filters", {}
+    ).get("nullDensity")
+    assert isinstance(null_density, dict)
+    assert null_density.get("eq") == 6.7
+    assert "min" not in null_density
+    assert "max" not in null_density
+
+    sort_case = _mcp_tools_called(by_name["example_catalog_sort_popularity_desc"])[0]
+    assert sort_case.args.get("object_type") == "glossary"
+    sort = sort_case.args.get("sort")
+    assert isinstance(sort, dict)
+    assert sort.get("field") == "popularity"
+    assert sort.get("direction") == "desc"
+    assert "search_terms" not in sort_case.args
+    assert "context_query" not in sort_case.args
+
     empty = by_name["example_catalog_filters_no_match"]
     assert _tool_result_payload(_mcp_tools_called(empty)[0]).get("total") == 0
 

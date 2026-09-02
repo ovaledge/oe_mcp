@@ -1441,6 +1441,9 @@ def _enrich_create_tag_response(
 
     catalog = _catalog_doc_from_lookup(lookup_body)
     indexed = catalog is not None
+    create_nav = data.get("navLink")
+    if isinstance(create_nav, str) and create_nav.strip():
+        catalog = {**(catalog or {}), "navLink": create_nav}
     summary_nav, summary_url, redirect_nav, redirect_url = _resolve_tag_nav(
         catalog,
         tag_id,

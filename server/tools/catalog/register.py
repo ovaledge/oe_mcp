@@ -8,6 +8,7 @@ from fastmcp import FastMCP
 from pydantic import Field
 
 from server.constants import (
+    MCP_ASSET_EXPLORER_SORT_FIELDS_DOC,
     MCP_CATALOG_OBJECT_TYPES_DOC,
     MCP_SEARCH_CLASSIFICATIONS_PARAM,
     MCP_SEARCH_CONTEXT_QUERY_PARAM,
@@ -237,8 +238,19 @@ def register(mcp: FastMCP) -> None:
                 description=(
                     "Extra catalog facets (tableType, certification, ranges). "
                     "Open-ended ranges: min or max only — do not invent the other bound. "
-                    "More than N uses min just above N. Top-level args win if both set. "
-                    "See docs://ovaledge/mcp_workflows."
+                    "Exact metric: eq (e.g. nullDensity 6.7%). More than N uses min just "
+                    "above N. Top-level args win if both set. See docs://ovaledge/mcp_workflows."
+                ),
+                default=None,
+            ),
+        ] = None,
+        sort: Annotated[
+            dict[str, Any] | None,
+            Field(
+                description=(
+                    "Order filter-only listings: {field, direction}. field one of "
+                    f"{MCP_ASSET_EXPLORER_SORT_FIELDS_DOC}; direction asc or desc "
+                    "(default desc). Omit when search_terms or context_query is set."
                 ),
                 default=None,
             ),
@@ -274,6 +286,7 @@ def register(mcp: FastMCP) -> None:
             include_parent=include_parent,
             include_children=include_children,
             filters=filters,
+            sort=sort,
         )
 
     @mcp.tool(title="View asset details", description=_DESC_ASSET_DETAILS, annotations=READ_ONLY)

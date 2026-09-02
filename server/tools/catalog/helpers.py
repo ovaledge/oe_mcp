@@ -8,6 +8,10 @@ from typing import Any
 from server.constants import (
     MCP_ACCESS_DISAMBIGUATION_SEARCH_GUARD_DOC,
     MCP_ASSET_EXPLORER_FILTER_KEYS,
+    MCP_ASSET_EXPLORER_SORT_DEFAULT_DIRECTION,
+    MCP_ASSET_EXPLORER_SORT_DIRECTIONS,
+    MCP_ASSET_EXPLORER_SORT_FIELDS,
+    MCP_ASSET_EXPLORER_SORT_FIELDS_DOC,
     MCP_CATALOG_OBJECT_TYPES_DOC,
     MCP_PATH_ASSET_DETAILS,
     MCP_PATH_ASSET_EXPLORER,
@@ -29,7 +33,7 @@ from server.constants import (
     MCP_UPDATE_ASSET_DESCRIPTION_OBJECT_TYPES_DOC,
 )
 from server.nav_links import build_absolute_nav_url, extract_hash_nav_link
-from server.tools.common import drop_none, strip_or_none
+from server.tools.common import drop_none, error_payload, strip_or_none
 from server.tools.common.confirm_gate import attach_confirmation_token
 from server.tools.common.descriptions import classify_tool_desc
 
@@ -53,8 +57,10 @@ _DESC_ASSET_EXPLORER = classify_tool_desc(
     "Exact filters: connection_name, schema_name, server_type, owner, steward, custodian, "
     "object_type. tags/terms match exact governance names (not loose synonyms). "
     "Extra facets (tableType, certification, ranges) go in filters; open-ended ranges "
-    "use min or max only (do not invent the other bound); more than N uses min just "
-    "above N; top-level args win if both set — matrix: docs://ovaledge/mcp_workflows. "
+    "use min or max only (do not invent the other bound); exact metric uses eq; more "
+    "than N uses min just above N; top-level args win if both set; filter-only "
+    "sort={field,direction} (omit with keywords) — matrix: "
+    "docs://ovaledge/mcp_workflows. "
     f"Semantic ranking: {MCP_SEARCH_CONTEXT_QUERY_PARAM}. "
     "Look up one term/tag: name + object_type=glossary|oetag "
     "(include_parent/children for tags). "
@@ -500,6 +506,76 @@ def _clean_filter_value(value: Any) -> Any:
     return value
 
 
+_SORT_FIELD_BY_COMPACT: dict[str, str] = {
+    token.replace("_", ""): token for token in MCP_ASSET_EXPLORER_SORT_FIELDS
+}
+
+
+def _canonical_sort_field(raw: str) -> str | None:
+    token = raw.strip().lower()
+    if not token:
+        return None
+    if token in MCP_ASSET_EXPLORER_SORT_FIELDS:
+        return token
+    return _SORT_FIELD_BY_COMPACT.get(token.replace("_", ""))
+
+
+def _normalize_explorer_sort(sort: Any) -> dict[str, str] | None:
+    """Return search.sort {field, direction} or None when sort is omitted."""
+    if sort is None:
+        return None
+    dump = getattr(sort, "model_dump", None)
+    raw = dump(exclude_none=True) if callable(dump) else sort
+    if not isinstance(raw, dict) or not raw:
+        return None
+    field_raw = raw.get("field")
+    if not isinstance(field_raw, str) or not field_raw.strip():
+        return None
+    field = _canonical_sort_field(field_raw)
+    if field is None:
+        return None
+    direction_raw = raw.get("direction")
+    direction = MCP_ASSET_EXPLORER_SORT_DEFAULT_DIRECTION
+    if isinstance(direction_raw, str) and direction_raw.strip():
+        direction = direction_raw.strip().lower()
+    return {"field": field, "direction": direction}
+
+
+def _validate_explorer_sort(sort: Any) -> dict[str, Any] | None:
+    """Return error_payload when sort is present but invalid; None when ok or omitted."""
+    if sort is None:
+        return None
+    dump = getattr(sort, "model_dump", None)
+    raw = dump(exclude_none=True) if callable(dump) else sort
+    if not isinstance(raw, dict):
+        return error_payload("sort must be an object {field, direction}.")
+    if not raw:
+        return None
+    field_raw = raw.get("field")
+    if not isinstance(field_raw, str) or not field_raw.strip():
+        return error_payload(
+            "sort.field is required when sort is set. One of: "
+            + MCP_ASSET_EXPLORER_SORT_FIELDS_DOC
+            + "."
+        )
+    if _canonical_sort_field(field_raw) is None:
+        return error_payload(
+            f"sort.field must be one of {MCP_ASSET_EXPLORER_SORT_FIELDS_DOC}, "
+            f"got {field_raw!r}."
+        )
+    direction_raw = raw.get("direction")
+    if direction_raw is None or (isinstance(direction_raw, str) and not direction_raw.strip()):
+        return None
+    if not isinstance(direction_raw, str):
+        return error_payload("sort.direction must be 'asc' or 'desc'.")
+    if direction_raw.strip().lower() not in MCP_ASSET_EXPLORER_SORT_DIRECTIONS:
+        return error_payload(
+            f"sort.direction must be one of {sorted(MCP_ASSET_EXPLORER_SORT_DIRECTIONS)}, "
+            f"got {direction_raw!r}."
+        )
+    return None
+
+
 def _filters_from_extra(filters: Any) -> dict[str, Any]:
     if filters is None:
         return {}
@@ -548,6 +624,7 @@ def _build_asset_explorer_body(
     include_parent: bool = False,
     include_children: bool = False,
     filters: Any = None,
+    sort: Any = None,
 ) -> dict[str, Any]:
     """Build POST /asset-explorer JSON. Top-level tool args win over nested filters."""
     body: dict[str, Any] = drop_none(
@@ -562,6 +639,7 @@ def _build_asset_explorer_body(
         contextQuery=strip_or_none(context_query),
         page=max(page, 1),
         limit=min(max(limit, 1), MCP_SEARCH_CATALOG_MAX_LIMIT),
+        sort=_normalize_explorer_sort(sort),
     )
     if search:
         body["search"] = search
