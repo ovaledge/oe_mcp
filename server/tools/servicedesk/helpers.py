@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -11,7 +12,7 @@ from server.constants import (
     MCP_SERVICE_REQUEST_OBJECT_TYPE_ALIASES,
     MCP_SERVICE_REQUEST_TYPE_ALIASES,
 )
-from server.nav_links import build_absolute_nav_url
+from server.nav_links import build_absolute_nav_url, extract_hash_nav_link
 from server.tools.common import as_dict as _as_dict
 from server.tools.common import blank as _blank
 from server.tools.common.confirm_gate import (
@@ -31,7 +32,8 @@ _DESC_CREATE_SERVICE_REQUEST = classify_tool_desc(
     "**Not** `dq_rule_advisor` — a DQ Rule Recommendation **request** is a ticket. "
     "Resolve objects with asset_explorer first (object_id, object_type, connection_id). "
     "object_id accepts one id, a list, or comma-separated ids "
-    "(join when Select Table allowMultiple is true).\n\n"
+    "(join when Select Table allowMultiple is true). Invalid tokens "
+    "are rejected. Multiple ids fail when the selector is single-value.\n\n"
     "Infer request_type (access / content / dataquality) and object_type (table → oetable). "
     "Call without ticket_template_id/summary to look up the Published and Active template. "
     "If none is returned, stop — never publish or activate a template from MCP. "
@@ -41,6 +43,30 @@ _DESC_CREATE_SERVICE_REQUEST = classify_tool_desc(
 )
 
 ObjectIdArg = int | list[Any] | str | None
+_MAX_OBJECT_ID = 2_147_483_647
+_PRINCIPAL_FIELD_TYPES = frozenset(
+    {
+        "oeusers",
+        "oeauthorusers",
+        "oeviewerusers",
+        "oeroles",
+        "oeauthorroles",
+        "oebusinessroles",
+        "oeteams",
+        "tags",
+        "terms",
+    }
+)
+
+
+@dataclass(frozen=True)
+class ObjectIdParseResult:
+    ids: list[int]
+    rejected_tokens: list[str]
+
+    @property
+    def has_rejected_tokens(self) -> bool:
+        return bool(self.rejected_tokens)
 
 
 def normalize_request_type(value: str | None) -> str | None:
@@ -87,20 +113,23 @@ _INTERNAL_PREVIEW_FIELD_NAMES = frozenset(
 def _parse_positive_int(value: object) -> int | None:
     if isinstance(value, bool):
         return None
-    if isinstance(value, int) and value > 0:
+    if isinstance(value, int) and 1 <= value <= _MAX_OBJECT_ID:
         return value
     if isinstance(value, str):
         trimmed = value.strip()
         if trimmed.isdigit():
             parsed = int(trimmed)
-            return parsed if parsed > 0 else None
+            return parsed if 1 <= parsed <= _MAX_OBJECT_ID else None
     return None
 
 
-def normalize_object_ids(value: ObjectIdArg) -> list[int]:
-    if value is None or isinstance(value, bool):
-        return []
+def parse_object_ids(value: ObjectIdArg) -> ObjectIdParseResult:
+    if value is None:
+        return ObjectIdParseResult([], [])
+    if isinstance(value, bool):
+        return ObjectIdParseResult([], [str(value)])
     raw_items: list[object]
+    rejected: list[str] = []
     if isinstance(value, int):
         raw_items = [value]
     elif isinstance(value, str):
@@ -113,16 +142,24 @@ def normalize_object_ids(value: ObjectIdArg) -> list[int]:
             else:
                 raw_items.append(item)
     else:
-        return []
+        return ObjectIdParseResult([], [str(value)])
     ids: list[int] = []
     seen: set[int] = set()
     for item in raw_items:
         parsed = _parse_positive_int(item)
-        if parsed is None or parsed in seen:
+        if parsed is None:
+            if item is not None and not (isinstance(item, str) and not item.strip()):
+                rejected.append(str(item).strip())
+            continue
+        if parsed in seen:
             continue
         seen.add(parsed)
         ids.append(parsed)
-    return ids
+    return ObjectIdParseResult(ids, rejected)
+
+
+def normalize_object_ids(value: ObjectIdArg) -> list[int]:
+    return parse_object_ids(value).ids
 
 
 def primary_object_id(object_ids: list[int]) -> int | None:
@@ -145,7 +182,52 @@ def _catalog_selector_value(field: dict[str, Any], object_ids: list[int]) -> int
         return None
     if _field_allows_multiple(field):
         return joined_object_ids(object_ids)
+    if len(object_ids) > 1:
+        return None
     return object_ids[0]
+
+
+def _is_catalog_selector_field(field: dict[str, Any], object_type: str | None) -> bool:
+    field_object_type = str(field.get("objectType") or "").strip().lower()
+    if not field_object_type:
+        return False
+    field_type = str(field.get("fieldType") or "").strip().lower()
+    if field_type in _PRINCIPAL_FIELD_TYPES:
+        return False
+    expected = (object_type or "").strip().lower()
+    return not expected or field_object_type == expected
+
+
+def invalid_object_id_error(parsed: ObjectIdParseResult) -> dict[str, Any] | None:
+    if not parsed.has_rejected_tokens:
+        return None
+    rejected = ", ".join(parsed.rejected_tokens)
+    return error_payload(
+        "object_id contains values that are not valid catalog ids: "
+        f"{rejected}. Each id must be an integer from 1 to 2147483647.",
+        error_code="invalid_object_id",
+    )
+
+
+def multiple_object_ids_not_allowed_error(
+    fields: list[dict[str, Any]],
+    object_ids: list[int],
+    object_type: str | None,
+) -> dict[str, Any] | None:
+    if len(object_ids) <= 1 or not fields:
+        return None
+    for field in fields:
+        if not _is_catalog_selector_field(field, object_type):
+            continue
+        if _field_allows_multiple(field):
+            return None
+        name = str(field.get("fieldName") or "catalog object")
+        return error_payload(
+            f'object_id has multiple values but the catalog selector "{name}" '
+            "does not allow multiple. Provide a single object_id.",
+            error_code="object_id_multiple_not_allowed",
+        )
+    return None
 
 
 def _parse_ticket_date(value: str) -> datetime | None:
@@ -266,12 +348,20 @@ def build_lookup_params(
     return params
 
 
+def create_object_id_payload(object_ids: list[int]) -> int | str | None:
+    if not object_ids:
+        return None
+    if len(object_ids) == 1:
+        return object_ids[0]
+    return joined_object_ids(object_ids)
+
+
 def build_create_body(
     *,
     ticket_template_id: int,
     summary: str,
     description: str | None,
-    object_id: int | None,
+    object_ids: list[int],
     object_type: str | None,
     ticket_fields: dict[str, Any] | None,
     custom_fields: dict[str, str] | None,
@@ -282,7 +372,8 @@ def build_create_body(
     }
     if not _blank(description):
         body["description"] = str(description).strip()
-    if object_id is not None and object_id > 0:
+    object_id = create_object_id_payload(object_ids)
+    if object_id is not None:
         body["objectId"] = object_id
     if not _blank(object_type):
         body["objectType"] = object_type
@@ -371,16 +462,18 @@ def merge_default_ticket_fields(
     merged: dict[str, Any] = dict(ticket_fields or {})
     for field in fields:
         name = str(field.get("fieldName") or "").strip()
-        if not name or name in merged:
+        if not name:
             continue
         if field.get("filledByCurrentUser") or _is_requested_for_field(field):
-            if not _blank(current_user_id):
+            if name not in merged and not _blank(current_user_id):
                 merged[name] = current_user_id
             continue
         object_type = str(field.get("objectType") or "").strip().lower()
         selector = _catalog_selector_value(field, object_ids)
         if selector is not None and object_type and object_type not in {"oeusers", ""}:
             merged[name] = selector
+            continue
+        if name in merged:
             continue
         default = _field_default(field)
         if default is not None:
@@ -614,9 +707,17 @@ def format_create_confirmation_preview(
 def enrich_create_response(body: dict[str, Any]) -> dict[str, Any]:
     out = dict(body) if isinstance(body, dict) else {"ok": True, "data": body}
     data = _as_dict(out.get("data"))
-    nav = str(data.get("navLink") or "")
+    nav = extract_hash_nav_link(str(data.get("navLink") or ""))
+    if not nav:
+        nav = extract_hash_nav_link(str(data.get("redirectUrl") or ""))
+    redirect = str(data.get("redirectUrl") or "").strip()
     if nav:
+        data["navLink"] = nav
+    if redirect.startswith(("http://", "https://")):
+        data["redirectUrl"] = redirect
+    elif nav:
         data["redirectUrl"] = build_absolute_nav_url(nav)
+    if nav or redirect:
         out["data"] = data
     display = cell(data.get("displayTicketId") or data.get("ticketId"))
     redirect = str(data.get("redirectUrl") or "").strip()
