@@ -938,6 +938,40 @@ class TestCreateTag:
         assert "#nav/tag?id=5" in out["data"]["navLink"]
         assert out.get("catalogLookupNote")
 
+    async def test_prefers_create_response_nav_link(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.side_effect = _route_create_tag_posts(
+            {
+                "ok": True,
+                "data": {
+                    "tagId": 5,
+                    "tagName": "PII",
+                    "navLink": "#nav/tag?id=5&objectType=oetag",
+                },
+            },
+            lookup_error=OvalEdgeError(404, "Not found"),
+        )
+        open_opts = {"ok": True, "data": {"tagSecurityMode": "open", "parentTagChoices": []}}
+        mock_oe_client.get.return_value = open_opts
+        mcp = FastMCP(name="test", version="0.0.1")
+        governance.register(mcp)
+        fn = await get_tool_fn(mcp, "create_tag")
+        await fn(tag_name="PII")
+        preview = await fn(
+            tag_name="PII",
+            create_directly_under_master=True,
+            parent_step_completed_by_user=True,
+        )
+        out = await fn(
+            tag_name="PII",
+            create_directly_under_master=True,
+            parent_step_completed_by_user=True,
+            write_confirmed_by_user=True,
+            confirmation_token=preview["confirmationToken"],
+        )
+        assert out["ok"] is True
+        assert out["navLink"] == "#nav/tag?id=5&objectType=oetag"
+        assert out["backendCreatePayload"]["navLink"] == "#nav/tag?id=5&objectType=oetag"
+
     async def test_rejects_empty_name(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
         governance.register(mcp)

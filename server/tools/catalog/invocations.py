@@ -34,6 +34,7 @@ from server.tools.catalog.helpers import (
     _normalize_search_terms,
     _resolve_server_type,
     _validate_description_inputs,
+    _validate_explorer_sort,
 )
 from server.tools.common import drop_none as _q
 from server.tools.common import map_ovaledge_error, ovaledge_client
@@ -71,8 +72,12 @@ async def _invoke_asset_explorer(
     include_parent: bool = False,
     include_children: bool = False,
     filters: dict[str, Any] | None = None,
+    sort: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """POST asset-explorer — find related catalog assets; omit object_type unless inferred."""
+    sort_err = _validate_explorer_sort(sort)
+    if sort_err is not None:
+        return sort_err
     if object_type is not None and object_type not in MCP_CATALOG_OBJECT_TYPES:
         return {
             "error": (
@@ -120,6 +125,7 @@ async def _invoke_asset_explorer(
             include_parent=include_parent,
             include_children=include_children,
             filters=filters,
+            sort=sort,
         )
         async with ovaledge_client() as client:
             body = await client.post(MCP_PATH_ASSET_EXPLORER, body=payload)

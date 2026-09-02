@@ -42,6 +42,8 @@ def test_nested_range_filters_pass_through() -> None:
                 "rating": {"min": 4.01},
                 "dqIndex": {"min": 80},
                 "popularity": {"min": 70},
+                "nullDensity": {"eq": 6.7},
+                "rowCount": {"min": 100},
                 "createdDate": {"from": "2024-01-01", "to": "2024-12-31"},
             },
         }
@@ -50,4 +52,17 @@ def test_nested_range_filters_pass_through() -> None:
     assert body["filters"]["rating"] == {"min": 4.01}
     assert body["filters"]["dqIndex"] == {"min": 80}
     assert body["filters"]["popularity"] == {"min": 70}
+    assert body["filters"]["nullDensity"] == {"eq": 6.7}
+    assert body["filters"]["rowCount"] == {"min": 100}
     assert body["filters"]["createdDate"] == {"from": "2024-01-01", "to": "2024-12-31"}
+
+
+def test_sort_stays_on_search() -> None:
+    body = _to_asset_explorer_post_body(
+        {
+            "objectType": "glossary",
+            "sort": {"field": "popularity", "direction": "desc"},
+        }
+    )
+    assert body["objectType"] == "glossary"
+    assert body["search"]["sort"] == {"field": "popularity", "direction": "desc"}

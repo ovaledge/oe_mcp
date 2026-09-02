@@ -111,6 +111,9 @@ class TestStaticDocResources:
         assert "Do not invent `max:5`" in text
         assert "Omit any bound the user did not specify" in text
         assert "this tool always sends `search.page` and `search.limit`" in text
+        assert 'sort={"field":"popularity","direction":"desc"}' in compact
+        assert "dq_index" in text
+        assert "Omit `sort` when `search_terms` or `context_query` is set" in text
         assert "Backend: **POST** `/api/v1/mcp/asset-explorer`" in text
         assert "GET `/api/v1/mcp/asset-explorer`" not in text
         extra_facets = MCP_ASSET_EXPLORER_FILTER_KEYS - {
