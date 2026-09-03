@@ -85,6 +85,39 @@ class TestShouldResolveViaAssetExplorer:
             )
             is False
         )
+        assert (
+            should_resolve_via_asset_explorer(
+                "group_to_roles",
+                None,
+                None,
+                "analysts",
+                None,
+                None,
+            )
+            is False
+        )
+        assert (
+            should_resolve_via_asset_explorer(
+                "privilege_to_principals",
+                None,
+                None,
+                "SELECT",
+                None,
+                None,
+            )
+            is False
+        )
+        assert (
+            should_resolve_via_asset_explorer(
+                "role_to_parent_roles",
+                None,
+                None,
+                "ANALYST",
+                None,
+                None,
+            )
+            is False
+        )
 
 
 class TestCatalogTypeMapping:

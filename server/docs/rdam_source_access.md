@@ -43,8 +43,8 @@ Named objects: `asset_explorer` this tool fills `object_id`, `object_type`, `con
 - **role_to_parent_roles:** `object_path` or `object_name` required (role name); direct parents from `rdam_parentroles` (one hop).
 - **role_to_privileges:** `object_path` or `object_name` required (role name); account-level privileges for the role (`rdam_*privilege` by perm code).
 - **group_to_privileges:** `object_path` or `object_name` required (group name); Redshift/Tableau only. **Not Snowflake**.
-- **user_to_privileges:** `username` required; account-level privileges for the user.
-- **privilege_to_roles / privilege_to_groups / privilege_to_users / privilege_to_principals:** `object_path` or `object_name` required (privilege / perm-code name, e.g. `SELECT`); reverse lookup by name via `LIKE` on harvest tables — **not** filtered by catalog `object_path`. `privilege_to_groups` and `privilege_to_principals` are Redshift/Tableau only (**not Snowflake**).
+- **user_to_privileges:** `username` required; account-level privileges for the user (direct plus role expansion; group expansion when the source supports groups).
+- **privilege_to_roles / privilege_to_groups / privilege_to_users / privilege_to_principals:** `object_path` or `object_name` required (privilege / perm-code name, e.g. `SELECT`); reverse lookup by **token** (comma-separated `rdam_permcode` parts), not substring — **not** filtered by catalog `object_path`. `privilege_to_groups` is Redshift/Tableau only (**not Snowflake**). `privilege_to_principals` works on Snowflake (roles + users; groups skipped).
 - **Whenever `object_path` is set for grant directions:** `object_type` required (do not infer from dot segments). Membership / relationship / privilege-reverse directions are exempt.
 - **Single value only:** `source_system`, `object_type`, `connection_id`.
 - **Multiple values allowed:** `username` (user_to_objects), `object_path`.

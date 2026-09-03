@@ -47,6 +47,20 @@ class TestAccessExplorerRegistration:
             "user_to_objects",
             "object_to_users",
             "browse",
+            "role_to_users",
+            "group_to_users",
+            "user_to_roles",
+            "user_to_groups",
+            "group_to_roles",
+            "role_to_groups",
+            "role_to_parent_roles",
+            "role_to_privileges",
+            "group_to_privileges",
+            "user_to_privileges",
+            "privilege_to_roles",
+            "privilege_to_groups",
+            "privilege_to_users",
+            "privilege_to_principals",
         }
 
     def test_description_covers_both_operations(self) -> None:

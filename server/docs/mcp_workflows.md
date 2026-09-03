@@ -179,7 +179,7 @@ Bare first-person “What can I access?” / “What tables can I see?” **with
 | `privilege_to_roles` | `object_path` or `object_name` (privilege / perm-code name) | “Which roles have privilege **SELECT**?” |
 | `privilege_to_groups` | `object_path` or `object_name` (privilege name); Redshift/Tableau only | “Which groups have privilege **SELECT**?” |
 | `privilege_to_users` | `object_path` or `object_name` (privilege name) | “Which users have privilege **SELECT**?” |
-| `privilege_to_principals` | `object_path` or `object_name` (privilege name); Redshift/Tableau only | “Which principals have privilege **SELECT**?” |
+| `privilege_to_principals` | `object_path` or `object_name` (privilege name); Snowflake returns roles+users (groups skipped) | “Which principals have privilege **SELECT**?” |
 | `browse` | `connection_id`, `object_type`; optional `object_path` as parent | “List tables in `BUSINESS.BANKING`” |
 
 ### `object_path` formats

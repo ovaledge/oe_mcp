@@ -108,7 +108,7 @@ async def _invoke_source_system_access(
     if resolved_object_id is not None and not normalize_string_list(object_path):
         composed_path = None
     normalized_type: str | None = None
-    if raw_object_type is not None:
+    if raw_object_type is not None and not membership_mode:
         normalized_type, type_err = validate_and_normalize_object_type(source, raw_object_type)
         if type_err is not None:
             return type_err
@@ -147,7 +147,7 @@ async def _invoke_source_system_access(
                 resolved_fqn = resolved.fully_qualified_name
             if resolved.object_name:
                 resolved_object_name = resolved.object_name
-            if resolved.object_type:
+            if resolved.object_type and not membership_mode:
                 normalized_type, type_err = validate_and_normalize_object_type(
                     source, resolved.object_type
                 )

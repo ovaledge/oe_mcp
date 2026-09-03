@@ -14,16 +14,15 @@ from typing import Any
 from server.client import OvalEdgeError
 from server.constants import (
     MCP_MEMBERSHIP_QUERY_DIRECTIONS,
-    MCP_PRIVILEGE_REVERSE_QUERY_DIRECTIONS,
-    MCP_ROLE_NAME_QUERY_DIRECTIONS,
-    MCP_USER_MEMBERSHIP_QUERY_DIRECTIONS,
     MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
     MCP_PATH_ACCESS_EXPLORER,
+    MCP_PRIVILEGE_REVERSE_QUERY_DIRECTIONS,
     MCP_QUERY_DIRECTIONS,
     MCP_RDAM_OBJECT_TYPE_ALL,
     MCP_RDAM_OBJECT_TYPES,
     MCP_RDAM_SCOPE_MODE_DESCENDANTS,
     MCP_RDAM_SCOPE_MODE_EXACT,
+    MCP_ROLE_NAME_QUERY_DIRECTIONS,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_CONNECTION_ERROR,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_OBJECT_TYPE_ERROR,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_SOURCE_ERROR,
@@ -32,13 +31,14 @@ from server.constants import (
     MCP_SOURCE_SYSTEM_GROUP_UNSUPPORTED_FOR_SNOWFLAKE_ERROR,
     MCP_SOURCE_SYSTEM_OBJECT_PATH_REQUIRED_ERROR,
     MCP_SOURCE_SYSTEM_OBJECT_TYPE_REQUIRED_ERROR,
-    MCP_SOURCE_SYSTEM_ROLE_NAME_REQUIRED_ERROR,
     MCP_SOURCE_SYSTEM_PRIVILEGE_NAME_REQUIRED_ERROR,
+    MCP_SOURCE_SYSTEM_ROLE_NAME_REQUIRED_ERROR,
     MCP_SOURCE_SYSTEM_USERNAME_REQUIRED_ERROR,
     MCP_SOURCE_SYSTEMS,
     MCP_TABLE_SCHEMA_DISCOVERY_EARLY_EXIT_CANDIDATES,
     MCP_TABLE_SCHEMA_DISCOVERY_MAX_PROBES,
     MCP_TABLE_SCHEMA_DISCOVERY_PROBE_CONCURRENCY,
+    MCP_USER_MEMBERSHIP_QUERY_DIRECTIONS,
 )
 from server.tools.common import error_payload
 
@@ -67,7 +67,13 @@ _FULL_TABLE_PATH_SEGMENTS = 3
 
 def is_membership_direction(query_direction: str) -> bool:
     """True for role/group membership directions (principal or user centric)."""
-    return query_direction.strip().lower() in MCP_MEMBERSHIP_QUERY_DIRECTIONS
+    qd = query_direction.strip().lower()
+    return (
+        is_principal_membership_direction(qd)
+        or is_user_membership_direction(qd)
+        or is_privilege_reverse_direction(qd)
+        or qd in MCP_MEMBERSHIP_QUERY_DIRECTIONS
+    )
 
 
 def is_user_membership_direction(query_direction: str) -> bool:
@@ -88,7 +94,6 @@ def is_group_relationship_direction(query_direction: str) -> bool:
         "role_to_groups",
         "group_to_privileges",
         "privilege_to_groups",
-        "privilege_to_principals",
     }
 
 

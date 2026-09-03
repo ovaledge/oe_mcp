@@ -63,7 +63,8 @@ def register(mcp: FastMCP) -> None:
             Field(
                 description=(
                     "catalog: OvalEdge user id (user_to_object). "
-                    "RDAM: remote login for user_to_objects."
+                    "RDAM: remote login for user_to_objects / user_to_roles / "
+                    "user_to_groups / user_to_privileges."
                 ),
             ),
         ] = None,
@@ -96,8 +97,8 @@ def register(mcp: FastMCP) -> None:
             Field(
                 description=(
                     "Catalog asset name or RDAM bare table/report name. "
-                    "RDAM role_to_users / group_to_users: role or group name when "
-                    "object_path is omitted."
+                    "RDAM role_to_* / group_to_* / privilege_to_*: role, group, or "
+                    "privilege name when object_path is omitted."
                 ),
             ),
         ] = None,

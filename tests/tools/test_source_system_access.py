@@ -23,6 +23,7 @@ from server.tools.access.helpers import _DESC_ACCESS_EXPLORER
 from server.tools.rdam.helpers import (
     _has_table_level_grants,
     _schema_names_from_schema_grants,
+    is_group_relationship_direction,
     is_incomplete_table_object_path,
     is_membership_direction,
     is_principal_membership_direction,
@@ -1605,6 +1606,8 @@ class TestMembershipDirections:
         assert is_user_membership_direction("user_to_privileges")
         assert is_privilege_reverse_direction("privilege_to_roles")
         assert is_privilege_reverse_direction("privilege_to_principals")
+        assert not is_group_relationship_direction("privilege_to_principals")
+        assert is_group_relationship_direction("privilege_to_groups")
         assert not is_principal_membership_direction("user_to_roles")
         assert not is_user_membership_direction("role_to_users")
         assert not is_privilege_reverse_direction("role_to_privileges")
@@ -1783,7 +1786,11 @@ class TestMembershipDirections:
         assert err is None
 
     def test_validate_privilege_reverse_requires_privilege_name(self) -> None:
-        for direction in ("privilege_to_roles", "privilege_to_users"):
+        for direction in (
+            "privilege_to_roles",
+            "privilege_to_users",
+            "privilege_to_principals",
+        ):
             err = validate_source_system_access_args(
                 "snowflake", direction, None, None, None, 1000
             )
@@ -1795,17 +1802,16 @@ class TestMembershipDirections:
             )
             assert err is None
 
-        for direction in ("privilege_to_groups", "privilege_to_principals"):
-            err = validate_source_system_access_args(
-                "redshift", direction, None, None, None, 1000
-            )
-            assert err is not None
-            assert err["error"] == MCP_SOURCE_SYSTEM_PRIVILEGE_NAME_REQUIRED_ERROR
+        err = validate_source_system_access_args(
+            "redshift", "privilege_to_groups", None, None, None, 1000
+        )
+        assert err is not None
+        assert err["error"] == MCP_SOURCE_SYSTEM_PRIVILEGE_NAME_REQUIRED_ERROR
 
-            err = validate_source_system_access_args(
-                "redshift", direction, None, "SELECT", None, 1000
-            )
-            assert err is None
+        err = validate_source_system_access_args(
+            "redshift", "privilege_to_groups", None, "SELECT", None, 1000
+        )
+        assert err is None
 
     def test_validate_rejects_privilege_to_groups_on_snowflake(self) -> None:
         err = validate_source_system_access_args(
@@ -1814,12 +1820,11 @@ class TestMembershipDirections:
         assert err is not None
         assert err["error"] == MCP_SOURCE_SYSTEM_GROUP_UNSUPPORTED_FOR_SNOWFLAKE_ERROR
 
-    def test_validate_rejects_privilege_to_principals_on_snowflake(self) -> None:
+    def test_validate_allows_privilege_to_principals_on_snowflake(self) -> None:
         err = validate_source_system_access_args(
             "snowflake", "privilege_to_principals", None, "SELECT", None, 1000
         )
-        assert err is not None
-        assert err["error"] == MCP_SOURCE_SYSTEM_GROUP_UNSUPPORTED_FOR_SNOWFLAKE_ERROR
+        assert err is None
 
     async def test_role_to_users_forwards_params(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {
@@ -1857,6 +1862,37 @@ class TestMembershipDirections:
                 "connectionId": 1000,
             },
         )
+
+    async def test_membership_ignores_leftover_object_type(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {"grants": [{"principalType": "user", "principalName": "bob"}]},
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="snowflake",
+            query_direction="role_to_users",
+            object_name="SYSADMIN",
+            object_type="column",
+            connection_id=1000,
+        )
+        assert out["ok"] is True
+        assert_rdam_api_called(
+            mock_oe_client,
+            {
+                "sourceSystem": "snowflake",
+                "queryDirection": "role_to_users",
+                "objectPath": "SYSADMIN",
+                "connectionId": 1000,
+            },
+        )
+        called_params = mock_oe_client.get.call_args.kwargs["params"]
+        assert "objectType" not in called_params
 
     async def test_group_to_users_forwards_params(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {

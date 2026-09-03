@@ -402,6 +402,57 @@
       ]
     },
     {
+      "name": "example_native_role_to_users",
+      "input": "Which users are assigned to role SYSADMIN in Snowflake?",
+      "actual_output": "I listed users assigned to SYSADMIN via access_explorer role_to_users (object_name=SYSADMIN, no object_type).",
+      "mcp_tools_called": [
+        {
+          "name": "access_explorer",
+          "args": {
+            "operation": "source_system_access",
+            "source_system": "snowflake",
+            "query_direction": "role_to_users",
+            "object_name": "SYSADMIN"
+          },
+          "result": {
+            "grants": [
+              {
+                "principalType": "user",
+                "principalName": "bob",
+                "grantMechanism": "role",
+                "contributingRole": "SYSADMIN"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "example_native_user_to_roles",
+      "input": "Which roles is bhanu assigned to in Snowflake?",
+      "actual_output": "I listed roles for bhanu via access_explorer user_to_roles.",
+      "mcp_tools_called": [
+        {
+          "name": "access_explorer",
+          "args": {
+            "operation": "source_system_access",
+            "source_system": "snowflake",
+            "query_direction": "user_to_roles",
+            "username": "bhanu"
+          },
+          "result": {
+            "grants": [
+              {
+                "principalType": "role",
+                "principalName": "SYSADMIN",
+                "grantMechanism": "role"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "example_metadata_drift",
       "input": "What changed in the CUSTOMER schema after the latest crawl?",
       "actual_output": "I compared metadata between crawls for the CUSTOMER schema.",
