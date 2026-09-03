@@ -7,6 +7,7 @@ from typing import Any
 
 from server.client import OvalEdgeError
 from server.constants import (
+    MCP_MEMBERSHIP_QUERY_DIRECTIONS,
     MCP_PATH_ASSET_DETAILS,
     MCP_PATH_ASSET_EXPLORER,
 )
@@ -63,9 +64,10 @@ def should_resolve_via_asset_explorer(
 ) -> bool:
     """Look up identifiers via asset_explorer unless object_id and object_type are known.
 
-    DAM API only. Browse parent paths are sent to DAM as-is.
+    DAM API only. Browse and membership directions skip catalog resolve.
     """
-    if query_direction.strip().lower() == "browse":
+    qd = query_direction.strip().lower()
+    if qd == "browse" or qd in MCP_MEMBERSHIP_QUERY_DIRECTIONS:
         return False
     has_type = bool(resolve_single_object_type(object_type))
     if object_id is not None and object_id > 0 and has_type:

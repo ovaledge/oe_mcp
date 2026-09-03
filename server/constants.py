@@ -255,13 +255,79 @@ MCP_SOURCE_SYSTEM_HINT_MISMATCH_CODE = "mcp.source.system.hint.mismatch"
 MCP_SOURCE_SYSTEMS_DOC = (
     "redshift, snowflake, tableau (examples; oasis accepts additional RDAM connectors)"
 )
-MCP_QUERY_DIRECTIONS = frozenset({"user_to_objects", "object_to_users", "browse"})
-MCP_QUERY_DIRECTIONS_DOC = "user_to_objects | object_to_users | browse"
+MCP_QUERY_DIRECTIONS = frozenset(
+    {
+        "user_to_objects",
+        "object_to_users",
+        "browse",
+        "role_to_users",
+        "group_to_users",
+        "user_to_roles",
+        "user_to_groups",
+        "group_to_roles",
+        "role_to_groups",
+        "role_to_parent_roles",
+        "role_to_privileges",
+        "group_to_privileges",
+        "user_to_privileges",
+        "privilege_to_roles",
+        "privilege_to_groups",
+        "privilege_to_users",
+        "privilege_to_principals",
+    }
+)
+MCP_MEMBERSHIP_QUERY_DIRECTIONS = frozenset(
+    {
+        "role_to_users",
+        "group_to_users",
+        "user_to_roles",
+        "user_to_groups",
+        "group_to_roles",
+        "role_to_groups",
+        "role_to_parent_roles",
+        "role_to_privileges",
+        "group_to_privileges",
+        "user_to_privileges",
+        "privilege_to_roles",
+        "privilege_to_groups",
+        "privilege_to_users",
+        "privilege_to_principals",
+    }
+)
+MCP_USER_MEMBERSHIP_QUERY_DIRECTIONS = frozenset(
+    {"user_to_roles", "user_to_groups", "user_to_privileges"}
+)
+MCP_PRIVILEGE_REVERSE_QUERY_DIRECTIONS = frozenset(
+    {
+        "privilege_to_roles",
+        "privilege_to_groups",
+        "privilege_to_users",
+        "privilege_to_principals",
+    }
+)
+MCP_ROLE_NAME_QUERY_DIRECTIONS = frozenset(
+    {
+        "role_to_users",
+        "role_to_groups",
+        "role_to_parent_roles",
+        "role_to_privileges",
+    }
+)
+MCP_QUERY_DIRECTIONS_DOC = (
+    "user_to_objects | object_to_users | browse | role_to_users | group_to_users | "
+    "user_to_roles | user_to_groups | group_to_roles | role_to_groups | "
+    "role_to_parent_roles | role_to_privileges | group_to_privileges | user_to_privileges | "
+    "privilege_to_roles | privilege_to_groups | privilege_to_users | privilege_to_principals"
+)
 MCP_CATALOG_QUERY_DIRECTIONS = frozenset({"user_to_object", "object_to_principals"})
 MCP_CATALOG_QUERY_DIRECTIONS_DOC = "user_to_object | object_to_principals"
 MCP_ACCESS_QUERY_DIRECTIONS_DOC = (
     "catalog_access: user_to_object | object_to_principals; "
-    "source_system_access: user_to_objects | object_to_users | browse"
+    "source_system_access: user_to_objects | object_to_users | browse | "
+    "role_to_users | group_to_users | user_to_roles | user_to_groups | "
+    "group_to_roles | role_to_groups | role_to_parent_roles | role_to_privileges | "
+    "group_to_privileges | user_to_privileges | privilege_to_roles | "
+    "privilege_to_groups | privilege_to_users | privilege_to_principals"
 )
 
 # RDAM native object levels for access_explorer source_system_access (wire: objectType).
@@ -594,6 +660,20 @@ MCP_SOURCE_SYSTEM_OBJECT_TYPE_REQUIRED_ERROR = (
 MCP_SOURCE_SYSTEM_DESCENDANTS_CONNECTION_REQUIRED_ERROR = (
     "Query parameter connectionId is required when objectPath is omitted with "
     "scope_mode=descendants."
+)
+MCP_SOURCE_SYSTEM_ROLE_NAME_REQUIRED_ERROR = (
+    "Query parameter object_path or object_name is required for role_to_users (the role name)."
+)
+MCP_SOURCE_SYSTEM_GROUP_NAME_REQUIRED_ERROR = (
+    "Query parameter object_path or object_name is required for group_to_users (the group name)."
+)
+MCP_SOURCE_SYSTEM_GROUP_UNSUPPORTED_FOR_SNOWFLAKE_ERROR = (
+    "Group membership lookup is not supported for this source_system. Use role_to_users for "
+    "Snowflake."
+)
+MCP_SOURCE_SYSTEM_PRIVILEGE_NAME_REQUIRED_ERROR = (
+    "Query parameter object_path or object_name is required for privilege reverse lookup "
+    "(the privilege / perm code)."
 )
 
 # asset-explorer POST JSON keys (POST /api/v1/mcp/asset-explorer).
