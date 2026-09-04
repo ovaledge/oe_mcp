@@ -197,14 +197,6 @@ class TestAssessCdeDq:
                                 "matchReason": "keyword_match",
                             },
                         ],
-                        "existingRulesForFunction": [
-                            {
-                                "dqruleId": 1618,
-                                "name": "DESCRIPTION_datalengthrange",
-                                "purpose": "Description must be more than 50 characters",
-                                "purposeSimilarity": 0.0,
-                            }
-                        ],
                     }
                 ],
             }
@@ -212,9 +204,34 @@ class TestAssessCdeDq:
         assert "recommendedFunctionCandidates" in text
         assert "Non-Empty and Non-Null Validation" in text
         assert "excluded_function_names" in text
-        assert "Existing rules using this function" in text or "existingRulesForFunction" in text
-        assert "DESCRIPTION_datalengthrange" in text
-        assert "ID 1618" in text
+
+    def test_format_assess_shows_matching_existing_rule(self) -> None:
+        text = dataquality_helpers.format_assess_cde_dq_response(
+            {
+                "assessedCount": 1,
+                "rows": [
+                    {
+                        "tableColumnName": "CATEGORY_NAME",
+                        "objectId": 42,
+                        "objectType": "oecolumn",
+                        "recommendedFunction": "Non-Null Validation",
+                        "recommendedWorkflow": "function_based",
+                        "recommendedRuleId": 10264,
+                        "recommendedRule": "STG_CATEGORIES_CATEGORY_NAME_NN",
+                        "associatedToDqRule": False,
+                        "recommendedFunctionCandidates": [
+                            {
+                                "functionName": "Non-Null Validation",
+                                "score": 0.72,
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+        assert "STG_CATEGORIES_CATEGORY_NAME_NN" in text
+        assert "10264" in text
+        assert "associate" in text
 
     def test_format_assess_hides_dbt_function_candidates(self) -> None:
         text = dataquality_helpers.format_assess_cde_dq_response(

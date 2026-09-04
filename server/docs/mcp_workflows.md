@@ -27,7 +27,7 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 | Data quality rule lookup | `dq_rule_advisor` step=lookup; prompt `explain_dq_rule` |
 | CDE assets / DQ function & rule recommendations | `dq_rule_advisor` step=assess (after `asset_explorer` or `discover_cde_columns=true`) |
 | Associate objects to existing data quality rule | `dq_rule_manager` step=associate (after assess/lookup; confirm gate) |
-| Find same-function rules before creating | `dq_rule_manager` step=create_standard with `prefer_existing_rule=true` (default) |
+| Associate to context-matching existing rule (or create) | `dq_rule_manager` step=create_standard with `prefer_existing_rule=true` (default; uses assess `recommendedRuleId`) |
 | Create a **new** data quality rule (second rule / explicit new) | `dq_rule_manager` step=create_standard with `prefer_existing_rule=false` |
 | Mark object as CDE before auto-create | `update_cde_associations` (confirm gate) → then `dq_rule_manager` step=create_standard |
 | Generate custom SQL data quality queries | `dq_rule_advisor` step=generate_query (after assess when workflow is `custom_sql`) |
@@ -400,12 +400,12 @@ See also: [governance](governance), [asset_types](asset_types), [overview](overv
 
 End-to-end routing for function-based and custom-SQL data quality workflows.
 
-**Ladder (do not skip):** (1) `dq_rule_advisor` step=assess → present `recommendedFunction` / `recommendedFunctionCandidates` and `existingRulesForFunction`; (2) if same-function rules exist → user picks → `dq_rule_manager` step=associate; (3) else → `dq_rule_manager` step=create_standard with `preferred_function_name` = exact candidate / `recommendedFunction` name; (4) only when `recommendedFunction` is Not Identified **and** no usable catalog candidates remain **and** the user confirms custom SQL → generate_query → validate_query → create_custom_sql with the `recommendedFunction` name from generate/assess. Use exact OvalEdge catalog function names only — never invent labels such as “Max Length Check”. Retry policy: auto-retry the last successful ladder step once; if it still fails, stop and ask the user.
+**Ladder (do not skip):** (1) `dq_rule_advisor` step=assess → present `recommendedFunction` / `recommendedFunctionCandidates` and `recommendedRuleId` when an existing rule matches the object's business context; (2) `dq_rule_manager` step=create_standard with `prefer_existing_rule=true` — associates to that existing rule when `recommendedRuleId` is set, otherwise creates; (3) only when `recommendedFunction` is Not Identified **and** no usable catalog candidates remain **and** the user confirms custom SQL → generate_query → validate_query → create_custom_sql with the `recommendedFunction` name from generate/assess. Use exact OvalEdge catalog function names only — never invent labels such as “Max Length Check”. Retry policy: auto-retry the last successful ladder step once; if it still fails, stop and ask the user.
 
 ### Read-only path
 
 1. `asset_explorer` with `critical_data_element=Yes` (types: `oetable`, `oecolumn`, `oefile`, `oefilecolumn`), **or** pass known `objects` to `dq_rule_advisor` step=assess.
-2. `dq_rule_advisor` step=assess — recommended function and `existingRulesForFunction` (all active rules using that function, purpose-ranked but never filtered by purpose).
+2. `dq_rule_advisor` step=assess — recommended function and `recommendedRuleId` when an existing same-function rule matches the object's business description / business rule.
 3. Optional: `dq_rule_advisor` step=lookup when the user names an existing rule (rules are not in catalog search).
 
 ### Write path (function-based auto-create / associate)
@@ -413,7 +413,7 @@ End-to-end routing for function-based and custom-SQL data quality workflows.
 | Step | Tool | Notes |
 |------|------|--------|
 | Mark CDE (prerequisite) | `update_cde_associations` | Object must be **CDE=Yes** before auto-create; tables, columns, files, schemas, charts, APIs, queries; **confirm gate** |
-| Select or create | `dq_rule_manager` step=create_standard | Re-assesses internally; same-function rules require user selection; new create has **confirm gate** |
+| Select or create | `dq_rule_manager` step=create_standard | Re-assesses internally; associates to a context-matching existing rule when `prefer_existing_rule=true`; new create has **confirm gate** |
 | Link to known rule only | `dq_rule_manager` step=associate | When `dqrule_id` is known; does not auto-create; **confirm gate** |
 
 **`dq_rule_manager` step=create_standard routing (agent):**
@@ -422,7 +422,7 @@ End-to-end routing for function-based and custom-SQL data quality workflows.
 |-------------|------------|
 | One named column/table (after reading its description) | `objects=[{"objectId": <id>, "objectType": "oecolumn"}]`, `discover_cde_columns=false` — **do not** discover-all |
 | List / assess all CDE columns in a domain | `discover_cde_columns=true` (or explicit multi-object `objects`) |
-| “Create data quality rule” / from business description (default) | `prefer_existing_rule=true` lists every same-function rule; ask user to select an ID or explicitly choose new |
+| “Create data quality rule” / from business description (default) | `prefer_existing_rule=true` associates to a context-matching existing rule when found; otherwise creates |
 | “Create **new** rule” / second rule / different purpose on same object | `prefer_existing_rule=false`; often `skip_duplicate_function_on_object=false` |
 | Criteria only in user message, not in catalog | `supplemental_criteria_text` |
 | Pick a function from assess candidates | `preferred_function_name` |
@@ -441,7 +441,7 @@ End-to-end routing for function-based and custom-SQL data quality workflows.
 
 **`prefer_existing_rule` behavior:**
 
-- **`true` (default):** Assessment returns every active rule with the recommended function in `existingRulesForFunction`. Purpose similarity only sorts the list; it never removes a same-function rule. The MCP preview returns `select_existing_rule` without a create token. Ask the user to choose a `dqruleId`, then use `dq_rule_manager` step=associate.
+- **`true` (default):** If assess finds an existing same-function rule whose purpose/criteria match the object's business description or business rule, `create_standard` **associates** that object to the recommended rule (`recommendedRuleId`) instead of creating a new one. Unrelated same-function rules are ignored.
 - **`false`:** Explicitly request a **new** data quality rule. The normal create confirmation gate applies.
 - Criteria are parsed from business metadata first. A create response reports `criteriaSource=business_metadata`, `business_metadata_with_defaults`, `function_default`, `not_required`, or `unresolved`; `criteriaMessage` explains partial/failed parsing, defaults applied, or required manual review.
 

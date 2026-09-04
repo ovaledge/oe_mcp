@@ -84,7 +84,8 @@ _DESC_DQ_RULE_MANAGER = classify_tool_desc(
 _DQ_ASSESS_AGENT_INSTRUCTION = (
     "Follow the DQ ladder: present recommendedFunction and "
     "recommendedFunctionCandidates (exact OE names only). "
-    "Prefer associate, then create_standard with an exact candidate name. "
+    "If recommendedRuleId is set, dq_rule_manager step=create_standard associates "
+    "the object to that existing rule — do not create a duplicate. "
     "If Not Identified but candidates are present, ask the user to pick one "
     "candidate — do not invent a function name. "
     "Only after user confirms custom SQL when no usable catalog candidate remains, "
@@ -304,6 +305,27 @@ def _is_dbt_function_name(name: Any) -> bool:
     return text.startswith("dbt_") or text.startswith("dbt ")
 
 
+def _matching_existing_rule(row: dict[str, Any]) -> dict[str, Any] | None:
+    """Existing rule to associate when assess set recommendedRuleId from a context match."""
+    rid = row.get("recommendedRuleId")
+    try:
+        rid_int = int(rid) if rid is not None else 0
+    except (TypeError, ValueError):
+        rid_int = 0
+    name = row.get("recommendedRule")
+    if not isinstance(name, str):
+        name_text = ""
+    else:
+        name_text = name.strip()
+    if rid_int <= 0 or not name_text or name_text.lower() == "not available":
+        return None
+    return {
+        "dqruleId": rid_int,
+        "name": name_text,
+        "associatedToObject": bool(row.get("associatedToDqRule")),
+    }
+
+
 def format_assess_cde_dq_response(body: dict[str, Any]) -> str:
     """Human-readable summary highlighting description gaps and function candidates."""
     data = body.get("data") if isinstance(body.get("data"), dict) else body
@@ -346,6 +368,7 @@ def format_assess_cde_dq_response(body: dict[str, Any]) -> str:
                 lines.append(f"  Available custom fields: {', '.join(str(f) for f in fields)}")
         rec_fn = row.get("recommendedFunction")
         workflow = row.get("recommendedWorkflow")
+        matching_rule = _matching_existing_rule(row)
         if isinstance(rec_fn, str) and rec_fn.strip() and not _is_dbt_function_name(rec_fn):
             wf = f" [{workflow}]" if isinstance(workflow, str) and workflow.strip() else ""
             lines.append(f"  recommendedFunction: `{rec_fn}`{wf}")
@@ -369,14 +392,21 @@ def format_assess_cde_dq_response(body: dict[str, Any]) -> str:
                 reason_bit = f", {reason}" if isinstance(reason, str) and reason.strip() else ""
                 lines.append(f"    - `{cname}`{score_bit}{reason_bit}")
             if isinstance(workflow, str) and workflow.strip().lower() == "custom_sql":
-                lines.append(
-                    "  Next: after user confirms custom SQL, call "
-                    f"{TOOL_DQ_RULE_ADVISOR} step=generate_query → validate_query → "
-                    f"{TOOL_DQ_RULE_MANAGER} step=create_custom_sql with recommendedFunction "
-                    "verbatim. Never hand-write SQL. Do not use create_standard for an "
-                    "OEQUERY SQL function. IN/NOT IN or allowed-value sets use "
-                    "SQL Values Contains, not SQL Exact Value."
-                )
+                if matching_rule:
+                    lines.append(
+                        f"  Next: {TOOL_DQ_RULE_MANAGER} step=create_standard will associate "
+                        f"this object to existing rule ID {matching_rule.get('dqruleId')} "
+                        f"({matching_rule.get('name')}). Do not create a duplicate."
+                    )
+                else:
+                    lines.append(
+                        "  Next: after user confirms custom SQL, call "
+                        f"{TOOL_DQ_RULE_ADVISOR} step=generate_query → validate_query → "
+                        f"{TOOL_DQ_RULE_MANAGER} step=create_custom_sql with recommendedFunction "
+                        "verbatim. Never hand-write SQL. Do not use create_standard for an "
+                        "OEQUERY SQL function. IN/NOT IN or allowed-value sets use "
+                        "SQL Values Contains, not SQL Exact Value."
+                    )
             else:
                 not_id = (
                     isinstance(rec_fn, str)
@@ -388,12 +418,25 @@ def format_assess_cde_dq_response(body: dict[str, Any]) -> str:
                         "real OE catalog functions — ask the user to pick one exact name "
                         "for create_standard. Never invent names (Max Length Check, etc.)."
                     )
-                lines.append(
-                    f"  Next: {TOOL_DQ_RULE_MANAGER} step=create_standard with "
-                    "preferred_function_name = one exact candidate / recommendedFunction "
-                    "name from the list above. If none fit: re-call "
-                    f"{TOOL_DQ_RULE_ADVISOR} step=assess with excluded_function_names."
-                )
+                if matching_rule:
+                    lines.append(
+                        f"  Next: {TOOL_DQ_RULE_MANAGER} step=create_standard will associate "
+                        f"this object to existing rule ID {matching_rule.get('dqruleId')} "
+                        f"({matching_rule.get('name')}). Do not create a duplicate."
+                    )
+                else:
+                    lines.append(
+                        f"  Next: {TOOL_DQ_RULE_MANAGER} step=create_standard with "
+                        "preferred_function_name = one exact candidate / recommendedFunction "
+                        "name from the list above. If none fit: re-call "
+                        f"{TOOL_DQ_RULE_ADVISOR} step=assess with excluded_function_names."
+                    )
+        elif matching_rule:
+            lines.append(
+                f"  Next: {TOOL_DQ_RULE_MANAGER} step=create_standard will associate "
+                f"this object to existing rule ID {matching_rule.get('dqruleId')} "
+                f"({matching_rule.get('name')}). Do not create a duplicate."
+            )
         elif (
             isinstance(rec_fn, str)
             and rec_fn.strip().lower() == "not identified"
@@ -427,20 +470,17 @@ def format_assess_cde_dq_response(body: dict[str, Any]) -> str:
                     f"before calling {TOOL_DQ_RULE_ADVISOR} step=generate_query; "
                     "never invent a function name or hand-write SQL."
                 )
-        existing_rules = row.get("existingRulesForFunction")
-        if isinstance(existing_rules, list) and existing_rules:
+        if matching_rule:
             lines.append(
-                "  existingRulesForFunction (user must choose → associate before create):"
+                "  Existing matching rule (create_standard will associate, not create): "
+                f"{_format_existing_rule_choice(matching_rule)}"
             )
-            for rule in existing_rules:
-                if not isinstance(rule, dict):
-                    continue
-                lines.append(f"    {_format_existing_rule_choice(rule)}")
     lines.append("")
     lines.append(
-        "Ladder reminder: associate existing same-function rules first; else "
-        "create_standard; custom SQL only after user confirmation when no "
-        "recommendedFunction remains — then generate → validate → create. "
+        "Ladder reminder: when recommendedRuleId is set (context-matching existing "
+        "rule), create_standard associates to that rule; else create_standard creates; "
+        "custom SQL only after user confirmation when no recommendedFunction remains "
+        "— then generate → validate → create. "
         f"{_DQ_RETRY_POLICY}"
     )
     return "\n".join(lines)
@@ -600,58 +640,30 @@ def format_create_dq_rules_confirmation_preview(
         assessment_data.get("rows", []) if isinstance(assessment_data, dict) else []
     )
     action_lines: list[str] = []
-    selection_lines: list[str] = []
-    selection_choices: list[dict[str, Any]] = []
     for row in assessment_rows if isinstance(assessment_rows, list) else []:
         if not isinstance(row, dict):
             continue
         object_id = row.get("objectId")
         object_type = row.get("objectType")
-        existing_rules = row.get("existingRulesForFunction")
-        if prefer and isinstance(existing_rules, list) and existing_rules:
-            selection_lines.append(f"- `{object_type}:{object_id}`:")
-            selection_choices.append(
-                {
-                    "objectId": object_id,
-                    "objectType": object_type,
-                    "rules": [rule for rule in existing_rules if isinstance(rule, dict)],
-                }
-            )
-            selection_lines.extend(
-                f"  {_format_existing_rule_choice(rule)}"
-                for rule in existing_rules
-                if isinstance(rule, dict)
-            )
+        matching_rule = _matching_existing_rule(row) if prefer else None
+        if matching_rule:
+            rule_id = matching_rule.get("dqruleId", "?")
+            rule_name = matching_rule.get("name", "?")
+            if matching_rule.get("associatedToObject"):
+                action_lines.append(
+                    f"- `{object_type}:{object_id}`: already associated to existing rule "
+                    f"{rule_name} (id {rule_id})"
+                )
+            else:
+                action_lines.append(
+                    f"- `{object_type}:{object_id}`: associate to existing rule "
+                    f"{rule_name} (id {rule_id}) — do not create a new rule"
+                )
             continue
         action_lines.append(
             f"- `{object_type}:{object_id}`: create a new rule "
-            "(no existing rule uses the recommended function)"
+            "(no existing rule matches this object's business context)"
         )
-    if selection_lines:
-        return {
-            "ok": True,
-            "awaitingUserConfirmation": True,
-            "workflowPhase": "select_existing_rule",
-            "doNotCreate": True,
-            "requiresRuleSelection": True,
-            "writeConfirmedByUser": False,
-            "formattedResponse": (
-                "**Choose an existing DQ rule or explicitly request a new rule**\n\n"
-                "The following active rules use the recommended function:\n"
-                f"{chr(10).join(selection_lines)}\n\n"
-                "Ask the user to choose a DQ rule ID. For a selected rule, call "
-                f"`{TOOL_DQ_RULE_MANAGER}` step=associate and use its confirmation flow. "
-                "If the user explicitly wants a new rule instead, re-call "
-                f"`{TOOL_DQ_RULE_MANAGER}` step=create_standard with "
-                "`prefer_existing_rule=false` to receive a create confirmation preview."
-            ),
-            "agentInstruction": (
-                "Do not create or auto-select. Present every same-function rule and wait for "
-                "the user to choose a dqruleId, or explicitly choose creation."
-            ),
-            "existingRuleChoices": selection_choices,
-            "pendingCreate": body,
-        }
     planned_actions = (
         "\n".join(action_lines)
         if action_lines
