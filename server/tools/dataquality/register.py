@@ -189,7 +189,14 @@ def register(mcp: FastMCP) -> None:
         ] = MCP_DQ_ASSESS_LIMIT_DEFAULT,
         prefer_existing_rule: Annotated[
             bool,
-            Field(description="create_standard: list same-function rules to choose.", default=True),
+            Field(
+                description=(
+                    "create_standard: when true (default), associate to recommendedRuleId "
+                    "if assess found a context-matching existing rule; otherwise create. "
+                    "When false, always create a new rule."
+                ),
+                default=True,
+            ),
         ] = True,
         skip_duplicate_function_on_object: Annotated[
             bool,

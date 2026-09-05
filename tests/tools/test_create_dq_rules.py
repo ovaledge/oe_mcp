@@ -106,22 +106,9 @@ class TestCreateDqRules:
                     {
                         "objectId": 42,
                         "objectType": "oecolumn",
-                        "existingRulesForFunction": [
-                            {
-                                "dqruleId": 101,
-                                "name": "Inventory Quantity Required",
-                                "purpose": "Quantity must be populated",
-                                "successOperator": "Greater Than",
-                                "successValue1": "0",
-                                "purposeSimilarity": 0.2,
-                            },
-                            {
-                                "dqruleId": 1618,
-                                "name": "DESCRIPTION_datalengthrange",
-                                "purpose": "Description should be more than 50 characters",
-                                "purposeSimilarity": 0.0,
-                            },
-                        ],
+                        "recommendedRuleId": 101,
+                        "recommendedRule": "Inventory Quantity Required",
+                        "associatedToDqRule": False,
                     }
                 ]
             }
@@ -135,15 +122,45 @@ class TestCreateDqRules:
             objects={"objectId": 42, "objectType": "oecolumn"},
         )
 
-        assert preview["workflowPhase"] == "select_existing_rule"
-        assert preview["requiresRuleSelection"] is True
-        assert preview.get("confirmationToken") is None
+        assert preview["workflowPhase"] == "confirm_create"
+        assert preview.get("confirmationToken")
+        assert preview.get("requiresRuleSelection") is None
+        assert "associate to existing rule" in preview["formattedResponse"]
         assert "Inventory Quantity Required" in preview["formattedResponse"]
-        assert "ID 101" in preview["formattedResponse"]
-        assert "DESCRIPTION_datalengthrange" in preview["formattedResponse"]
-        assert "ID 1618" in preview["formattedResponse"]
-        assert "prefer_existing_rule=false" in preview["formattedResponse"]
-        assert preview["existingRuleChoices"][0]["rules"][1]["dqruleId"] == 1618
+        assert "id 101" in preview["formattedResponse"]
+        assert "do not create a new rule" in preview["formattedResponse"]
+
+    async def test_preview_ignores_recommended_rule_not_available(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        """Oasis RULE_NOT_AVAILABLE means no context match — do not associate."""
+        mock_oe_client.post.return_value = {
+            "data": {
+                "rows": [
+                    {
+                        "objectId": 42,
+                        "objectType": "oecolumn",
+                        "recommendedRuleId": 10264,
+                        "recommendedRule": "Not Available",
+                        "associatedToDqRule": False,
+                    }
+                ]
+            }
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
+
+        preview = await fn(
+            step="create_standard",
+            objects={"objectId": 42, "objectType": "oecolumn"},
+        )
+
+        assert preview["workflowPhase"] == "confirm_create"
+        assert preview.get("confirmationToken")
+        assert "associate to existing rule" not in preview["formattedResponse"]
+        assert "id 10264" not in preview["formattedResponse"]
+        assert "Not Available" not in preview["formattedResponse"]
 
     async def test_discover_posts_payload(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.post.return_value = {"rows": []}
