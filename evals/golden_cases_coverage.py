@@ -91,18 +91,26 @@ _ASSESS_CDE_DQ_PROMPT_TEXT = (
     "Assess CDE DQ coverage.\n\n"
     "Steps:\n"
     "1. dq_rule_advisor step=assess for CDE columns on target tables.\n"
-    "2. dq_rule_advisor step=lookup for matching rules.\n"
-    "3. dq_rule_manager step=associate or step=create_standard with confirm gate "
-    "(preview, then write_confirmed_by_user=true + confirmation_token)."
+    "2. Present recommendedFunction / recommendedRuleId when an existing rule "
+    "matches the object's business context. If already associated, skip the write.\n"
+    "3. If the user wants coverage applied, dq_rule_manager step=create_standard "
+    "(prefer_existing_rule=true) — associates when recommendedRuleId is set, "
+    "otherwise creates. Confirm gate (preview, then write_confirmed_by_user=true "
+    "+ confirmation_token).\n"
+    "4. dq_rule_advisor step=lookup only when the user names an existing rule; "
+    "then dq_rule_manager step=associate with confirm gate."
 )
 
 _CUSTOM_SQL_DQ_PROMPT_TEXT = (
     "Custom SQL DQ workflow for CDE column.\n\n"
     "Steps:\n"
-    "1. dq_rule_advisor step=generate_query for the column (custom_sql path)\n"
-    "2. dq_rule_advisor step=validate_query with confirm gate "
-    "using connection_id/schema_id from context\n"
-    "3. dq_rule_manager step=create_custom_sql with confirm gate when canCreateRule is true"
+    "1. dq_rule_advisor step=assess first.\n"
+    "2. If recommendedRuleId is set and not already associated, "
+    "dq_rule_manager step=create_standard (prefer_existing_rule=true) associates.\n"
+    "3. If no matching rule, create_standard with prefer_existing_rule=true; "
+    "use prefer_existing_rule=false only for an explicit second/new rule.\n"
+    "4. Custom SQL only after user confirmation when no recommendedFunction remains: "
+    "generate_query → validate_query (confirm gate) → create_custom_sql (confirm gate)."
 )
 
 _GLOSSARY_CREATE_POST_BODY: dict[str, object] = {
@@ -1068,10 +1076,12 @@ def golden_dq_coverage_workflow() -> ConversationalTestCase:
     )
     return ConversationalTestCase(
         name="dq_coverage_workflow",
-        scenario="Analyst assesses CDE DQ coverage and links rules to columns.",
+        scenario="Analyst assesses CDE DQ coverage and applies associate-or-create.",
         expected_outcome=(
-            "Agent runs dq_rule_advisor (assess_cde), looks up a rule, previews and confirms "
-            "association, then previews and confirms dq_rule_manager (create_standard) when needed."
+            "Agent runs dq_rule_advisor step=assess, then dq_rule_manager "
+            "step=create_standard (prefer_existing_rule=true) to associate when "
+            "recommendedRuleId is set or create otherwise. Lookup plus step=associate "
+            "only when the user names an existing rule."
         ),
         mcp_servers=[srv],
         turns=[
@@ -1110,8 +1120,25 @@ def golden_dq_coverage_workflow() -> ConversationalTestCase:
                         },
                         result=tool_call_result(
                             {
-                                "assessedCount": 3,
-                                "rows": [{"objectId": 101, "objectType": "oecolumn"}],
+                                "assessedCount": 2,
+                                "rows": [
+                                    {
+                                        "objectId": 101,
+                                        "objectType": "oecolumn",
+                                        "recommendedFunction": "Non-Null Validation",
+                                        "recommendedRuleId": 10264,
+                                        "recommendedRule": "STG_CATEGORIES_CATEGORY_NAME_NN",
+                                        "associatedToDqRule": False,
+                                    },
+                                    {
+                                        "objectId": 102,
+                                        "objectType": "oecolumn",
+                                        "recommendedFunction": "Non-Null Validation",
+                                        "recommendedRuleId": 0,
+                                        "recommendedRule": "Not Available",
+                                        "associatedToDqRule": False,
+                                    },
+                                ],
                             }
                         ),
                     ),
@@ -1119,11 +1146,75 @@ def golden_dq_coverage_workflow() -> ConversationalTestCase:
             ),
             Turn(
                 role="user",
-                content="Link the null-density rule to those columns.",
+                content="Apply the recommendations.",
             ),
             Turn(
                 role="assistant",
-                content="Looking up DQ rule, then previewing association.",
+                content="Previewing dq_rule_manager create_standard (associate or create).",
+                mcp_tools_called=[
+                    MCPToolCall(
+                        name=TOOL_DQ_RULE_MANAGER,
+                        args={
+                            "step": "create_standard",
+                            "objects": [
+                                {"object_id": 101, "object_type": "oecolumn"},
+                                {"object_id": 102, "object_type": "oecolumn"},
+                            ],
+                            "prefer_existing_rule": True,
+                            "write_confirmed_by_user": False,
+                        },
+                        result=tool_call_result(
+                            {
+                                "workflowPhase": "confirm_create",
+                                "doNotCreate": True,
+                                "confirmationToken": _CREATE_DQ_CONFIRM_TOKEN,
+                                "formattedResponse": (
+                                    "**Confirm DQ rule create/associate**\n"
+                                    "- `oecolumn:101`: associate to existing rule "
+                                    "STG_CATEGORIES_CATEGORY_NAME_NN (id 10264)\n"
+                                    "- `oecolumn:102`: create a new rule"
+                                ),
+                            },
+                        ),
+                    ),
+                ],
+            ),
+            Turn(role="user", content="Approved — apply the rules."),
+            Turn(
+                role="assistant",
+                content="POSTing dq_rule_manager create_standard with preview token.",
+                mcp_tools_called=[
+                    MCPToolCall(
+                        name=TOOL_DQ_RULE_MANAGER,
+                        args={
+                            "step": "create_standard",
+                            "objects": [
+                                {"object_id": 101, "object_type": "oecolumn"},
+                                {"object_id": 102, "object_type": "oecolumn"},
+                            ],
+                            "prefer_existing_rule": True,
+                            "write_confirmed_by_user": True,
+                            "confirmation_token": _CREATE_DQ_CONFIRM_TOKEN,
+                        },
+                        result=tool_call_result(
+                            {
+                                "data": {
+                                    "createdCount": 1,
+                                    "associatedCount": 1,
+                                },
+                                "formattedResponse": "1 created, 1 associated.",
+                            },
+                        ),
+                    ),
+                ],
+            ),
+            Turn(
+                role="user",
+                content="Also link the Null Data Density Check rule to column 101.",
+            ),
+            Turn(
+                role="assistant",
+                content="Looking up the named DQ rule, then previewing association.",
                 mcp_tools_called=[
                     MCPToolCall(
                         name=TOOL_DQ_RULE_ADVISOR,
@@ -1150,7 +1241,7 @@ def golden_dq_coverage_workflow() -> ConversationalTestCase:
                     ),
                 ],
             ),
-            Turn(role="user", content="Approved — link the rule."),
+            Turn(role="user", content="Approved — link the named rule."),
             Turn(
                 role="assistant",
                 content="POSTing association with preview token.",
@@ -1166,52 +1257,6 @@ def golden_dq_coverage_workflow() -> ConversationalTestCase:
                         },
                         result=tool_call_result(
                             {"data": {"associatedCount": 1, "dqruleId": 42}},
-                        ),
-                    ),
-                ],
-            ),
-            Turn(
-                role="user",
-                content="Create missing DQ rules for any uncovered CDE columns.",
-            ),
-            Turn(
-                role="assistant",
-                content="Previewing dq_rule_manager create_standard in discover mode.",
-                mcp_tools_called=[
-                    MCPToolCall(
-                        name=TOOL_DQ_RULE_MANAGER,
-                        args={
-                            "step": "create_standard",
-                            "discover_cde_columns": True,
-                            "prefer_existing_rule": True,
-                            "write_confirmed_by_user": False,
-                        },
-                        result=tool_call_result(
-                            {
-                                "workflowPhase": "confirm_create",
-                                "doNotCreate": True,
-                                "confirmationToken": _CREATE_DQ_CONFIRM_TOKEN,
-                            },
-                        ),
-                    ),
-                ],
-            ),
-            Turn(role="user", content="Approved — create rules."),
-            Turn(
-                role="assistant",
-                content="POSTing dq_rule_manager create_standard with preview token.",
-                mcp_tools_called=[
-                    MCPToolCall(
-                        name=TOOL_DQ_RULE_MANAGER,
-                        args={
-                            "step": "create_standard",
-                            "discover_cde_columns": True,
-                            "prefer_existing_rule": True,
-                            "write_confirmed_by_user": True,
-                            "confirmation_token": _CREATE_DQ_CONFIRM_TOKEN,
-                        },
-                        result=tool_call_result(
-                            {"rows": [{"status": "created", "dqruleId": 55}]},
                         ),
                     ),
                 ],
@@ -1269,11 +1314,11 @@ def golden_custom_sql_dq_workflow() -> ConversationalTestCase:
     )
     return ConversationalTestCase(
         name="custom_sql_dq_workflow",
-        scenario="Analyst generates, validates, and creates a custom SQL DQ rule.",
+        scenario="Analyst assesses first, then generates, validates, and creates custom SQL.",
         expected_outcome=(
-            "Agent calls dq_rule_advisor (generate_query), previews and confirms "
-            "dq_rule_advisor (validate_query), then previews and confirms dq_rule_manager "
-            "(create_custom_sql) when validation allows."
+            "Agent calls dq_rule_advisor step=assess first. generate_query runs only "
+            "after no recommendedFunction remains and the user confirms custom SQL. "
+            "Then confirm-gated validate_query and create_custom_sql."
         ),
         mcp_servers=[srv],
         turns=[
@@ -1283,13 +1328,46 @@ def golden_custom_sql_dq_workflow() -> ConversationalTestCase:
             ),
             Turn(
                 role="assistant",
-                content="Following create_custom_sql_dq_workflow.",
+                content="Following create_custom_sql_dq_workflow — assess first.",
                 mcp_prompts_called=[
                     MCPPromptCall(
                         name="create_custom_sql_dq_workflow",
                         result=prompt_result,
                     ),
                 ],
+                mcp_tools_called=[
+                    MCPToolCall(
+                        name=TOOL_DQ_RULE_ADVISOR,
+                        args={
+                            "step": "assess",
+                            "objects": [{"object_id": 101, "object_type": "oecolumn"}],
+                        },
+                        result=tool_call_result(
+                            {
+                                "assessedCount": 1,
+                                "rows": [
+                                    {
+                                        "objectId": 101,
+                                        "objectType": "oecolumn",
+                                        "recommendedFunction": "Not Identified",
+                                        "recommendedWorkflow": "custom_sql",
+                                        "recommendedRuleId": 0,
+                                        "recommendedRule": "Not Available",
+                                        "associatedToDqRule": False,
+                                    }
+                                ],
+                            }
+                        ),
+                    ),
+                ],
+            ),
+            Turn(
+                role="user",
+                content="No catalog function fits — generate custom SQL.",
+            ),
+            Turn(
+                role="assistant",
+                content="Generating custom SQL after user confirmation.",
                 mcp_tools_called=[
                     MCPToolCall(
                         name=TOOL_DQ_RULE_ADVISOR,

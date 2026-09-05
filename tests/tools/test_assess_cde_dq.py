@@ -231,7 +231,66 @@ class TestAssessCdeDq:
         )
         assert "STG_CATEGORIES_CATEGORY_NAME_NN" in text
         assert "10264" in text
-        assert "associate" in text
+        assert "will associate" in text
+        assert "already associated; no write needed" not in text
+        assert "Next: already associated" not in text
+
+    def test_format_assess_already_associated_matching_rule(self) -> None:
+        text = dataquality_helpers.format_assess_cde_dq_response(
+            {
+                "assessedCount": 1,
+                "rows": [
+                    {
+                        "tableColumnName": "CATEGORY_NAME",
+                        "objectId": 42,
+                        "objectType": "oecolumn",
+                        "recommendedFunction": "Non-Null Validation",
+                        "recommendedWorkflow": "function_based",
+                        "recommendedRuleId": 10264,
+                        "recommendedRule": "STG_CATEGORIES_CATEGORY_NAME_NN",
+                        "associatedToDqRule": True,
+                        "recommendedFunctionCandidates": [
+                            {
+                                "functionName": "Non-Null Validation",
+                                "score": 0.72,
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+        assert "already associated" in text
+        assert "no write needed" in text
+        assert "will associate" not in text
+        assert "Do not create a duplicate or re-associate" in text
+
+    def test_format_assess_ignores_recommended_rule_not_available(self) -> None:
+        text = dataquality_helpers.format_assess_cde_dq_response(
+            {
+                "assessedCount": 1,
+                "rows": [
+                    {
+                        "tableColumnName": "CATEGORY_NAME",
+                        "objectId": 42,
+                        "objectType": "oecolumn",
+                        "recommendedFunction": "Non-Null Validation",
+                        "recommendedWorkflow": "function_based",
+                        "recommendedRuleId": 10264,
+                        "recommendedRule": "Not Available",
+                        "associatedToDqRule": False,
+                        "recommendedFunctionCandidates": [
+                            {
+                                "functionName": "Non-Null Validation",
+                                "score": 0.72,
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+        assert "Not Available" not in text
+        assert "10264" not in text
+        assert "will associate" not in text
 
     def test_format_assess_hides_dbt_function_candidates(self) -> None:
         text = dataquality_helpers.format_assess_cde_dq_response(
