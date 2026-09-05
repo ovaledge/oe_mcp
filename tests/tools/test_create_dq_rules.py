@@ -130,6 +130,56 @@ class TestCreateDqRules:
         assert "id 101" in preview["formattedResponse"]
         assert "do not create a new rule" in preview["formattedResponse"]
 
+    async def test_preview_already_associated_existing_rule(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {
+            "data": {
+                "rows": [
+                    {
+                        "objectId": 42,
+                        "objectType": "oecolumn",
+                        "recommendedRuleId": 101,
+                        "recommendedRule": "Inventory Quantity Required",
+                        "associatedToDqRule": True,
+                    }
+                ]
+            }
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
+
+        preview = await fn(
+            step="create_standard",
+            objects={"objectId": 42, "objectType": "oecolumn"},
+        )
+
+        assert preview["workflowPhase"] == "confirm_create"
+        assert preview.get("confirmationToken")
+        assert "already associated to existing rule" in preview["formattedResponse"]
+        assert "associate to existing rule" not in preview["formattedResponse"]
+
+    async def test_preview_prefer_false_does_not_claim_no_context_match(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mcp = FastMCP(name="test", version="0.0.1")
+        dataquality.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_DQ_RULE_MANAGER)
+
+        preview = await fn(
+            step="create_standard",
+            objects={"objectId": 42, "objectType": "oecolumn"},
+            prefer_existing_rule=False,
+        )
+
+        assert preview["workflowPhase"] == "confirm_create"
+        assert preview.get("confirmationToken")
+        assert "no existing rule matches" not in preview["formattedResponse"]
+        assert "Assessment returned no actionable objects." not in preview["formattedResponse"]
+        assert "prefer_existing_rule=false" in preview["formattedResponse"]
+        mock_oe_client.post.assert_not_awaited()
+
     async def test_preview_ignores_recommended_rule_not_available(
         self, mock_oe_client: AsyncMock
     ) -> None:

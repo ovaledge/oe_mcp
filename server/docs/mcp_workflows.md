@@ -413,7 +413,7 @@ End-to-end routing for function-based and custom-SQL data quality workflows.
 | Step | Tool | Notes |
 |------|------|--------|
 | Mark CDE (prerequisite) | `update_cde_associations` | Object must be **CDE=Yes** before auto-create; tables, columns, files, schemas, charts, APIs, queries; **confirm gate** |
-| Select or create | `dq_rule_manager` step=create_standard | Re-assesses internally; associates to a context-matching existing rule when `prefer_existing_rule=true`; new create has **confirm gate** |
+| Associate or create | `dq_rule_manager` step=create_standard | Re-assesses internally; associates to a context-matching existing rule when `prefer_existing_rule=true`; skip if already associated; **confirm gate** covers associate and create |
 | Link to known rule only | `dq_rule_manager` step=associate | When `dqrule_id` is known; does not auto-create; **confirm gate** |
 
 **`dq_rule_manager` step=create_standard routing (agent):**
@@ -441,7 +441,7 @@ End-to-end routing for function-based and custom-SQL data quality workflows.
 
 **`prefer_existing_rule` behavior:**
 
-- **`true` (default):** If assess finds an existing same-function rule whose purpose/criteria match the object's business description or business rule, `create_standard` **associates** that object to the recommended rule (`recommendedRuleId`) instead of creating a new one. Unrelated same-function rules are ignored.
+- **`true` (default):** If assess finds an existing same-function rule whose purpose/criteria match the object's business description or business rule, `create_standard` **associates** that object to the recommended rule (`recommendedRuleId`) instead of creating a new one. Unrelated same-function rules are ignored. If `associatedToDqRule` is already true, skip the write.
 - **`false`:** Explicitly request a **new** data quality rule. The normal create confirmation gate applies.
 - Criteria are parsed from business metadata first. A create response reports `criteriaSource=business_metadata`, `business_metadata_with_defaults`, `function_default`, `not_required`, or `unresolved`; `criteriaMessage` explains partial/failed parsing, defaults applied, or required manual review.
 

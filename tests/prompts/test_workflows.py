@@ -116,6 +116,8 @@ class TestWorkflowPromptRegistration:
 
         assert "recommendedFunction" in text
         assert "IN/NOT IN set-membership is SQL Values Contains" in text
+        assert "prefer_existing_rule=true" in text
+        assert "prefer_existing_rule=false only when the user explicitly" in text
         assert "auto-retry" in text.lower() or "ask the user" in text.lower()
         assert "stop" in text.lower()
 

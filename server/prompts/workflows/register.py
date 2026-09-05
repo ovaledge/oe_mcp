@@ -622,7 +622,7 @@ def register(mcp: FastMCP) -> None:
     @mcp.prompt()
     def assess_cde_dq_coverage(scope: str) -> list[Message]:
         """
-        CDE column DQ assessment (read-only recommendations).
+        CDE column DQ assessment, then associate/create when the user wants coverage applied.
 
         Trigger: "Which CDE columns need DQ rules?"
                  "Recommend DQ functions for critical data elements in Finance"
@@ -643,9 +643,11 @@ def register(mcp: FastMCP) -> None:
             f"recommendedFunction, recommendedFunctionCandidates, recommendedRuleId, "
             f"associatedToDqRule, and redirect URLs. If recommendedRuleId is set, the object's "
             f"business context matched an existing rule\n"
-            f"3b. Call {TOOL_DQ_RULE_MANAGER} step=create_standard (prefer_existing_rule=true). "
+            f"3b. If the user wants to apply the recommendation, call "
+            f"{TOOL_DQ_RULE_MANAGER} step=create_standard (prefer_existing_rule=true). "
             f"When recommendedRuleId is set it associates that object to the existing rule "
-            f"instead of creating a new one. If the user rejects candidates, "
+            f"instead of creating a new one. If associatedToDqRule is true, skip the write. "
+            f"If the user rejects candidates, "
             f"re-call {TOOL_DQ_RULE_ADVISOR} step=assess with excluded_function_names; "
             f"use preferred_function_name when they pick one. Only when no "
             f"recommendedFunction remains and the user confirms custom SQL → "
@@ -674,12 +676,13 @@ def register(mcp: FastMCP) -> None:
             f"2. Call {TOOL_DQ_RULE_ADVISOR} step=assess with explicit objects for the "
             f"named assets "
             f"(discover_cde_columns=true only when listing all CDE columns)\n"
-            f"3. If recommendedRuleId is set, {TOOL_DQ_RULE_MANAGER} step=create_standard "
+            f"3. If recommendedRuleId is set and the object is not already associated, "
+            f"{TOOL_DQ_RULE_MANAGER} step=create_standard (prefer_existing_rule=true) "
             f"associates the object to that existing rule (do not create a duplicate)\n"
-            f"4. If no matching existing rule, confirm and call "
-            f"{TOOL_DQ_RULE_MANAGER}(step=create_standard, prefer_existing_rule=false) "
-            f"only when the user explicitly wants a new rule; otherwise create_standard with "
-            f"prefer_existing_rule=true\n"
+            f"4. If no matching existing rule, call "
+            f"{TOOL_DQ_RULE_MANAGER}(step=create_standard, prefer_existing_rule=true) "
+            f"to create. Use prefer_existing_rule=false only when the user explicitly "
+            f"wants a second or different-purpose rule\n"
             f"5. After create, surface criteriaSource and criteriaMessage; "
             f"business_metadata_with_defaults or function_default means defaults were applied\n"
             f"6. For custom_sql workflow (only after user confirmation when no "

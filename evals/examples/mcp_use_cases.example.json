@@ -453,6 +453,36 @@
       ]
     },
     {
+      "name": "example_native_privilege_to_principals",
+      "input": "Which principals have privilege SELECT in Snowflake?",
+      "actual_output": "I listed principals with SELECT via access_explorer privilege_to_principals (object_name=SELECT, no object_type).",
+      "mcp_tools_called": [
+        {
+          "name": "access_explorer",
+          "args": {
+            "operation": "source_system_access",
+            "source_system": "snowflake",
+            "query_direction": "privilege_to_principals",
+            "object_name": "SELECT"
+          },
+          "result": {
+            "grants": [
+              {
+                "principalType": "role",
+                "principalName": "SYSADMIN",
+                "privilege": "SELECT"
+              },
+              {
+                "principalType": "user",
+                "principalName": "bob",
+                "privilege": "SELECT"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "example_metadata_drift",
       "input": "What changed in the CUSTOMER schema after the latest crawl?",
       "actual_output": "I compared metadata between crawls for the CUSTOMER schema.",
@@ -710,7 +740,7 @@
     {
       "name": "example_dq_rule_advisor_assess",
       "input": "Assess DQ coverage for CDE columns on customer_profile.",
-      "actual_output": "I called dq_rule_advisor step=assess with explicit table objects (read-only assessment).",
+      "actual_output": "I called dq_rule_advisor step=assess with explicit table objects and presented recommendedRuleId when a context-matching rule was found.",
       "mcp_tools_called": [
         {
           "name": "dq_rule_advisor",
@@ -730,7 +760,11 @@
               {
                 "objectId": 101,
                 "objectType": "oecolumn",
-                "cdeStatus": "Yes"
+                "cdeStatus": "Yes",
+                "recommendedFunction": "Non-Null Validation",
+                "recommendedRuleId": 10264,
+                "recommendedRule": "STG_CATEGORIES_CATEGORY_NAME_NN",
+                "associatedToDqRule": false
               }
             ]
           }
@@ -766,7 +800,7 @@
     {
       "name": "example_dq_rule_manager_create_standard_preview",
       "input": "Discover and create missing DQ rules for CDE columns.",
-      "actual_output": "I previewed dq_rule_manager step=create_standard in discover mode before POST.",
+      "actual_output": "I previewed dq_rule_manager step=create_standard with prefer_existing_rule=true; it associates to recommendedRuleId when assess found a context match, otherwise creates.",
       "mcp_tools_called": [
         {
           "name": "dq_rule_manager",
@@ -779,7 +813,8 @@
           "result": {
             "workflowPhase": "confirm_create",
             "doNotCreate": true,
-            "confirmationToken": "preview-token-placeholder"
+            "confirmationToken": "preview-token-placeholder",
+            "formattedResponse": "**Confirm DQ rule create/associate**\n- `oecolumn:101`: associate to existing rule STG_CATEGORIES_CATEGORY_NAME_NN (id 10264) — do not create a new rule"
           }
         }
       ]

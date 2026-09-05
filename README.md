@@ -132,7 +132,7 @@ Knowledge: `explain_business_term`, `organizational_knowledge`, `explain_tag`, `
 Lineage & quality: `trust_assessment`, `trace_data_lineage`, `metadata_drift`, `assess_cde_dq_coverage`, `create_custom_sql_dq_workflow`.  
 Access: `resolve_object_access`, `native_source_access`, `catalog_object_access`, `dam_object_browse`.  
 Writes (human-in-the-loop): `create_business_glossary_term`, `create_governance_tag`, `create_service_desk_request`, `document_asset_descriptions`, `assign_governance_roles`.  
-DQ writes (user-approved after `dq_rule_advisor` step=assess): use `dq_rule_manager` (create_standard / associate) or prompt `create_custom_sql_dq_workflow`.
+DQ writes (user-approved after `dq_rule_advisor` step=assess): use `dq_rule_manager` `step=create_standard` with `prefer_existing_rule=true` (associates to assess `recommendedRuleId` when set, otherwise creates), `step=associate` when the user names a rule, or prompt `create_custom_sql_dq_workflow`.
 
 ## Development
 

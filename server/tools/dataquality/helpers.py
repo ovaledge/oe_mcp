@@ -84,8 +84,9 @@ _DESC_DQ_RULE_MANAGER = classify_tool_desc(
 _DQ_ASSESS_AGENT_INSTRUCTION = (
     "Follow the DQ ladder: present recommendedFunction and "
     "recommendedFunctionCandidates (exact OE names only). "
-    "If recommendedRuleId is set, dq_rule_manager step=create_standard associates "
-    "the object to that existing rule — do not create a duplicate. "
+    "If recommendedRuleId is set and the object is not already associated, "
+    "dq_rule_manager step=create_standard associates to that existing rule — "
+    "do not create a duplicate. If already associated, skip the write. "
     "If Not Identified but candidates are present, ask the user to pick one "
     "candidate — do not invent a function name. "
     "Only after user confirms custom SQL when no usable catalog candidate remains, "
@@ -326,6 +327,22 @@ def _matching_existing_rule(row: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def _assess_matching_rule_next_line(matching_rule: dict[str, Any]) -> str:
+    """Assess Next-step line for a context-matching existing rule."""
+    rule_id = matching_rule.get("dqruleId")
+    rule_name = matching_rule.get("name")
+    if matching_rule.get("associatedToObject"):
+        return (
+            f"  Next: already associated to existing rule ID {rule_id} "
+            f"({rule_name}). Do not create a duplicate or re-associate."
+        )
+    return (
+        f"  Next: {TOOL_DQ_RULE_MANAGER} step=create_standard will associate "
+        f"this object to existing rule ID {rule_id} ({rule_name}). "
+        "Do not create a duplicate."
+    )
+
+
 def format_assess_cde_dq_response(body: dict[str, Any]) -> str:
     """Human-readable summary highlighting description gaps and function candidates."""
     data = body.get("data") if isinstance(body.get("data"), dict) else body
@@ -393,11 +410,7 @@ def format_assess_cde_dq_response(body: dict[str, Any]) -> str:
                 lines.append(f"    - `{cname}`{score_bit}{reason_bit}")
             if isinstance(workflow, str) and workflow.strip().lower() == "custom_sql":
                 if matching_rule:
-                    lines.append(
-                        f"  Next: {TOOL_DQ_RULE_MANAGER} step=create_standard will associate "
-                        f"this object to existing rule ID {matching_rule.get('dqruleId')} "
-                        f"({matching_rule.get('name')}). Do not create a duplicate."
-                    )
+                    lines.append(_assess_matching_rule_next_line(matching_rule))
                 else:
                     lines.append(
                         "  Next: after user confirms custom SQL, call "
@@ -419,11 +432,7 @@ def format_assess_cde_dq_response(body: dict[str, Any]) -> str:
                         "for create_standard. Never invent names (Max Length Check, etc.)."
                     )
                 if matching_rule:
-                    lines.append(
-                        f"  Next: {TOOL_DQ_RULE_MANAGER} step=create_standard will associate "
-                        f"this object to existing rule ID {matching_rule.get('dqruleId')} "
-                        f"({matching_rule.get('name')}). Do not create a duplicate."
-                    )
+                    lines.append(_assess_matching_rule_next_line(matching_rule))
                 else:
                     lines.append(
                         f"  Next: {TOOL_DQ_RULE_MANAGER} step=create_standard with "
@@ -432,11 +441,7 @@ def format_assess_cde_dq_response(body: dict[str, Any]) -> str:
                         f"{TOOL_DQ_RULE_ADVISOR} step=assess with excluded_function_names."
                     )
         elif matching_rule:
-            lines.append(
-                f"  Next: {TOOL_DQ_RULE_MANAGER} step=create_standard will associate "
-                f"this object to existing rule ID {matching_rule.get('dqruleId')} "
-                f"({matching_rule.get('name')}). Do not create a duplicate."
-            )
+            lines.append(_assess_matching_rule_next_line(matching_rule))
         elif (
             isinstance(rec_fn, str)
             and rec_fn.strip().lower() == "not identified"
@@ -471,16 +476,19 @@ def format_assess_cde_dq_response(body: dict[str, Any]) -> str:
                     "never invent a function name or hand-write SQL."
                 )
         if matching_rule:
-            lines.append(
-                "  Existing matching rule (create_standard will associate, not create): "
-                f"{_format_existing_rule_choice(matching_rule)}"
-            )
+            if matching_rule.get("associatedToObject"):
+                existing_label = "  Existing matching rule (already associated; no write needed): "
+            else:
+                existing_label = (
+                    "  Existing matching rule (create_standard will associate, not create): "
+                )
+            lines.append(f"{existing_label}{_format_existing_rule_choice(matching_rule)}")
     lines.append("")
     lines.append(
         "Ladder reminder: when recommendedRuleId is set (context-matching existing "
-        "rule), create_standard associates to that rule; else create_standard creates; "
-        "custom SQL only after user confirmation when no recommendedFunction remains "
-        "— then generate → validate → create. "
+        "rule), create_standard associates unless already associated; else "
+        "create_standard creates; custom SQL only after user confirmation when no "
+        "recommendedFunction remains — then generate → validate → create. "
         f"{_DQ_RETRY_POLICY}"
     )
     return "\n".join(lines)
@@ -664,11 +672,15 @@ def format_create_dq_rules_confirmation_preview(
             f"- `{object_type}:{object_id}`: create a new rule "
             "(no existing rule matches this object's business context)"
         )
-    planned_actions = (
-        "\n".join(action_lines)
-        if action_lines
-        else "- Assessment returned no actionable objects."
-    )
+    if action_lines:
+        planned_actions = "\n".join(action_lines)
+    elif not prefer:
+        planned_actions = (
+            "- Create a new rule for each listed object "
+            "(prefer_existing_rule=false; do not associate)."
+        )
+    else:
+        planned_actions = "- Assessment returned no actionable objects."
     preview = {
         "ok": True,
         "awaitingUserConfirmation": True,

@@ -232,6 +232,23 @@ def test_example_json_catalog_nested_filters() -> None:
     empty = by_name["example_catalog_filters_no_match"]
     assert _tool_result_payload(_mcp_tools_called(empty)[0]).get("total") == 0
 
+    privilege = _mcp_tools_called(by_name["example_native_privilege_to_principals"])[0]
+    assert privilege.args.get("query_direction") == "privilege_to_principals"
+    assert privilege.args.get("object_name") == "SELECT"
+    assert "object_type" not in privilege.args
+
+    assess = _tool_result_payload(_mcp_tools_called(by_name["example_dq_rule_advisor_assess"])[0])
+    assess_rows = assess.get("rows")
+    assert isinstance(assess_rows, list) and assess_rows
+    assert assess_rows[0].get("recommendedRuleId") == 10264
+
+    create_preview = _mcp_tools_called(
+        by_name["example_dq_rule_manager_create_standard_preview"]
+    )[0]
+    assert create_preview.args.get("prefer_existing_rule") is True
+    preview_text = _tool_result_payload(create_preview).get("formattedResponse") or ""
+    assert "associate to existing rule" in preview_text
+
 
 def test_llm_only_skips_structural_validation_fixtures() -> None:
     """Intentional invalid-arg rows use llm_score=false so MCPUseMetric is not run on them."""
