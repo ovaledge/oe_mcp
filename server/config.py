@@ -99,6 +99,11 @@ class Settings(BaseSettings):
     # enables GET on ``/mcp`` for long-lived sessions — required for Cursor (and similar)
     # clients that fall back to SSE / GET after Streamable HTTP negotiation.
     mcp_http_stateless: bool = True
+    # POST /mcp replies as ``application/json`` instead of ``text/event-stream``.
+    # Required for clients such as Snowflake Cortex that send
+    # ``Accept: application/json`` only (FastMCP SSE mode then returns -32600 Not Acceptable).
+    # Spec-compliant clients that advertise both types still accept a JSON body.
+    mcp_json_response: bool = True
 
     # ── Local MCP — OvalEdge user token credentials ──────────────
     ovaledge_user_token: str = ""

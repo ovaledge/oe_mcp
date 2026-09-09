@@ -2,7 +2,7 @@
 
 Guides for connecting **OvalEdge MCP** from common editors and assistants.
 
-**Last reviewed:** July 2026.
+**Last reviewed:** September 2026.
 
 | Client | Local (stdio) | Remote HTTP (`remote_credentials`) | Remote OAuth (`AUTH_MODE=remote` / Okta) |
 | ------ | --------------- | ---------------------------------- | ---------------------------------------- |
@@ -11,8 +11,9 @@ Guides for connecting **OvalEdge MCP** from common editors and assistants.
 | **Claude** (Desktop, Chat, Code) | [SETUP_CLAUDE.md](SETUP_CLAUDE.md) | [SETUP_CLAUDE.md](SETUP_CLAUDE.md) (`mcp-remote` / headers) | [SETUP_CLAUDE.md](SETUP_CLAUDE.md#remote-oauth-auth_moderremote) |
 | **VS Code + GitHub Copilot** | [SETUP_VSCODE_GITHUB_COPILOT.md](SETUP_VSCODE_GITHUB_COPILOT.md#local-stdio-optional) | [SETUP_VSCODE_GITHUB_COPILOT.md](SETUP_VSCODE_GITHUB_COPILOT.md#remote-http-remote_credentials) | [SETUP_VSCODE_GITHUB_COPILOT.md](SETUP_VSCODE_GITHUB_COPILOT.md#remote-oauth-auth_moderremote) |
 | **Microsoft Copilot** (Studio / Teams / M365 agents) | — | [SETUP_MICROSOFT_COPILOT.md](SETUP_MICROSOFT_COPILOT.md) (API key) | [SETUP_MICROSOFT_COPILOT.md](SETUP_MICROSOFT_COPILOT.md#remote-oauth-auth_moderremote) |
+| **Snowflake Cortex** (Agents / Intelligence) | — | — (OAuth only) | [SETUP_SNOWFLAKE_CORTEX.md](SETUP_SNOWFLAKE_CORTEX.md) |
 
-**Okta Sign-in redirect URI allowlist** (Cursor, Claude, GitHub Copilot, Microsoft Copilot): [README_REMOTE_MCP.md — Okta redirect URIs (all clients)](../../README_REMOTE_MCP.md#okta-redirect-uris-all-clients).
+**Okta Sign-in redirect URI allowlist** (Cursor, Claude, GitHub Copilot, Microsoft Copilot, Snowflake Cortex): [README_REMOTE_MCP.md — Okta redirect URIs (all clients)](../../README_REMOTE_MCP.md#okta-redirect-uris-all-clients).
 
 **Do not mix guides**
 
@@ -22,6 +23,7 @@ Guides for connecting **OvalEdge MCP** from common editors and assistants.
 | **Microsoft Copilot** | Copilot Studio MCP wizard + publish/Agent Store — not `mcp.json` |
 | **Cursor / Kiro** | `mcpServers` in Cursor/Kiro MCP JSON |
 | **Claude Desktop** | `claude_desktop_config.json` (often via `mcp-remote` for remote HTTP) |
+| **Snowflake Cortex** | External MCP server + API integration in Snowflake — [SETUP_SNOWFLAKE_CORTEX.md](SETUP_SNOWFLAKE_CORTEX.md) (not `mcp.json`) |
 
 **Microsoft Copilot quick path**
 
@@ -29,6 +31,13 @@ Guides for connecting **OvalEdge MCP** from common editors and assistants.
 2. Test in Studio (generative orchestration on).
 3. Enable **Microsoft 365 Copilot** / **Teams** channel → Publish → admin approve for org.
 4. Users open the agent from **Built by your org** / Teams Apps / Studio share link — not default Copilot chat.
+
+**Snowflake Cortex quick path**
+
+1. Deploy MCP with `AUTH_MODE=remote` and `MCP_JSON_RESPONSE=true` (default).
+2. Add Okta redirect `https://identity.snowflake.com/oauth2/callback`.
+3. Create a Snowflake API integration + `EXTERNAL MCP SERVER`, attach it to a Cortex Agent — [SETUP_SNOWFLAKE_CORTEX.md](SETUP_SNOWFLAKE_CORTEX.md).
+4. Users **Connect** the connector in Snowflake Intelligence, then chat.
 
 **Shared references**
 
