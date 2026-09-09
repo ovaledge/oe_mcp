@@ -31,7 +31,7 @@ Reference the `title` in `_DESC_*` and in `mcp_workflows.md` (e.g. ``asset_explo
 
 `server/tools/common/annotations.py` holds the four allowed profiles. Pick one — do not hand-roll a dict:
 
-| Profile | Use for | `readOnlyHint` / `destructiveHint` |
+| Profile | Use for | `read_only_hint` / `destructive_hint` (JSON: `readOnlyHint` / `destructiveHint`) |
 |---------|---------|-----------------------------------|
 | `READ_ONLY` | Lookups that never mutate OvalEdge state | `True` / `False` |
 | `GOVERNED_CREATE` | Confirm-gated writes that add objects | `False` / `False` |
@@ -183,7 +183,7 @@ This repo implements **Level 2** MCP contract governance (domain-scoped tool des
 | EA expectation | oe_mcp practice |
 |----------------|-----------------|
 | Complete tool contract (purpose, inputs, outputs, side effects) | `title` + `_DESC_*` + Pydantic `Field` + MCP `annotations` + `mcp_workflows` / domain docs |
-| Human-in-the-loop for writes | `confirm_create` / `confirm_update` + `write_confirmed_by_user=true`, with `readOnlyHint=False` so clients cannot auto-approve |
+| Human-in-the-loop for writes | `confirm_create` / `confirm_update` + `write_confirmed_by_user=true`, with `read_only_hint=False` so clients cannot auto-approve |
 | Context window budgeting | Description budget tests + `mcp_response_slim` on responses |
 | AuthZ on every data call | OvalEdge RBAC/DAA enforced server-side; document in `_DESC_*` |
 | Stable error contracts | `{"error", "status_code"}` via `error_payload` / `map_ovaledge_error`; optional `error_code` on validation errors |

@@ -87,15 +87,15 @@ def mcp_server_icons() -> list[Icon] | None:
     icons = [
         Icon(
             src=src,
-            mimeType="image/png",
+            mime_type="image/png",
             sizes=["48x48"],
         ),
         Icon(
             src=src,
-            mimeType="image/png",
+            mime_type="image/png",
             sizes=["96x96"],
         ),
     ]
     if src.startswith("data:"):
-        icons.append(Icon(src=src, mimeType="image/png", sizes=["any"]))
+        icons.append(Icon(src=src, mime_type="image/png", sizes=["any"]))
     return icons

@@ -3,10 +3,12 @@
 [![CI](https://github.com/ovaledge/oe_mcp/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/ovaledge/oe_mcp/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![Version](https://img.shields.io/badge/version-2.0.0-blue)](pyproject.toml)
-[![FastMCP](https://img.shields.io/badge/FastMCP-3.4-00C7B7)](https://gofastmcp.com)
+[![FastMCP](https://img.shields.io/badge/FastMCP-4.0-00C7B7)](https://gofastmcp.com)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
 OvalEdge governance and catalog MCP server for MCP clients (Cursor, Claude Desktop, etc.): catalog discovery, lineage, glossary and tags, organizational knowledge, metadata drift, native source-system access previews, product docs, workflow prompts, and governed writes (glossary terms, tags, descriptions, roles, service-desk tickets) — all subject to OvalEdge RBAC. Server instructions route knowledge questions through **`knowledge_search`**.
+
+Built on **FastMCP 4** (MCP Python SDK v2). The JSON-RPC wire format is still camelCase (`inputSchema`, `readOnlyHint`); Python constructors and attribute access use snake_case (`input_schema`, `read_only_hint`).
 
 ## How to run / deploy
 

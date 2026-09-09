@@ -53,7 +53,7 @@ def _tool_calls_from_turns(turns: Sequence[Turn]) -> list[MCPToolCall]:
 
 def _structured_result(tool_call: MCPToolCall) -> dict[str, Any]:
     result = cast(CallToolResult, tool_call.result)
-    structured = result.structuredContent
+    structured = result.structured_content
     assert isinstance(structured, dict)
     inner = structured.get("result")
     assert isinstance(inner, dict)
