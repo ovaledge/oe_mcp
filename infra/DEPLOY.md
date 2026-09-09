@@ -285,6 +285,7 @@ curl -sS "$(aws cloudformation describe-stacks --stack-name oe-mcp-oauth-zip \
 | Claude Code | `claude mcp add --transport http --callback-port 8788 … <MCPEndpointUrl>` |
 | VS Code / GitHub Copilot | `"type":"http"`, `"url":"<MCPEndpointUrl>"`, `"oauth":{"callbackPort":8790}` |
 | Microsoft Copilot Studio | Prefer API key + `remote_credentials`, or OAuth wizard — [SETUP_MICROSOFT_COPILOT.md](../docs/client-setup/SETUP_MICROSOFT_COPILOT.md) |
+| Snowflake Cortex | OAuth only (`AUTH_MODE=remote`) — [SETUP_SNOWFLAKE_CORTEX.md](../docs/client-setup/SETUP_SNOWFLAKE_CORTEX.md) |
 
 Details: [README_REMOTE_MCP.md](../README_REMOTE_MCP.md#lambda-zip-okta-connect-auth_moderremote).
 

@@ -34,14 +34,13 @@ class TestBrandingHelpers:
         src = resolve_mcp_icon_src()
         assert src == f"https://brand.example.com{MCP_BRAND_ICON_ROUTE}"
 
-    def test_resolve_icon_src_stdio_uses_data_uri_even_with_public_base_url(
+    def test_resolve_icon_src_stdio_omits_icon(
         self, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setenv("MCP_STDIO_TRANSPORT", "true")
         monkeypatch.setattr(settings, "mcp_public_base_url", "https://mcp.example.com")
-        src = resolve_mcp_icon_src()
-        assert src is not None
-        assert src.startswith("data:image/png;base64,")
+        assert resolve_mcp_icon_src() is None
+        assert mcp_server_icons() is None
 
     def test_resolve_icon_src_localhost_http_falls_back_to_data_uri(
         self, monkeypatch: pytest.MonkeyPatch,
@@ -67,7 +66,8 @@ class TestBrandingHelpers:
         monkeypatch.setattr(settings, "mcp_brand_icon_base_url", "https://x.example.com")
         assert brand_icon_public_url() == f"https://x.example.com{MCP_BRAND_ICON_ROUTE}"
 
-    def test_mcp_server_icons_returns_png_icons(self) -> None:
+    def test_mcp_server_icons_returns_png_icons(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("MCP_STDIO_TRANSPORT", raising=False)
         icons = mcp_server_icons()
         assert icons is not None
         assert len(icons) >= 2
@@ -104,7 +104,8 @@ class TestBrandIconRoute:
         assert r.status_code == 200
         assert r.headers["content-type"].startswith("image/png")
 
-    async def test_create_mcp_registers_icons(self) -> None:
+    async def test_create_mcp_registers_icons(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("MCP_STDIO_TRANSPORT", raising=False)
         from server.app import create_mcp
 
         mcp = create_mcp()

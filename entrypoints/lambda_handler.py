@@ -61,11 +61,17 @@ from server.logging_config import configure_runtime_observability
 
 logger = logging.getLogger(__name__)
 
-mcp_http = mcp.http_app(
-    path="/",
-    transport="streamable-http",
-    stateless_http=settings.mcp_http_stateless,
-)
+def mcp_http_app_kwargs() -> dict[str, Any]:
+    """Kwargs for FastMCP Streamable HTTP (JSON POST bodies for Cortex-style clients)."""
+    return {
+        "path": "/",
+        "transport": "streamable-http",
+        "stateless_http": settings.mcp_http_stateless,
+        "json_response": settings.mcp_json_response,
+    }
+
+
+mcp_http = mcp.http_app(**mcp_http_app_kwargs())
 
 # Icons are resolved at ``server.app`` import; refresh here so HTTP entrypoints pick up
 # ``MCP_PUBLIC_BASE_URL`` from env / ``.env`` (stdio sets ``MCP_STDIO_TRANSPORT`` earlier).
