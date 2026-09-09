@@ -245,8 +245,8 @@ def golden_multi_turn_lineage_followup() -> ConversationalTestCase:
                         result=ReadResourceResult(
                             contents=[
                                 TextResourceContents(
-                                    uri=table_uri,
-                                    mimeType="application/json",
+                                    uri=str(table_uri),
+                                    mime_type="application/json",
                                     text=(
                                         '{"objectId": 1, "name": "customer_transactions", '
                                         '"lineage": {"upstream": ["raw_events"]}}'
@@ -1028,8 +1028,8 @@ def golden_mcp_use_routing_guide_resource() -> LLMTestCase:
     resource_result = ReadResourceResult(
         contents=[
             TextResourceContents(
-                uri=_MCP_WORKFLOWS_RESOURCE_URI,
-                mimeType="text/markdown",
+                uri=str(_MCP_WORKFLOWS_RESOURCE_URI),
+                mime_type="text/markdown",
                 text=workflows_text,
             )
         ]

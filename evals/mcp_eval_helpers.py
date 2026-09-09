@@ -6,7 +6,6 @@ from typing import Any
 
 from deepeval.test_case import MCPServer
 from mcp.types import CallToolResult, Prompt, Resource, TextContent, Tool
-from pydantic import AnyUrl
 
 from server.mcp_surface import (
     MCP_OVALEDGE_RESOURCE_TEMPLATES,
@@ -19,12 +18,12 @@ def _tool_input_schema() -> dict[str, Any]:
     return {"type": "object", "properties": {}, "additionalProperties": True}
 
 
-def _sample_resource_uri(template: str) -> AnyUrl:
-    """Fill template placeholders for eval Resource metadata."""
+def _sample_resource_uri(template: str) -> str:
+    """Fill template placeholders for eval Resource metadata (SDK v2 uri is str)."""
     sample = template
     for key in ("object_id", "object_type"):
         sample = sample.replace(f"{{{key}}}", "1")
-    return AnyUrl(sample)
+    return sample
 
 
 def ovaledge_eval_mcp_server(
@@ -44,7 +43,7 @@ def ovaledge_eval_mcp_server(
         Tool(
             name=name,
             description=f"OvalEdge MCP tool: {name}",
-            inputSchema=_tool_input_schema(),
+            input_schema=_tool_input_schema(),
         )
         for name in sorted(selected_tools)
     ]
@@ -78,11 +77,11 @@ def ovaledge_eval_mcp_server(
 
 
 def tool_call_result(payload: dict[str, Any]) -> CallToolResult:
-    """CallToolResult with structuredContent shape expected by MCPTaskCompletionMetric."""
+    """CallToolResult with structured_content shape expected by MCPTaskCompletionMetric."""
     return CallToolResult(
         content=[TextContent(type="text", text="{}", annotations=None)],
-        structuredContent={"result": payload},
-        isError=False,
+        structured_content={"result": payload},
+        is_error=False,
     )
 
 

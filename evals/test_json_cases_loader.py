@@ -29,7 +29,7 @@ def _tool_result_payload(tool: MCPToolCall) -> dict[str, Any]:
     result = tool.result
     if result is None:
         return {}
-    structured = getattr(result, "structuredContent", None)
+    structured = getattr(result, "structured_content", None)
     if isinstance(structured, dict):
         # tool_call_result() wraps as {"result": <payload>}
         inner = structured.get("result")

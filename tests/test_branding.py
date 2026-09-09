@@ -71,7 +71,7 @@ class TestBrandingHelpers:
         icons = mcp_server_icons()
         assert icons is not None
         assert len(icons) >= 2
-        assert all(i.mimeType == "image/png" for i in icons)
+        assert all(i.mime_type == "image/png" for i in icons)
 
 
 class TestBrandIconRoute:
