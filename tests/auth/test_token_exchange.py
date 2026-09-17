@@ -31,6 +31,7 @@ async def test_exchange_oauth_access_token_extracts_access_token() -> None:
     assert token == "oe-from-okta"
     mock_client.post.assert_awaited_once()
     assert mock_client.post.await_args.kwargs["json"]["userToken"] == "oauth-jwt"
+    assert mock_client.post.await_args.kwargs["headers"]["Authorization"].startswith("Basic ")
 
 
 @pytest.mark.asyncio
@@ -67,6 +68,7 @@ async def test_exchange_client_credentials_extracts_token_field() -> None:
     body = mock_client.post.await_args.kwargs["json"]
     assert body["userToken"] == "test-user-token"
     assert body["userSecret"] == "test-user-secret"
+    assert mock_client.post.await_args.kwargs["headers"]["Authorization"].startswith("Basic ")
 
 
 @pytest.mark.asyncio
@@ -122,6 +124,7 @@ async def test_exchange_user_credentials_extracts_token() -> None:
     body = mock_client.post.await_args.kwargs["json"]
     assert body["userToken"] == "my-token"
     assert body["userSecret"] == "my-secret"
+    assert mock_client.post.await_args.kwargs["headers"]["Authorization"].startswith("Basic ")
 
 
 @pytest.mark.asyncio

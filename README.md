@@ -22,7 +22,7 @@ Built on **FastMCP 4** (MCP Python SDK v2). The JSON-RPC wire format is still ca
 
 Full deployment matrix (auth, credentials, scripts): **[infra/DEPLOY.md](infra/DEPLOY.md)**.
 
-**Editor / assistant connection:** [docs/client-setup/README.md](docs/client-setup/README.md) (Cursor, Kiro, Claude, GitHub Copilot in VS Code, Microsoft Copilot Studio / M365, Snowflake Cortex — separate guides).
+**Editor / assistant connection:** [docs/client-setup/README.md](docs/client-setup/README.md) (Cursor, Kiro, Claude, ChatGPT / Codex, GitHub Copilot in VS Code, Microsoft Copilot Studio / M365, Snowflake Cortex — separate guides). Public Claude/OpenAI directory listing: [docs/client-setup/PUBLISH_DIRECTORIES.md](docs/client-setup/PUBLISH_DIRECTORIES.md).
 
 **`AUTH_MODE`** in `.env` (or process env): `local`, **`remote`** (Okta/OIDC Connect — forward Bearer), or `remote_credentials` (header token+secret). Full variable reference: [.env.example](.env.example).
 

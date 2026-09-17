@@ -130,6 +130,10 @@ class Settings(BaseSettings):
     # Space-separated scopes advertised in discovery / registration (Okta: openid profile email).
     oauth_scopes: str = "openid profile email"
     mcp_public_base_url: str = ""
+    # OpenAI plugin directory domain verification. Served as the exact body of
+    # GET /.well-known/openai-apps-challenge (unauthenticated). Empty → 404.
+    # Paste the portal token at deploy time; never commit the live value.
+    openai_apps_challenge: str = ""
     # Optional HTTPS base for MCP ``initialize`` icon URL only (``GET /brand/...``).
     # Use when MCP runs on localhost but Cursor must fetch the icon from a public URL.
     mcp_brand_icon_base_url: str = ""

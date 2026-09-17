@@ -98,6 +98,10 @@ Connect Cursor via **`ovaledge-local-http`** in `mcp.json`; credentials come fro
 
 ## Troubleshooting
 
+### `TokenExchangeError` with HTTP 400 `INVALID_TOKEN` / `Prefix missing Token`
+
+OvalEdge’s REST `ApiAuthenticationFilter` requires an `Authorization` prefix on `/api/**`, including permitAll `POST /api/user/token/generate`. This is **not** a missing `mcp.json` value. Local MCP sends a dummy `Authorization: Basic …` marker on that call so the body (`userToken` / `userSecret`) can be processed. Restart the stdio server after pulling this change. Do **not** send `Authorization: Bearer …` on token/generate against an oauth2 OvalEdge pod — the resource server will introspect it and return 401.
+
 ### `TokenExchangeError` with HTTP 200 empty body
 
 - Check `OVALEDGE_BASE_URL` and `POST /api/user/token/generate` for your OvalEdge build

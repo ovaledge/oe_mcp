@@ -11,7 +11,7 @@ Run the same MCP tools over **HTTP** with FastAPI + Mangum (`entrypoints/lambda_
 | `remote` | `Authorization: Bearer` + Okta/OIDC access token | Full discovery + `POST /register` | **Okta Connect** — validate token, forward Bearer to OvalEdge |
 | `remote_credentials` | `X-OvalEdge-Credentials` (`token::secret`) **or** `X-OvalEdge-Token` + `X-OvalEdge-Secret` | Minimal `/.well-known/*` stubs (no browser OAuth) | Per-user OvalEdge JWT cached server-side; use **HTTPS** |
 
-Shared: `POST /mcp` (streamable HTTP), `GET /health`, `GET /`.
+Shared: `POST /mcp` (streamable HTTP), `GET /health`, `GET /`, and (when configured) `GET /.well-known/openai-apps-challenge`.
 
 All variables are documented in [.env.example](.env.example).
 
@@ -93,6 +93,9 @@ Okta (strict mode) requires an **exact** URI match, including loopback **port**.
 | **Microsoft Copilot Studio** | Wizard-issued URL (often `https://global.consent.azure-apim.net/redirect/<slug>`) | **Do not invent the slug** — copy the full callback URL after creating the MCP tool with OAuth, or from a `redirect_uri` mismatch error. Slug changes if you rename the tool. See [SETUP_MICROSOFT_COPILOT.md](docs/client-setup/SETUP_MICROSOFT_COPILOT.md#redirect-url--you-do-not-invent-the-slug) |
 | **Microsoft Copilot Studio** (common extras) | `https://token.botframework.com/.auth/web/redirect`, `https://europe.token.botframework.com/.auth/web/redirect`, `https://copilotstudio.microsoft.com/auth/callback` | Pre-add these; then add the wizard-issued `azure-apim.net` URL |
 | **Snowflake Cortex** (Agents / Intelligence) | `https://identity.snowflake.com/oauth2/callback` | External MCP connector. PrivateLink uses a different callback — [SETUP_SNOWFLAKE_CORTEX.md](docs/client-setup/SETUP_SNOWFLAKE_CORTEX.md) |
+| **ChatGPT** (legacy) | `https://chatgpt.com/connector_platform_oauth_redirect` | Stable; keep even after the per-app URI exists |
+| **ChatGPT** (current) | `https://chatgpt.com/connector/oauth/{callback_id}` | **Copy from the ChatGPT plugin/app page** — do not invent the id |
+| **Codex CLI** | Exact loopback from `codex mcp add` (often `http://127.0.0.1/callback` plus an optional path suffix) | Okta needs an exact match; add whatever Codex prints |
 
 **Recommended allowlist (IDE clients — copy-paste):**
 
@@ -105,17 +108,20 @@ http://localhost:8788/callback
 http://127.0.0.1:8788/callback
 http://localhost:8790/callback
 http://127.0.0.1:8790/callback
+https://chatgpt.com/connector_platform_oauth_redirect
 ```
 
-Then add any **Microsoft Copilot Studio** redirect URLs the wizard shows (per environment / tool name), and **`https://identity.snowflake.com/oauth2/callback`** if you use Cortex.
+Then add any **Microsoft Copilot Studio** redirect URLs the wizard shows (per environment / tool name), **`https://identity.snowflake.com/oauth2/callback`** if you use Cortex, the ChatGPT `connector/oauth/{callback_id}` URI from the plugin page, and the Codex loopback URI `codex mcp add` prints.
 
 | Client guide | Section |
 |--------------|---------|
 | Cursor | [SETUP_CURSOR.md](docs/client-setup/SETUP_CURSOR.md#remote-oauth-auth_moderremote) |
 | Claude | [SETUP_CLAUDE.md](docs/client-setup/SETUP_CLAUDE.md#remote-oauth-auth_moderremote) |
+| ChatGPT / Codex | [SETUP_CODEX.md](docs/client-setup/SETUP_CODEX.md) |
 | GitHub Copilot (VS Code) | [SETUP_VSCODE_GITHUB_COPILOT.md](docs/client-setup/SETUP_VSCODE_GITHUB_COPILOT.md#remote-oauth-auth_moderremote) |
 | Microsoft Copilot Studio | [SETUP_MICROSOFT_COPILOT.md](docs/client-setup/SETUP_MICROSOFT_COPILOT.md#remote-oauth-auth_moderremote) |
 | Snowflake Cortex | [SETUP_SNOWFLAKE_CORTEX.md](docs/client-setup/SETUP_SNOWFLAKE_CORTEX.md) |
+| Directory / plugin publish | [PUBLISH_DIRECTORIES.md](docs/client-setup/PUBLISH_DIRECTORIES.md) |
 
 ### Confidential Okta apps (client secret)
 

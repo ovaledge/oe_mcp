@@ -238,7 +238,7 @@ Deploy **`AUTH_MODE=remote`** (browser Connect → Okta → Bearer forward to Ov
 ### Prerequisites
 
 1. OvalEdge accepts Okta Bearer on `/api/**` (`spring.profiles.active` includes `oauth2`; `api.introspection.uri` / `api.clientid` / `api.clientsecret` match the same Okta org as `OAUTH_*`).
-2. Okta OIDC app: Authorization Code + PKCE; redirect URIs for Cursor / Claude / GitHub Copilot / Microsoft Copilot — [allowlist](../README_REMOTE_MCP.md#okta-redirect-uris-all-clients).
+2. Okta OIDC app: Authorization Code + PKCE; redirect URIs for Cursor / Claude / ChatGPT / Codex / GitHub Copilot / Microsoft Copilot — [allowlist](../README_REMOTE_MCP.md#okta-redirect-uris-all-clients).
 3. `OVALEDGE_BASE_URL` reachable **from Lambda** (public HTTPS or VPC — not `127.0.0.1`).
 4. Unique `STACK_NAME` if another `oe-mcp*` stack already exists in the account/region.
 
@@ -269,6 +269,9 @@ export MCP_HTTP_STATELESS=true
 
 1. Note outputs **`MCPEndpointUrl`**, **`MCPPublicBaseUrl`**, **`HealthUrl`**.
 2. Set Lambda environment **`MCP_PUBLIC_BASE_URL`** = `MCPPublicBaseUrl` (host only, **no** `/mcp`).
+   For an OpenAI plugin listing, also set **`OPENAI_APPS_CHALLENGE`** to the portal token
+   (`OpenAIAppsChallenge` SAM parameter, or Lambda env). Then
+   `GET /.well-known/openai-apps-challenge` must return that token as plaintext.
 3. Verify:
 
 ```bash
@@ -283,6 +286,7 @@ curl -sS "$(aws cloudformation describe-stacks --stack-name oe-mcp-oauth-zip \
 |--------|--------|
 | Cursor | `"url": "<MCPEndpointUrl>"` |
 | Claude Code | `claude mcp add --transport http --callback-port 8788 … <MCPEndpointUrl>` |
+| ChatGPT / Codex | [SETUP_CODEX.md](../docs/client-setup/SETUP_CODEX.md) · directory checklist [PUBLISH_DIRECTORIES.md](../docs/client-setup/PUBLISH_DIRECTORIES.md) |
 | VS Code / GitHub Copilot | `"type":"http"`, `"url":"<MCPEndpointUrl>"`, `"oauth":{"callbackPort":8790}` |
 | Microsoft Copilot Studio | Prefer API key + `remote_credentials`, or OAuth wizard — [SETUP_MICROSOFT_COPILOT.md](../docs/client-setup/SETUP_MICROSOFT_COPILOT.md) |
 | Snowflake Cortex | OAuth only (`AUTH_MODE=remote`) — [SETUP_SNOWFLAKE_CORTEX.md](../docs/client-setup/SETUP_SNOWFLAKE_CORTEX.md) |
@@ -309,7 +313,8 @@ Stack outputs (when WAF enabled): **`WAFWebAclArn`**, **`WAFAllowedSourceCidrs`*
 
 **Caveats:**
 
-- SaaS MCP clients (Cursor, Claude) often use **dynamic egress IPs** — WAF works best with a **fixed corporate egress** (proxy, ZTNA, VPN).
+- SaaS MCP clients (Cursor, Claude, ChatGPT) often use **dynamic egress IPs** — WAF works best with a **fixed corporate egress** (proxy, ZTNA, VPN).
+- For directory review, allow Anthropic `160.79.104.0/21` and refresh OpenAI prefixes from [chatgpt-connectors.json](https://openai.com/chatgpt-connectors.json), or leave WAF off. IP allowlisting does not replace OAuth.
 - WAF is regional and billed separately from Lambda/API Gateway.
 - App-layer auth is still required for allowed IPs.
 
@@ -326,6 +331,7 @@ Key parameters (full list in [template.yaml](template.yaml)):
 | `LambdaArchitecture` | `x86_64` | `arm64` for Graviton |
 | `EnableWaf` | `false` | Set via `--waf` |
 | `AllowedSourceCidrs` | `127.0.0.1/32` | Ignored when WAF disabled |
+| `OpenAIAppsChallenge` | *(empty)* | Token for `GET /.well-known/openai-apps-challenge` (NoEcho) |
 | `TelemetryBackend` | `none` | `phoenix` or `langfuse` to enable OTLP export |
 | `TelemetryServiceName` | `oe-mcp` | OTLP `service.name` |
 | `TelemetryProjectName` | *(empty)* | Phoenix/Langfuse project routing; defaults to service name |

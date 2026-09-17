@@ -15,6 +15,7 @@ from server.auth.context import (
     current_oe_user_token,
 )
 from server.auth.credentials_cache import credential_cache_key
+from server.auth.directory_well_known import OPENAI_APPS_CHALLENGE_PATH
 from server.auth.jwt_util import get_unverified_claims
 from server.auth.oauth_discovery import OAuthDiscoveryError
 from server.auth.remote_credentials_parse import (
@@ -82,6 +83,7 @@ _UNPROTECTED = {
     "/.well-known/openid-configuration",
     "/.well-known/oauth-protected-resource",
     "/.well-known/oauth-protected-resource/mcp",
+    OPENAI_APPS_CHALLENGE_PATH,
     "/mcp-auth/declined",
     "/register",
     "/health",
