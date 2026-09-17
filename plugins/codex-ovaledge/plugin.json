@@ -1,0 +1,31 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "ovaledge",
+  "version": "2.0.0",
+  "description": "OvalEdge catalog, governance, knowledge, access, and data quality for ChatGPT and Codex.",
+  "author": {
+    "name": "OvalEdge",
+    "email": "rohit.anand@ovaledge.com",
+    "url": "https://www.ovaledge.com"
+  },
+  "homepage": "https://www.ovaledge.com",
+  "license": "MIT",
+  "keywords": ["ovaledge", "data-catalog", "governance", "mcp"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "OvalEdge",
+        "shortDescription": "Governed data catalog, access, and quality tools.",
+        "longDescription": "Connect ChatGPT and Codex to an OvalEdge tenant over Streamable HTTP MCP with Okta OAuth. Bundled skills wrap server routing playbooks; tools stay on the remote MCP server.",
+        "developerName": "OvalEdge",
+        "category": "Productivity",
+        "capabilities": ["Read", "Write"],
+        "websiteURL": "https://www.ovaledge.com",
+        "defaultPrompt": [
+          "Find tables related to sales in the OvalEdge catalog.",
+          "Search OvalEdge knowledge for how data classification works."
+        ]
+      }
+    }
+  }
+}

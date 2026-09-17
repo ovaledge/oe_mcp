@@ -1,0 +1,17 @@
+{
+  "name": "ovaledge-mcp",
+  "owner": {
+    "name": "OvalEdge",
+    "email": "rohit.anand@ovaledge.com"
+  },
+  "metadata": {
+    "description": "OvalEdge MCP plugin for Claude Code"
+  },
+  "plugins": [
+    {
+      "name": "ovaledge",
+      "source": "./plugins/claude-ovaledge",
+      "description": "OvalEdge catalog, governance, knowledge, access, and data quality via remote MCP."
+    }
+  ]
+}

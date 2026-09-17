@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "ovaledge": {
+      "type": "streamable-http",
+      "url": "https://YOUR_PUBLIC_MCP_BASE_URL/mcp"
+    }
+  }
+}

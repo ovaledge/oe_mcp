@@ -12,8 +12,11 @@ Guides for connecting **OvalEdge MCP** from common editors and assistants.
 | **VS Code + GitHub Copilot** | [SETUP_VSCODE_GITHUB_COPILOT.md](SETUP_VSCODE_GITHUB_COPILOT.md#local-stdio-optional) | [SETUP_VSCODE_GITHUB_COPILOT.md](SETUP_VSCODE_GITHUB_COPILOT.md#remote-http-remote_credentials) | [SETUP_VSCODE_GITHUB_COPILOT.md](SETUP_VSCODE_GITHUB_COPILOT.md#remote-oauth-auth_moderremote) |
 | **Microsoft Copilot** (Studio / Teams / M365 agents) | — | [SETUP_MICROSOFT_COPILOT.md](SETUP_MICROSOFT_COPILOT.md) (API key) | [SETUP_MICROSOFT_COPILOT.md](SETUP_MICROSOFT_COPILOT.md#remote-oauth-auth_moderremote) |
 | **Snowflake Cortex** (Agents / Intelligence) | — | — (OAuth only) | [SETUP_SNOWFLAKE_CORTEX.md](SETUP_SNOWFLAKE_CORTEX.md) |
+| **ChatGPT / Codex** | — | — (directories reject header auth) | [SETUP_CODEX.md](SETUP_CODEX.md) |
 
-**Okta Sign-in redirect URI allowlist** (Cursor, Claude, GitHub Copilot, Microsoft Copilot, Snowflake Cortex): [README_REMOTE_MCP.md — Okta redirect URIs (all clients)](../../README_REMOTE_MCP.md#okta-redirect-uris-all-clients).
+**Okta Sign-in redirect URI allowlist** (Cursor, Claude, ChatGPT/Codex, GitHub Copilot, Microsoft Copilot, Snowflake Cortex): [README_REMOTE_MCP.md — Okta redirect URIs (all clients)](../../README_REMOTE_MCP.md#okta-redirect-uris-all-clients).
+
+**Public directories** (Claude Connectors, Claude plugin directory, OpenAI/Codex Plugins Directory): [PUBLISH_DIRECTORIES.md](PUBLISH_DIRECTORIES.md).
 
 **Do not mix guides**
 
@@ -23,6 +26,7 @@ Guides for connecting **OvalEdge MCP** from common editors and assistants.
 | **Microsoft Copilot** | Copilot Studio MCP wizard + publish/Agent Store — not `mcp.json` |
 | **Cursor / Kiro** | `mcpServers` in Cursor/Kiro MCP JSON |
 | **Claude Desktop** | `claude_desktop_config.json` (often via `mcp-remote` for remote HTTP) |
+| **ChatGPT / Codex** | ChatGPT Plugins / Codex `mcp.json` or `plugins/codex-ovaledge` — [SETUP_CODEX.md](SETUP_CODEX.md) |
 | **Snowflake Cortex** | External MCP server + API integration in Snowflake — [SETUP_SNOWFLAKE_CORTEX.md](SETUP_SNOWFLAKE_CORTEX.md) (not `mcp.json`) |
 
 **Microsoft Copilot quick path**
@@ -38,6 +42,13 @@ Guides for connecting **OvalEdge MCP** from common editors and assistants.
 2. Add Okta redirect `https://identity.snowflake.com/oauth2/callback`.
 3. Create a Snowflake API integration + `EXTERNAL MCP SERVER`, attach it to a Cortex Agent — [SETUP_SNOWFLAKE_CORTEX.md](SETUP_SNOWFLAKE_CORTEX.md).
 4. Users **Connect** the connector in Snowflake Intelligence, then chat.
+
+**ChatGPT / Codex quick path**
+
+1. Deploy MCP with `AUTH_MODE=remote` (HTTPS `/mcp`).
+2. Add Okta redirects (`chatgpt.com/connector_platform_oauth_redirect` plus the per-app callback, and the Codex loopback URI).
+3. Connect in ChatGPT developer mode or Codex — [SETUP_CODEX.md](SETUP_CODEX.md).
+4. Public directory listing is a separate portal — [PUBLISH_DIRECTORIES.md](PUBLISH_DIRECTORIES.md).
 
 **Shared references**
 

@@ -38,6 +38,10 @@ Reference the `title` in `_DESC_*` and in `mcp_workflows.md` (e.g. ``asset_explo
 | `GOVERNED_UPDATE` | Confirm-gated writes that overwrite existing values | `False` / `True` |
 | `GOVERNED_EXECUTE` | Confirm-gated, non-mutating (e.g. runs SQL on a connection) | `False` / `False` |
 
+All four profiles set `open_world_hint=False` (`openWorldHint` on the wire): tools
+are limited to the authenticated OvalEdge tenant. Do not flip this unless a tool
+starts calling the public internet or other unbounded services.
+
 **Invariant (tested):** a tool exposing `write_confirmed_by_user` must **not** be `READ_ONLY`, and a tool without the gate must be. Clients auto-approve read-only tools — an over-claimed hint bypasses human review on a governed write.
 
 ## Context budget (always-on agent context)

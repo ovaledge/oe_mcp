@@ -70,6 +70,10 @@ class TestMcpSurfaceInventory:
                 assert tool.annotations.destructive_hint is False, (
                     f"{tool.name} is read-only but flagged destructive"
                 )
+            assert tool.annotations.open_world_hint is False, (
+                f"{tool.name} must advertise a bounded OvalEdge tenant "
+                f"(openWorldHint=false) for directory review"
+            )
 
     async def test_list_prompts_matches_expected_set(self, mcp_client) -> None:
         async with Client(mcp_client) as client:
