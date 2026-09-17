@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>OvalEdge</title>
+<style>
+:root { color-scheme: light dark; --bg:#0f1419; --card:#1a222c; --fg:#e8eef4;
+  --muted:#9aa8b5; --line:#2b3845; --accent:#3d9cf0; --up:#7dcea0; --down:#f5b041; }
+@media (prefers-color-scheme: light) {
+  :root { --bg:#f6f8fa; --card:#fff; --fg:#1b242c; --muted:#5b6b78; --line:#d8dee6; }
+}
+html,body { margin:0; padding:0; background:var(--bg); color:var(--fg);
+  font: 13px/1.45 ui-sans-serif, system-ui, sans-serif; }
+.wrap { padding:12px 14px 16px; }
+h1 { font-size:15px; margin:0 0 10px; font-weight:650; }
+.muted { color:var(--muted); }
+.err { color:#e57373; }
+table { width:100%; border-collapse:collapse; background:var(--card);
+  border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+th,td { text-align:left; padding:7px 9px; border-bottom:1px solid var(--line);
+  vertical-align:top; }
+th { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+tr:last-child td { border-bottom:0; }
+a { color:var(--accent); }
+.card { background:var(--card); border:1px solid var(--line); border-radius:8px;
+  padding:10px 12px; margin:0 0 10px; }
+.kv { display:grid; grid-template-columns:140px 1fr; gap:4px 10px; }
+.kv .k { color:var(--muted); }
+svg.graph { width:100%; height:auto; background:var(--card); border:1px solid var(--line);
+  border-radius:8px; }
+.search { width:100%; box-sizing:border-box; margin:0 0 8px; padding:7px 9px;
+  border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 id="title">OvalEdge</h1>
+  <p id="status" class="muted">Waiting for tool result from the host…</p>
+  <div id="root"></div>
+</div>
+<script>
+(function () {
+  const VIEW = "__VIEW__";
+  const titleEl = document.getElementById("title");
+  const statusEl = document.getElementById("status");
+  const root = document.getElementById("root");
+  const titles = {
+    explorer: "Catalog search",
+    details: "Asset details",
+    lineage: "Data lineage",
+    drift: "Metadata changes"
+  };
+  titleEl.textContent = titles[VIEW] || "OvalEdge";
+
+  function esc(v) {
+    return String(v == null ? "" : v).replace(/[&<>"']/g, function (c) {
+      return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c];
+    });
+  }
+  function httpUrl(v) {
+    const s = String(v || "");
+    return /^https?:\/\//i.test(s) ? s : "";
+  }
+  function pick(obj, keys) {
+    if (!obj) return "";
+    for (let i = 0; i < keys.length; i++) {
+      const v = obj[keys[i]];
+      if (v != null && String(v) !== "") return v;
+    }
+    return "";
+  }
+  function unwrap(payload) {
+    if (!payload || typeof payload !== "object") return payload;
+    if (payload.structuredContent) return unwrap(payload.structuredContent);
+    if (payload.result) return unwrap(payload.result);
+    if (Array.isArray(payload.content)) {
+      for (let i = 0; i < payload.content.length; i++) {
+        const c = payload.content[i];
+        if (c && c.type === "text" && c.text) {
+          try { return JSON.parse(c.text); } catch (e) {}
+        }
+      }
+    }
+    return payload;
+  }
+  function itemsOf(p) {
+    if (!p) return [];
+    if (Array.isArray(p.items)) return p.items;
+    if (p.data && Array.isArray(p.data.items)) return p.data.items;
+    if (Array.isArray(p.results)) return p.results;
+    return [];
+  }
+  function detailsOf(p) {
+    if (!p) return {};
+    if (p.data && p.data.details && typeof p.data.details === "object") {
+      return p.data.details;
+    }
+    if (p.data && typeof p.data === "object") return p.data;
+    return p;
+  }
+  function graphOf(p) {
+    const src = (p && p.data && (p.data.nodes || p.data.edges)) ? p.data : p;
+    return {
+      nodes: (src && Array.isArray(src.nodes)) ? src.nodes : [],
+      edges: (src && Array.isArray(src.edges)) ? src.edges : [],
+      root: src ? (src.rootObjectId || src.objectId || "") : ""
+    };
+  }
+  function driftOf(p) {
+    if (p && p.data && typeof p.data === "object") return p.data;
+    return p || {};
+  }
+  function openLink(obj) {
+    const url = httpUrl(pick(obj, ["redirectUrl", "redirect_url"]));
+    return url ? '<a href="' + esc(url) + '" target="_blank" rel="noopener">Open</a>' : "";
+  }
+
+  function renderExplorer(p) {
+    const rows = itemsOf(p);
+    if (!rows.length) {
+      root.innerHTML = '<p class="muted">No catalog hits.</p>';
+      return;
+    }
+    let html = '<input class="search" id="q" placeholder="Filter rows"/>';
+    html += "<table><thead><tr><th>Name</th><th>Type</th><th>Connection</th>"
+      + "<th>Steward</th><th></th></tr></thead><tbody id='tb'>";
+    rows.forEach(function (it) {
+      const name = pick(it, ["objectName", "name", "tableName"]);
+      html += "<tr data-q='" + esc((name + " " + pick(it, ["objectType", "type"])
+        + " " + pick(it, ["connectionName", "connection"])).toLowerCase()) + "'>";
+      html += "<td>" + esc(name) + "</td>";
+      html += "<td>" + esc(pick(it, ["objectType", "type"])) + "</td>";
+      html += "<td>" + esc(pick(it, ["connectionName", "connection", "serverType"]))
+        + "</td>";
+      html += "<td>" + esc(pick(it, ["steward", "owner"])) + "</td>";
+      html += "<td>" + openLink(it) + "</td></tr>";
+    });
+    html += "</tbody></table>";
+    root.innerHTML = html;
+    const q = document.getElementById("q");
+    const tb = document.getElementById("tb");
+    q.addEventListener("input", function () {
+      const needle = q.value.toLowerCase();
+      Array.prototype.forEach.call(tb.rows, function (tr) {
+        tr.style.display = tr.getAttribute("data-q").indexOf(needle) >= 0 ? "" : "none";
+      });
+    });
+  }
+
+  function renderDetails(p) {
+    const d = detailsOf(p);
+    const fields = [
+      ["Name", pick(d, ["objectName", "name"])],
+      ["Type", pick(d, ["objectType", "type"])],
+      ["Id", pick(d, ["objectId", "id"])],
+      ["Steward", pick(d, ["steward"])],
+      ["Owner", pick(d, ["owner"])],
+      ["Certification", pick(d, ["certificationStatus", "certification"])],
+      ["DQ score", pick(d, ["dqScore", "dqscore"])],
+      ["Description", pick(d, ["description", "businessDescription"])]
+    ];
+    let html = '<div class="card"><div class="kv">';
+    fields.forEach(function (pair) {
+      if (pair[1] === "") return;
+      html += '<div class="k">' + esc(pair[0]) + '</div><div>' + esc(pair[1])
+        + "</div>";
+    });
+    html += "</div>";
+    const link = openLink(d);
+    if (link) html += "<p>" + link + "</p>";
+    html += "</div>";
+    root.innerHTML = html;
+  }
+
+  function renderLineage(p) {
+    const g = graphOf(p);
+    if (!g.nodes.length) {
+      root.innerHTML = '<p class="muted">No lineage graph for this asset.</p>';
+      return;
+    }
+    const cols = {};
+    g.nodes.forEach(function (n) {
+      const dir = String(n.direction || "").toUpperCase();
+      let hop = Number(n.hop);
+      if (!isFinite(hop)) hop = 0;
+      let col = 0;
+      if (dir === "UPSTREAM" || (hop > 0 && dir !== "DOWNSTREAM")) col = -hop;
+      else if (dir === "DOWNSTREAM") col = hop;
+      else col = hop;
+      n._col = col;
+      n._id = String(n.id || n.objectId || n.name || "");
+      if (!cols[col]) cols[col] = [];
+      cols[col].push(n);
+    });
+    const colKeys = Object.keys(cols).map(Number).sort(function (a, b) { return a - b; });
+    const colW = 180;
+    const rowH = 56;
+    const pad = 24;
+    let maxRows = 1;
+    colKeys.forEach(function (c) { maxRows = Math.max(maxRows, cols[c].length); });
+    const width = pad * 2 + colKeys.length * colW;
+    const height = pad * 2 + maxRows * rowH;
+    const pos = {};
+    colKeys.forEach(function (c, ci) {
+      cols[c].forEach(function (n, ri) {
+        pos[n._id] = { x: pad + ci * colW + 70, y: pad + ri * rowH + 18 };
+      });
+    });
+    let svg = '<svg class="graph" viewBox="0 0 ' + width + " " + height
+      + '" xmlns="http://www.w3.org/2000/svg">';
+    g.edges.forEach(function (e) {
+      const a = pos[String(e.fromId || e.from || "")];
+      const b = pos[String(e.toId || e.to || "")];
+      if (!a || !b) return;
+      svg += '<line x1="' + a.x + '" y1="' + a.y + '" x2="' + b.x + '" y2="' + b.y
+        + '" stroke="#7aa0c4" stroke-width="1.4"/>';
+    });
+    g.nodes.forEach(function (n) {
+      const pnt = pos[n._id];
+      if (!pnt) return;
+      const dir = String(n.direction || "").toUpperCase();
+      const fill = dir === "UPSTREAM" ? "#1e3d32" : dir === "DOWNSTREAM" ? "#3d321e" : "#1e2a38";
+      svg += '<rect x="' + (pnt.x - 66) + '" y="' + (pnt.y - 14)
+        + '" width="132" height="28" rx="6" fill="' + fill + '" stroke="#3d9cf0"/>';
+      svg += '<text x="' + pnt.x + '" y="' + (pnt.y + 4)
+        + '" text-anchor="middle" font-size="10" fill="#e8eef4">'
+        + esc(pick(n, ["name", "objectName", "_id"])).slice(0, 22) + "</text>";
+    });
+    svg += "</svg>";
+    root.innerHTML = svg;
+  }
+
+  function tableBlock(title, rows, cols) {
+    if (!rows || !rows.length) return "";
+    let html = "<h1>" + esc(title) + "</h1><table><thead><tr>";
+    cols.forEach(function (c) { html += "<th>" + esc(c[1]) + "</th>"; });
+    html += "</tr></thead><tbody>";
+    rows.forEach(function (r) {
+      html += "<tr>";
+      cols.forEach(function (c) { html += "<td>" + esc(pick(r, c[0])) + "</td>"; });
+      html += "</tr>";
+    });
+    html += "</tbody></table>";
+    return html;
+  }
+
+  function renderDrift(p) {
+    const d = driftOf(p);
+    const roll = d.rollup || {};
+    let html = '<div class="card">';
+    html += "<div>Total changes: <b>" + esc(roll.totalChanges || 0) + "</b></div>";
+    html += "<div class='muted'>Tables " + esc(roll.tablesModified || 0)
+      + " · Columns " + esc(roll.columnsModified || 0)
+      + " · Row counts " + esc(roll.rowCountChanges || 0) + "</div>";
+    const link = openLink(d);
+    if (link) html += "<p>" + link + "</p>";
+    html += "</div>";
+    html += tableBlock("Tables", d.tableChanges, [
+      [["tableName", "name"], "Table"],
+      [["changeType", "status"], "Change"]
+    ]);
+    html += tableBlock("Columns", d.columnChanges, [
+      [["tableName"], "Table"],
+      [["columnName", "name"], "Column"],
+      [["changeType", "status"], "Change"]
+    ]);
+    html += tableBlock("Row counts", d.rowCountChanges || d.topLargeRowCountAdds, [
+      [["tableName", "name"], "Table"],
+      [["rowCountDelta"], "Delta"]
+    ]);
+    root.innerHTML = html || '<p class="muted">No crawl diff rows.</p>';
+  }
+
+  function render(raw) {
+    const p = unwrap(raw);
+    if (!p) return;
+    if (p.error) {
+      statusEl.className = "err";
+      statusEl.textContent = String(p.error);
+      root.innerHTML = "";
+      return;
+    }
+    statusEl.style.display = "none";
+    if (VIEW === "explorer") renderExplorer(p);
+    else if (VIEW === "details") renderDetails(p);
+    else if (VIEW === "lineage") renderLineage(p);
+    else renderDrift(p);
+  }
+
+  function onMessage(ev) {
+    const msg = ev && ev.data;
+    if (!msg) return;
+    if (msg.method === "ui/notifications/tool-result"
+        || msg.method === "ui/tool-result"
+        || msg.method === "notifications/tool-result") {
+      render(msg.params || msg.result || msg);
+      return;
+    }
+    if (msg.type === "tool-result" || msg.type === "ui/tool-result") {
+      render(msg.payload || msg.result || msg);
+    }
+  }
+  window.addEventListener("message", onMessage);
+  try {
+    window.parent.postMessage({
+      jsonrpc: "2.0",
+      method: "ui/initialize",
+      params: { protocolVersion: "2026-08-05" }
+    }, "*");
+  } catch (e) {}
+  if (window.openai) {
+    const out = window.openai.toolOutput || window.openai.toolResult;
+    if (out) render(out);
+  }
+})();
+</script>
+</body>
+</html>

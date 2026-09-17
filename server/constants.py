@@ -937,6 +937,13 @@ MCP_RESOURCE_GOVERNANCE_GLOSSARY_TERM = "ovaledge://governance/glossary-term/{ob
 MCP_RESOURCE_GOVERNANCE_DATA_STORY = "ovaledge://governance/data-story/{object_id}"
 MCP_RESOURCE_GOVERNANCE_TAG = "ovaledge://governance/tag/{object_id}"
 
+# MCP Apps HTML (hosts that implement io.modelcontextprotocol/ui). Not user-facing
+# links — never show these URIs in chat; use redirectUrl / navLink instead.
+MCP_UI_ASSET_EXPLORER = "ui://ovaledge/asset-explorer.html"
+MCP_UI_ASSET_DETAILS = "ui://ovaledge/asset-details.html"
+MCP_UI_ASSET_LINEAGE = "ui://ovaledge/asset-lineage.html"
+MCP_UI_METADATA_CHANGES = "ui://ovaledge/metadata-changes.html"
+
 # ── Static doc resources (markdown under server/docs/) ───────────
 DOCS_RESOURCE_URI_PREFIX = "docs://ovaledge"
 

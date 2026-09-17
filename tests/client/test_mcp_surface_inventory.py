@@ -13,6 +13,7 @@ from server.docs.loader import DOCS_DIR
 from server.mcp_surface import (
     MCP_OVALEDGE_RESOURCE_TEMPLATES,
     MCP_TOOL_NAMES,
+    MCP_UI_RESOURCE_URIS,
     MCP_WORKFLOW_PROMPT_NAMES,
 )
 
@@ -95,3 +96,5 @@ class TestMcpSurfaceInventory:
         for md in DOCS_DIR.glob("*.md"):
             doc_uri = f"{DOCS_RESOURCE_URI_PREFIX}/{md.stem}"
             assert doc_uri in uris
+        for uri in MCP_UI_RESOURCE_URIS:
+            assert uri in uris, f"missing MCP Apps UI resource {uri}"

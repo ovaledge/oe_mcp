@@ -17,6 +17,10 @@ from server.constants import (
     MCP_SEARCH_GLOSSARY_TERMS_PARAM,
     MCP_SEARCH_TAGS_PARAM,
     MCP_SEARCH_TERMS_PARAM,
+    MCP_UI_ASSET_DETAILS,
+    MCP_UI_ASSET_EXPLORER,
+    MCP_UI_ASSET_LINEAGE,
+    MCP_UI_METADATA_CHANGES,
 )
 from server.tools.catalog.cde_helpers import _DESC_UPDATE_CDE
 from server.tools.catalog.helpers import (
@@ -36,11 +40,18 @@ from server.tools.catalog.invocations import (
 )
 from server.tools.common.annotations import GOVERNED_UPDATE, READ_ONLY
 from server.tools.common.confirm_gate import CONFIRMATION_TOKEN_PARAM_DESCRIPTION
+from server.tools.common.mcp_apps_ui import catalog_app_config, catalog_app_meta
 
 
 def register(mcp: FastMCP) -> None:
 
-    @mcp.tool(title="Find data assets", description=_DESC_ASSET_EXPLORER, annotations=READ_ONLY)
+    @mcp.tool(
+        title="Find data assets",
+        description=_DESC_ASSET_EXPLORER,
+        annotations=READ_ONLY,
+        app=catalog_app_config(MCP_UI_ASSET_EXPLORER),
+        meta=catalog_app_meta(MCP_UI_ASSET_EXPLORER),
+    )
     async def asset_explorer(
         search_terms: Annotated[
             list[str] | None,
@@ -289,7 +300,13 @@ def register(mcp: FastMCP) -> None:
             sort=sort,
         )
 
-    @mcp.tool(title="View asset details", description=_DESC_ASSET_DETAILS, annotations=READ_ONLY)
+    @mcp.tool(
+        title="View asset details",
+        description=_DESC_ASSET_DETAILS,
+        annotations=READ_ONLY,
+        app=catalog_app_config(MCP_UI_ASSET_DETAILS),
+        meta=catalog_app_meta(MCP_UI_ASSET_DETAILS),
+    )
     async def asset_details(
         object_id: Annotated[
             int,
@@ -316,7 +333,13 @@ def register(mcp: FastMCP) -> None:
             object_type=object_type,
         )
 
-    @mcp.tool(title="Trace data lineage", description=_DESC_ASSET_LINEAGE, annotations=READ_ONLY)
+    @mcp.tool(
+        title="Trace data lineage",
+        description=_DESC_ASSET_LINEAGE,
+        annotations=READ_ONLY,
+        app=catalog_app_config(MCP_UI_ASSET_LINEAGE),
+        meta=catalog_app_meta(MCP_UI_ASSET_LINEAGE),
+    )
     async def asset_lineage(
         object_id: Annotated[
             int,
@@ -551,6 +574,8 @@ def register(mcp: FastMCP) -> None:
         title="Compare metadata changes",
         description=_DESC_METADATA_CHANGES,
         annotations=READ_ONLY,
+        app=catalog_app_config(MCP_UI_METADATA_CHANGES),
+        meta=catalog_app_meta(MCP_UI_METADATA_CHANGES),
     )
     async def metadata_changes_between_crawls(
         question: Annotated[
