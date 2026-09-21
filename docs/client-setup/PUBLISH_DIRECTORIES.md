@@ -100,7 +100,7 @@ Docs: [Submit plugins](https://developers.openai.com/plugins/deploy/submission),
 | D7 | **Release notes** | One short paragraph: first listing of OvalEdge MCP for ChatGPT and Codex. |
 | D8 | **Okta redirect for ChatGPT** | After creating the draft, copy `https://chatgpt.com/connector/oauth/{callback_id}` from the app page into the Okta Sign-in redirect URI list. Also keep the legacy `https://chatgpt.com/connector_platform_oauth_redirect`. Codex CLI: add the **exact** loopback URI printed by `codex mcp add`. |
 | D9 | **Privacy vs tool payloads** | Review tool JSON for unnecessary PII, trace IDs, or secrets. Disclose in the privacy policy only what you actually return. |
-| D10 | **No MCP Apps UI** | This server has no UI templates — do **not** upload screenshots (`screenshots_not_allowed` if you do). |
+| D10 | **MCP Apps UI screenshots** | Four catalog tools advertise self-contained `ui://ovaledge/*.html` views (search table, details card, lineage graph, crawl-diff tables). Upload 3–5 cropped **widget** screenshots from ChatGPT/Claude Apps. Do **not** screenshot OvalEdge itself. IDE / Cortex / Copilot Studio still use JSON + `formattedResponse`. |
 | D11 | **Workspace-only (skip public directory)** | ChatGPT developer mode, or install `plugins/codex-ovaledge` from `.agents/plugins/marketplace.json`. Replace `YOUR_PUBLIC_MCP_BASE_URL` in `mcp.json` first. Workspace Publish is org-scoped, not the public directory. |
 
 EU residency, Template URLs, and enhanced directory placement are **out of band** with OpenAI (support / partner contact). Do not invent a template URL in the form unless they enabled it.
