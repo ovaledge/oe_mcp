@@ -1069,14 +1069,14 @@ standard-no-fastapi-cloud-cli = ["email-validator (>=2.0.0)", "fastapi-cli[stand
 
 [[package]]
 name = "fastmcp-slim"
-version = "4.0.3"
+version = "4.0.5"
 description = "The dependency-slim FastMCP package."
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "fastmcp_slim-4.0.3-py3-none-any.whl", hash = "sha256:3756ed4bd9f82f40adaf51974b7cdd1463ab6b9f479cf69b69b2692969312b87"},
-    {file = "fastmcp_slim-4.0.3.tar.gz", hash = "sha256:3ce04a82b82cc41ccb12bb3bb366cfd65b52bc797b8fee332a75da9d480f9b74"},
+    {file = "fastmcp_slim-4.0.5-py3-none-any.whl", hash = "sha256:2bb5bc1ff0a0f3ae063b97f647ea3730d32d5481050231818c161214b9047f67"},
+    {file = "fastmcp_slim-4.0.5.tar.gz", hash = "sha256:5dc5395bcacb0eb405787393298891210c821d3f66334c2695e5e435d88fe575"},
 ]
 
 [package.dependencies]
@@ -1110,11 +1110,11 @@ watchfiles = {version = ">=1.0.0", optional = true, markers = "extra == \"server
 websockets = {version = ">=15.0.1", optional = true, markers = "extra == \"server\""}
 
 [package.extras]
-anthropic = ["anthropic (>=0.48.0,<1)"]
+anthropic = ["anthropic (>=0.48.0,<2)"]
 apps = ["prefab-ui (>=0.18.0)"]
 azure = ["azure-identity (>=1.16.0)", "pyjwt (>=2.12.0)"]
 client = ["authlib (>=1.6.11)", "exceptiongroup (>=1.2.2)", "httpx2 (>=2.5.0)", "mcp (>=2.0.0,<3.0.0)", "opentelemetry-api (>=1.28.0)", "py-key-value-aio[filetree,keyring,memory] (>=0.4.4,<0.5.0)", "starlette (>=1.0.1)"]
-code-mode = ["pydantic-monty (==0.0.18)"]
+code-mode = ["pydantic-monty (==0.0.21)"]
 gemini = ["google-genai (>=1.18.0)", "jsonref (>=1.1.0)"]
 mcp = ["exceptiongroup (>=1.2.2)", "httpx2 (>=2.5.0)", "mcp (>=2.0.0,<3.0.0)", "opentelemetry-api (>=1.28.0)", "starlette (>=1.0.1)"]
 openai = ["openai (>=1.102.0)"]
@@ -4464,4 +4464,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "00872e7bdddfd40ee36c08e049f88b3b1683e766023590b0759f515d66b89e92"
+content-hash = "1acafbed1715f5b60e6a538f321071d91028089a768c31d9c773c72afb3989fc"
