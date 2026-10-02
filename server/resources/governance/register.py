@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastmcp import FastMCP
 
 from server.constants import (
-    MCP_PATH_OBJECT_DETAILS,
+    MCP_PATH_ASSET_DETAILS,
     MCP_RESOURCE_GOVERNANCE_DATA_STORY,
     MCP_RESOURCE_GOVERNANCE_GLOSSARY_TERM,
     MCP_RESOURCE_GOVERNANCE_TAG,
@@ -21,7 +21,7 @@ def register(mcp: FastMCP) -> None:
         Glossary term as catalog document (objectType=glossary).
         URI: {MCP_RESOURCE_GOVERNANCE_GLOSSARY_TERM}
 
-        GET {MCP_PATH_OBJECT_DETAILS}?objectId=...&objectType=glossary
+        GET {MCP_PATH_ASSET_DETAILS}?objectId=...&objectType=glossary
         """
         return await fetch_object_details_json(object_id, "glossary")
 
@@ -31,9 +31,9 @@ def register(mcp: FastMCP) -> None:
         Data story catalog document (objectType=oestory) by internal object id.
         URI: {MCP_RESOURCE_GOVERNANCE_DATA_STORY}
 
-        GET {MCP_PATH_OBJECT_DETAILS}?objectId=...&objectType=oestory
+        GET {MCP_PATH_ASSET_DETAILS}?objectId=...&objectType=oestory
 
-        For narrative sections and formattedResponse, prefer lookup_datastory with the same id.
+        For narrative sections and formattedResponse, prefer knowledge_search with the same id.
         """
         return await fetch_object_details_json(object_id, "oestory")
 
@@ -43,8 +43,8 @@ def register(mcp: FastMCP) -> None:
         Tag catalog document (objectType=oetag) by internal object id.
         URI: {MCP_RESOURCE_GOVERNANCE_TAG}
 
-        GET {MCP_PATH_OBJECT_DETAILS}?objectId=...&objectType=oetag
+        GET {MCP_PATH_ASSET_DETAILS}?objectId=...&objectType=oetag
 
-        For tag hierarchy and create-options context, prefer lookup_tags.
+        For tag hierarchy, prefer asset_explorer with object_type=oetag.
         """
         return await fetch_object_details_json(object_id, "oetag")

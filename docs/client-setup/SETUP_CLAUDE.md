@@ -1,6 +1,6 @@
 # Claude (Desktop, Chat, Code) + OvalEdge MCP
 
-**Last reviewed:** July 2026.
+**Last reviewed:** September 2026.
 
 Anthropic’s [MCP quickstart (user)](https://modelcontextprotocol.io/quickstart/user) · [Connect Claude Desktop to local MCP](https://support.anthropic.com/en/articles/10995153-connecting-claude-desktop-to-local-mcp-servers) · [`mcp-remote` (npm)](https://www.npmjs.com/package/mcp-remote) · [Claude Code setup](https://code.claude.com/docs/en/setup)
 
@@ -146,6 +146,30 @@ If authorize fails with *redirect_uri must be a Login redirect URI*, add the exa
 
 ---
 
+## Claude Code plugin (in-repo)
+
+For Claude Code / Cowork, this repo ships [`plugins/claude-ovaledge/`](../../plugins/claude-ovaledge/). It prompts for the HTTPS `/mcp` URL (`userConfig.mcp_url`) and loads a skill that defers to `docs://ovaledge/mcp_workflows`.
+
+```bash
+claude plugin validate plugins/claude-ovaledge
+claude plugin marketplace add ./
+# or: claude --plugin-dir plugins/claude-ovaledge
+```
+
+The marketplace catalog is [`.claude-plugin/marketplace.json`](../../.claude-plugin/marketplace.json). Do not put Okta secrets in the plugin.
+
+Public plugin-directory submission (separate from Claude.ai **Connectors**): [PUBLISH_DIRECTORIES.md](PUBLISH_DIRECTORIES.md#c-claude-plugin-directory-claude-code--cowork).
+
+---
+
+## Connectors Directory (claude.ai)
+
+Custom **Connect** (above) works today for any Team/Enterprise user who pastes `https://YOUR_PUBLIC_MCP_BASE_URL/mcp`.
+
+Listing in Anthropic’s **Connectors Directory** is a portal submission (Owners on Team/Enterprise). Skills are not a standalone connector type. Checklist: [PUBLISH_DIRECTORIES.md](PUBLISH_DIRECTORIES.md#b-claude-connectors-directory-claudeai).
+
+---
+
 ## Troubleshooting
 
 | Symptom | Action |
@@ -158,5 +182,6 @@ If authorize fails with *redirect_uri must be a Login redirect URI*, add the exa
 ## Shared references
 
 - Remote auth and TLS: [README_REMOTE_MCP.md](../../README_REMOTE_MCP.md)
+- Directory / plugin publish: [PUBLISH_DIRECTORIES.md](PUBLISH_DIRECTORIES.md)
 - Local stdio env: [README_LOCAL_MCP.md](../../README_LOCAL_MCP.md)
 - Client index: [README.md](README.md)

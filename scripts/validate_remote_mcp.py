@@ -85,7 +85,11 @@ async def cmd_discovery() -> None:
 async def cmd_ovaledge(token: str | None) -> None:
     import httpx
 
-    from server.auth.token_exchange import TokenExchangeError, exchange_oauth_access_token
+    from server.auth.token_exchange import (
+        TokenExchangeError,
+        _token_generate_headers,
+        exchange_oauth_access_token,
+    )
     from server.config import settings
     from server.constants import OVALEDGE_TOKEN_EXCHANGE_PATH
 
@@ -102,7 +106,7 @@ async def cmd_ovaledge(token: str | None) -> None:
         r = await client.post(
             url,
             json=probe_body,
-            headers={"Accept": "application/json", "Content-Type": "application/json"},
+            headers=_token_generate_headers(),
         )
     raw_len = len(r.content or b"")
     print("HTTP status:", r.status_code)

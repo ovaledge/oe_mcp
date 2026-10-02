@@ -52,7 +52,7 @@ codegraph sync
 | Need | Use |
 |------|-----|
 | MCP tool contract / new tool | `@oe-mcp-tool-design` skill |
-| OvalEdge routing (RDAM vs catalog ACL) | `server/docs/mcp_workflows.md`, `rdam_source_access.md` |
+| OvalEdge routing (RDAM vs catalog permissions) | `server/docs/mcp_workflows.md`, `rdam_source_access.md` |
 | Runtime agent docs | `docs://ovaledge/*` on the running MCP server |
 
 CodeGraph does **not** encode which MCP tool answers a user question — use static docs and workflow prompts for that.

@@ -129,7 +129,7 @@ If you never enter the secret, status stays **Not connected** and MCP calls retu
 ### A5. Confirm tools on the agent
 
 1. On **Tools**, open the OvalEdge MCP entry.
-2. Confirm tools such as `search_catalog_assets`, `catalog_asset_details`, etc.
+2. Confirm tools such as `asset_explorer`, `asset_details`, etc.
 3. Optionally customize which tools are enabled.
 
 ---

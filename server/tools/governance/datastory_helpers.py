@@ -6,35 +6,14 @@ import re
 from html import unescape
 from typing import Any
 
-from server.constants import MCP_PATH_LOOKUP_DATASTORY
 from server.tools.common import as_dict as _as_dict
 from server.tools.common.descriptions import classify_tool_desc
 from server.tools.governance._shared import _cell
 
+# Deprecated as a standalone MCP tool — use knowledge_search. Kept for enrichment helpers.
 _DESC_DATASTORY = classify_tool_desc(
-    "Look up one OvalEdge data story the caller can access (Elasticsearch oestory + RBAC).\n\n"
-    "**Prefer this tool when** the user asks about organizational knowledge onboarded as "
-    "data stories: internal policies, standards, playbooks, onboarding, operating "
-    "procedures, domain narratives, or 'what we documented' — not OvalEdge product how-to "
-    "(use search_platform_docs) and not locating a table/report (use search_catalog_assets). "
-    "Default for open-ended org-knowledge questions: content_query with the user's question.\n\n"
-    f"Backend: GET {MCP_PATH_LOOKUP_DATASTORY}\n\n"
-    "Lookup modes:\n"
-    "- object_id — internal story identifier (alone).\n"
-    "- story_name — title lookup (optional story_zone_name).\n"
-    "- content_query — search story narrative/sections; optional story_zone_name and/or "
-    "story_name to narrow.\n\n"
-    "Response includes formattedResponse (storyCitation line, story sections, navUrl). "
-    "Present formattedResponse to the user for every lookup mode (including content_query). "
-    "The first line must be storyCitation exactly — do not add lead-ins such as "
-    "'Your organization governs', 'Based on', or 'According to' before the story title.\n\n"
-    "Also: metadata, content, accessControl, navLink, navUrl, storyTitleLink, storyCitation, "
-    "storyOpeningLine (same as storyCitation — copy verbatim as the answer's first line).\n\n"
-    "After search_catalog_assets returns an oestory, call this tool (object_id or "
-    "content_query) for title hyperlinks and formattedResponse — do not cite stories from "
-    "search hits alone.\n\n"
-    "Not found (404) if no match or the story is not visible to the authenticated user. "
-    "Do not use for glossary, tags, or tables."
+    "Data-story enrichment helper (not registered as a standalone MCP tool). "
+    "Use knowledge_search for dual-corpus org knowledge + platform docs."
 )
 def _story_zone_name(meta: dict[str, Any]) -> str:
     return _cell(meta.get("storyZoneName"))

@@ -56,6 +56,7 @@ After deploy:
 | **ENOTFOUND** on API hostname | Wrong / deleted API Gateway | Update client URL from stack `MCPEndpointUrl` |
 | **MCP error -32001: Request timed out** (client) | Request exceeded client timeout (often 4 min) while server hung or retried | CloudWatch duration; OvalEdge slowness; reduce `depth` on lineage |
 | Pydantic `Unexpected keyword argument` on tools | Client using old parameter names (`query` vs `search_terms`) | Redeploy server; use current tool schema from `tools/list` |
+| `-32600` `Not Acceptable: Client must accept both application/json and text/event-stream` | Client (e.g. Snowflake Cortex) sends `Accept: application/json` only; server in SSE mode | Redeploy with `MCP_JSON_RESPONSE=true` (default). Confirm `/health` is a new artifact. |
 | Server instructions say **Phase 1 read-only** only | Old Lambda artifact | Redeploy from current `main` / feature branch |
 
 ## CloudWatch Logs
@@ -118,7 +119,7 @@ Log lines intentionally **omit** credential headers. Tool logs include `tool=<na
 ## Performance notes
 
 - **HTTP API + Lambda** integration timeout is **30 seconds**. Increasing Lambda timeout above 30s does not extend API Gateway’s wait for `/mcp`.
-- **Large responses** (`asset_lineage`, `search_platform_docs`, fat `catalog_asset_details`) need CPU/memory to serialize. Default template memory is now **1024 MB**; raise with `LAMBDA_MEMORY_SIZE=2048` if CloudWatch shows duration near 30s or memory maxed.
+- **Large responses** (`asset_lineage`, `knowledge_search`, fat `asset_details`) need CPU/memory to serialize. Default template memory is now **1024 MB**; raise with `LAMBDA_MEMORY_SIZE=2048` if CloudWatch shows duration near 30s or memory maxed.
 - **Intermittent 500s** with successful retries often indicate OvalEdge upstream slowness or warm/cold Lambda behavior — correlate `mcp_tool duration_ms` with OvalEdge HTTP logs (`OVALEDGE_LOG_HTTP_REQUESTS=true` in Lambda env).
 
 ## Token exchange: INVALID_TOKEN / duplicate JWT issuance
@@ -163,7 +164,7 @@ Deploy parameters: [DEPLOY.md](DEPLOY.md#telemetry-opentelemetry).
 | *oauth_audience is not set* | Old build requiring audience for JWT | Redeploy current code (audience optional; introspect preferred when client id is set) |
 | Cursor `fetch failed` / cannot connect | Wrong `MCPEndpointUrl`, DNS, or laptop network | `curl /health` from the same machine; URL must be `https://…/mcp` |
 
-Client guides: [SETUP_CURSOR.md](../docs/client-setup/SETUP_CURSOR.md#remote-oauth-auth_moderremote) · [SETUP_CLAUDE.md](../docs/client-setup/SETUP_CLAUDE.md#remote-oauth-auth_moderremote) · [SETUP_VSCODE_GITHUB_COPILOT.md](../docs/client-setup/SETUP_VSCODE_GITHUB_COPILOT.md#remote-oauth-auth_moderremote) · [SETUP_MICROSOFT_COPILOT.md](../docs/client-setup/SETUP_MICROSOFT_COPILOT.md#remote-oauth-auth_moderremote).
+Client guides: [SETUP_CURSOR.md](../docs/client-setup/SETUP_CURSOR.md#remote-oauth-auth_moderremote) · [SETUP_CLAUDE.md](../docs/client-setup/SETUP_CLAUDE.md#remote-oauth-auth_moderremote) · [SETUP_VSCODE_GITHUB_COPILOT.md](../docs/client-setup/SETUP_VSCODE_GITHUB_COPILOT.md#remote-oauth-auth_moderremote) · [SETUP_MICROSOFT_COPILOT.md](../docs/client-setup/SETUP_MICROSOFT_COPILOT.md#remote-oauth-auth_moderremote) · [SETUP_SNOWFLAKE_CORTEX.md](../docs/client-setup/SETUP_SNOWFLAKE_CORTEX.md).
 
 Deploy ZIP Okta: [DEPLOY.md — Okta Connect Lambda ZIP](DEPLOY.md#okta-connect-lambda-zip).
 

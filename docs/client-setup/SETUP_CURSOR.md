@@ -45,7 +45,7 @@ If `.env` in the repo is complete, you can omit most `env` keys and rely on the 
 
 ### Logo in Cursor (stdio vs HTTP)
 
-**`ovaledge-local` (stdio)** sends the icon as a data URI in MCP metadata, but Cursor typically shows a letter avatar for command-based servers, not the PNG.
+**`ovaledge-local` (stdio)** omits the icon (Cursor shows a letter avatar for command-based servers). A data-URI PNG in ``initialize`` can delay ``tools/list`` when Cursor restarts the stdio process.
 
 For the **OvalEdge logo**, use **local HTTP** instead:
 
@@ -146,11 +146,11 @@ With the server connected, Cursor can list **MCP prompts**, **resources**, and *
 
 | Need | Start with |
 | ---- | ---------- |
-| Internal policy / playbook / narrative | Prompt `organizational_knowledge` or tool `lookup_datastory` |
-| Find tables, files, reports | Prompt `data_discovery` or `search_catalog_assets` |
+| Internal policy / playbook / narrative | Prompt `organizational_knowledge` or tool `knowledge_search` |
+| Find tables, files, reports | Prompt `data_discovery` or `asset_explorer` |
 | Create tag or glossary term | Prompt `create_governance_tag` / `create_business_glossary_term` (confirm preview, then `write_confirmed_by_user=true`) |
-| OvalEdge product how-to | Prompt `platform_help` or `search_platform_docs` |
-| Native Redshift / Snowflake / Tableau grants | Prompt `native_source_access` or tool `source_system_access` |
+| OvalEdge product how-to | Prompt `platform_help` or `knowledge_search` |
+| Native Redshift / Snowflake / Tableau grants | Prompt `native_source_access` or `access_explorer` (`operation=source_system_access`) |
 | Deep link by id | `ovaledge://catalog/table/{id}`, `ovaledge://governance/data-story/{id}`, … |
 
 Full index: [server/docs/mcp_workflows.md](../../server/docs/mcp_workflows.md) (`docs://ovaledge/mcp_workflows`). Agent rules: [README.md](../../README.md#agent-guidance-mirrors-serverapppy-instructions).
@@ -160,6 +160,7 @@ Full index: [server/docs/mcp_workflows.md](../../server/docs/mcp_workflows.md) (
 | Symptom | Action |
 | ------- | ------ |
 | Tools missing after edit | Restart Cursor / toggle MCP server off→on |
+| Connected but 0 tools / only `mcp_auth` | Cursor dropped `tools/list` (stdio restart race) and may cache `toolCount=0`. Toggle the server off→on, or use **local HTTP** (`oe-mcp-http` + `url` in `mcp.json`). Confirm OvalEdge at `OVALEDGE_BASE_URL` is up. |
 | `fetch failed` on remote URL | `curl` `…/health`; confirm URL ends with `/mcp` |
 | OAuth redirect rejected | Add Cursor URIs in Okta (above); retry Connect |
 | Token exchange / client auth failed | Ensure Lambda has `OAUTH_CLIENT_SECRET`; redeploy |

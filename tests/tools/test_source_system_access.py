@@ -4,18 +4,31 @@ from fastmcp import FastMCP
 
 from server.client import OvalEdgeError
 from server.constants import (
-    MCP_PATH_SOURCE_SYSTEM_ACCESS,
+    MCP_OPERATION_CATALOG_ACCESS,
+    MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
+    MCP_PATH_ACCESS_EXPLORER,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_CONNECTION_ERROR,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_OBJECT_TYPE_ERROR,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_SOURCE_ERROR,
+    MCP_SOURCE_SYSTEM_GROUP_NAME_REQUIRED_ERROR,
+    MCP_SOURCE_SYSTEM_GROUP_UNSUPPORTED_FOR_SNOWFLAKE_ERROR,
+    MCP_SOURCE_SYSTEM_PRIVILEGE_NAME_REQUIRED_ERROR,
+    MCP_SOURCE_SYSTEM_ROLE_NAME_REQUIRED_ERROR,
+    MCP_SOURCE_SYSTEM_USERNAME_REQUIRED_ERROR,
+    TOOL_ACCESS_EXPLORER,
 )
 from server.docs.loader import read_doc_markdown
-from server.tools import rdam
+from server.tools import access
+from server.tools.access.helpers import _DESC_ACCESS_EXPLORER
 from server.tools.rdam.helpers import (
-    _DESC_SOURCE_SYSTEM_ACCESS,
     _has_table_level_grants,
     _schema_names_from_schema_grants,
+    is_group_relationship_direction,
     is_incomplete_table_object_path,
+    is_membership_direction,
+    is_principal_membership_direction,
+    is_privilege_reverse_direction,
+    is_user_membership_direction,
     normalize_string_list,
     reject_multiple_connection_id,
     reject_multiple_object_type,
@@ -28,7 +41,8 @@ from tests.helpers import get_tool_fn
 
 
 def assert_rdam_api_called(mock_client: AsyncMock, params: dict[str, object]) -> None:
-    mock_client.get.assert_any_call(MCP_PATH_SOURCE_SYSTEM_ACCESS, params=params)
+    expected = {"operation": MCP_OPERATION_SOURCE_SYSTEM_ACCESS, **params}
+    mock_client.get.assert_any_call(MCP_PATH_ACCESS_EXPLORER, params=expected)
 
 
 # Required on every source_system_access call (matches tool schema).
@@ -42,8 +56,8 @@ _REQ = {
 
 class TestGetSourceSystemAccess:
     def test_tool_description_documents_daa_scope(self) -> None:
-        governance_doc = read_doc_markdown("governance_model")
-        assert "Data Access Admin" in _DESC_SOURCE_SYSTEM_ACCESS
+        governance_doc = read_doc_markdown("governance")
+        assert "Data Access Admin" in _DESC_ACCESS_EXPLORER
         assert "Instance Data Access Admin" in governance_doc
         assert "Connector Data Access Admin" in governance_doc
 
@@ -55,30 +69,57 @@ class TestGetSourceSystemAccess:
         assert "SNOWFLAKE.ALERT" in rdam_doc
         assert "object_type=schema" in rdam_doc
         assert "rdam_tableprivilege" in rdam_doc
-        assert "never fall back to `search_catalog_assets`" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
+        assert "never fall back to `asset_explorer`" in _DESC_ACCESS_EXPLORER.lower()
         assert "Mandatory API fields" in rdam_doc
-        assert "object_name" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "object_name" in _DESC_ACCESS_EXPLORER
         assert "object_type=all" in rdam_doc
         assert "svc_analytics" in rdam_doc
-        assert "get_user_object_access" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "access_explorer" in _DESC_ACCESS_EXPLORER or "operation" in _DESC_ACCESS_EXPLORER
+        assert "catalog_access" in _DESC_ACCESS_EXPLORER
         assert "Access grant models by source system" in rdam_doc
-        assert "direct" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "contributing_role" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "user_to_objects" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "descendants" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "direct" in _DESC_ACCESS_EXPLORER
+        assert "contributing_role" in _DESC_ACCESS_EXPLORER
+        assert "user_to_objects" in _DESC_ACCESS_EXPLORER
+        assert "role_to_users" in _DESC_ACCESS_EXPLORER
+        assert "group_to_users" in _DESC_ACCESS_EXPLORER
+        assert "user_to_roles" in _DESC_ACCESS_EXPLORER
+        assert "user_to_groups" in _DESC_ACCESS_EXPLORER
+        assert "role_to_users" in rdam_doc
+        assert "group_to_users" in rdam_doc
+        assert "user_to_roles" in rdam_doc
+        assert "user_to_groups" in rdam_doc
+        assert "group_to_roles" in rdam_doc
+        assert "role_to_groups" in rdam_doc
+        assert "role_to_parent_roles" in rdam_doc
+        assert "role_to_privileges" in rdam_doc
+        assert "group_to_privileges" in rdam_doc
+        assert "user_to_privileges" in rdam_doc
+        assert "instanceName" in rdam_doc
+        assert "instanceId" in rdam_doc
+        assert "privilege_to_roles" in rdam_doc
+        assert "privilege_to_groups" in rdam_doc
+        assert "privilege_to_users" in rdam_doc
+        assert "privilege_to_principals" in rdam_doc
+        assert "descendants" in _DESC_ACCESS_EXPLORER
         assert "never call `object_to_users`" in rdam_doc.lower()
-        assert "do not probe" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
+        assert "do not probe" in _DESC_ACCESS_EXPLORER.lower()
         assert "do not probe" in rdam_doc.lower()
-        assert "omit `object_path`" in _DESC_SOURCE_SYSTEM_ACCESS.lower()
+        assert "omit `object_path`" in _DESC_ACCESS_EXPLORER.lower()
         assert "all tables on that connector" in rdam_doc.lower()
         assert "ask the user which schema" in rdam_doc.lower()
-        assert "requiresSchemaSelection" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "connection_id" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "docs://ovaledge/rdam_source_access" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "docs://ovaledge/mcp_workflows" in _DESC_SOURCE_SYSTEM_ACCESS
-        assert "native_source_access" in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "requiresSchemaSelection" in _DESC_ACCESS_EXPLORER
+        assert "connection_id" in _DESC_ACCESS_EXPLORER
+        assert "docs://ovaledge/rdam_source_access" in _DESC_ACCESS_EXPLORER
+        assert "docs://ovaledge/mcp_workflows" in _DESC_ACCESS_EXPLORER
+        assert "native_source_access" in _DESC_ACCESS_EXPLORER
         assert "disabled" in rdam_doc.lower()
-        assert "filteredToObjectLevel" not in _DESC_SOURCE_SYSTEM_ACCESS
+        assert "what tables/schemas/columns can i see/view/access" in _DESC_ACCESS_EXPLORER.lower()
+        assert "named principal" in _DESC_ACCESS_EXPLORER.lower()
+        assert "not `access_explorer`" in _DESC_ACCESS_EXPLORER
+        assert "mcp.source.system.hint.mismatch" in rdam_doc
+        assert "validation-only" in rdam_doc.lower()
+
+        assert "filteredToObjectLevel" not in _DESC_ACCESS_EXPLORER
 
     def test_validate_only_source_system_and_query_direction_required(self) -> None:
         assert (
@@ -125,12 +166,11 @@ class TestGetSourceSystemAccess:
         )
         assert err is not None
 
-    def test_validate_rejects_invalid_source_system_or_direction(self) -> None:
+    def test_validate_rejects_invalid_direction_not_unknown_source_system(self) -> None:
         err = validate_source_system_access_args(
             "postgres", "user_to_objects", "u", "prod_db.t", "table", 1000
         )
-        assert err is not None
-        assert "source_system" in err["error"]
+        assert err is None
 
         err = validate_source_system_access_args(
             "redshift", "invalid", "u", "prod_db.t", "table", 1000
@@ -141,6 +181,30 @@ class TestGetSourceSystemAccess:
     def test_validate_username_not_required_for_object_to_users(self) -> None:
         err = validate_source_system_access_args(
             "snowflake", "object_to_users", None, "BUSINESS.BANKING", "schema", 1360
+        )
+        assert err is None
+
+    def test_object_to_users_object_id_requires_object_type(self) -> None:
+        err = validate_source_system_access_args(
+            "snowflake",
+            "object_to_users",
+            None,
+            None,
+            None,
+            None,
+            object_id=42,
+        )
+        assert err is not None
+        assert "objectType" in err["error"]
+
+        err = validate_source_system_access_args(
+            "snowflake",
+            "object_to_users",
+            None,
+            None,
+            "table",
+            None,
+            object_id=42,
         )
         assert err is None
 
@@ -192,9 +256,10 @@ class TestGetSourceSystemAccess:
     async def test_user_to_objects_forwards_params(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="user_to_objects",
             **_REQ,
@@ -216,9 +281,10 @@ class TestGetSourceSystemAccess:
     ) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="user_to_objects",
             username="bhanuddm",
@@ -237,9 +303,10 @@ class TestGetSourceSystemAccess:
     async def test_object_to_users_forwards_params(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {}
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -259,9 +326,10 @@ class TestGetSourceSystemAccess:
         self, mock_oe_client: AsyncMock
     ) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="object_to_users",
             object_path=_REQ["object_path"],
@@ -275,9 +343,10 @@ class TestGetSourceSystemAccess:
         self, mock_oe_client: AsyncMock
     ) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="object_to_users",
             access_intent_confirmed="catalog_acl",
@@ -293,9 +362,10 @@ class TestGetSourceSystemAccess:
     ) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="user_to_objects",
             username=None,
@@ -305,24 +375,272 @@ class TestGetSourceSystemAccess:
         )
         assert out["status_code"] == 400
 
-    async def test_rejects_invalid_source_system(self, mock_oe_client: AsyncMock) -> None:
+    async def test_unsupported_source_system_continues_with_catalog_access(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {"ok": True, "data": {"items": []}}
+        mock_oe_client.get.side_effect = [
+            OvalEdgeError(
+                400,
+                "Connector type postgres is not supported for native DAM access. "
+                "Supported connector types: redshift, snowflake, tableau. "
+                "Continue with operation=catalog_access.",
+            ),
+            {"ok": True, "data": {"principals": []}},
+        ]
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
+            source_system="postgres",
+            query_direction="object_to_users",
+            access_intent_confirmed="native",
+            object_path=_REQ["object_path"],
+            object_type=_REQ["object_type"],
+            connection_id=_REQ["connection_id"],
+        )
+        assert out["ok"] is True
+        assert "_catalog_fallback" not in out
+        assert "catalog_access" in (out.get("data") or {}).get("advisoryMessage", "")
+        catalog_call = mock_oe_client.get.await_args_list[-1]
+        catalog_params = catalog_call.kwargs["params"]
+        assert catalog_call.args[0] == MCP_PATH_ACCESS_EXPLORER
+        assert catalog_params["operation"] == MCP_OPERATION_CATALOG_ACCESS
+        assert catalog_params["queryDirection"] == "object_to_principals"
+        assert "username" not in catalog_params
+
+    async def test_unsupported_source_system_fallback_uses_resolved_object_id(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {
+            "ok": True,
+            "data": {
+                "items": [
+                    {
+                        "objectId": 42,
+                        "objectType": "oetable",
+                        "fullyQualifiedName": "prod.public.orders",
+                    }
+                ]
+            },
+        }
+        mock_oe_client.get.side_effect = [
+            {
+                "ok": True,
+                "data": {
+                    "details": {
+                        "objectId": 42,
+                        "objectType": "oetable",
+                        "fullyQualifiedName": "prod.public.orders",
+                    }
+                },
+            },
+            OvalEdgeError(
+                400,
+                "source_system no compatible. Valores admitidos: redshift, snowflake, tableau.",
+                body={
+                    "ok": False,
+                    "code": "mcp.source.system.unsupported",
+                    "message": (
+                        "source_system no compatible. Valores admitidos: "
+                        "redshift, snowflake, tableau."
+                    ),
+                },
+            ),
+            {"ok": True, "data": {"principals": []}},
+        ]
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="postgres",
+            query_direction="object_to_users",
+            access_intent_confirmed="native",
+            object_name="orders",
+            object_type="table",
+            connection_id=_REQ["connection_id"],
+        )
+        assert out["ok"] is True
+        catalog_call = mock_oe_client.get.await_args_list[-1]
+        catalog_params = catalog_call.kwargs["params"]
+        assert catalog_params["operation"] == MCP_OPERATION_CATALOG_ACCESS
+        assert catalog_params["objectId"] == 42
+        assert catalog_params["objectType"] == "oetable"
+
+    async def test_unsupported_source_system_fallback_covers_all_resolved_paths(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {
+            "ok": True,
+            "data": {
+                "items": [
+                    {
+                        "objectId": 1,
+                        "objectType": "oeschema",
+                        "fullyQualifiedName": "DB.SCHEMA_A",
+                    },
+                    {
+                        "objectId": 2,
+                        "objectType": "oeschema",
+                        "fullyQualifiedName": "DB.SCHEMA_B",
+                    },
+                ]
+            },
+        }
+        mock_oe_client.get.side_effect = [
+            {
+                "ok": True,
+                "data": {
+                    "details": {
+                        "fullyQualifiedName": "DB.SCHEMA_A",
+                        "objectType": "oeschema",
+                    }
+                },
+            },
+            {
+                "ok": True,
+                "data": {
+                    "details": {
+                        "fullyQualifiedName": "DB.SCHEMA_B",
+                        "objectType": "oeschema",
+                    }
+                },
+            },
+            OvalEdgeError(
+                400,
+                "Connector type postgres is not supported for native DAM access. "
+                "Supported connector types: redshift, snowflake, tableau. "
+                "Continue with operation=catalog_access.",
+                body={
+                    "ok": False,
+                    "code": "mcp.source.system.unsupported",
+                    "message": (
+                        "Connector type postgres is not supported for native DAM access. "
+                        "Supported connector types: redshift, snowflake, tableau. "
+                        "Continue with operation=catalog_access."
+                    ),
+                },
+            ),
+            {
+                "ok": True,
+                "data": {
+                    "queryDirection": "object_to_principals",
+                    "fullyQualifiedName": "DB.SCHEMA_A",
+                    "principals": [{"principal": "ANALYST_A"}],
+                },
+            },
+            {
+                "ok": True,
+                "data": {
+                    "queryDirection": "object_to_principals",
+                    "fullyQualifiedName": "DB.SCHEMA_B",
+                    "principals": [{"principal": "ANALYST_B"}],
+                },
+            },
+        ]
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="postgres",
+            query_direction="object_to_users",
+            access_intent_confirmed="native",
+            fully_qualified_name="SCHEMA",
+            object_type="schema",
+            resolve_all_matches=True,
+        )
+        assert out["ok"] is True
+        objects = (out.get("data") or {}).get("objects")
+        assert objects is not None
+        assert [item["fullyQualifiedName"] for item in objects] == [
+            "DB.SCHEMA_A",
+            "DB.SCHEMA_B",
+        ]
+        catalog_calls = [
+            call
+            for call in mock_oe_client.get.await_args_list
+            if call.args
+            and call.args[0] == MCP_PATH_ACCESS_EXPLORER
+            and call.kwargs.get("params", {}).get("operation") == MCP_OPERATION_CATALOG_ACCESS
+        ]
+        assert [call.kwargs["params"].get("fullyQualifiedName") for call in catalog_calls] == [
+            "DB.SCHEMA_A",
+            "DB.SCHEMA_B",
+        ]
+
+    async def test_unsupported_source_system_does_not_fallback_user_to_objects(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = {"ok": True, "data": {"items": []}}
+        mock_oe_client.get.side_effect = [
+            OvalEdgeError(
+                400,
+                "Connector type postgres is not supported for native DAM access. "
+                "Supported connector types: redshift, snowflake, tableau. "
+                "Continue with operation=catalog_access.",
+            ),
+        ]
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
             source_system="postgres",
             query_direction="user_to_objects",
             **_REQ,
         )
-        assert out["status_code"] == 400
-        mock_oe_client.get.assert_not_called()
+        assert out.get("ok") is not True
+        assert out.get("status_code") == 400
+        assert "_catalog_fallback" not in out
+        catalog_calls = [
+            call
+            for call in mock_oe_client.get.await_args_list
+            if call.args and call.args[0] == MCP_PATH_ACCESS_EXPLORER
+            and call.kwargs.get("params", {}).get("operation") == MCP_OPERATION_CATALOG_ACCESS
+        ]
+        assert catalog_calls == []
+
+    async def test_source_system_hint_mismatch_does_not_continue_with_catalog_access(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.side_effect = OvalEdgeError(
+            400,
+            "sourceSystem snowflake does not match connectionId type redshift. "
+            "Pass a matching sourceSystem or omit sourceSystem.",
+        )
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="snowflake",
+            query_direction="browse",
+            object_type="database",
+            connection_id=_REQ["connection_id"],
+        )
+        assert out.get("ok") is not True
+        assert out.get("status_code") == 400
+        err = str(out.get("error") or "")
+        assert "does not match connectionId" in err
+        assert "catalog_access" not in err.lower()
+        catalog_calls = [
+            call
+            for call in mock_oe_client.get.await_args_list
+            if call.args and call.args[0] == MCP_PATH_ACCESS_EXPLORER
+            and call.kwargs.get("params", {}).get("operation") == MCP_OPERATION_CATALOG_ACCESS
+        ]
+        assert catalog_calls == []
 
     async def test_forwards_without_object_type(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="snowflake",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -342,9 +660,10 @@ class TestGetSourceSystemAccess:
     async def test_forwards_minimal_user_to_objects(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="snowflake",
             query_direction="user_to_objects",
             username="RACHEL",
@@ -362,9 +681,10 @@ class TestGetSourceSystemAccess:
         self, mock_oe_client: AsyncMock
     ) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="snowflake",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -380,9 +700,10 @@ class TestGetSourceSystemAccess:
     async def test_normalizes_oeschema_alias(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         await fn(
+            operation="source_system_access",
             source_system="snowflake",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -403,14 +724,18 @@ class TestGetSourceSystemAccess:
             })
 
     async def test_oval_edge_error(self, mock_oe_client: AsyncMock) -> None:
-        mock_oe_client.get.side_effect = OvalEdgeError(
-            404,
-            "username not found in harvested metadata",
-        )
+        mock_oe_client.post.return_value = {"ok": True, "data": {"items": []}}
+        mock_oe_client.get.side_effect = [
+            OvalEdgeError(
+                404,
+                "username not found in harvested metadata",
+            ),
+        ]
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="snowflake",
             query_direction="user_to_objects",
             username="missing.user",
@@ -422,9 +747,10 @@ class TestGetSourceSystemAccess:
 
     async def test_rejects_invalid_query_direction(self, mock_oe_client: AsyncMock) -> None:
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="objects_to_user",
             **_REQ,
@@ -435,9 +761,10 @@ class TestGetSourceSystemAccess:
     async def test_forwards_include_columns(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -463,9 +790,10 @@ class TestGetSourceSystemAccess:
             "object_path not found in harvested metadata: ovaledgedb.ovaledge.customer_vw",
         )
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -511,9 +839,10 @@ class TestGetSourceSystemAccess:
             },
         }
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -554,9 +883,10 @@ class TestGetSourceSystemAccess:
             },
         }
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="tableau",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -597,9 +927,10 @@ class TestGetSourceSystemAccess:
             },
         }
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="tableau",
             query_direction="user_to_objects",
             username="jane.doe",
@@ -612,14 +943,49 @@ class TestGetSourceSystemAccess:
         assert group_grant["grantMechanism"] == "group"
         assert group_grant["contributingGroup"] == "Analysts"
 
+    async def test_tableau_user_to_objects_direct_role(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {
+                        "objectPath": "Finance/Headcount",
+                        "objectLevel": "report",
+                        "grantMechanism": "role",
+                        "principalType": "user",
+                        "principalName": "jane.doe",
+                        "contributingRole": "Explorer",
+                        "privileges": ["READ"],
+                    },
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="tableau",
+            query_direction="user_to_objects",
+            username="jane.doe",
+            object_path="Finance/Headcount",
+            object_type="report",
+            connection_id=2000,
+        )
+        assert out["ok"] is True
+        role_grant = out["data"]["grants"][0]
+        assert role_grant["grantMechanism"] == "role"
+        assert role_grant["contributingRole"] == "Explorer"
+
     async def test_forwards_connection_prefixed_object_path(
         self, mock_oe_client: AsyncMock
     ) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         await fn(
+            operation="source_system_access",
             source_system="snowflake",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -643,9 +1009,10 @@ class TestGetSourceSystemAccess:
             "data": {"grants": [], "ambiguousMatch": True},
         }
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -694,9 +1061,10 @@ class TestGetSourceSystemAccess:
             },
         }
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="user_to_objects",
             username="john_analyst",
@@ -746,9 +1114,10 @@ class TestGetSourceSystemAccess:
             },
         }
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="user_to_objects",
             username="john_analyst",
@@ -774,9 +1143,10 @@ class TestGetSourceSystemAccess:
             },
         }
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -793,9 +1163,10 @@ class TestGetSourceSystemAccess:
     ) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="user_to_objects",
             username=["john_analyst", "svc_analytics"],
@@ -834,9 +1205,10 @@ class TestGetSourceSystemAccess:
     ) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -1042,9 +1414,10 @@ class TestShapeObjectToUsersDisambiguation:
 
         mock_oe_client.get.side_effect = _get
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -1099,9 +1472,10 @@ class TestSourceSystemAccessHelpers:
     async def test_object_name_forwards_composed_path(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.get.return_value = {"ok": True, "data": {"grants": []}}
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="object_to_users",
             access_intent_confirmed="native",
@@ -1129,9 +1503,10 @@ class TestSourceSystemAccessHelpers:
             },
         }
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="snowflake",
             query_direction="user_to_objects",
             username="john.doe",
@@ -1165,9 +1540,10 @@ class TestSourceSystemAccessHelpers:
             },
         }
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="redshift",
             query_direction="user_to_objects",
             username="svc_etl",
@@ -1192,9 +1568,10 @@ class TestSourceSystemAccessHelpers:
             },
         }
         mcp = FastMCP(name="test", version="0.0.1")
-        rdam.register(mcp)
-        fn = await get_tool_fn(mcp, "source_system_access")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
         out = await fn(
+            operation="source_system_access",
             source_system="snowflake",
             query_direction="user_to_objects",
             username="svc_analytics",
@@ -1203,3 +1580,815 @@ class TestSourceSystemAccessHelpers:
         assert out["data"]["multipleConnections"] is True
         assert out["data"]["connectionIds"] == [1001, 1002]
         assert "connection_id" in out["data"]["advisoryMessage"]
+
+
+class TestMembershipDirections:
+    def test_is_membership_direction(self) -> None:
+        assert is_membership_direction("role_to_users")
+        assert is_membership_direction("group_to_users")
+        assert is_membership_direction("user_to_roles")
+        assert is_membership_direction("user_to_groups")
+        assert is_membership_direction("group_to_roles")
+        assert is_membership_direction("role_to_groups")
+        assert is_membership_direction("role_to_parent_roles")
+        assert is_membership_direction("role_to_privileges")
+        assert is_membership_direction("group_to_privileges")
+        assert is_membership_direction("user_to_privileges")
+        assert is_membership_direction("privilege_to_roles")
+        assert is_membership_direction("privilege_to_groups")
+        assert is_membership_direction("privilege_to_users")
+        assert is_membership_direction("privilege_to_principals")
+        assert not is_membership_direction("user_to_objects")
+
+    def test_membership_direction_helpers(self) -> None:
+        assert is_principal_membership_direction("role_to_users")
+        assert is_user_membership_direction("user_to_roles")
+        assert is_user_membership_direction("user_to_privileges")
+        assert is_privilege_reverse_direction("privilege_to_roles")
+        assert is_privilege_reverse_direction("privilege_to_principals")
+        assert not is_group_relationship_direction("privilege_to_principals")
+        assert is_group_relationship_direction("privilege_to_groups")
+        assert not is_principal_membership_direction("user_to_roles")
+        assert not is_user_membership_direction("role_to_users")
+        assert not is_privilege_reverse_direction("role_to_privileges")
+
+    def test_validate_role_to_users_requires_role_name(self) -> None:
+        err = validate_source_system_access_args(
+            "snowflake", "role_to_users", None, None, None, 1000
+        )
+        assert err is not None
+        assert err["error"] == MCP_SOURCE_SYSTEM_ROLE_NAME_REQUIRED_ERROR
+
+        err = validate_source_system_access_args(
+            "snowflake", "role_to_users", None, "SYSADMIN", None, 1000
+        )
+        assert err is None
+
+        err = validate_source_system_access_args(
+            "snowflake",
+            "role_to_users",
+            None,
+            None,
+            None,
+            1000,
+            object_name="SYSADMIN",
+        )
+        assert err is None
+
+    def test_validate_group_to_users_requires_group_name(self) -> None:
+        err = validate_source_system_access_args(
+            "redshift", "group_to_users", None, None, None, 1000
+        )
+        assert err is not None
+        assert err["error"] == MCP_SOURCE_SYSTEM_GROUP_NAME_REQUIRED_ERROR
+
+        err = validate_source_system_access_args(
+            "redshift", "group_to_users", None, "analysts", None, 1000
+        )
+        assert err is None
+
+    def test_validate_rejects_group_to_users_on_snowflake(self) -> None:
+        err = validate_source_system_access_args(
+            "snowflake", "group_to_users", None, "analysts", None, 1000
+        )
+        assert err is not None
+        assert err["error"] == MCP_SOURCE_SYSTEM_GROUP_UNSUPPORTED_FOR_SNOWFLAKE_ERROR
+
+    def test_validate_membership_username_not_required_for_principal(self) -> None:
+        err = validate_source_system_access_args(
+            "snowflake", "role_to_users", None, "SYSADMIN", None, None
+        )
+        assert err is None
+
+    def test_validate_user_to_roles_requires_username(self) -> None:
+        err = validate_source_system_access_args(
+            "snowflake", "user_to_roles", None, None, None, 1000
+        )
+        assert err is not None
+        assert err["error"] == MCP_SOURCE_SYSTEM_USERNAME_REQUIRED_ERROR
+
+        err = validate_source_system_access_args(
+            "snowflake", "user_to_roles", "bhanu", None, None, 1000
+        )
+        assert err is None
+
+    def test_validate_user_to_groups_requires_username(self) -> None:
+        err = validate_source_system_access_args(
+            "redshift", "user_to_groups", None, None, None, 1000
+        )
+        assert err is not None
+        assert err["error"] == MCP_SOURCE_SYSTEM_USERNAME_REQUIRED_ERROR
+
+    def test_validate_rejects_user_to_groups_on_snowflake(self) -> None:
+        err = validate_source_system_access_args(
+            "snowflake", "user_to_groups", "bhanu", None, None, 1000
+        )
+        assert err is not None
+        assert err["error"] == MCP_SOURCE_SYSTEM_GROUP_UNSUPPORTED_FOR_SNOWFLAKE_ERROR
+
+    def test_validate_group_to_roles_requires_group_name(self) -> None:
+        err = validate_source_system_access_args(
+            "redshift", "group_to_roles", None, None, None, 1000
+        )
+        assert err is not None
+        assert err["error"] == MCP_SOURCE_SYSTEM_GROUP_NAME_REQUIRED_ERROR
+
+        err = validate_source_system_access_args(
+            "redshift", "group_to_roles", None, "analysts", None, 1000
+        )
+        assert err is None
+
+    def test_validate_rejects_group_to_roles_on_snowflake(self) -> None:
+        err = validate_source_system_access_args(
+            "snowflake", "group_to_roles", None, "analysts", None, 1000
+        )
+        assert err is not None
+        assert err["error"] == MCP_SOURCE_SYSTEM_GROUP_UNSUPPORTED_FOR_SNOWFLAKE_ERROR
+
+    def test_validate_role_to_groups_requires_role_name(self) -> None:
+        err = validate_source_system_access_args(
+            "redshift", "role_to_groups", None, None, None, 1000
+        )
+        assert err is not None
+        assert err["error"] == MCP_SOURCE_SYSTEM_ROLE_NAME_REQUIRED_ERROR
+
+        err = validate_source_system_access_args(
+            "redshift", "role_to_groups", None, "analyst_role", None, 1000
+        )
+        assert err is None
+
+    def test_validate_rejects_role_to_groups_on_snowflake(self) -> None:
+        err = validate_source_system_access_args(
+            "snowflake", "role_to_groups", None, "analyst_role", None, 1000
+        )
+        assert err is not None
+        assert err["error"] == MCP_SOURCE_SYSTEM_GROUP_UNSUPPORTED_FOR_SNOWFLAKE_ERROR
+
+    def test_validate_role_to_parent_roles_requires_role_name(self) -> None:
+        err = validate_source_system_access_args(
+            "snowflake", "role_to_parent_roles", None, None, None, 1000
+        )
+        assert err is not None
+        assert err["error"] == MCP_SOURCE_SYSTEM_ROLE_NAME_REQUIRED_ERROR
+
+        err = validate_source_system_access_args(
+            "snowflake", "role_to_parent_roles", None, "SYSADMIN", None, 1000
+        )
+        assert err is None
+
+    def test_validate_role_to_privileges_requires_role_name(self) -> None:
+        err = validate_source_system_access_args(
+            "snowflake", "role_to_privileges", None, None, None, 1000
+        )
+        assert err is not None
+        assert err["error"] == MCP_SOURCE_SYSTEM_ROLE_NAME_REQUIRED_ERROR
+
+        err = validate_source_system_access_args(
+            "snowflake",
+            "role_to_privileges",
+            None,
+            None,
+            None,
+            1000,
+            object_name="SYSADMIN",
+        )
+        assert err is None
+
+    def test_validate_group_to_privileges_requires_group_name(self) -> None:
+        err = validate_source_system_access_args(
+            "redshift", "group_to_privileges", None, None, None, 1000
+        )
+        assert err is not None
+        assert err["error"] == MCP_SOURCE_SYSTEM_GROUP_NAME_REQUIRED_ERROR
+
+        err = validate_source_system_access_args(
+            "redshift", "group_to_privileges", None, "analysts", None, 1000
+        )
+        assert err is None
+
+    def test_validate_rejects_group_to_privileges_on_snowflake(self) -> None:
+        err = validate_source_system_access_args(
+            "snowflake", "group_to_privileges", None, "analysts", None, 1000
+        )
+        assert err is not None
+        assert err["error"] == MCP_SOURCE_SYSTEM_GROUP_UNSUPPORTED_FOR_SNOWFLAKE_ERROR
+
+    def test_validate_user_to_privileges_requires_username(self) -> None:
+        err = validate_source_system_access_args(
+            "snowflake", "user_to_privileges", None, None, None, 1000
+        )
+        assert err is not None
+        assert err["error"] == MCP_SOURCE_SYSTEM_USERNAME_REQUIRED_ERROR
+
+        err = validate_source_system_access_args(
+            "snowflake", "user_to_privileges", "bhanu", None, None, 1000
+        )
+        assert err is None
+
+    def test_validate_privilege_reverse_requires_privilege_name(self) -> None:
+        for direction in (
+            "privilege_to_roles",
+            "privilege_to_users",
+            "privilege_to_principals",
+        ):
+            err = validate_source_system_access_args(
+                "snowflake", direction, None, None, None, 1000
+            )
+            assert err is not None
+            assert err["error"] == MCP_SOURCE_SYSTEM_PRIVILEGE_NAME_REQUIRED_ERROR
+
+            err = validate_source_system_access_args(
+                "snowflake", direction, None, "SELECT", None, 1000
+            )
+            assert err is None
+
+        err = validate_source_system_access_args(
+            "redshift", "privilege_to_groups", None, None, None, 1000
+        )
+        assert err is not None
+        assert err["error"] == MCP_SOURCE_SYSTEM_PRIVILEGE_NAME_REQUIRED_ERROR
+
+        err = validate_source_system_access_args(
+            "redshift", "privilege_to_groups", None, "SELECT", None, 1000
+        )
+        assert err is None
+
+    def test_validate_rejects_privilege_to_groups_on_snowflake(self) -> None:
+        err = validate_source_system_access_args(
+            "snowflake", "privilege_to_groups", None, "SELECT", None, 1000
+        )
+        assert err is not None
+        assert err["error"] == MCP_SOURCE_SYSTEM_GROUP_UNSUPPORTED_FOR_SNOWFLAKE_ERROR
+
+    def test_validate_allows_privilege_to_principals_on_snowflake(self) -> None:
+        err = validate_source_system_access_args(
+            "snowflake", "privilege_to_principals", None, "SELECT", None, 1000
+        )
+        assert err is None
+
+    async def test_role_to_users_forwards_params(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {
+                        "principalType": "user",
+                        "principalName": "bob",
+                        "grantMechanism": "role",
+                        "objectLevel": "role",
+                        "contributingRole": "SYSADMIN",
+                    }
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="snowflake",
+            query_direction="role_to_users",
+            object_name="SYSADMIN",
+            connection_id=1000,
+        )
+        assert out["ok"] is True
+        assert out["data"]["grants"][0]["principalName"] == "bob"
+        assert_rdam_api_called(
+            mock_oe_client,
+            {
+                "sourceSystem": "snowflake",
+                "queryDirection": "role_to_users",
+                "objectPath": "SYSADMIN",
+                "connectionId": 1000,
+            },
+        )
+
+    async def test_membership_ignores_leftover_object_type(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {"grants": [{"principalType": "user", "principalName": "bob"}]},
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="snowflake",
+            query_direction="role_to_users",
+            object_name="SYSADMIN",
+            object_type="column",
+            connection_id=1000,
+        )
+        assert out["ok"] is True
+        assert_rdam_api_called(
+            mock_oe_client,
+            {
+                "sourceSystem": "snowflake",
+                "queryDirection": "role_to_users",
+                "objectPath": "SYSADMIN",
+                "connectionId": 1000,
+            },
+        )
+        called_params = mock_oe_client.get.call_args.kwargs["params"]
+        assert "objectType" not in called_params
+
+    async def test_group_to_users_forwards_params(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {
+                        "principalType": "user",
+                        "principalName": "bob",
+                        "grantMechanism": "group",
+                        "contributingGroup": "analysts",
+                    }
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="redshift",
+            query_direction="group_to_users",
+            object_path="analysts",
+            connection_id=1000,
+        )
+        assert out["ok"] is True
+        assert_rdam_api_called(
+            mock_oe_client,
+            {
+                "sourceSystem": "redshift",
+                "queryDirection": "group_to_users",
+                "objectPath": "analysts",
+                "connectionId": 1000,
+            },
+        )
+
+    async def test_membership_skips_object_level_filter(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {
+                        "principalType": "user",
+                        "principalName": "bob",
+                        "objectLevel": "role",
+                    }
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="snowflake",
+            query_direction="role_to_users",
+            object_name="SYSADMIN",
+        )
+        assert "filteredToObjectLevel" not in out.get("data", {})
+        assert out["data"]["grants"][0]["objectLevel"] == "role"
+
+    async def test_user_to_roles_forwards_params(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {
+                        "principalType": "role",
+                        "principalName": "SYSADMIN",
+                        "grantMechanism": "role",
+                        "contributingRole": "SYSADMIN",
+                    }
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="snowflake",
+            query_direction="user_to_roles",
+            username="bhanu",
+            connection_id=1000,
+        )
+        assert out["ok"] is True
+        assert_rdam_api_called(
+            mock_oe_client,
+            {
+                "sourceSystem": "snowflake",
+                "queryDirection": "user_to_roles",
+                "username": "bhanu",
+                "connectionId": 1000,
+            },
+        )
+
+    async def test_user_to_groups_forwards_params(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {
+                        "principalType": "group",
+                        "principalName": "admin_group",
+                        "grantMechanism": "group",
+                        "contributingGroup": "admin_group",
+                    }
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="redshift",
+            query_direction="user_to_groups",
+            username="bhanu",
+            connection_id=1000,
+        )
+        assert out["ok"] is True
+        assert_rdam_api_called(
+            mock_oe_client,
+            {
+                "sourceSystem": "redshift",
+                "queryDirection": "user_to_groups",
+                "username": "bhanu",
+                "connectionId": 1000,
+            },
+        )
+
+    async def test_group_to_roles_forwards_params(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {
+                        "principalType": "role",
+                        "principalName": "analyst_role",
+                        "grantMechanism": "group",
+                        "contributingGroup": "analysts",
+                    }
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="redshift",
+            query_direction="group_to_roles",
+            object_name="analysts",
+            connection_id=1000,
+        )
+        assert out["ok"] is True
+        assert_rdam_api_called(
+            mock_oe_client,
+            {
+                "sourceSystem": "redshift",
+                "queryDirection": "group_to_roles",
+                "objectPath": "analysts",
+                "connectionId": 1000,
+            },
+        )
+
+    async def test_role_to_groups_forwards_params(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {
+                        "principalType": "group",
+                        "principalName": "analysts",
+                        "grantMechanism": "role",
+                        "contributingRole": "analyst_role",
+                    }
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="redshift",
+            query_direction="role_to_groups",
+            object_path="analyst_role",
+            connection_id=1000,
+        )
+        assert out["ok"] is True
+        assert_rdam_api_called(
+            mock_oe_client,
+            {
+                "sourceSystem": "redshift",
+                "queryDirection": "role_to_groups",
+                "objectPath": "analyst_role",
+                "connectionId": 1000,
+            },
+        )
+
+    async def test_role_to_parent_roles_forwards_params(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {
+                        "principalType": "parent_role",
+                        "principalName": "ACCOUNTADMIN",
+                        "objectLevel": "parent_role",
+                        "contributingRole": "SYSADMIN",
+                    }
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="snowflake",
+            query_direction="role_to_parent_roles",
+            object_name="SYSADMIN",
+            connection_id=1000,
+        )
+        assert out["ok"] is True
+        assert_rdam_api_called(
+            mock_oe_client,
+            {
+                "sourceSystem": "snowflake",
+                "queryDirection": "role_to_parent_roles",
+                "objectPath": "SYSADMIN",
+                "connectionId": 1000,
+            },
+        )
+
+    async def test_role_to_privileges_forwards_params(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {
+                        "principalType": "privilege",
+                        "principalName": "SELECT",
+                        "privileges": ["SELECT"],
+                        "contributingRole": "SYSADMIN",
+                    }
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="snowflake",
+            query_direction="role_to_privileges",
+            object_name="SYSADMIN",
+            connection_id=1000,
+        )
+        assert out["ok"] is True
+        assert_rdam_api_called(
+            mock_oe_client,
+            {
+                "sourceSystem": "snowflake",
+                "queryDirection": "role_to_privileges",
+                "objectPath": "SYSADMIN",
+                "connectionId": 1000,
+            },
+        )
+
+    async def test_group_to_privileges_forwards_params(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {
+                        "principalType": "privilege",
+                        "principalName": "SELECT",
+                        "privileges": ["SELECT"],
+                        "contributingGroup": "analysts",
+                    }
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="redshift",
+            query_direction="group_to_privileges",
+            object_name="analysts",
+            connection_id=1000,
+        )
+        assert out["ok"] is True
+        assert_rdam_api_called(
+            mock_oe_client,
+            {
+                "sourceSystem": "redshift",
+                "queryDirection": "group_to_privileges",
+                "objectPath": "analysts",
+                "connectionId": 1000,
+            },
+        )
+
+    async def test_user_to_privileges_forwards_params(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {
+                        "principalType": "privilege",
+                        "principalName": "USAGE",
+                        "privileges": ["USAGE"],
+                    }
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="snowflake",
+            query_direction="user_to_privileges",
+            username="bhanu",
+            connection_id=1000,
+        )
+        assert out["ok"] is True
+        assert_rdam_api_called(
+            mock_oe_client,
+            {
+                "sourceSystem": "snowflake",
+                "queryDirection": "user_to_privileges",
+                "username": "bhanu",
+                "connectionId": 1000,
+            },
+        )
+
+    async def test_privilege_to_roles_forwards_params(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {
+                        "principalType": "role",
+                        "principalName": "SYSADMIN",
+                        "privileges": ["SELECT"],
+                    }
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="snowflake",
+            query_direction="privilege_to_roles",
+            object_name="SELECT",
+            connection_id=1000,
+        )
+        assert out["ok"] is True
+        assert_rdam_api_called(
+            mock_oe_client,
+            {
+                "sourceSystem": "snowflake",
+                "queryDirection": "privilege_to_roles",
+                "objectPath": "SELECT",
+                "connectionId": 1000,
+            },
+        )
+
+    async def test_privilege_to_groups_forwards_params(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {
+                        "principalType": "group",
+                        "principalName": "analysts",
+                        "privileges": ["SELECT"],
+                    }
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="redshift",
+            query_direction="privilege_to_groups",
+            object_path="SELECT",
+            connection_id=1000,
+        )
+        assert out["ok"] is True
+        assert_rdam_api_called(
+            mock_oe_client,
+            {
+                "sourceSystem": "redshift",
+                "queryDirection": "privilege_to_groups",
+                "objectPath": "SELECT",
+                "connectionId": 1000,
+            },
+        )
+
+    async def test_privilege_to_users_forwards_params(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {
+                        "principalType": "user",
+                        "principalName": "bhanu",
+                        "privileges": ["SELECT"],
+                    }
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="snowflake",
+            query_direction="privilege_to_users",
+            object_name="SELECT",
+            connection_id=1000,
+        )
+        assert out["ok"] is True
+        assert_rdam_api_called(
+            mock_oe_client,
+            {
+                "sourceSystem": "snowflake",
+                "queryDirection": "privilege_to_users",
+                "objectPath": "SELECT",
+                "connectionId": 1000,
+            },
+        )
+
+    async def test_privilege_to_principals_forwards_params(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.get.return_value = {
+            "ok": True,
+            "data": {
+                "grants": [
+                    {
+                        "principalType": "user",
+                        "principalName": "bhanu",
+                        "privileges": ["SELECT"],
+                    },
+                    {
+                        "principalType": "role",
+                        "principalName": "SYSADMIN",
+                        "privileges": ["SELECT"],
+                    },
+                ],
+            },
+        }
+        mcp = FastMCP(name="test", version="0.0.1")
+        access.register(mcp)
+        fn = await get_tool_fn(mcp, TOOL_ACCESS_EXPLORER)
+        out = await fn(
+            operation="source_system_access",
+            source_system="redshift",
+            query_direction="privilege_to_principals",
+            object_name="SELECT",
+            connection_id=1000,
+        )
+        assert out["ok"] is True
+        assert len(out["data"]["grants"]) == 2
+        assert_rdam_api_called(
+            mock_oe_client,
+            {
+                "sourceSystem": "redshift",
+                "queryDirection": "privilege_to_principals",
+                "objectPath": "SELECT",
+                "connectionId": 1000,
+            },
+        )

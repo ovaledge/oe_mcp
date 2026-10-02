@@ -8,8 +8,6 @@ from typing import Any
 from server.client import OvalEdgeClient
 from server.constants import (
     MCP_DOMAIN_METADATA_SIZE_MAX,
-    MCP_GLOSSARY_TAGS_LIMIT_DEFAULT,
-    MCP_GLOSSARY_TAGS_LIMIT_MAX,
     MCP_PATH_DOMAIN_METADATA,
     MCP_PATH_GLOSSARY_TERMS,
 )
@@ -20,21 +18,10 @@ from server.tools.common.confirm_gate import attach_confirmation_token
 from server.tools.common.descriptions import classify_tool_desc
 from server.tools.governance._shared import _CREATE_CONFIRM_AGENT_INSTRUCTION, _cell
 
+# Deprecated as a standalone MCP tool — use asset_explorer. Kept for enrichment helpers.
 _DESC_GLOSSARY = classify_tool_desc(
-    "Look up business glossary term(s) by id, name, or glossary placement "
-    "(domain / category / subcategory). Server object type is always glossary.\n\n"
-    f"Backend: GET {MCP_PATH_GLOSSARY_TERMS}. Use exactly one lookup mode:\n"
-    "1. **object_id** — single term by id.\n"
-    "2. **term_name** — name search (may return multiple hits).\n"
-    "3. **Placement** — list terms under domain, category, or subcategory using "
-    "domain_id or domain_name (required), plus optional category_id/category_name and "
-    "subcategory_id/subcategory_name. Domain-only returns all terms in the domain; "
-    "category returns terms directly under that category; subcategory returns terms "
-    "in that subcategory.\n\n"
-    f"Optional limit (default {MCP_GLOSSARY_TAGS_LIMIT_DEFAULT}; capped at "
-    f"{MCP_GLOSSARY_TAGS_LIMIT_MAX}).\n\n"
-    "Do not combine object_id, term_name, and placement filters in one call.\n\n"
-    "Each hit includes relative navLink plus redirectUrl (absolute, from OVALEDGE_BASE_URL)."
+    "Glossary enrichment helper (not registered as a standalone MCP tool). "
+    "Use asset_explorer with name + object_type=glossary or placement filters."
 )
 _DESC_CREATE_GLOSSARY = classify_tool_desc(
     "Create a business glossary term (guided pickers) or list domain/category/subcategory "
@@ -46,7 +33,7 @@ _DESC_CREATE_GLOSSARY = classify_tool_desc(
     "Flow: term_name → domain (or domain_name on first call) → optional category/subcategory "
     "pickers → required description → confirm_create preview → POST only after "
     "write_confirmed_by_user=true.\n\n"
-    "Full step-by-step: docs://ovaledge/glossary_guide and workflow prompt "
+    "Full step-by-step: docs://ovaledge/governance and workflow prompt "
     "`create_business_glossary_term`."
 )
 def _glossary_nav_from_item(item: dict[str, Any]) -> str:

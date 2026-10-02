@@ -1,5 +1,6 @@
 """Stdio entrypoint (entrypoints/local.py)."""
 
+import logging
 from unittest.mock import AsyncMock, patch
 
 from server.auth.context import current_oe_jwt
@@ -24,5 +25,5 @@ class TestLocalEntrypoint:
             from entrypoints.local import main
 
             main()
-        obs_cfg.assert_called_once()
-        run.assert_called_once_with(transport="stdio")
+        obs_cfg.assert_called_once_with(level=logging.WARNING)
+        run.assert_called_once_with(transport="stdio", show_banner=False)

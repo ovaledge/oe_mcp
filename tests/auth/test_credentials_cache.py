@@ -6,7 +6,6 @@ from collections.abc import Iterator
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from jose import jwt as jose_jwt
 
 from server.auth.credentials_cache import (
     CachedJwtEntry,
@@ -15,6 +14,7 @@ from server.auth.credentials_cache import (
     credential_cache_key,
     reset_default_credentials_cache,
 )
+from server.auth.jwt_util import encode_hs256
 from server.auth.token_exchange import (
     TokenExchangeError,
     get_or_refresh_user_token,
@@ -32,7 +32,7 @@ def _reset_cache() -> Iterator[None]:
 
 def _fresh_jwt(seconds: int = 3600) -> str:
     exp = int(time.time()) + seconds
-    return jose_jwt.encode({"exp": exp, "sub": "u"}, "k", algorithm="HS256")
+    return encode_hs256({"exp": exp, "sub": "u"})
 
 
 @pytest.mark.asyncio
@@ -66,7 +66,7 @@ async def test_cache_miss_then_exchange() -> None:
 @pytest.mark.asyncio
 async def test_refresh_within_credentials_leeway() -> None:
     soon_exp = int(time.time()) + max(2, CREDENTIALS_REFRESH_LEEWAY_SECONDS // 2)
-    old = jose_jwt.encode({"exp": soon_exp, "sub": "x"}, "k", algorithm="HS256")
+    old = encode_hs256({"exp": soon_exp, "sub": "x"})
     assert is_token_expiring(old, leeway_seconds=CREDENTIALS_REFRESH_LEEWAY_SECONDS) is True
     new = _fresh_jwt(7200)
     with patch(
@@ -164,7 +164,7 @@ async def test_delete_entry_removes() -> None:
 
 @pytest.mark.asyncio
 async def test_no_exp_jwt_stays_cached_until_invalidated() -> None:
-    opaque = jose_jwt.encode({"sub": "opaque"}, "k", algorithm="HS256")
+    opaque = encode_hs256({"sub": "opaque"})
     assert is_token_expiring(opaque, leeway_seconds=CREDENTIALS_REFRESH_LEEWAY_SECONDS) is False
 
     with patch(

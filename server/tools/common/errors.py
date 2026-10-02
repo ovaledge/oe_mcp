@@ -22,4 +22,9 @@ def error_payload(
 
 
 def map_ovaledge_error(exc: OvalEdgeError) -> dict[str, Any]:
-    return error_payload(str(exc), status_code=exc.status_code)
+    code: str | None = None
+    if exc.body:
+        raw_code = exc.body.get("code")
+        if raw_code is not None and str(raw_code).strip():
+            code = str(raw_code).strip()
+    return error_payload(str(exc), status_code=exc.status_code, error_code=code)

@@ -6,29 +6,19 @@ from server.constants import (
     MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE,
     MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC,
     MCP_SOURCE_SYSTEMS_DOC,
-    TOOL_ASSESS_CDE_DQ,
+    TOOL_ACCESS_EXPLORER,
+    TOOL_ASSET_DETAILS,
+    TOOL_ASSET_EXPLORER,
     TOOL_ASSET_LINEAGE,
-    TOOL_ASSOCIATE_DQ_RULE_OBJECTS,
-    TOOL_CATALOG_ASSET_DETAILS,
-    TOOL_COLUMN_PROFILE,
-    TOOL_CREATE_DQ_RULES,
     TOOL_CREATE_GLOSSARY_TERM,
-    TOOL_CREATE_SQL_DQ_RULE,
+    TOOL_CREATE_SERVICE_REQUEST,
     TOOL_CREATE_TAG,
-    TOOL_GENERATE_DQ_QUERIES,
-    TOOL_GET_USER_OBJECT_ACCESS,
-    TOOL_LOOKUP_DATASTORY,
-    TOOL_LOOKUP_DQ_RULE,
-    TOOL_LOOKUP_GLOSSARY_TERM,
-    TOOL_LOOKUP_TAGS,
+    TOOL_DQ_RULE_ADVISOR,
+    TOOL_DQ_RULE_MANAGER,
+    TOOL_KNOWLEDGE_SEARCH,
     TOOL_METADATA_CHANGES_BETWEEN_CRAWLS,
-    TOOL_SEARCH_CATALOG,
-    TOOL_SEARCH_DOCS,
-    TOOL_SOURCE_SYSTEM_ACCESS,
-    TOOL_TABLE_ENTITY_RELATIONSHIPS,
     TOOL_UPDATE_ASSET_DESCRIPTIONS,
     TOOL_UPDATE_GOVERNANCE_ROLES,
-    TOOL_VALIDATE_DQ_QUERIES,
 )
 
 
@@ -44,23 +34,32 @@ def register(mcp: FastMCP) -> None:
 
         Trigger: "Find data about customer transactions"
                  "What tables do we have for financial reporting?"
+                 "What tables can I see/access?"
+                 "What schemas/columns can I view?"
         """
         text = (
             f"Help me find data for: '{query}'\n\n"
             f"Please follow this sequence:\n"
             f"1. Extract search keywords from the query\n"
-            f"2. Call {TOOL_SEARCH_CATALOG} with search_terms as a JSON array of those keywords, "
-            f"and context_query set verbatim to: '{query}' (for server vector/semantic search); "
-            f"optionally set object_type (see docs://ovaledge/asset_types)\n"
-            f"3. Call {TOOL_LOOKUP_GLOSSARY_TERM} with term_name for each key business concept\n"
-            f"4. Cross-reference glossary-linked objects against catalog hits\n"
-            f"5. Use pagination or repeat search with filters "
-            f"(owner, steward, connection) if scope is unclear\n"
+            f"2. Call {TOOL_ASSET_EXPLORER} once to find related assets: search_terms as a JSON "
+            f"array of those keywords, context_query set verbatim to: '{query}'. "
+            f"Omit object_type, tags, and terms unless the query clearly implies them "
+            f"(e.g. \"tables\", \"columns\", \"tagged X\"); hits may be any object type "
+            f"(see docs://ovaledge/asset_types)\n"
+            f"3. Optionally enrich: name + object_type=glossary|oetag only when looking up a "
+            f"specific term/tag entity — do not replace the open catalog search with "
+            f"type-scoped calls\n"
+            f"4. Shortlist top hits; call {TOOL_ASSET_DETAILS} only for chosen object_id + "
+            f"object_type (not before shortlist)\n"
+            f"5. Use pagination or repeat search with nested filters "
+            f"(certification, tableType, rating/dqIndex/nullDensity ranges, or sort "
+            f"{{field,direction}} on metric-only listings — "
+            f"docs://ovaledge/mcp_workflows) or top-level owner, steward, connection, "
+            f"or an inferred object_type if scope is unclear\n"
             f"6. If the user needs narrative or policy context (not just metadata), call "
-            f"{TOOL_LOOKUP_DATASTORY}(content_query=…) or search with object_type=oestory, "
-            f"then {TOOL_LOOKUP_DATASTORY} for formattedResponse\n"
+            f"{TOOL_KNOWLEDGE_SEARCH} with the narrative question\n"
             f"7. Present the top 5 recommended assets with:\n"
-            f"   - Full governance context from the catalog document "
+            f"   - object_type and Full governance context from the catalog document "
             f"(owner, steward, certification, DQ)\n"
             f"   - Trust summary per asset (green/yellow/red) where signals exist\n"
             f"   - Business term alignment if a glossary term matched\n"
@@ -81,9 +80,9 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Explain the business term '{term}' as defined in our organisation.\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_LOOKUP_GLOSSARY_TERM}(term_name='{term}')\n"
+            f"1. Call {TOOL_ASSET_EXPLORER}(name='{term}', object_type=glossary)\n"
             f"2. Traverse related-term and synonym fields from the response one level\n"
-            f"3. For up to two linked physical objects, call {TOOL_CATALOG_ASSET_DETAILS} "
+            f"3. For up to two linked physical objects, call {TOOL_ASSET_DETAILS} "
             f"with object_id and object_type from the payload "
             f"(see docs://ovaledge/asset_types; prefer oetable/oefile for physical data)\n"
             f"4. Synthesise and present:\n"
@@ -110,15 +109,14 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Produce a trust assessment for the data asset: '{asset_name}'\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_SEARCH_CATALOG} with search_terms derived from '{asset_name}' "
+            f"1. Call {TOOL_ASSET_EXPLORER} with search_terms derived from '{asset_name}' "
             f"(e.g. split into tokens) to resolve object_id and object_type "
             f"(prefer oetable or oefile)\n"
-            f"2. Call {TOOL_CATALOG_ASSET_DETAILS} with object_id and object_type — certification, "
+            f"2. Call {TOOL_ASSET_DETAILS} with object_id and object_type — certification, "
             f"governance roles, classifications\n"
             f"3. If object_type is oetable or oefile, call {TOOL_ASSET_LINEAGE} with that id/type "
             f"and depth 2–3 to verify data origin\n"
-            f"4. Optionally call {TOOL_COLUMN_PROFILE} for column-level statistics "
-            f"(oetable/oefile only)\n"
+            f"4. Asset details includes profile statistics automatically for oetable/oefile\n"
             f"5. Score each trust dimension and produce a red/amber/green scorecard:\n"
             f"   - DQ score and rule signals if returned\n"
             f"   - Metadata completeness\n"
@@ -144,20 +142,21 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Give me an overview of the '{domain}' data domain.\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_SEARCH_CATALOG} with search_terms including '{domain}' and related "
-            f"tokens, object_type=glossary for key terms; also try term-specific "
-            f"{TOOL_LOOKUP_GLOSSARY_TERM} when names are known\n"
-            f"2. Call {TOOL_SEARCH_CATALOG} with search_terms for domain keywords and "
-            f"object_type=oetable or oefile for anchor datasets\n"
-            f"3. Optionally call {TOOL_LOOKUP_TAGS} with tag_name matching the domain "
-            f"if tags are used\n"
-            f"4. Call {TOOL_LOOKUP_DATASTORY}(content_query='{domain}' domain overview) "
-            f"or object_type=oestory search for domain narrative stories\n"
+            f"1. Call {TOOL_ASSET_EXPLORER} to find related assets: search_terms including "
+            f"'{domain}' and "
+            f"related tokens, context_query='{domain} domain overview'; omit object_type "
+            f"so tables, files, reports, columns, and other types can match\n"
+            f"2. Optionally call {TOOL_ASSET_EXPLORER}(name=…, object_type=glossary) or "
+            f"object_type=oetag for known term/tag entities — do not replace step 1\n"
+            f"3. Shortlist anchors; call {TOOL_ASSET_DETAILS} for chosen hits when richer "
+            f"metadata is needed\n"
+            f"4. Call {TOOL_KNOWLEDGE_SEARCH}(query='{domain}' domain overview) "
+            f"for narrative stories or product documentation\n"
             f"5. Aggregate quality and certification signals from returned catalog documents\n"
             f"6. Identify governance contacts (owners/stewards) across key assets\n"
             f"7. Present:\n"
             f"   - Domain glossary highlights\n"
-            f"   - Anchor datasets (top candidates from search)\n"
+            f"   - Anchor assets by object_type (top candidates from search)\n"
             f"   - Domain quality health from available scores\n"
             f"   - Key governance contacts\n"
             f"   - Suggested next steps for a new team member"
@@ -177,10 +176,10 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Trace the full data lineage for: '{asset_name}'\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_SEARCH_CATALOG} to resolve name to object_id and object_type "
+            f"1. Call {TOOL_ASSET_EXPLORER} to resolve name to object_id and object_type "
             f"(oetable or oefile)\n"
             f"2. Call {TOOL_ASSET_LINEAGE}(object_id=…, object_type=…, depth=3)\n"
-            f"3. For important nodes, call {TOOL_CATALOG_ASSET_DETAILS} "
+            f"3. For important nodes, call {TOOL_ASSET_DETAILS} "
             f"and flag weak certification\n"
             f"4. Narrate the path in plain language: source → transformations → consumers\n"
             f"5. Present:\n"
@@ -204,18 +203,19 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Find all assets related to: '{asset_name}'\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_SEARCH_CATALOG} to resolve name to object_id; "
-            f"if the asset is an oetable, note the numeric id\n"
-            f"2. For oetable assets, call {TOOL_TABLE_ENTITY_RELATIONSHIPS}(object_id=…) "
-            f"for column/pattern relationships\n"
-            f"3. Call {TOOL_CATALOG_ASSET_DETAILS} for the anchor — extract glossary or "
-            f"tag references from the document if present\n"
-            f"4. Call {TOOL_LOOKUP_GLOSSARY_TERM} or {TOOL_LOOKUP_TAGS} for those references "
-            f"when ids or names are known\n"
-            f"5. De-duplicate and rank: (1) entity relationships "
-            f"(2) shared glossary/tag linkage\n"
-            f"6. Present join or relationship details, semantic links, and trust indicators "
-            f"per related asset"
+            f"1. Call {TOOL_ASSET_EXPLORER} to find related assets: search_terms including "
+            f"'{asset_name}', context_query set to the user question. "
+            f"Omit object_type unless the user named a type (tables/files/columns/…); "
+            f"do not default to oetable-only or to tags=/terms= exact filters\n"
+            f"2. Shortlist strong hits across returned object types; then call "
+            f"{TOOL_ASSET_DETAILS} for each shortlisted object_id + object_type — "
+            f"relationships are included for oetable; extract glossary/tag refs if present\n"
+            f"3. Optionally call {TOOL_ASSET_EXPLORER} with name + object_type=glossary|oetag "
+            f"only when resolving a specific term/tag entity from those refs\n"
+            f"4. De-duplicate and rank: (1) open catalog search hits (2) entity relationships "
+            f"(3) shared glossary/tag linkage\n"
+            f"5. Present related assets by object_type with links, join/relationship details "
+            f"when present, and trust indicators"
         )
         return [Message(text)]
 
@@ -234,21 +234,17 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Answer using our organization's data stories: '{question}'\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_LOOKUP_DATASTORY}(content_query='{question}') first. "
-            f"If the user named a story zone or title, also pass story_zone_name "
-            f"and/or story_name to narrow the search.\n"
-            f"2. If no story is found (404) or the answer is incomplete, optionally call "
-            f"{TOOL_SEARCH_CATALOG} with search_terms derived from the question and "
-            f"object_type=oestory to discover story object ids, then call "
-            f"{TOOL_LOOKUP_DATASTORY} again with object_id or a refined content_query "
-            f"(or read ovaledge://governance/data-story/{{object_id}} for the catalog document).\n"
-            f"3. Do not use {TOOL_SEARCH_DOCS} for this workflow — that is for OvalEdge "
-            f"product documentation only.\n"
-            f"4. Present the answer using formattedResponse from the lookup. The first line "
+            f"1. Call {TOOL_KNOWLEDGE_SEARCH}(query='{question}') first. "
+            f"Knowledge search covers both organizational stories and product documentation.\n"
+            f"2. If the answer is incomplete, refine the search wording or optionally call "
+            f"{TOOL_ASSET_EXPLORER} with search_terms derived from the question and "
+            f"object_type=oestory to discover related story metadata.\n"
+            f"3. Present the answer using formattedResponse when returned. The first line "
             f"must be storyCitation exactly (verbatim). Do not prepend phrases like "
             f"'Based on' or 'According to' before the citation.\n"
-            f"5. If multiple stories match, summarize each with its citation and navUrl; "
-            f"say clearly when no entitled story matched the question."
+            f"4. If multiple stories match, summarize each with its citation and navUrl; "
+            f"say clearly when no entitled story matched the question.\n"
+            f"5. Domain guide: docs://ovaledge/governance (Data stories)"
         )
         return [Message(text)]
 
@@ -264,7 +260,7 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Analyze metadata drift for: '{scope}'\n\n"
             f"Steps:\n"
-            f"1. If the scope is an asset name, call {TOOL_SEARCH_CATALOG} to resolve "
+            f"1. If the scope is an asset name, call {TOOL_ASSET_EXPLORER} to resolve "
             f"object_id, connection, and schema/table names\n"
             f"2. Call {TOOL_METADATA_CHANGES_BETWEEN_CRAWLS} with filters matching the scope "
             f"(schema, table, connection, time window, or crawl ids as supported by the tool)\n"
@@ -272,7 +268,7 @@ def register(mcp: FastMCP) -> None:
             f"from the response\n"
             f"4. If the API recommends ANALYSIS_TRANSACTION_JOB or data is incomplete, "
             f"say so clearly\n"
-            f"5. Link to affected assets via {TOOL_CATALOG_ASSET_DETAILS} when ids are known"
+            f"5. Link to affected assets via {TOOL_ASSET_DETAILS} when ids are known"
         )
         return [Message(text)]
 
@@ -284,22 +280,30 @@ def register(mcp: FastMCP) -> None:
         Trigger: "Who has access to ORDERS?"
                  "Who has access to BUSINESS.BANKING in Snowflake?"
                  "Who can see this table?"
+        Not: first-person catalog inventory without a named principal
+             ("What tables can I see/access?") — use data_discovery / asset_explorer.
+        Not: "I want access to Loan_Data table" / "raise an access request" —
+             that files a ticket via create_service_desk_request.
         """
         text = (
             f"Answer access for: '{question}'\n\n"
             f"{MCP_ACCESS_DISAMBIGUATION_RULE_DOC}\n\n"
             f"{MCP_ACCESS_PLATFORM_NAMES_NOT_SIGNALS_DOC}\n\n"
             f"When native/DAM signals are present → native_source_access → "
-            f"{TOOL_SOURCE_SYSTEM_ACCESS} with access_intent_confirmed=native. "
-            f"When catalog ACL / OE security signals are present → catalog_object_access → "
-            f"{TOOL_GET_USER_OBJECT_ACCESS} with access_intent_confirmed=catalog_acl. "
+            f"{TOOL_ACCESS_EXPLORER} with operation=source_system_access and "
+            f"access_intent_confirmed=native. "
+            f"When catalog-permissions / OE security signals are present → catalog_object_access → "
+            f"{TOOL_ACCESS_EXPLORER} with operation=catalog_access and "
+            f"access_intent_confirmed=catalog_acl. "
             f"When **neither** signal set is present — do **not** call any access tool; "
             f"present this message verbatim and wait for **1** or **2**:\n\n"
             f"{MCP_ACCESS_DISAMBIGUATION_USER_MESSAGE}\n\n"
-            f"After **1**: native_source_access → {TOOL_SOURCE_SYSTEM_ACCESS} with "
-            f"access_intent_confirmed=native. "
-            f"After **2**: catalog_object_access → {TOOL_SEARCH_CATALOG} (if needed) → "
-            f"{TOOL_GET_USER_OBJECT_ACCESS} with access_intent_confirmed=catalog_acl."
+            f"After **1**: native_source_access → {TOOL_ACCESS_EXPLORER} with "
+            f"operation=source_system_access and access_intent_confirmed=native. "
+            f"After **2**: catalog_object_access → {TOOL_ASSET_EXPLORER} (if needed) → "
+            f"{TOOL_ACCESS_EXPLORER} with operation=catalog_access and "
+            f"access_intent_confirmed=catalog_acl. "
+            f"When speaking to users, say catalog permissions (not ACL)."
         )
         return [Message(text)]
 
@@ -309,28 +313,56 @@ def register(mcp: FastMCP) -> None:
         question: str,
     ) -> list[Message]:
         """
-        Native Redshift/Snowflake/Tableau grants (harvested RDAM), not catalog ACLs.
+        Native Redshift/Snowflake/Tableau grants (harvested RDAM), not catalog permissions.
 
         Trigger: "What native privileges does svc_analytics have in Redshift?"
                  "Who has DAM access to prod_db.public.orders?"
                  "Which users have source-system SELECT on the Revenue Dashboard?"
+                 "What tables can I access in Redshift?" (first-person + named source)
+        Not: "What tables can I see/access?" without a named principal or source —
+             use data_discovery / asset_explorer.
         """
         text = (
             f"Answer native access for {source_system}: '{question}'\n\n"
             f"Prerequisite: user picked **1** (native) or the question includes native/DAM "
-            f"keywords — not Snowflake/Redshift/Tableau alone. If ambiguous, use "
-            f"resolve_object_access first.\n\n"
+            f"keywords — not Snowflake/Redshift/Tableau alone — or first-person inventory "
+            f"with this named source. Require a named remote username for user_to_objects "
+            f"(ask if missing). If ambiguous who-has-access, use resolve_object_access first. "
+            f"Generic first-person catalog inventory without a principal/source is "
+            f"data_discovery / {TOOL_ASSET_EXPLORER}, not this prompt.\n\n"
             f"Steps:\n"
             f"1. Infer query_direction from the question (do not ask the user): user_to_objects "
             f"when asking what a specific user can access; object_to_users when asking who has "
-            f"access to an object. For user permission questions, use user_to_objects and report "
-            f"only that user's grants — never object_to_users.\n"
-            f"2. Call {TOOL_SOURCE_SYSTEM_ACCESS} with source_system='{source_system}' "
+            f"access to an object; role_to_users when asking which users are assigned to a "
+            f"named role; group_to_users when asking which users belong to a named group "
+            f"(Redshift/Tableau — not Snowflake groups); user_to_roles when asking which roles "
+            f"a user is assigned to; user_to_groups when asking which groups a user belongs to "
+            f"(Redshift/Tableau — not Snowflake); group_to_roles when asking which roles are "
+            f"linked to a named group (Redshift/Tableau); role_to_groups when asking which "
+            f"groups are linked to a named role (Redshift/Tableau); role_to_parent_roles when "
+            f"asking for parent roles of a named role (direct parents only); role_to_privileges "
+            f"/ group_to_privileges / user_to_privileges when asking what account privileges a "
+            f"role, group, or user holds (group_to_privileges: Redshift/Tableau only); "
+            f"privilege_to_roles / privilege_to_groups / privilege_to_users / "
+            f"privilege_to_principals when asking which principals hold a named privilege / "
+            f"perm code (pass the privilege name as object_path or object_name — not an object "
+            f"FQN; privilege_to_groups: Redshift/Tableau only; privilege_to_principals "
+            f"returns roles and users on Snowflake and skips groups). "
+            f"For user permission questions, use "
+            f"user_to_objects and report only that user's grants — never object_to_users.\n"
+            f"2. Call {TOOL_ACCESS_EXPLORER} with operation=source_system_access, "
+            f"source_system='{source_system}' "
             f"({MCP_SOURCE_SYSTEMS_DOC}) and query_direction inferred from the question. "
             f"For object_to_users who-has-access, set access_intent_confirmed=native. "
             f"Only source_system and query_direction are mandatory otherwise; add username, "
             f"fully_qualified_name, object_type, connection_id, or privileges when the question "
-            f"supplies them. Always set object_type explicitly with object_path — Java uses "
+            f"supplies them. Named objects: {TOOL_ASSET_EXPLORER} this tool fills object_id, "
+            f"object_type, connection_id, FQN/object_path, object_name, then DAM API. "
+            f"Known object_id and object_type → DAM API only. Never fall back to "
+            f"{TOOL_ASSET_EXPLORER} after RDAM is empty or errors. Pass object_path or "
+            f"fully_qualified_name and object_type; add connection_id when the user provides it. "
+            f"Always set "
+            f"object_type explicitly with object_path — Java uses "
             f"objectType for resolution, not dot segment count alone. Path matrix: "
             f"database=dbName; schema=dbName.schemaName or schemaName; "
             f"table=dbName.schemaName.tableName, schemaName.tableName, or tableName; "
@@ -362,14 +394,20 @@ def register(mcp: FastMCP) -> None:
         Browse DAM-visible objects (inventory) on a connector.
 
         Trigger: "List schemas in BUSINESS on connection 1000"
-                 "What tables are in BUSINESS.BANKING?"
-                 "Show columns in ORDERS table"
+                 "What tables are in BUSINESS.BANKING?" (DAM / connection_id known)
+                 "Show columns in ORDERS table" (DAM browse)
+        Not: generic "What tables can I see?" without DAM/connection_id —
+             use data_discovery / asset_explorer.
         """
         text = (
             f"Browse DAM inventory on connection {connection_id} for: '{scope}'\n\n"
+            f"Prerequisite: explicit DAM browse / known connection_id (or first-person "
+            f"inventory with a named source that needs DAM browse). Generic first-person "
+            f"catalog inventory without DAM/connection_id → data_discovery / "
+            f"{TOOL_ASSET_EXPLORER}, not this prompt.\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_SOURCE_SYSTEM_ACCESS} with query_direction=browse, "
-            f"connection_id={connection_id}. "
+            f"1. Call {TOOL_ACCESS_EXPLORER} with operation=source_system_access, "
+            f"query_direction=browse, connection_id={connection_id}. "
             f"object_type is the **child level to list**; object_path (or fully_qualified_name) "
             f"is the **parent** scope.\n"
             f"2. Routing: list databases → omit object_path, object_type=database; "
@@ -379,7 +417,8 @@ def register(mcp: FastMCP) -> None:
             f"object_type=column.\n"
             f"3. Path routing: see docs://ovaledge/mcp_workflows (Native source access — "
             f"object_path formats and DAM browse).\n"
-            f"4. For access questions after browse, call {TOOL_SOURCE_SYSTEM_ACCESS} with "
+            f"4. For access questions after browse, call {TOOL_ACCESS_EXPLORER} with "
+            f"operation=source_system_access and "
             f"query_direction=user_to_objects or object_to_users."
         )
         return [Message(text)]
@@ -387,28 +426,30 @@ def register(mcp: FastMCP) -> None:
     @mcp.prompt()
     def catalog_object_access(question: str) -> list[Message]:
         """
-        OvalEdge catalog ACL permissions (user/role grants), not native RDAM.
+        OvalEdge catalog permissions (user/role grants), not native RDAM.
 
-        Trigger: "What OvalEdge catalog ACL does john.doe have on CUSTOMER_MASTER?"
+        Trigger: "What OvalEdge catalog permissions does john.doe have on CUSTOMER_MASTER?"
                  "Who has catalog access to the Finance schema?"
                  "Which OE security roles provide access to this report?"
         """
         text = (
             f"Answer OvalEdge catalog access: '{question}'\n\n"
-            f"Prerequisite: user picked **2** (catalog ACL) or the question includes OE "
+            f"Prerequisite: user picked **2** (catalog permissions) or the question includes OE "
             f"security / catalog-access keywords — not Snowflake/Redshift/Tableau alone. "
-            f"If ambiguous, use resolve_object_access first.\n\n"
+            f"If ambiguous, use resolve_object_access first. "
+            f"Say **catalog permissions** to users (not ACL).\n\n"
             f"Steps:\n"
             f"1. Infer query_direction: user_to_object when asking what a specific user can do; "
             f"object_to_principals when asking who has access on an asset.\n"
-            f"2. Resolve the asset with {TOOL_SEARCH_CATALOG} when the user names it; pass "
+            f"2. Resolve the asset with {TOOL_ASSET_EXPLORER} when the user names it; pass "
             f"object_id and object_type from the chosen hit. If multiple matches, ask the user "
-            f"to pick or use matchCandidates from get_user_object_access.\n"
-            f"3. Call {TOOL_GET_USER_OBJECT_ACCESS} with query_direction, username (for "
-            f"user_to_object), resolved object_id+object_type, and for object_to_principals "
-            f"who-has-access set access_intent_confirmed=catalog_acl.\n"
+            f"to pick or use matchCandidates from {TOOL_ACCESS_EXPLORER}.\n"
+            f"3. Call {TOOL_ACCESS_EXPLORER} with operation=catalog_access, query_direction, "
+            f"username (for user_to_object), resolved object_id+object_type, and for "
+            f"object_to_principals who-has-access set access_intent_confirmed=catalog_acl.\n"
             f"4. Present metadataPermission, dataPermission, grantSources, contributingRoles, "
-            f"inheritedFrom when columns/terms inherit parent ACLs, and redirectUrl."
+            f"inheritedFrom when columns/terms inherit parent catalog permissions, and "
+            f"redirectUrl."
         )
         return [Message(text)]
 
@@ -423,14 +464,12 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Explain the governance tag '{tag_name}'.\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_LOOKUP_TAGS}(tag_name='{tag_name}') — add "
-            f"include_parent=true and/or include_children=true when the user asks for "
-            f"parent or child tags in the hierarchy\n"
-            f"2. If not found, call {TOOL_SEARCH_CATALOG} with search_terms including "
+            f"1. Call {TOOL_ASSET_EXPLORER}(name='{tag_name}', object_type=oetag)\n"
+            f"2. If not found, call {TOOL_ASSET_EXPLORER} with search_terms including "
             f"'{tag_name}' and object_type=oetag\n"
             f"3. Present tag description, master/parent hierarchy, child tags, and "
             f"stewardship from formattedResponse or returned fields\n"
-            f"4. Optionally list catalog assets tagged via {TOOL_SEARCH_CATALOG} with tags filter "
+            f"4. Optionally list catalog assets tagged via {TOOL_ASSET_EXPLORER} with tags filter "
             f"when the user asks what data uses this tag"
         )
         return [Message(text)]
@@ -446,10 +485,10 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Explain the DQ rule '{rule_name}'.\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_LOOKUP_DQ_RULE}(rule_name='{rule_name}')\n"
+            f"1. Call {TOOL_DQ_RULE_ADVISOR}(step=lookup, rule_name='{rule_name}')\n"
             f"2. Present rule purpose, object binding, steward, and redirectUrl from hits\n"
-            f"3. Note that DQ rules are not in {TOOL_SEARCH_CATALOG}; always use "
-            f"{TOOL_LOOKUP_DQ_RULE} first\n"
+            f"3. Note that DQ rules are not in {TOOL_ASSET_EXPLORER}; always use "
+            f"{TOOL_DQ_RULE_ADVISOR} step=lookup first\n"
             f"4. If the user wants to change steward only, mention {TOOL_UPDATE_GOVERNANCE_ROLES} "
             f"with object_type=dqrule (steward role only)"
         )
@@ -475,7 +514,8 @@ def register(mcp: FastMCP) -> None:
             f"4. When placement and description are ready, call without write_confirmed_by_user "
             f"to get confirm_create preview; wait for user approval\n"
             f"5. Re-call with write_confirmed_by_user=true and the same parameters to POST\n"
-            f"6. Present placementPath and navUrl from the create response"
+            f"6. Present placementPath and navUrl from the create response\n"
+            f"7. Full steps: docs://ovaledge/governance"
         )
         return [Message(text)]
 
@@ -498,7 +538,8 @@ def register(mcp: FastMCP) -> None:
             f"3. When placement is finalized, call without write_confirmed_by_user for "
             f"confirm_create preview; wait for user approval\n"
             f"4. Re-call with write_confirmed_by_user=true and the same placement to POST\n"
-            f"5. Present formattedResponse with tag summary and nav links"
+            f"5. Present formattedResponse with tag summary and nav links\n"
+            f"6. OPEN/SECURE steps: docs://ovaledge/governance"
         )
         return [Message(text)]
 
@@ -516,8 +557,8 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Improve descriptions for asset '{asset_name}': {intent}\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_SEARCH_CATALOG} to resolve object_id and object_type\n"
-            f"2. Call {TOOL_CATALOG_ASSET_DETAILS} to read current descriptions and governance\n"
+            f"1. Call {TOOL_ASSET_EXPLORER} to resolve object_id and object_type\n"
+            f"2. Call {TOOL_ASSET_DETAILS} to read current descriptions and governance\n"
             f"3. Draft description text from the user intent — do not invent facts beyond "
             f"what the user or catalog already states\n"
             f"4. Confirm the draft with the user; call {TOOL_UPDATE_ASSET_DESCRIPTIONS} "
@@ -541,8 +582,9 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Update governance roles for '{asset_name}': {role_changes}\n\n"
             f"Steps:\n"
-            f"1. If the target sounds like a DQ rule, call {TOOL_LOOKUP_DQ_RULE} first; "
-            f"otherwise {TOOL_SEARCH_CATALOG} then {TOOL_CATALOG_ASSET_DETAILS}\n"
+            f"1. If the target sounds like a DQ rule, call "
+            f"{TOOL_DQ_RULE_ADVISOR} step=lookup first; "
+            f"otherwise {TOOL_ASSET_EXPLORER} then {TOOL_ASSET_DETAILS}\n"
             f"2. Confirm object_id, object_type, and role_changes with the user (owner, steward, "
             f"custodian, governance_role_4–6; null removes)\n"
             f"3. Call {TOOL_UPDATE_GOVERNANCE_ROLES} without write_confirmed_by_user for "
@@ -565,7 +607,7 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"Answer this OvalEdge platform question: '{question}'\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_SEARCH_DOCS}(query='{question}', limit=7, num_candidates=128)\n"
+            f"1. Call {TOOL_KNOWLEDGE_SEARCH}(query='{question}', limit=7)\n"
             f"2. Grade relevance of returned chunks against the question\n"
             f"3. If relevant docs found:\n"
             f"   - Synthesise a step-by-step answer\n"
@@ -580,33 +622,41 @@ def register(mcp: FastMCP) -> None:
     @mcp.prompt()
     def assess_cde_dq_coverage(scope: str) -> list[Message]:
         """
-        CDE column DQ assessment (read-only recommendations).
+        CDE column DQ assessment, then associate/create when the user wants coverage applied.
 
         Trigger: "Which CDE columns need DQ rules?"
                  "Recommend DQ functions for critical data elements in Finance"
+        Not: "Raise a Data Quality Rule Recommendation request" —
+             that files a ticket via create_service_desk_request.
         """
         text = (
             f"Assess Critical Data Element (CDE) DQ coverage for: '{scope}'\n\n"
             f"Steps:\n"
-            f"1. Call {TOOL_SEARCH_CATALOG} with search_terms from the scope and "
+            f"1. Call {TOOL_ASSET_EXPLORER} with search_terms from the scope and "
             f"critical_data_element=Yes (and object_type oetable/oecolumn/oefile/oefilecolumn "
             f"when narrowing)\n"
             f"2. Build objects from hits (objectId + objectType). When the user named one "
             f"column/asset, pass only that object — do not discover-all. Call "
-            f"{TOOL_ASSESS_CDE_DQ}(discover_cde_columns=true) only when listing all CDE columns\n"
-            f"3. Call {TOOL_ASSESS_CDE_DQ} with those objects — read-only; present "
-            f"recommendedFunction, recommendedFunctionCandidates, existingRulesForFunction, "
-            f"associatedToDqRule, and redirect URLs. Show every same-function rule and let the "
-            f"user choose a dqruleId; purpose similarity is display order only\n"
-            f"3b. If the user rejects candidates, re-call {TOOL_ASSESS_CDE_DQ} with "
-            f"excluded_function_names; use preferred_function_name when they pick one. "
-            f"Only when no catalog candidates remain, use custom_sql "
-            f"({TOOL_GENERATE_DQ_QUERIES})\n"
-            f"4. Use {TOOL_LOOKUP_DQ_RULE} when the user names an existing rule; do not use "
-            f"{TOOL_SEARCH_CATALOG} for dqrule objects\n"
-            f"5. Only after explicit user approval for writes: {TOOL_ASSOCIATE_DQ_RULE_OBJECTS} "
-            f"for a known data quality rule id, or {TOOL_CREATE_DQ_RULES} "
-            f"with the same scoped objects (never broaden a single-column request)"
+            f"{TOOL_DQ_RULE_ADVISOR}(step=assess, discover_cde_columns=true) only when "
+            f"listing all CDE columns\n"
+            f"3. Call {TOOL_DQ_RULE_ADVISOR} step=assess with those objects — read-only; present "
+            f"recommendedFunction, recommendedFunctionCandidates, recommendedRuleId, "
+            f"associatedToDqRule, and redirect URLs. If recommendedRuleId is set, the object's "
+            f"business context matched an existing rule\n"
+            f"3b. If the user wants to apply the recommendation, call "
+            f"{TOOL_DQ_RULE_MANAGER} step=create_standard (prefer_existing_rule=true). "
+            f"When recommendedRuleId is set it associates that object to the existing rule "
+            f"instead of creating a new one. If associatedToDqRule is true, skip the write. "
+            f"If the user rejects candidates, "
+            f"re-call {TOOL_DQ_RULE_ADVISOR} step=assess with excluded_function_names; "
+            f"use preferred_function_name when they pick one. Only when no "
+            f"recommendedFunction remains and the user confirms custom SQL → "
+            f"{TOOL_DQ_RULE_ADVISOR} step=generate_query (never hand-write SQL)\n"
+            f"4. Use {TOOL_DQ_RULE_ADVISOR} step=lookup when the user names an existing rule; "
+            f"do not use {TOOL_ASSET_EXPLORER} for dqrule objects\n"
+            f"5. On any error: auto-retry the last successful ladder step once; if it "
+            f"still fails, ask the user whether to retry again (retry only if they say "
+            f"yes, otherwise stop). Do not invent recommendedFunction names or SQL"
         )
         return [Message(text)]
 
@@ -621,25 +671,85 @@ def register(mcp: FastMCP) -> None:
         text = (
             f"CDE / custom SQL DQ workflow for: {user_intent}\n\n"
             f"Steps:\n"
-            f"1. If column ids are unknown, call {TOOL_SEARCH_CATALOG} with "
+            f"1. If column ids are unknown, call {TOOL_ASSET_EXPLORER} with "
             f"criticalDataElement filter or search_terms for CDE columns\n"
-            f"2. Call {TOOL_ASSESS_CDE_DQ} with explicit objects for the named assets "
+            f"2. Call {TOOL_DQ_RULE_ADVISOR} step=assess with explicit objects for the "
+            f"named assets "
             f"(discover_cde_columns=true only when listing all CDE columns)\n"
-            f"3. Present every existingRulesForFunction entry; never hide a same-function rule "
-            f"because its purpose differs\n"
-            f"4. Ask the user to choose a dqruleId. Then confirm and call "
-            f"{TOOL_ASSOCIATE_DQ_RULE_OBJECTS}. If they explicitly want new, call "
-            f"{TOOL_CREATE_DQ_RULES}(prefer_existing_rule=false) with confirm gate\n"
+            f"3. If recommendedRuleId is set and the object is not already associated, "
+            f"{TOOL_DQ_RULE_MANAGER} step=create_standard (prefer_existing_rule=true) "
+            f"associates the object to that existing rule (do not create a duplicate)\n"
+            f"4. If no matching existing rule, call "
+            f"{TOOL_DQ_RULE_MANAGER}(step=create_standard, prefer_existing_rule=true) "
+            f"to create. Use prefer_existing_rule=false only when the user explicitly "
+            f"wants a second or different-purpose rule\n"
             f"5. After create, surface criteriaSource and criteriaMessage; "
             f"business_metadata_with_defaults or function_default means defaults were applied\n"
-            f"6. For custom_sql workflow: {TOOL_GENERATE_DQ_QUERIES} → use "
+            f"6. For custom_sql workflow (only after user confirmation when no "
+            f"recommendedFunction remains): {TOOL_DQ_RULE_ADVISOR} step=generate_query → use "
             f"connection_id/schema_id from formattedResponse or data.context → "
-            f"{TOOL_VALIDATE_DQ_QUERIES} (confirm gate) → {TOOL_CREATE_SQL_DQ_RULE} "
-            f"(confirm gate) after canCreateRule is true. Copy recommendedFunction verbatim "
-            f"from assess/generate into recommended_function; IN/NOT IN set-membership is "
+            f"{TOOL_DQ_RULE_ADVISOR} step=validate_query (confirm gate) → "
+            f"{TOOL_DQ_RULE_MANAGER} step=create_custom_sql "
+            f"(confirm gate) after canCreateRule is true. Pass recommended_function = "
+            f"recommendedFunction from generate/assess verbatim; never invent names or "
+            f"hand-write SQL. IN/NOT IN set-membership is "
             f"SQL Values Contains, not SQL Exact Value. On code_found follow "
-            f"recommendedReuseAction ({TOOL_ASSOCIATE_DQ_RULE_OBJECTS} or "
-            f"{TOOL_CREATE_SQL_DQ_RULE} with code_object_id)\n"
-            f"7. Ad-hoc rule lookup: {TOOL_LOOKUP_DQ_RULE} (not catalog search)"
+            f"recommendedReuseAction ({TOOL_DQ_RULE_MANAGER} step=associate or "
+            f"{TOOL_DQ_RULE_MANAGER} step=create_custom_sql with code_object_id)\n"
+            f"7. On any error: auto-retry the last successful step once; if still "
+            f"failing, ask the user whether to retry again (yes → retry; no → stop)\n"
+            f"8. Ad-hoc rule lookup: {TOOL_DQ_RULE_ADVISOR} step=lookup (not asset search)"
+        )
+        return [Message(text)]
+
+    @mcp.prompt()
+    def create_service_desk_request(intent: str) -> list[Message]:
+        """
+        Create a service desk request from a catalog object (access, content change, …).
+
+        Trigger: "I want access to Loan_Data table"
+                 "I need Data Read access for Customer table"
+                 "Create a content change request for Employee table"
+                 "Raise a Data Quality Rule Recommendation request"
+                 "I want access for Loan_Data, Employee_Details and Sales_Target"
+                 "Raise an access request for these tables"
+        """
+        text = (
+            f"Create a service request for: '{intent}'\n\n"
+            f"Steps:\n"
+            f"1. Infer request_type (access, content, dataquality) and object_type "
+            f"(table → oetable). Map 'Data Read' / 'Data Preview' / 'Data Write' to Permission. "
+            f"Do not guess object_id. This is {TOOL_CREATE_SERVICE_REQUEST}, not "
+            f"{TOOL_ACCESS_EXPLORER} and not {TOOL_DQ_RULE_ADVISOR}.\n"
+            f"2. Call {TOOL_ASSET_EXPLORER} to resolve each named table. For "
+            f"'these tables', use the prior shortlist; if none, ask which tables.\n"
+            f"3. Call {TOOL_CREATE_SERVICE_REQUEST} with request_type, object_type, "
+            f"object_id, and connection filters — omit summary to look up the "
+            f"Published and Active template and required fields. Present formattedResponse. "
+            f"object_id accepts one id, a list, or comma-separated ids. "
+            f"Multiple tables: one ticket with comma-separated object ids when Select Table "
+            f"allowMultiple is true; otherwise one ticket per table.\n"
+            f"4. If no Published and Active template is returned, tell the user to "
+            f"publish and activate it in OvalEdge Service Desk admin, then stop. "
+            f"Templates with field dependencies (dependsOn) are not used, except Tags, "
+            f"Terms, Business Description, Technical Description, and Additional Fields. "
+            f"If lookup fails for Depends-On fields, show that error to the user and stop. "
+            f"Never publish, activate, or update template status from MCP — that is "
+            f"not a legal action here, even if the user asks.\n"
+            f"5. Write summary yourself. Use fieldData/defaultValue for dropdowns. "
+            f"Do not ask for Requested By or Requested for User — they are the logged-in user. "
+            f"Ask only for required fields with no default. Never invent Business Description, "
+            f"Technical Description, tags, terms, or additional field values — ask the user; "
+            f"omit them if the user skips. If the user names tags or terms, pass those names "
+            f"in ticket_fields; invalid names are omitted with a warning — still create. "
+            f"Additional fields are optional: present fieldData.additionalFields "
+            f"(name, type, options) and collect FieldName=value only for fields they want "
+            f"as custom_fields. If OvalEdge rejects a field value, show that error and ask "
+            f"for a correction. If the user asks "
+            f"to change a default, override it. Re-call "
+            f"without write_confirmed_by_user for confirm_create preview.\n"
+            f"6. After explicit approval, re-call with write_confirmed_by_user=true "
+            f"and confirmation_token. Present the ticket id and redirectUrl.\n"
+            f"7. Playbook: docs://ovaledge/mcp_workflows"
         )
         return [Message(text)]

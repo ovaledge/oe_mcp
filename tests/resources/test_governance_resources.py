@@ -5,7 +5,7 @@ from fastmcp import FastMCP
 from fastmcp.resources.template import FunctionResourceTemplate
 
 from server.constants import (
-    MCP_PATH_OBJECT_DETAILS,
+    MCP_PATH_ASSET_DETAILS,
     MCP_RESOURCE_GOVERNANCE_DATA_STORY,
     MCP_RESOURCE_GOVERNANCE_GLOSSARY_TERM,
     MCP_RESOURCE_GOVERNANCE_TAG,
@@ -25,7 +25,7 @@ class TestGovernanceResources:
         text = await tmpl.fn("7")
         assert json.loads(text) == payload
         mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_OBJECT_DETAILS,
+            MCP_PATH_ASSET_DETAILS,
             params={"objectId": 7, "objectType": "glossary"},
         )
 
@@ -39,7 +39,7 @@ class TestGovernanceResources:
         text = await tmpl.fn("99")
         assert json.loads(text) == payload
         mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_OBJECT_DETAILS,
+            MCP_PATH_ASSET_DETAILS,
             params={"objectId": 99, "objectType": "oestory"},
         )
 
@@ -53,6 +53,6 @@ class TestGovernanceResources:
         text = await tmpl.fn("12")
         assert json.loads(text) == payload
         mock_oe_client.get.assert_called_once_with(
-            MCP_PATH_OBJECT_DETAILS,
+            MCP_PATH_ASSET_DETAILS,
             params={"objectId": 12, "objectType": "oetag"},
         )

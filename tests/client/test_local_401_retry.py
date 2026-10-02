@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
-from jose import jwt as jose_jwt
 
 from server.auth import context as auth_context
+from server.auth.jwt_util import encode_hs256
 from server.client import OvalEdgeClient, OvalEdgeError
 
 
@@ -23,12 +23,8 @@ def _reset_jwt_cache() -> Generator[None, None, None]:
 
 @pytest.mark.asyncio
 async def test_get_retries_once_on_401_then_succeeds() -> None:
-    stale = jose_jwt.encode({"sub": "no-exp-claim"}, "k", algorithm="HS256")
-    fresh = jose_jwt.encode(
-        {"sub": "no-exp-claim", "exp": int(time.time()) + 3600},
-        "k",
-        algorithm="HS256",
-    )
+    stale = encode_hs256({"sub": "no-exp-claim"})
+    fresh = encode_hs256({"sub": "no-exp-claim", "exp": int(time.time()) + 3600})
     auth_context.local_cached_oe_jwt = stale
     auth_context.current_oe_jwt.set(stale)
 
@@ -60,12 +56,8 @@ async def test_get_retries_once_on_401_then_succeeds() -> None:
 
 @pytest.mark.asyncio
 async def test_get_raises_when_401_persists_after_refresh() -> None:
-    stale = jose_jwt.encode({"sub": "x"}, "k", algorithm="HS256")
-    fresh = jose_jwt.encode(
-        {"sub": "x", "exp": int(time.time()) + 3600},
-        "k",
-        algorithm="HS256",
-    )
+    stale = encode_hs256({"sub": "x"})
+    fresh = encode_hs256({"sub": "x", "exp": int(time.time()) + 3600})
     auth_context.local_cached_oe_jwt = stale
     auth_context.current_oe_jwt.set(stale)
 
@@ -96,12 +88,8 @@ async def test_get_raises_when_401_persists_after_refresh() -> None:
 
 @pytest.mark.asyncio
 async def test_get_retries_once_on_400_invalid_token_then_succeeds() -> None:
-    stale = jose_jwt.encode({"sub": "no-exp-claim"}, "k", algorithm="HS256")
-    fresh = jose_jwt.encode(
-        {"sub": "no-exp-claim", "exp": int(time.time()) + 3600},
-        "k",
-        algorithm="HS256",
-    )
+    stale = encode_hs256({"sub": "no-exp-claim"})
+    fresh = encode_hs256({"sub": "no-exp-claim", "exp": int(time.time()) + 3600})
     auth_context.local_cached_oe_jwt = stale
     auth_context.current_oe_jwt.set(stale)
 

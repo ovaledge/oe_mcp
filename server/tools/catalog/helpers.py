@@ -1,21 +1,24 @@
 """
-Catalog and related data tools (search, details, column profile, relationships, lineage).
+Catalog MCP helpers: tool descriptions, search params, description updates.
 """
 
-import json
 import re
 from typing import Any
 
 from server.constants import (
     MCP_ACCESS_DISAMBIGUATION_SEARCH_GUARD_DOC,
+    MCP_ASSET_EXPLORER_FILTER_KEYS,
+    MCP_ASSET_EXPLORER_SORT_DEFAULT_DIRECTION,
+    MCP_ASSET_EXPLORER_SORT_DIRECTIONS,
+    MCP_ASSET_EXPLORER_SORT_FIELDS,
+    MCP_ASSET_EXPLORER_SORT_FIELDS_DOC,
     MCP_CATALOG_OBJECT_TYPES_DOC,
-    MCP_PATH_COLUMN_PROFILE,
-    MCP_PATH_ENTITY_RELATIONSHIPS,
-    MCP_PATH_LINEAGE,
+    MCP_PATH_ASSET_DETAILS,
+    MCP_PATH_ASSET_EXPLORER,
+    MCP_PATH_ASSET_LINEAGE,
     MCP_PATH_METADATA_CHANGES_BETWEEN_CRAWLS,
-    MCP_PATH_OBJECT_DETAILS,
-    MCP_PATH_SEARCH_CATALOG,
     MCP_PATH_UPDATE_ASSET_DESCRIPTIONS,
+    MCP_SEARCH_CATALOG_MAX_LIMIT,
     MCP_SEARCH_CLASSIFICATIONS_PARAM,
     MCP_SEARCH_CONTEXT_QUERY_PARAM,
     MCP_SEARCH_CRITICAL_DATA_ELEMENT_PARAM,
@@ -30,79 +33,72 @@ from server.constants import (
     MCP_UPDATE_ASSET_DESCRIPTION_OBJECT_TYPES_DOC,
 )
 from server.nav_links import build_absolute_nav_url, extract_hash_nav_link
+from server.tools.common import drop_none, error_payload, strip_or_none
 from server.tools.common.confirm_gate import attach_confirmation_token
 from server.tools.common.descriptions import classify_tool_desc
 
 _TABLE_FILE_TYPES = frozenset({"oetable", "oefile"})
 
-_DESC_SEARCH = classify_tool_desc(
+_DESC_ASSET_EXPLORER = classify_tool_desc(
     MCP_ACCESS_DISAMBIGUATION_SEARCH_GUARD_DOC
-    + "Search the OvalEdge catalog (Elasticsearch hybrid / keyword search plus optional "
-    "server-side vector context). Use for discovery: schemas, tables, columns, files, charts, "
-    "APIs, queries, data products, glossary, tags, and stories.\n\n"
-    f"Backend: GET {MCP_PATH_SEARCH_CATALOG}\n\n"
-    "**Parameters:** Lexical lists (wire as JSON array strings): "
+    + "**Find data assets** (`asset_explorer`) — search the catalog for tables, files, "
+    "columns, reports, glossary terms, tags, and other governed objects related to a "
+    "business question.\n\n"
+    "How to call: pass keywords in search_terms and the user's full question in "
+    "context_query. Omit object_type, tags, and terms (leave them unset) unless the user "
+    "clearly asks for one kind of asset (e.g. \"tables only\", \"tagged Payments\", a named "
+    "glossary term). Do not default to tables-only. After you shortlist hits, call "
+    "asset_details for full metadata.\n\n"
+    f"Backend: POST {MCP_PATH_ASSET_EXPLORER}\n\n"
+    "Keyword lists are JSON arrays: "
     f"{MCP_SEARCH_TERMS_PARAM}, {MCP_SEARCH_TAGS_PARAM}, {MCP_SEARCH_GLOSSARY_TERMS_PARAM}, "
     f"{MCP_SEARCH_CUSTOM_FIELDS_PARAM}, {MCP_SEARCH_DATA_PRODUCTS_PARAM}, "
     f"{MCP_SEARCH_CLASSIFICATIONS_PARAM}, {MCP_SEARCH_CRITICAL_DATA_ELEMENT_PARAM}. "
     "Exact filters: connection_name, schema_name, server_type, owner, steward, custodian, "
-    "object_type. Glossary placement: domain_id/domain_name plus optional category/subcategory. "
-    f"Semantic ranking: {MCP_SEARCH_CONTEXT_QUERY_PARAM} = user's verbatim question.\n\n"
-    "Prefer tags=[] for tag assignments, terms=[] for glossary links, classifications=[] for "
-    "sensitivity labels; use search_terms for general keywords.\n\n"
-    "Examples:\n"
-    '1) "Assets with Operations tag" → tags=["Operations"], context_query=<question>.\n'
-    '2) "Customer tables owned by rohit" → search_terms=["customer"], object_type="oetable", '
-    'owner="rohit.anand@ovaledge.com".\n'
-    '3) "CDE columns" → object_type="oecolumn", critical_data_element=["Yes"]; '
-    "then assess_cde_dq.\n\n"
-    "object_type: one catalog type or omit for all — allowlist in docs://ovaledge/asset_types. "
-    "JDBC-backed exclusive types (use alone): dp_domain, dp_product, oeglobaldomain, "
-    "storyzone, oedomain.\n\n"
-    "More filter combinations and examples: docs://ovaledge/mcp_workflows (Catalog search).\n\n"
-    "Each hit includes objectId, objectType, navLink, redirectUrl. For oestory hits, call "
-    "lookup_datastory for full narrative — do not answer from search snippets alone."
+    "object_type. tags/terms match exact governance names (not loose synonyms). "
+    "Extra facets (tableType, certification, ranges) go in filters; open-ended ranges "
+    "use min or max only (do not invent the other bound); exact metric uses eq; more "
+    "than N uses min just above N; top-level args win if both set; filter-only "
+    "sort={field,direction} (omit with keywords) — matrix: "
+    "docs://ovaledge/mcp_workflows. "
+    f"Semantic ranking: {MCP_SEARCH_CONTEXT_QUERY_PARAM}. "
+    "Look up one term/tag: name + object_type=glossary|oetag "
+    "(include_parent/children for tags). "
+    "Glossary placement: domain_id|domain_name + optional category/subcategory.\n\n"
+    "Examples: "
+    '"What tables can I see/access?" → this tool (not access_explorer); '
+    'search_terms=["payment"] + context_query="Find assets related to payment"; '
+    'tables only → object_type="oetable"; '
+    'glossary name="Revenue" object_type="glossary".\n\n'
+    "Types: docs://ovaledge/asset_types. Playbooks: docs://ovaledge/mcp_workflows. "
+    "Policies and how-tos: knowledge_search — not search snippets alone."
 )
-_DESC_DETAILS = classify_tool_desc(
-    "Fetch one catalog document (JSON from Elasticsearch for most types; embeddings removed). "
-    "Long business/technical/wiki descriptions are truncated for MCP client limits "
-    "(plain text up to ~6k chars; HTML/wiki markup shorter). "
-    "Use after search_catalog_assets to drill into an asset.\n\n"
-    f"Backend: GET {MCP_PATH_OBJECT_DETAILS}\n\n"
-    "Exactly one lookup mode: (1) fully_qualified_name alone, OR "
-    "(2) object_id AND object_type together. Never mix FQN with id/type.\n\n"
-    "For **dp_domain** (Data Domains), **dp_product** (Data Products), **oeglobaldomain** "
-    "(glossary Domains), **storyzone** (Story Zones), and **oedomain** (Report Groups), use "
-    "object_id + object_type from search_catalog_assets hits; FQN lookup is not supported. "
-    "Details are resolved from the database and wiki when no ES document exists.\n\n"
-    "object_type must be one of: "
+_DESC_ASSET_DETAILS = classify_tool_desc(
+    "**View asset details** (`asset_details`) — full catalog metadata for one chosen asset "
+    "(object_id + object_type; no fully qualified name). Includes profile stats for tables/"
+    "files and entity relationships for tables when available. Use after asset_explorer "
+    "shortlist — not for open-ended discovery.\n\n"
+    f"Backend: GET {MCP_PATH_ASSET_DETAILS}\n\n"
+    "object_type one of: "
     + MCP_CATALOG_OBJECT_TYPES_DOC
-    + ".\n\n"
-    "Response includes relative navLink plus redirectUrl "
-    "(absolute, from OVALEDGE_BASE_URL)."
+    + ". Response: details; optional profile and relationships; navLink/redirectUrl when "
+    "present. Playbooks: docs://ovaledge/mcp_workflows."
 )
-_DESC_COLUMN = classify_tool_desc(
-    "Column-level profile statistics for one table or file asset.\n\n"
-    f"Backend: GET {MCP_PATH_COLUMN_PROFILE}\n\n"
-    "object_type must be oetable or oefile only."
-)
-_DESC_REL = classify_tool_desc(
-    "Table-only: entity relationships (columns, patterns) for one oetable.\n\n"
-    f"Backend: GET {MCP_PATH_ENTITY_RELATIONSHIPS}\n\n"
-    "Pass the table's internal object_id (oetable)."
-)
-_DESC_LINEAGE = classify_tool_desc(
-    "Data lineage graph from the database for a table or file.\n\n"
-    f"Backend: GET {MCP_PATH_LINEAGE}\n\n"
-    "object_type must be oetable or oefile. depth defaults to 2; server may clamp depth."
+_DESC_ASSET_LINEAGE = classify_tool_desc(
+    "**Trace data lineage** (`asset_lineage`) — show where a table or file comes from and "
+    "what depends on it (upstream/downstream). Resolve the asset id with asset_explorer "
+    "first when the user only gives a name.\n\n"
+    f"Backend: GET {MCP_PATH_ASSET_LINEAGE}\n\n"
+    "Requires object_id + object_type (oetable or oefile only). depth defaults to 2 "
+    "(server may clamp). Playbooks: docs://ovaledge/mcp_workflows; prompt trace_data_lineage."
 )
 _DESC_UPDATE_DESCRIPTIONS = classify_tool_desc(
     "Update description field(s) on a catalog or governance asset (RBAC on server).\n\n"
     f"Backend: POST {MCP_PATH_UPDATE_ASSET_DESCRIPTIONS}\n\n"
     "**Confirm gate:** confirm_update preview first; POST only with write_confirmed_by_user=true "
     "(same pattern as create_glossary_term / create_tag). Never confirm until user approves.\n\n"
-    "Resolve object_id via search_catalog_assets, lookup_glossary_term, or lookup_tags — do not "
-    "guess ids. Required: object_id, object_type, and an explicit description slot.\n\n"
+    "Resolve object_id via asset_explorer — do not guess ids. Required: object_id, object_type, "
+    "and an explicit description slot.\n\n"
     "If the user says only \"description\", ask which slot applies — do not guess business vs "
     "technical vs domain/tag fields. Multi-slot types need clientContext.prompt when using "
     "typed fields.\n\n"
@@ -472,8 +468,133 @@ def _resolve_server_type(raw: str | None) -> str | None:
     return MCP_SERVER_TYPES_BY_LOWER.get(value.lower())
 
 
-def _apply_lexical_search_params(
-    params: dict[str, object],
+def _filter_api_key(key: str) -> str:
+    """Map snake_case extra filter keys to the POST JSON camelCase field names."""
+    if "_" not in key:
+        return key
+    parts = [p for p in key.split("_") if p]
+    if not parts:
+        return key
+    return parts[0] + "".join(p[:1].upper() + p[1:] for p in parts[1:])
+
+
+def _clean_filter_value(value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped or None
+    if isinstance(value, list):
+        cleaned: list[Any] = []
+        for item in value:
+            if item is None:
+                continue
+            if isinstance(item, str):
+                stripped = item.strip()
+                if stripped:
+                    cleaned.append(stripped)
+            else:
+                cleaned.append(item)
+        return cleaned or None
+    if isinstance(value, dict):
+        nested = {
+            k: cleaned
+            for k, raw in value.items()
+            if (cleaned := _clean_filter_value(raw)) is not None
+        }
+        return nested or None
+    return value
+
+
+_SORT_FIELD_BY_COMPACT: dict[str, str] = {
+    token.replace("_", ""): token for token in MCP_ASSET_EXPLORER_SORT_FIELDS
+}
+
+
+def _canonical_sort_field(raw: str) -> str | None:
+    token = raw.strip().lower()
+    if not token:
+        return None
+    if token in MCP_ASSET_EXPLORER_SORT_FIELDS:
+        return token
+    return _SORT_FIELD_BY_COMPACT.get(token.replace("_", ""))
+
+
+def _normalize_explorer_sort(sort: Any) -> dict[str, str] | None:
+    """Return search.sort {field, direction} or None when sort is omitted."""
+    if sort is None:
+        return None
+    dump = getattr(sort, "model_dump", None)
+    raw = dump(exclude_none=True) if callable(dump) else sort
+    if not isinstance(raw, dict) or not raw:
+        return None
+    field_raw = raw.get("field")
+    if not isinstance(field_raw, str) or not field_raw.strip():
+        return None
+    field = _canonical_sort_field(field_raw)
+    if field is None:
+        return None
+    direction_raw = raw.get("direction")
+    direction = MCP_ASSET_EXPLORER_SORT_DEFAULT_DIRECTION
+    if isinstance(direction_raw, str) and direction_raw.strip():
+        direction = direction_raw.strip().lower()
+    return {"field": field, "direction": direction}
+
+
+def _validate_explorer_sort(sort: Any) -> dict[str, Any] | None:
+    """Return error_payload when sort is present but invalid; None when ok or omitted."""
+    if sort is None:
+        return None
+    dump = getattr(sort, "model_dump", None)
+    raw = dump(exclude_none=True) if callable(dump) else sort
+    if not isinstance(raw, dict):
+        return error_payload("sort must be an object {field, direction}.")
+    if not raw:
+        return None
+    field_raw = raw.get("field")
+    if not isinstance(field_raw, str) or not field_raw.strip():
+        return error_payload(
+            "sort.field is required when sort is set. One of: "
+            + MCP_ASSET_EXPLORER_SORT_FIELDS_DOC
+            + "."
+        )
+    if _canonical_sort_field(field_raw) is None:
+        return error_payload(
+            f"sort.field must be one of {MCP_ASSET_EXPLORER_SORT_FIELDS_DOC}, "
+            f"got {field_raw!r}."
+        )
+    direction_raw = raw.get("direction")
+    if direction_raw is None or (isinstance(direction_raw, str) and not direction_raw.strip()):
+        return None
+    if not isinstance(direction_raw, str):
+        return error_payload("sort.direction must be 'asc' or 'desc'.")
+    if direction_raw.strip().lower() not in MCP_ASSET_EXPLORER_SORT_DIRECTIONS:
+        return error_payload(
+            f"sort.direction must be one of {sorted(MCP_ASSET_EXPLORER_SORT_DIRECTIONS)}, "
+            f"got {direction_raw!r}."
+        )
+    return None
+
+
+def _filters_from_extra(filters: Any) -> dict[str, Any]:
+    if filters is None:
+        return {}
+    dump = getattr(filters, "model_dump", None)
+    raw = dump(exclude_none=True) if callable(dump) else filters
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, Any] = {}
+    for key, value in raw.items():
+        api_key = _filter_api_key(str(key))
+        if api_key not in MCP_ASSET_EXPLORER_FILTER_KEYS:
+            continue
+        cleaned = _clean_filter_value(value)
+        if cleaned is not None:
+            out[api_key] = cleaned
+    return out
+
+
+def _build_asset_explorer_body(
     *,
     search_terms: list[str] | None = None,
     tags: list[str] | None = None,
@@ -482,22 +603,76 @@ def _apply_lexical_search_params(
     data_products: list[str] | None = None,
     classifications: list[str] | None = None,
     critical_data_element: list[str] | None = None,
-) -> None:
-    """Map MCP list args to API query params (each a JSON array string)."""
-    for api_key, values in (
-        (MCP_SEARCH_TERMS_PARAM, search_terms),
-        (MCP_SEARCH_TAGS_PARAM, tags),
-        (MCP_SEARCH_GLOSSARY_TERMS_PARAM, terms),
-        (MCP_SEARCH_CUSTOM_FIELDS_PARAM, custom_fields),
-        (MCP_SEARCH_DATA_PRODUCTS_PARAM, data_products),
-        (MCP_SEARCH_CLASSIFICATIONS_PARAM, classifications),
-        (MCP_SEARCH_CRITICAL_DATA_ELEMENT_PARAM, critical_data_element),
-    ):
-        normalized = _normalize_search_terms(values)
-        if normalized is not None:
-            params[api_key] = json.dumps(normalized, ensure_ascii=False)
-
-
+    context_query: str | None = None,
+    page: int = 1,
+    limit: int = 20,
+    connection_name: str | None = None,
+    resolved_server_type: str | None = None,
+    schema_name: str | None = None,
+    owner: str | None = None,
+    steward: str | None = None,
+    custodian: str | None = None,
+    object_type: str | None = None,
+    domain_id: int | None = None,
+    domain_name: str | None = None,
+    category_id: int | None = None,
+    category_name: str | None = None,
+    subcategory_id: int | None = None,
+    subcategory_name: str | None = None,
+    object_id: int | None = None,
+    name: str | None = None,
+    include_parent: bool = False,
+    include_children: bool = False,
+    filters: Any = None,
+    sort: Any = None,
+) -> dict[str, Any]:
+    """Build POST /asset-explorer JSON. Top-level tool args win over nested filters."""
+    body: dict[str, Any] = drop_none(
+        objectId=object_id if object_id is not None and object_id > 0 else None,
+        objectType=object_type,
+        name=strip_or_none(name),
+        includeParent=True if include_parent else None,
+        includeChildren=True if include_children else None,
+    )
+    search = drop_none(
+        searchTerms=_normalize_search_terms(search_terms),
+        contextQuery=strip_or_none(context_query),
+        page=max(page, 1),
+        limit=min(max(limit, 1), MCP_SEARCH_CATALOG_MAX_LIMIT),
+        sort=_normalize_explorer_sort(sort),
+    )
+    if search:
+        body["search"] = search
+    placement = drop_none(
+        domainId=domain_id if domain_id is not None and domain_id > 0 else None,
+        domainName=strip_or_none(domain_name),
+        categoryId=category_id if category_id is not None and category_id > 0 else None,
+        categoryName=strip_or_none(category_name),
+        subcategoryId=subcategory_id
+        if subcategory_id is not None and subcategory_id > 0
+        else None,
+        subcategoryName=strip_or_none(subcategory_name),
+    )
+    if placement:
+        body["glossaryPlacement"] = placement
+    top_filters = drop_none(
+        connectionName=strip_or_none(connection_name),
+        serverType=resolved_server_type,
+        schemaName=strip_or_none(schema_name),
+        owner=strip_or_none(owner),
+        steward=strip_or_none(steward),
+        custodian=strip_or_none(custodian),
+        tags=_normalize_search_terms(tags),
+        terms=_normalize_search_terms(terms),
+        customFields=_normalize_search_terms(custom_fields),
+        dataProducts=_normalize_search_terms(data_products),
+        classifications=_normalize_search_terms(classifications),
+        criticalDataElement=_normalize_search_terms(critical_data_element),
+    )
+    merged_filters = {**_filters_from_extra(filters), **top_filters}
+    if merged_filters:
+        body["filters"] = merged_filters
+    return body
 
 
 def _enrich_catalog_item_nav(item: dict[str, Any]) -> dict[str, Any]:
@@ -514,22 +689,71 @@ def _enrich_catalog_item_nav(item: dict[str, Any]) -> dict[str, Any]:
 
 
 def _enrich_catalog_search_response(body: dict[str, Any]) -> dict[str, Any]:
+    """Enrich catalog hit nav links (flat or McpApiResult-wrapped explorer payload)."""
     if body.get("error"):
         return body
     out = dict(body)
     items = body.get("items")
+    data = body.get("data")
     if isinstance(items, list):
         out["items"] = [_enrich_catalog_item_nav(x) for x in items if isinstance(x, dict)]
+    elif isinstance(data, dict):
+        data_out = dict(data)
+        nested_items = data.get("items")
+        if isinstance(nested_items, list):
+            data_out["items"] = [
+                _enrich_catalog_item_nav(x) for x in nested_items if isinstance(x, dict)
+            ]
+        out["data"] = data_out
+    return out
+
+
+def _enrich_asset_explorer_response(body: dict[str, Any]) -> dict[str, Any]:
+    """Enrich explorer response: catalog items + glossary/tag sections when present."""
+    from server.tools.governance.glossary_helpers import _enrich_glossary_lookup_response
+    from server.tools.governance.tag_helpers import _enrich_tag_lookup_response
+
+    if body.get("error") or body.get("ok") is False:
+        return body
+    out = _enrich_catalog_search_response(body)
+    data = out.get("data")
+    if not isinstance(data, dict):
+        return out
+    data_out = dict(data)
+    glossary = data.get("glossaryTerms")
+    if glossary is not None:
+        enriched = _enrich_glossary_lookup_response({"ok": True, "data": glossary})
+        data_out["glossaryTerms"] = enriched.get("data", glossary)
+        if enriched.get("formattedResponse"):
+            out["formattedResponse"] = enriched["formattedResponse"]
+    tags = data.get("tags")
+    if tags is not None:
+        enriched = _enrich_tag_lookup_response({"ok": True, "data": tags})
+        data_out["tags"] = enriched.get("data", tags)
+        if enriched.get("formattedResponse"):
+            out["formattedResponse"] = enriched["formattedResponse"]
+    out["data"] = data_out
     return out
 
 
 def _enrich_catalog_details_response(body: dict[str, Any]) -> dict[str, Any]:
+    """Enrich composite asset-details (details + optional profile/relationships)."""
     if body.get("error") or body.get("ok") is False:
         return body
     out = dict(body)
     data = body.get("data")
-    if isinstance(data, dict):
-        out["data"] = _enrich_catalog_item_nav(data)
+    if not isinstance(data, dict):
+        return out
+    data_out = dict(data)
+    details = data.get("details")
+    if isinstance(details, dict):
+        data_out["details"] = _enrich_catalog_item_nav(details)
+    elif details is None and (
+        "objectId" in data or "objectType" in data or "navLink" in data
+    ):
+        # Flat metadata fallback
+        data_out = _enrich_catalog_item_nav(data_out)
+    out["data"] = data_out
     return out
 
 

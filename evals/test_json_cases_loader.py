@@ -29,7 +29,7 @@ def _tool_result_payload(tool: MCPToolCall) -> dict[str, Any]:
     result = tool.result
     if result is None:
         return {}
-    structured = getattr(result, "structuredContent", None)
+    structured = getattr(result, "structured_content", None)
     if isinstance(structured, dict):
         # tool_call_result() wraps as {"result": <payload>}
         inner = structured.get("result")
@@ -98,19 +98,19 @@ def test_load_example_mcp_use_json() -> None:
     if "example_catalog_search" in by_name:
         c = by_name["example_catalog_search"]
         assert "revenue" in (c.input or "")
-        assert _mcp_tools_called(c)[0].name == "search_catalog_assets"
+        assert _mcp_tools_called(c)[0].name == "asset_explorer"
     if "example_catalog_then_details" in by_name:
         c = by_name["example_catalog_then_details"]
         assert [x.name for x in _mcp_tools_called(c)] == [
-            "search_catalog_assets",
-            "catalog_asset_details",
+            "asset_explorer",
+            "asset_details",
         ]
     if "example_datastory_lookup" in by_name:
         c = by_name["example_datastory_lookup"]
-        assert _mcp_tools_called(c)[0].name == "lookup_datastory"
+        assert _mcp_tools_called(c)[0].name == "knowledge_search"
     if "example_glossary_lookup" in by_name:
         c = by_name["example_glossary_lookup"]
-        assert _mcp_tools_called(c)[0].args.get("term_name") == "PII"
+        assert _mcp_tools_called(c)[0].args.get("name") == "PII"
 
 
 def test_example_json_covers_all_mcp_tools() -> None:
@@ -152,6 +152,104 @@ def test_example_json_has_happy_and_adverse_path_per_tool() -> None:
     )
 
 
+def test_example_json_catalog_nested_filters() -> None:
+    """POST asset_explorer nested filters: views, dqIndex, at-least/more-than/max rating."""
+    cases = load_mcp_use_cases_from_json(_EXAMPLES)
+    by_name = {c.name: c for c in cases if c.name}
+
+    search = by_name["example_catalog_search"]
+    assert _mcp_tools_called(search)[0].args.get("filters", {}).get("certification") == [
+        "certified"
+    ]
+
+    views = by_name["example_catalog_filters_certified_views"]
+    view_args = _mcp_tools_called(views)[0].args
+    assert "search_terms" not in view_args
+    view_filters = view_args.get("filters")
+    assert isinstance(view_filters, dict)
+    assert view_filters.get("tableType") == ["VIEW"]
+    assert view_filters.get("certification") == ["certified"]
+
+    dq_case = by_name["example_catalog_dq_index_range"]
+    dq = _mcp_tools_called(dq_case)[0].args.get("filters", {}).get("dqIndex")
+    assert isinstance(dq, dict)
+    assert dq.get("min") == 80
+    assert "max" not in dq
+
+    rating_case = by_name["example_catalog_rating_min_filter"]
+    rating_args = _mcp_tools_called(rating_case)[0].args
+    assert rating_args.get("object_type") == "oetable"
+    rating = rating_args.get("filters", {}).get("rating")
+    assert isinstance(rating, dict)
+    assert rating.get("min") == 4
+    assert "max" not in rating
+
+    more_than = by_name["example_catalog_rating_more_than_filter"]
+    more_than_rating = _mcp_tools_called(more_than)[0].args.get("filters", {}).get("rating")
+    assert isinstance(more_than_rating, dict)
+    assert more_than_rating.get("min") == 4.01
+    assert "max" not in more_than_rating
+
+    max_case = by_name["example_catalog_rating_max_filter"]
+    max_rating = _mcp_tools_called(max_case)[0].args.get("filters", {}).get("rating")
+    assert isinstance(max_rating, dict)
+    assert max_rating.get("max") == 3
+    assert "min" not in max_rating
+
+    popularity = _mcp_tools_called(by_name["example_catalog_popularity_min_filter"])[0].args.get(
+        "filters", {}
+    ).get("popularity")
+    assert isinstance(popularity, dict)
+    assert popularity.get("min") == 70
+    assert "max" not in popularity
+
+    created = _mcp_tools_called(by_name["example_catalog_created_date_filter"])[0].args.get(
+        "filters", {}
+    ).get("createdDate")
+    assert isinstance(created, dict)
+    assert created.get("from") == "2024-01-01"
+    assert created.get("to") == "2024-12-31"
+    assert "min" not in created
+    assert "max" not in created
+
+    null_density = _mcp_tools_called(by_name["example_catalog_null_density_eq"])[0].args.get(
+        "filters", {}
+    ).get("nullDensity")
+    assert isinstance(null_density, dict)
+    assert null_density.get("eq") == 6.7
+    assert "min" not in null_density
+    assert "max" not in null_density
+
+    sort_case = _mcp_tools_called(by_name["example_catalog_sort_popularity_desc"])[0]
+    assert sort_case.args.get("object_type") == "glossary"
+    sort = sort_case.args.get("sort")
+    assert isinstance(sort, dict)
+    assert sort.get("field") == "popularity"
+    assert sort.get("direction") == "desc"
+    assert "search_terms" not in sort_case.args
+    assert "context_query" not in sort_case.args
+
+    empty = by_name["example_catalog_filters_no_match"]
+    assert _tool_result_payload(_mcp_tools_called(empty)[0]).get("total") == 0
+
+    privilege = _mcp_tools_called(by_name["example_native_privilege_to_principals"])[0]
+    assert privilege.args.get("query_direction") == "privilege_to_principals"
+    assert privilege.args.get("object_name") == "SELECT"
+    assert "object_type" not in privilege.args
+
+    assess = _tool_result_payload(_mcp_tools_called(by_name["example_dq_rule_advisor_assess"])[0])
+    assess_rows = assess.get("rows")
+    assert isinstance(assess_rows, list) and assess_rows
+    assert assess_rows[0].get("recommendedRuleId") == 10264
+
+    create_preview = _mcp_tools_called(
+        by_name["example_dq_rule_manager_create_standard_preview"]
+    )[0]
+    assert create_preview.args.get("prefer_existing_rule") is True
+    preview_text = _tool_result_payload(create_preview).get("formattedResponse") or ""
+    assert "associate to existing rule" in preview_text
+
+
 def test_llm_only_skips_structural_validation_fixtures() -> None:
     """Intentional invalid-arg rows use llm_score=false so MCPUseMetric is not run on them."""
     all_cases = load_mcp_use_cases_from_json(_EXAMPLES)
@@ -159,7 +257,7 @@ def test_llm_only_skips_structural_validation_fixtures() -> None:
     assert len(llm_cases) < len(all_cases)
     skipped = {c.name for c in all_cases} - {c.name for c in llm_cases}
     assert "example_search_rejects_invalid_object_type" in skipped
-    assert "example_lookup_tags_neither_id_nor_name" in skipped
+    assert "example_asset_explorer_neither_id_nor_name" in skipped
 
 
 def test_load_root_array(tmp_path: Path) -> None:

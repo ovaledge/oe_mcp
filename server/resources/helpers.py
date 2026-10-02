@@ -9,11 +9,11 @@ from server.tools.common.runtime import ovaledge_client
 
 
 async def fetch_object_details_json(object_id: str, object_type: str) -> str:
-    from server.constants import MCP_PATH_OBJECT_DETAILS
+    from server.constants import MCP_PATH_ASSET_DETAILS
 
     async with ovaledge_client() as client:
         raw = await client.get(
-            MCP_PATH_OBJECT_DETAILS,
+            MCP_PATH_ASSET_DETAILS,
             params={"objectId": int(object_id), "objectType": object_type},
         )
         if not isinstance(raw, dict):

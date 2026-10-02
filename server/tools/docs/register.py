@@ -1,4 +1,4 @@
-"""MCP tool registration for platform documentation search."""
+"""MCP tool registration for dual-corpus knowledge search."""
 
 from __future__ import annotations
 
@@ -7,27 +7,54 @@ from typing import Annotated, Any
 from fastmcp import FastMCP
 from pydantic import Field
 
-from server.client import OvalEdgeError
-from server.constants import MCP_PATH_SEARCH_PLATFORM_DOCS
-from server.tools.common import map_ovaledge_error, ovaledge_client
-from server.tools.docs.helpers import _DESC_DOCS, search_platform_docs_params
+from server.tools.common.annotations import READ_ONLY
+from server.tools.docs.helpers import _DESC_KNOWLEDGE_SEARCH
+from server.tools.docs.invocations import _invoke_knowledge_search
 
 
 def register(mcp: FastMCP) -> None:
 
-    @mcp.tool(description=_DESC_DOCS)
-    async def search_platform_docs(
+    @mcp.tool(
+        title="Search knowledge & docs",
+        description=_DESC_KNOWLEDGE_SEARCH,
+        annotations=READ_ONLY,
+    )
+    async def knowledge_search(
         query: Annotated[
-            str,
-            Field(description="Natural-language question or keywords for documentation search."),
-        ],
+            str | None,
+            Field(
+                description=(
+                    "Your question in plain language — searches org stories and "
+                    "OvalEdge product docs."
+                ),
+                default=None,
+            ),
+        ] = None,
+        content_query: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Optional alternate wording focused on story body content."
+                ),
+                default=None,
+            ),
+        ] = None,
+        story_zone_name: Annotated[
+            str | None,
+            Field(description="Limit to stories in this story zone / folder.", default=None),
+        ] = None,
+        story_name: Annotated[
+            str | None,
+            Field(description="Look up a story by its title.", default=None),
+        ] = None,
+        object_id: Annotated[
+            int | None,
+            Field(description="Look up one data story by its catalog id.", default=None),
+        ] = None,
         limit: Annotated[
             int | None,
             Field(
-                description=(
-                    "Max hits to return (maps to API limit; default 10 on server if omitted). "
-                    "This client caps at 50."
-                ),
+                description="Max product-doc results (default 10 on server; max 50 here).",
                 default=None,
             ),
         ] = None,
@@ -35,18 +62,19 @@ def register(mcp: FastMCP) -> None:
             int | None,
             Field(
                 description=(
-                    "KNN numCandidates (optional). Must be >= limit if both sent; "
-                    "client enforces that. If omitted while limit is set, client picks "
-                    "max(128, limit) capped at 512."
+                    "Advanced: how many doc candidates to score (must be >= limit)."
                 ),
                 default=None,
             ),
         ] = None,
     ) -> dict[str, Any]:
-        """Platform docs search (see MCP tool description)."""
-        params = search_platform_docs_params(query, limit, num_candidates)
-        try:
-            async with ovaledge_client() as client:
-                return await client.get(MCP_PATH_SEARCH_PLATFORM_DOCS, params=params)
-        except OvalEdgeError as e:
-            return map_ovaledge_error(e)
+        """Search organizational knowledge and OvalEdge product documentation."""
+        return await _invoke_knowledge_search(
+            query=query,
+            content_query=content_query,
+            story_zone_name=story_zone_name,
+            story_name=story_name,
+            object_id=object_id,
+            limit=limit,
+            num_candidates=num_candidates,
+        )

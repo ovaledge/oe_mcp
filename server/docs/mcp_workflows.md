@@ -2,9 +2,9 @@
 
 This document is the **agent routing guide** for the OvalEdge MCP server. It is served as a static MCP resource at **`docs://ovaledge/mcp_workflows`** (alongside other files in `server/docs/`).
 
-**Agents must read this resource** at session start and before multi-step workflows, governed writes, native source access (RDAM), catalog ACL checks, or DQ operations. Server instructions (`server/app.py`) and tool descriptions link here; workflow prompts assume you have loaded this guide or an equivalent section.
+**Agents must read this resource** at session start and before multi-step workflows, governed writes, native source access (RDAM), catalog permissions checks, or DQ operations. Server instructions (`server/app.py`) and tool descriptions link here; workflow prompts assume you have loaded this guide or an equivalent section.
 
-Canonical inventories (used by tests): **`server/mcp_surface.py`** — `MCP_TOOL_NAMES` (25 tools), `MCP_WORKFLOW_PROMPT_NAMES` (20 prompts), `MCP_OVALEDGE_RESOURCE_TEMPLATES` (5 object-detail templates).
+Canonical inventories (used by tests): **`server/mcp_surface.py`** — `MCP_TOOL_NAMES` (15 tools), `MCP_WORKFLOW_PROMPT_NAMES` (22 prompts), `MCP_OVALEDGE_RESOURCE_TEMPLATES` (5 object-detail templates).
 
 There is **no MCP protocol “tool priority” field**. Routing is guided by:
 
@@ -12,118 +12,148 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 2. **This document** (`docs://ovaledge/mcp_workflows`) — full routing index and playbooks  
 3. **Tool descriptions** — per-tool when-to-call (budget: `tests/tools/test_tool_description_budget.py`)  
 4. **Workflow prompts** (`server/prompts/workflows/`) — optional multi-step playbooks  
-5. **Domain guides** — `docs://ovaledge/glossary_guide`, `tags_guide`, `rdam_source_access`, etc.  
+5. **Domain guides** — `docs://ovaledge/governance`, `asset_types`, `rdam_source_access`, `overview`  
 6. **Client rules** (e.g. Cursor project rules) — host-specific, outside this repo  
 
 ## Tool routing (quick reference)
 
 | User intent | Start with |
 |-------------|------------|
-| Find tables, files, reports, columns | `search_catalog_assets` → `catalog_asset_details` |
-| Rich metadata for one catalog object | `catalog_asset_details` (after search or when `object_id` known) |
-| Org policies, playbooks, narrative knowledge in data stories | `lookup_datastory` (`content_query` = question); prompt `organizational_knowledge` |
-| OvalEdge product how-to (UI, features) | `search_platform_docs`; prompt `platform_help` |
-| Business term definition | `lookup_glossary_term`; prompt `explain_business_term` |
-| Tag meaning or hierarchy | `lookup_tags`; prompt `explain_tag` |
-| Data quality rule lookup | `lookup_dq_rule`; prompt `explain_dq_rule` |
-| CDE assets / DQ function & rule recommendations | `assess_cde_dq` (after `search_catalog_assets` or `discover_cde_columns=true`) |
-| Associate objects to existing data quality rule | `associate_dq_rule_objects` (after `assess_cde_dq` / `lookup_dq_rule`; confirm gate) |
-| Find same-function rules before creating | `create_dq_rules` with `prefer_existing_rule=true` (default); user chooses a returned rule ID or explicitly requests new |
-| Create a **new** data quality rule (second rule / explicit new) | `create_dq_rules` with `prefer_existing_rule=false`; often `skip_duplicate_function_on_object=false` |
-| Mark object as CDE before auto-create | `update_cde_associations` (confirm gate) → then `create_dq_rules` |
-| Generate custom SQL data quality queries | `generate_dq_queries` (after `assess_cde_dq` when workflow is `custom_sql`) |
-| Validate custom SQL data quality queries | `validate_dq_queries` (confirm gate; executes SELECT on connection) |
-| Create custom SQL data quality rule | `create_sql_dq_rule` (confirm gate; after validate when `canCreateRule`) |
+| Find tables, files, reports, columns (incl. first-person “what can I see/view/access?” without a named principal) | `asset_explorer` (Find data assets; omit `object_type` unless query implies a type) → `asset_details` after shortlist |
+| Rich metadata, column profile, or table relationships | `asset_details` (View asset details; after search or when `object_id` known) |
+| Org policies, playbooks, narratives, or OvalEdge product how-to | `knowledge_search` (Search knowledge & docs); prompts `organizational_knowledge`, `platform_help` |
+| Business term definition | `asset_explorer` with `name` and `object_type=glossary`; prompt `explain_business_term` |
+| Tag meaning or hierarchy | `asset_explorer` with `name` and `object_type=oetag`; prompt `explain_tag` |
+| Data quality rule lookup | `dq_rule_advisor` step=lookup; prompt `explain_dq_rule` |
+| CDE assets / DQ function & rule recommendations | `dq_rule_advisor` step=assess (after `asset_explorer` or `discover_cde_columns=true`) |
+| Associate objects to existing data quality rule | `dq_rule_manager` step=associate (after assess/lookup; confirm gate) |
+| Associate to context-matching existing rule (or create) | `dq_rule_manager` step=create_standard with `prefer_existing_rule=true` (default; uses assess `recommendedRuleId`) |
+| Create a **new** data quality rule (second rule / explicit new) | `dq_rule_manager` step=create_standard with `prefer_existing_rule=false` |
+| Mark object as CDE before auto-create | `update_cde_associations` (confirm gate) → then `dq_rule_manager` step=create_standard |
+| Generate custom SQL data quality queries | `dq_rule_advisor` step=generate_query (after assess when workflow is `custom_sql`) |
+| Validate custom SQL data quality queries | `dq_rule_advisor` step=validate_query (confirm gate; executes SELECT on connection) |
+| Create custom SQL data quality rule | `dq_rule_manager` step=create_custom_sql (confirm gate; after validate when `canCreateRule`) |
 | CDE / custom SQL DQ workflow (prompt) | `create_custom_sql_dq_workflow` or `assess_cde_dq_coverage` |
 | Metadata drift between crawls | `metadata_changes_between_crawls`; prompt `metadata_drift` |
-| Native Redshift/Snowflake/Tableau grants | `source_system_access`; prompts `native_source_access`, `dam_object_browse` |
-| OvalEdge catalog ACL (user/role on catalog objects) | `get_user_object_access`; prompt `catalog_object_access` |
-| Lineage | `asset_lineage`; prompt `trace_data_lineage` |
-| Column stats | `column_profile_statistics` |
-| Table relationships | `table_entity_relationships`; prompt `find_related_assets` |
+| Native Redshift/Snowflake/Tableau grants | `access_explorer` with `operation=source_system_access`; prompts `native_source_access`, `dam_object_browse`. If 400 unsupported connector type / servertype (`mcp.source.system.unsupported`), continue with `operation=catalog_access`. If 400 `mcp.source.system.hint.mismatch`, fix `source_system` vs `connection_id` — do not switch to catalog_access |
+| OvalEdge catalog permissions (user/role on catalog objects) | `access_explorer` with `operation=catalog_access`; prompt `catalog_object_access` |
+| Lineage | `asset_lineage` (Trace data lineage); prompt `trace_data_lineage` |
+| Column stats / table relationships | `asset_details` (automatic for `oetable`/`oefile`; relationships for `oetable`); prompt `find_related_assets` |
 | Trust / certification scorecard | prompt `trust_assessment` |
 | Domain overview (terms, tables, stories) | prompt `explore_data_domain` |
 | Create glossary term | `create_glossary_term` (guided; human confirms); prompt `create_business_glossary_term` |
 | Create tag | `create_tag` (guided; human confirms); prompt `create_governance_tag` |
+| “I want/need access to [table]”, “raise an access request”, content-change request, or “Data Quality Rule Recommendation request” | `create_service_request` (prompt `create_service_desk_request`) — **not** `access_explorer` and **not** `dq_rule_advisor`. “Who has access?” stays `resolve_object_access` |
 | Update descriptions | `update_asset_descriptions`; prompt `document_asset_descriptions` |
 | Update governance roles | `update_governance_roles`; prompt `assign_governance_roles` |
 | Update CDE flag on tables/columns/files | `update_cde_associations` (confirm gate) |
-| Update custom / additional field | `search_catalog_assets` (if needed) → `update_custom_field_value` (confirm gate) |
+| Update custom / additional field | `asset_explorer` (if needed) → `update_custom_field_value` (confirm gate) |
 
-**Data stories vs platform docs:** `lookup_datastory` searches **your organization’s** onboarded stories (`oestory`). `search_platform_docs` searches **OvalEdge product** documentation. Do not use platform docs for internal policy questions.
+**Knowledge search:** `knowledge_search` searches both your organization’s onboarded data stories (`oestory`) and OvalEdge product documentation. It has no corpus enum; use the question context and returned citations to distinguish the result source.
 
 ## Registered MCP tools (inventory)
 
 | Domain | Tool | Governed write |
 |--------|------|----------------|
-| Catalog | `search_catalog_assets` | — |
-| Catalog | `catalog_asset_details` | — |
-| Catalog | `column_profile_statistics` | — |
-| Catalog | `table_entity_relationships` | — |
+| Catalog | `asset_explorer` | — |
+| Catalog | `asset_details` | — |
 | Catalog | `asset_lineage` | — |
 | Catalog | `metadata_changes_between_crawls` | — |
 | Catalog | `update_asset_descriptions` | confirm gate |
 | Catalog | `update_cde_associations` | confirm gate |
-| Governance | `lookup_glossary_term` | — |
 | Governance | `create_glossary_term` | confirm gate |
-| Governance | `lookup_tags` | — |
 | Governance | `create_tag` | confirm gate |
-| Governance | `lookup_datastory` | — |
+| Service desk | `create_service_request` | confirm gate |
 | Governance | `update_governance_roles` | confirm gate |
 | Governance | `update_custom_field_value` | confirm gate |
-| Data quality | `lookup_dq_rule` | — |
-| Data quality | `assess_cde_dq` | — |
-| Data quality | `associate_dq_rule_objects` | confirm gate |
-| Data quality | `create_dq_rules` | confirm gate |
-| Data quality | `generate_dq_queries` | — |
-| Data quality | `validate_dq_queries` | confirm gate |
-| Data quality | `create_sql_dq_rule` | confirm gate |
-| Access | `get_user_object_access` | — |
-| RDAM | `source_system_access` | — |
-| Docs | `search_platform_docs` | — |
+| Data quality | `dq_rule_advisor` | validate_query confirm gate |
+| Data quality | `dq_rule_manager` | confirm gate |
+| Access | `access_explorer` | — |
+| Knowledge | `knowledge_search` | — |
 
-## Catalog search (`search_catalog_assets`)
+## Asset explorer (`asset_explorer`)
+
+Backend: **POST** `/api/v1/mcp/asset-explorer`. Tool args map to a JSON body (`search`, `glossaryPlacement`, `filters`). OvalEdge accepts an empty `{}`; this tool always sends `search.page` and `search.limit` (defaults 1 and 20).
 
 Extended parameter patterns (tool description keeps a short summary; use this section when disambiguating filters):
 
 | User intent | Suggested parameters |
 |-------------|---------------------|
-| Certified tables in a schema | `object_type=oetable`, `schema_name`, optional `search_terms` |
+| Certified tables in a schema | `object_type=oetable`, `schema_name`, `filters={"certification":["certified"]}` |
+| Views only | `object_type=oetable`, `filters={"tableType":["VIEW"]}` |
+| DQ score at least N | `filters={"dqIndex":{"min":80}}` — omit `max`; scale 0–100, inclusive |
+| Closed DQ band | `filters={"dqIndex":{"min":80,"max":100}}` only when the user named both ends |
+| Tables rated at least 4 | `object_type=oetable`, `filters={"rating":{"min":4}}` — omit `max`; 1–5 stars, inclusive. Do not invent `max:5` |
+| Tables rated more than 4 | `object_type=oetable`, `filters={"rating":{"min":4.01}}` — inclusive min just above 4 (no exclusive `gt`). Omit `max`. Do not use `{min:4}` (that includes 4-star) |
+| Tables rated at most 3 | `object_type=oetable`, `filters={"rating":{"max":3}}` — omit `min` |
+| Popularity at least N | `filters={"popularity":{"min":70}}` — omit `max` |
+| Null density exactly 6.7% | `object_type=oetable`, `filters={"nullDensity":{"eq":6.7}}` — percents, not fractions (`6.7` not `0.067`). Omit `search_terms` for metric-only listing |
+| Density / row / column count | `filters.density` / `rowCount` / `columnCount` `{min}`, `{max}`, or `{eq}` |
+| Most popular glossary terms | `object_type=glossary`, `sort={"field":"popularity","direction":"desc"}` — omit `search_terms` / `context_query` so hybrid ranking does not override order |
+| Created between two dates | `filters={"createdDate":{"from":"2024-01-01","to":"2024-12-31"}}` ISO dates; omit `from` or `to` if the user did not name that end |
 | Assets by connector technology | `server_type` (e.g. mysql, snowflake, tableau) + `context_query` |
 | Data products | `data_products=[...]`, `context_query` |
 | Custom field values | `custom_fields=[...]` or `search_terms` fallback |
-| Data Domains (not glossary Global Domain) | `object_type=dp_domain` alone — do not combine with other types |
+| Data Domains (not glossary Global Domain) | `object_type=dp_domain` alone — do not combine with other types; or `filters.dataDomains` names |
 | Report Groups | `object_type=oedomain` alone — do not combine with other types |
 | PII / classification | `classifications=["PII"]`, `context_query` |
+| Assets by exact tag name | `tags=["Customer and Sales"]` — exact tag name (case-insensitive), not FQN/description contains |
+| Assets by exact glossary term | `terms=["Payment"]` — exact term name (case-insensitive), not description/domain contains |
 | Glossary terms in placement | `object_type=glossary`, `domain_name`, optional `category_name` |
 | Assets linked to domain terms | `object_type=oetable`, `domain_name` |
-| CDE columns | `object_type=oecolumn`, `critical_data_element=["Yes"]` → then `assess_cde_dq` |
+| CDE columns | `object_type=oecolumn`, `critical_data_element=["Yes"]` → then `dq_rule_advisor` step=assess |
+
+**Nested `filters` (new facets):** `tableName`, `folder`, `reportGroup`, `apiGroup`, `dataDomains`, `governanceRole4`, `governanceRole5`, `governanceRole6`, `tableType`, `reportType`, `reportLevel`, `termStatus`, `ticketStatus`, `subscriptionMode`, `criticality`, `sensitivity`, `deliveryAccessMode`, `certification`, `questionWalls`, ranges `dqIndex` / `popularity` / `rating` / `curationScore` / `nullDensity` / `density` / `rowCount` / `columnCount`, `createdDate` `{from,to}` ISO dates. Do not duplicate keys already passed as top-level args; if both are set, **top-level wins**.
+
+**Range filters:** pass `{min}`, `{max}`, `{min,max}`, or `{eq}` for an exact value. Bounds are **inclusive**. Omit any bound the user did not specify — do not fill a scale ceiling (`rating` max 5, `dqIndex` max 100) unless they asked for an upper limit. “At least N” → `{min:N}`; “at most N” → `{max:N}`; “exactly N” → `{eq:N}`; “more than N” / “greater than N” → inclusive `min` just above N (e.g. rating `{"min":4.01}`). `createdDate` uses `{from,to}` ISO dates, not min/max. Scales: `dqIndex` 0–100, `rating` 1–5 stars; `nullDensity` / `density` are stored percents (`6.7` means 6.7%, not 0.067); `popularity` / `curationScore` / `rowCount` / `columnCount` as OvalEdge returns them. There is no exclusive `gt`/`lt` operator.
+
+**Sort (`search.sort`):** pass `sort={"field":"popularity","direction":"desc"}` to order a **filter-only** listing. Allowed `field` tokens: `relevance`, `name`, `popularity`, `rating`, `dq_index`, `curation_score`, `row_count`, `column_count`, `null_density`, `density`, `created_date` (camelCase aliases such as `dqIndex` are accepted). `direction` is `asc` or `desc` (default `desc`). Hits may include `popularity` so a popularity-ordered page can show what it ranked on. Omit `sort` when `search_terms` or `context_query` is set — hybrid ranking owns that order.
 
 **Glossary placement:** `domain_id` or `domain_name` (required), plus optional category/subcategory. With `object_type=glossary`, returns terms in that placement; without `object_type`, returns catalog assets linked to terms there.
 
 **server_type:** Infer from the user question when they name a technology; omit when not implied — do not guess.
 
-Omit empty list parameters; filter-only search is valid. Each hit includes `objectId`, `objectType`, `navLink`, `redirectUrl`. For `oestory` hits, follow with `lookup_datastory`.
+`asset_explorer` (**Find data assets**) is the unified catalog search; it has no operation enum. **Default discovery:** `search_terms` + `context_query`; **omit `object_type`**, `tags`, and `terms` unless the user/query clearly implies them (e.g. “tables only”, “tagged Payments”, “glossary term Region”). Do not default to `oetable`-only or replace an open catalog search with separate type-scoped calls. `tags`/`terms` are exact governance filters, not keyword synonyms. Call **`asset_details` only after shortlisting** a hit (`object_id` + `object_type`). Omit empty list parameters; filter-only search is valid. Each hit includes `objectId`, `objectType`, `navLink`, `redirectUrl`.
+
+**Discovery vs grants:** first-person inventory without a named principal (e.g. “What tables/schemas/columns can I see/view/access?”) → `asset_explorer` — **not** `access_explorer`. Named-principal grant questions and who-has-access on a specific object use `access_explorer` (see below). First-person + named Redshift/Snowflake/Tableau → RDAM via `access_explorer` (ask for remote username / `connection_id` as needed).
+
+Use `name` plus `object_type=glossary` for a business term entity, or `name` plus `object_type=oetag` for a tag entity — after or alongside open catalog search, not instead of it for “find related assets” questions.
+
+## Asset details (`asset_details`)
+
+**View asset details:** call with `object_id` and `object_type` after shortlisting from `asset_explorer`; `fully_qualified_name` is not supported. Always returns details; auto profile for `oetable`/`oefile`; relationships for `oetable`.
+
+## Asset lineage (`asset_lineage`)
+
+**Trace data lineage:** upstream/downstream graph for **`oetable`** or **`oefile`** only (`object_id` + `object_type`, optional `depth`). Resolve the id via `asset_explorer` first when the user names an asset.
+
+## Knowledge search (`knowledge_search`)
+
+**Search knowledge & docs:** searches both data stories and OvalEdge product documentation (no corpus enum). Prefer `query`; optional story filters. Present `formattedResponse` / `storyCitation`. Not for physical catalog discovery — use `asset_explorer`. Details: [governance](governance#data-stories-organizational-knowledge).
 
 ## Who has access? (disambiguate first)
 
-Use workflow prompt **`resolve_object_access`**. Native RDAM → `source_system_access` with `access_intent_confirmed=native`; OvalEdge catalog ACL → `get_user_object_access` with `access_intent_confirmed=catalog_acl`. Skip disambiguation when the question includes native/DAM signals (native, remote, DAM, source system, …) or catalog ACL signals (OE security, ACL, catalog access, …). **Snowflake/Redshift/Tableau alone do not skip disambiguation** — e.g. “Who has access to BUSINESS.BANKING in Snowflake?” and “Who has access to customer1 in redshift1 in Redshift?” both require the **1** / **2** choice first. Server returns `ACCESS_INTENT_REQUIRED` when who-has-access directions omit `access_intent_confirmed`.
+Use workflow prompt **`resolve_object_access`**. Native RDAM → `access_explorer` with `operation=source_system_access` and `access_intent_confirmed=native`; OvalEdge catalog permissions → `access_explorer` with `operation=catalog_access` and `access_intent_confirmed=catalog_acl`. Skip disambiguation when the question includes native/DAM signals (native, remote, DAM, source system, …) or catalog-permissions signals (OE security, catalog permissions, catalog access; legacy “ACL”, …). **Snowflake/Redshift/Tableau alone do not skip disambiguation** — e.g. “Who has access to BUSINESS.BANKING in Snowflake?” and “Who has access to customer1 in redshift1 in Redshift?” both require the **1** / **2** choice first. Server returns `ACCESS_INTENT_REQUIRED` when who-has-access directions omit `access_intent_confirmed`.
+
+Do **not** treat generic first-person catalog inventory (“What tables can I see/access?” with no named principal and no named source) as who-has-access — use `asset_explorer` / `data_discovery` instead.
 
 ## Native source access (RDAM)
 
-Use **`source_system_access`** for **native** grants harvested from Redshift, Snowflake, or Tableau (RDAM SQL only — **no Elasticsearch**). This is **not** OvalEdge catalog ACL (`get_user_object_access`) and **not** catalog discovery.
+Use **`access_explorer`** with **`operation=source_system_access`** for **native** grants harvested from Redshift, Snowflake, or Tableau (RDAM SQL only — **no Elasticsearch**). This is **not** OvalEdge catalog permissions (`operation=catalog_access`) and **not** catalog discovery.
 
-**Never fall back to `search_catalog_assets`** when RDAM is empty, not-found, or errors — catalog search cannot return native grants. Report the RDAM/API outcome instead.
+Named objects: `asset_explorer` this tool fills `object_id`, `object_type`, `connection_id`, FQN/`object_path`, `object_name`, then DAM API. Known `object_id` and `object_type` → DAM API only. **Never fall back to `asset_explorer`** after RDAM is empty, not-found, or errors — report the DAM/API outcome.
+
+Bare first-person “What can I access?” / “What tables can I see?” **without** a named principal **and** without naming Redshift/Snowflake/Tableau → catalog discovery (`asset_explorer`). First-person **with** a named source (e.g. “What tables can I access in Redshift?”) → this RDAM path (ask for remote `username` / `connection_id` as needed). Named-principal questions (e.g. “What can `svc_analytics` access?”) stay here.
 
 **Workflow prompt:** `native_source_access` (pass `source_system` and the user’s question).
 
 | Parameter | Values / notes |
 |-----------|----------------|
 | `source_system` | **Required** — `redshift`, `snowflake`, `tableau` |
-| `query_direction` | **Required** — infer from question: `user_to_objects`, `object_to_users`, `browse` |
-| `username` | **Required** for `user_to_objects` only |
-| `object_path` | **Required** for `object_to_users` (exact). Optional parent scope for `browse`. For `user_to_objects` + `connection_id` + `object_type=table`, omit to list all tables on the connector |
-| `object_type` | **Required** for `browse` and whenever `object_path` is set |
+| `query_direction` | **Required** — infer from question: `user_to_objects`, `object_to_users`, `browse`, `role_to_users`, `group_to_users`, `user_to_roles`, `user_to_groups`, `group_to_roles`, `role_to_groups`, `role_to_parent_roles`, `role_to_privileges`, `group_to_privileges`, `user_to_privileges`, `privilege_to_roles`, `privilege_to_groups`, `privilege_to_users`, `privilege_to_principals` |
+| `username` | **Required** for `user_to_objects`, `user_to_roles`, `user_to_groups`, and `user_to_privileges` |
+| `object_path` | **Required** for `object_to_users` (exact) and membership/relationship directions that take a role, group, or privilege name (`role_to_*`, `group_to_*`, `privilege_to_*`). Optional parent scope for `browse`. For `user_to_objects` + `connection_id` + `object_type=table`, omit to list all tables on the connector |
+| `object_type` | **Required** for `browse` and grant directions whenever `object_path` is set. **Not** used for membership / relationship / privilege-reverse directions |
 | `include_columns` | Redshift only — column-level grants (default false) |
 | `connection_id` | **Required** for `browse`; strongly recommended for grants — from the user only, do not probe |
 | `resolve_all_matches` | When `object_path` is ambiguous, return all matches (max 50); default returns `matchCandidates` |
@@ -136,6 +166,20 @@ Use **`source_system_access`** for **native** grants harvested from Redshift, Sn
 | `user_to_objects` (all tables on connector) | `username`, `connection_id`, `object_type=table` (omit `object_path`) | “What **tables** can `svc_analytics` query?” |
 | `user_to_objects` (database level) | `username`, `object_path=BUSINESS`, `object_type=database`, `connection_id` | “What **database-level** permissions does `john_analyst` have?” |
 | `object_to_users` | `object_path`, `object_type`, `connection_id` recommended | “Who has native access to `prod_db.public.orders`?” (`object_type=table`) |
+| `role_to_users` | `object_path` or `object_name` (role name); optional `connection_id` | “Which users are assigned to role **SYSADMIN** in Snowflake?” |
+| `group_to_users` | `object_path` or `object_name` (group name); Redshift/Tableau only | “Which users belong to group **analysts** in Redshift?” |
+| `user_to_roles` | `username`; optional `connection_id` | “Which roles is **bhanu** assigned to?” |
+| `user_to_groups` | `username`; Redshift/Tableau only | “Which groups does **bhanu** belong to?” |
+| `group_to_roles` | `object_path` or `object_name` (group name); Redshift/Tableau only | “Which roles are linked to group **analysts**?” |
+| `role_to_groups` | `object_path` or `object_name` (role name); Redshift/Tableau only | “Which groups are linked to role **analyst_role**?” |
+| `role_to_parent_roles` | `object_path` or `object_name` (role name); direct parents only | “What are the parent roles of **SYSADMIN**?” |
+| `role_to_privileges` | `object_path` or `object_name` (role name) | “What privileges does role **SYSADMIN** have?” |
+| `group_to_privileges` | `object_path` or `object_name` (group name); Redshift/Tableau only | “What privileges does group **analysts** have?” |
+| `user_to_privileges` | `username`; optional `connection_id` | “What account privileges does **bhanu** have?” |
+| `privilege_to_roles` | `object_path` or `object_name` (privilege / perm-code name) | “Which roles have privilege **SELECT**?” |
+| `privilege_to_groups` | `object_path` or `object_name` (privilege name); Redshift/Tableau only | “Which groups have privilege **SELECT**?” |
+| `privilege_to_users` | `object_path` or `object_name` (privilege name) | “Which users have privilege **SELECT**?” |
+| `privilege_to_principals` | `object_path` or `object_name` (privilege name); Snowflake returns roles+users (groups skipped) | “Which principals have privilege **SELECT**?” |
 | `browse` | `connection_id`, `object_type`; optional `object_path` as parent | “List tables in `BUSINESS.BANKING`” |
 
 ### `object_path` formats
@@ -157,16 +201,16 @@ Partial paths (e.g. table name only) may return **`matchCandidates`** — disamb
 
 ### DAM object browse + scoped “who has access to all …”
 
-Use **`source_system_access`** for inventory browse and scoped grant rollups:
+Use **`access_explorer`** (`operation=source_system_access`) for inventory browse and scoped grant rollups:
 
 | User intent | Approach |
 |-------------|----------|
-| List databases / schemas / tables / columns in DAM | `source_system_access` with `query_direction=browse` |
-| Who can access **one** table or schema grant | `source_system_access` `object_to_users` (default `scope_mode=exact`) |
-| Who has access to **all objects under** a schema or database | `source_system_access` with `scope_mode=descendants` |
+| List databases / schemas / tables / columns in DAM | `access_explorer` `operation=source_system_access` with `query_direction=browse` |
+| Who can access **one** table or schema grant | `access_explorer` `operation=source_system_access` `object_to_users` (default `scope_mode=exact`) |
+| Who has access to **all objects under** a schema or database | `access_explorer` `operation=source_system_access` with `scope_mode=descendants` |
 | Schema inventory **and** access audit | Browse tables/columns, then scoped grants call |
 
-Do not use `search_catalog_assets` for either browse or native grants.
+Do not use `asset_explorer` for either browse or native grants. Without an explicit DAM / `connection_id` / named-source intent, “What tables are in X?” / first-person inventory is catalog discovery (`asset_explorer`), not this browse path.
 
 ### Grant models (what to expect in the response)
 
@@ -174,11 +218,11 @@ Do not use `search_catalog_assets` for either browse or native grants.
 - **Snowflake:** role assignment only (no direct user grants / groups).
 - **Tableau:** direct site-user grants and site-group grants on project/report (`grant_mechanism`: direct | group). Group access is expanded via harvested `rdam_usergroup` membership.
 
-**Authorization:** Instance or Connector **Data Access Admin** is enforced server-side; callers without DAA on the scoped connection see RDAM no-access. See [governance_model](governance_model#data-access-admin-daa). Deep routing (agent rules, privilege map, disambiguation): [rdam_source_access](rdam_source_access).
+**Authorization:** Instance or Connector **Data Access Admin** is enforced server-side; callers without DAA on the scoped connection see RDAM no-access. See [governance](governance#data-access-admin-daa). Deep routing (agent rules, privilege map, disambiguation): [rdam_source_access](rdam_source_access).
 
-## Catalog object access (`get_user_object_access`)
+## Catalog object access (`access_explorer` operation=catalog_access)
 
-OvalEdge **catalog ACL** grants (metadata read/write, data permissions) — **not** native DB/BI grants (`source_system_access`).
+OvalEdge **catalog permissions** grants (metadata read/write, data permissions) — **not** native DB/BI grants (`operation=source_system_access`).
 
 **Workflow prompt:** `catalog_object_access`.
 
@@ -187,11 +231,11 @@ OvalEdge **catalog ACL** grants (metadata read/write, data permissions) — **no
 | `user_to_object` | What access does user X have on object Y? (`username` required) |
 | `object_to_principals` | Which users and roles have access on object Y? |
 
-**Asset resolution (exactly one):** `object_id` + `object_type` (preferred after `search_catalog_assets`), `fully_qualified_name`, or `object_name` (may return `matchCandidates`).
+**Asset resolution (exactly one):** `object_id` + `object_type` (preferred after `asset_explorer`), `fully_qualified_name`, or `object_name` (may return `matchCandidates`).
 
 **Connectors:** `object_type=connection` (aliases: `connector`, `data source`) with `object_name`. Connectors are not in catalog search — resolve by display name or pass `object_id` from data-sources.
 
-**JDBC-backed types** (may be absent from Elasticsearch — use exclusive `search_catalog_assets` then access with ids from the hit):
+**JDBC-backed types** (may be absent from Elasticsearch — use exclusive `asset_explorer` then access with ids from the hit):
 
 | Type | object_type | Notes |
 |------|-------------|--------|
@@ -202,13 +246,13 @@ OvalEdge **catalog ACL** grants (metadata read/write, data permissions) — **no
 | Report Groups | `oedomain` | Search alone (aliases: `reportgroup`); not ES-indexed |
 | Data Stories | `oestory` | Access inherited from parent Story Zone — present `inheritedFrom` |
 
-When the user names a catalog asset, call `search_catalog_assets` first, then pass `object_id` and `object_type` from the chosen hit.
+When the user names a catalog asset, call `asset_explorer` first, then pass `object_id` and `object_type` from the chosen hit.
 
 ## Update asset descriptions (`update_asset_descriptions`)
 
 **Workflow prompt:** `document_asset_descriptions`.
 
-Resolve `object_id` via `search_catalog_assets`, `lookup_glossary_term`, or `lookup_tags` — do not guess ids. Required: `object_id`, `object_type`, and an explicit description slot.
+Resolve `object_id` via `asset_explorer` — do not guess ids. Required: `object_id`, `object_type`, and an explicit description slot.
 
 If the user says only "description", ask which slot applies — do not guess `business_description` vs `technical_description`. For multi-slot types, a typed field without `clientContext.prompt` naming the slot is rejected (HTTP 400).
 
@@ -228,32 +272,29 @@ If the user says only "description", ask which slot applies — do not guess `bu
 
 ## Resources (deep links by object id)
 
-Resources return JSON catalog documents from `GET /api/v1/mcp/object-details`. When you need rich narrative (story sections, tag create flow), prefer the **lookup tools** listed below.
+Resources return JSON catalog documents from `GET /api/v1/mcp/asset-details`. When you need rich narrative or citations, use `knowledge_search`; use `asset_explorer` for glossary terms and tags.
 
 | URI template | objectType | Prefer tool for |
 |--------------|------------|-----------------|
-| `ovaledge://catalog/table/{object_id}` | `oetable` | `catalog_asset_details` |
-| `ovaledge://catalog/file/{object_id}` | `oefile` | `catalog_asset_details` |
-| `ovaledge://governance/glossary-term/{object_id}` | `glossary` | `lookup_glossary_term` |
-| `ovaledge://governance/data-story/{object_id}` | `oestory` | `lookup_datastory` |
-| `ovaledge://governance/tag/{object_id}` | `oetag` | `lookup_tags` |
+| `ovaledge://catalog/table/{object_id}` | `oetable` | `asset_details` |
+| `ovaledge://catalog/file/{object_id}` | `oefile` | `asset_details` |
+| `ovaledge://governance/glossary-term/{object_id}` | `glossary` | `asset_explorer` |
+| `ovaledge://governance/data-story/{object_id}` | `oestory` | `knowledge_search` |
+| `ovaledge://governance/tag/{object_id}` | `oetag` | `asset_explorer` |
 
 Static platform markdown (this folder): `docs://ovaledge/{filename}`:
 
 | Resource URI | Topic |
 |--------------|--------|
 | `docs://ovaledge/mcp_workflows` | This routing guide (read first) |
-| `docs://ovaledge/overview` | OvalEdge product overview + MCP summary |
-| `docs://ovaledge/asset_types` | Catalog `object_type` allow-list |
-| `docs://ovaledge/glossary_guide` | Glossary create wizard |
-| `docs://ovaledge/tags_guide` | Tag create (OPEN/SECURE) wizard |
-| `docs://ovaledge/data_stories` | Data story lookup behavior |
-| `docs://ovaledge/governance_model` | Roles, DAA, governance concepts |
-| `docs://ovaledge/rdam_source_access` | Deep RDAM routing and disambiguation |
+| `docs://ovaledge/overview` | OvalEdge product overview + MCP read-tool summary |
+| `docs://ovaledge/asset_types` | Catalog `object_type` allow-list + filter guidance |
+| `docs://ovaledge/governance` | Roles, CDE, glossary/tag create, data stories, DAA summary |
+| `docs://ovaledge/rdam_source_access` | Deep RDAM / native grants routing |
 
 ## Workflow prompts
 
-Invoke by name from the MCP client when supported. Each prompt returns instruction text that tells the agent which tools to call in order. **20 prompts** registered (see `MCP_WORKFLOW_PROMPT_NAMES` in `server/mcp_surface.py`).
+Invoke by name from the MCP client when supported. Each prompt returns instruction text that tells the agent which tools to call in order. **22 prompts** registered (see `MCP_WORKFLOW_PROMPT_NAMES` in `server/mcp_surface.py`).
 
 ### Discovery
 
@@ -271,7 +312,7 @@ Invoke by name from the MCP client when supported. Each prompt returns instructi
 | `organizational_knowledge` | **Data stories first** — internal policies and narratives |
 | `explain_tag` | Tag lookup and tagged assets |
 | `explain_dq_rule` | Data quality rule lookup and steward context |
-| `platform_help` | OvalEdge product docs via `search_platform_docs` |
+| `platform_help` | OvalEdge product docs via `knowledge_search` |
 
 ### Lineage and quality
 
@@ -280,17 +321,17 @@ Invoke by name from the MCP client when supported. Each prompt returns instructi
 | `trust_assessment` | Scorecard: DQ, certification, lineage, roles |
 | `trace_data_lineage` | Upstream/downstream narrative |
 | `metadata_drift` | Changes between crawls |
-| `assess_cde_dq_coverage` | CDE columns: catalog search → read-only `assess_cde_dq`; optional writes after approval |
+| `assess_cde_dq_coverage` | CDE columns: catalog search → read-only `dq_rule_advisor` step=assess; optional writes after approval |
 | `create_custom_sql_dq_workflow` | CDE assess → associate/create_rules → generate/validate/create SQL via thin DQ tools |
 
 ### Access
 
 | Prompt | Purpose |
 |--------|---------|
-| `resolve_object_access` | Disambiguate native RDAM vs catalog ACL before calling an access tool |
-| `native_source_access` | Redshift / Snowflake / Tableau native grants (not catalog ACLs) |
-| `catalog_object_access` | OvalEdge catalog ACL (`get_user_object_access`) |
-| `dam_object_browse` | DAM inventory browse via `source_system_access` |
+| `resolve_object_access` | Disambiguate native RDAM vs catalog permissions before calling an access tool |
+| `native_source_access` | Redshift / Snowflake / Tableau native grants (not catalog permissionss) |
+| `catalog_object_access` | OvalEdge catalog permissions (`access_explorer` operation=catalog_access) |
+| `dam_object_browse` | DAM inventory browse via `access_explorer` operation=source_system_access |
 
 ### Governed writes (human-in-the-loop)
 
@@ -298,54 +339,90 @@ Invoke by name from the MCP client when supported. Each prompt returns instructi
 |--------|---------|
 | `create_business_glossary_term` | Guided `create_glossary_term` with pickers and confirm gate |
 | `create_governance_tag` | Guided `create_tag` (secure/open) with confirm gate |
+| `create_service_desk_request` | Resolve asset → look up template → confirm → `create_service_request` |
 | `document_asset_descriptions` | Draft + user confirm → `update_asset_descriptions` |
 | `assign_governance_roles` | Resolve target → confirm → `update_governance_roles` |
-| `assess_cde_dq_coverage` | CDE assess → lookup → associate / `create_dq_rules` with confirm gate |
-| `create_custom_sql_dq_workflow` | Custom SQL path: `generate_dq_queries` → `validate_dq_queries` → `create_sql_dq_rule` |
+| `assess_cde_dq_coverage` | CDE assess → lookup → associate / `dq_rule_manager` step=create_standard with confirm gate |
+| `create_custom_sql_dq_workflow` | Custom SQL path: `dq_rule_advisor` step=generate_query → `dq_rule_advisor` step=validate_query → `dq_rule_manager` step=create_custom_sql |
 
 ## Update CDE associations (`update_cde_associations`)
 
-Mark or unmark **Critical Data Element (CDE)** on catalog objects — tables, columns, files, file columns, schemas, charts, APIs, and queries. Resolve targets via `search_catalog_assets` first.
+Mark or unmark **Critical Data Element (CDE)** on catalog objects — tables, columns, files, file columns, schemas, charts, APIs, and queries. Resolve targets via `asset_explorer` first.
 
-**Required before auto-create:** `create_dq_rules` skips objects that are not **CDE=Yes** (per-row message explains this).
+**Required before auto-create:** `dq_rule_manager` step=create_standard skips objects that are not **CDE=Yes** (per-row message explains this).
 
 **Confirm gate:** call without `write_confirmed_by_user` for `confirm_update` preview → user approval → re-call with `write_confirmed_by_user=true` and `confirmation_token` from the preview.
 
-Often used before DQ workflows when the user wants to mark a table or column as CDE, or change CDE coverage after `assess_cde_dq`.
+Often used before DQ workflows when the user wants to mark a table or column as CDE, or change CDE coverage after `dq_rule_advisor` step=assess.
+
+## Create a service request (`create_service_request`)
+
+File an OvalEdge service desk ticket from user intent (access, content change, data quality).
+
+**Sample prompts (trigger `create_service_request` / `create_service_desk_request`):**
+
+| User says | Route |
+|-----------|--------|
+| “I want access to Loan_Data table” | `request_type=access`, resolve `Loan_Data` via `asset_explorer` |
+| “I need Data Read access for Customer table” | `access`; set **Permission** to `Data Read` (do not ask if the user already named it) |
+| “Create a content change request for Employee table” | `request_type=content` |
+| “Raise a Data Quality Rule Recommendation request” | `request_type=dataquality` — this is a **service desk ticket**, not `dq_rule_advisor`. Ask which table/file if none is named |
+| “I want access for Loan_Data, Employee_Details and Sales_Target” | Resolve each table; one ticket with comma-separated object ids when Select Table `allowMultiple` is true, otherwise one ticket per table |
+| “Raise an access request for these tables” | Use the prior shortlist; if none, ask which tables |
+
+1. Infer **request_type** (`access`, `content`, `dataquality`) and **object_type** (`table` → `oetable`).
+2. Call `asset_explorer` to resolve `object_id`, `object_type`, `connection_id`, and connection name/type. Do not invent ids.
+3. Call `create_service_request` **without** `summary` to look up the **Published and Active** template for that request type + object type (optional `connection_type` / `connection_name` / `connection_id`). If none is returned, the tool responds `template_not_found` even when `summary` is omitted — **stop**; never publish or activate a template from MCP. Present `formattedResponse`. Fill **summary** yourself. Use **fieldData / defaultValue** for dropdowns (Priority, Permission) unless the user already named a value. **Requested By** and **Requested for User** are the logged-in user. Ask only for required fields that have no default. If the user later asks to change a default, override it.
+4. **Do not invent** Business Description, Technical Description, tags, terms, or additional fields. Ask the user; if they skip, omit those fields.
+5. **Tags and terms:** if the user names any, pass those names in `ticket_fields` (Associated Tags / Associated Term). The backend checks whether they exist. Valid names are included; unknown names are omitted with a warning — still create the request. Do not block on invalid tags or terms.
+6. **Additional fields:** optional. When lookup returns `fieldData.additionalFields`, present each as **name (type)** plus allowed options for code fields. Ask `Field name = value` only for fields the user wants; skip the rest. Pass those as `custom_fields` keyed by fieldName. Do not invent field names or values. OvalEdge validates additional-field types on create; if the POST fails, show that error.
+7. **Field validations:** When lookup fields are present, MCP rejects unknown dropdown values and unparseable dates (`invalid_ticket_field`) before preview or POST. OvalEdge still enforces remaining lookup `validations` on create (character limits, URLs, additional-field types, and other rules MCP does not check). If a value is rejected, show that error and ask for a corrected value. Do not invent replacement copy for character limits or other unvalidated constraints.
+8. Re-call with `ticket_template_id`, `object_id` (one id, a list, or comma-separated ids when Select Table `allowMultiple` is true), `summary`, and any user-supplied `ticket_fields`. After merge, if required catalog fields are still empty (for example Select Table without `object_id`), the tool stays in `collect_fields` — do not skip to **confirm_create**. Summary is a top-level argument, not a remaining ticket field.
+9. After explicit user approval of the `confirm_create` preview (`formattedResponse`, `confirmationToken`), re-call with `write_confirmed_by_user=true` and `confirmation_token`. Show any `warnings` from the created ticket.
+
+**Published / Active only.** Lookup returns only templates that are Published and Active. Draft, unpublished, or inactive templates are not usable from MCP. **Field dependencies:** templates whose fields use `dependsOn` during create are skipped, except **Tags, Terms, Business Description, Technical Description, and Additional Fields**. If lookup fails for Depends-On fields, show that error to the user and **stop** — do not try to create the request. If lookup finds no Published and Active template, show the error, tell the user to publish and activate a template in OvalEdge (Service Desk admin), and **stop**.
+
+**Never change template status from MCP.** If the user asks you to publish, activate, or otherwise update template status from this chat, refuse. That is not a legal MCP action — there is no tool for it, and you must not attempt it via other APIs.
+
+**Not** `access_explorer` — this creates a ticket; it does not list native grants or catalog permissions.
+
+**Workflow prompt:** `create_service_desk_request`.
 
 ## Human confirmation before write (MCP-only)
 
-`create_glossary_term`, `create_tag`, `update_asset_descriptions`, `update_governance_roles`, `update_custom_field_value`, `update_cde_associations`, `associate_dq_rule_objects`, `create_dq_rules`, `validate_dq_queries`, and `create_sql_dq_rule` require **`write_confirmed_by_user=true`** on the call that performs the OvalEdge POST (unless `dry_run=true` on update tools). Earlier calls return **`confirm_create`** or **`confirm_update`** previews (`doNotCreate` / `doNotUpdate`) with `formattedResponse` and **`confirmationToken`** — the agent must show them and wait for explicit user approval.
+`create_glossary_term`, `create_tag`, `create_service_request`, `update_asset_descriptions`, `update_governance_roles`, `update_custom_field_value`, `update_cde_associations`, `dq_rule_manager` step=associate, `dq_rule_manager` step=create_standard, `dq_rule_advisor` step=validate_query, and `dq_rule_manager` step=create_custom_sql require **`write_confirmed_by_user=true`** on the call that performs the OvalEdge POST (unless `dry_run=true` on update tools). Earlier calls return **`confirm_create`** or **`confirm_update`** previews (`doNotCreate` / `doNotUpdate`) with `formattedResponse` and **`confirmationToken`** — the agent must show them and wait for explicit user approval.
 
-This gate is enforced in the MCP server (preview tokens, `write_confirmed_by_user`). The OvalEdge backend enforces RBAC and business rules on the actual POST (e.g. CDE prerequisite and skip reasons on `create_dq_rules`).
+This gate is enforced in the MCP server (preview tokens, `write_confirmed_by_user`). The OvalEdge backend enforces RBAC and business rules on the actual POST (e.g. CDE prerequisite and skip reasons on `dq_rule_manager` step=create_standard).
 
-See also: [glossary_guide](glossary_guide), [tags_guide](tags_guide), [data_stories](data_stories), [governance_model](governance_model).
+See also: [governance](governance), [asset_types](asset_types), [overview](overview), [rdam_source_access](rdam_source_access).
 
 ## CDE / DQ intelligence (MCP)
 
 End-to-end routing for function-based and custom-SQL data quality workflows.
 
+**Ladder (do not skip):** (1) `dq_rule_advisor` step=assess → present `recommendedFunction` / `recommendedFunctionCandidates` and `recommendedRuleId` when an existing rule matches the object's business context; (2) `dq_rule_manager` step=create_standard with `prefer_existing_rule=true` — associates to that existing rule when `recommendedRuleId` is set, otherwise creates; (3) only when `recommendedFunction` is Not Identified **and** no usable catalog candidates remain **and** the user confirms custom SQL → generate_query → validate_query → create_custom_sql with the `recommendedFunction` name from generate/assess. Use exact OvalEdge catalog function names only — never invent labels such as “Max Length Check”. Retry policy: auto-retry the last successful ladder step once; if it still fails, stop and ask the user.
+
 ### Read-only path
 
-1. `search_catalog_assets` with `critical_data_element=Yes` (types: `oetable`, `oecolumn`, `oefile`, `oefilecolumn`), **or** pass known `objects` to `assess_cde_dq`.
-2. `assess_cde_dq` — recommended function and `existingRulesForFunction` (all active rules using that function, purpose-ranked but never filtered by purpose).
-3. Optional: `lookup_dq_rule` when the user names an existing rule (rules are not in catalog search).
+1. `asset_explorer` with `critical_data_element=Yes` (types: `oetable`, `oecolumn`, `oefile`, `oefilecolumn`), **or** pass known `objects` to `dq_rule_advisor` step=assess.
+2. `dq_rule_advisor` step=assess — recommended function and `recommendedRuleId` when an existing same-function rule matches the object's business description / business rule.
+3. Optional: `dq_rule_advisor` step=lookup when the user names an existing rule (rules are not in catalog search).
 
 ### Write path (function-based auto-create / associate)
 
 | Step | Tool | Notes |
 |------|------|--------|
 | Mark CDE (prerequisite) | `update_cde_associations` | Object must be **CDE=Yes** before auto-create; tables, columns, files, schemas, charts, APIs, queries; **confirm gate** |
-| Select or create | `create_dq_rules` | Re-assesses internally; same-function rules require user selection; new create has **confirm gate** |
-| Link to known rule only | `associate_dq_rule_objects` | When `dqrule_id` is known; does not auto-create; **confirm gate** |
+| Associate or create | `dq_rule_manager` step=create_standard | Re-assesses internally; associates to a context-matching existing rule when `prefer_existing_rule=true`; skip if already associated; **confirm gate** covers associate and create |
+| Link to known rule only | `dq_rule_manager` step=associate | When `dqrule_id` is known; does not auto-create; **confirm gate** |
 
-**`create_dq_rules` routing (agent):**
+**`dq_rule_manager` step=create_standard routing (agent):**
 
 | User intent | Parameters |
 |-------------|------------|
 | One named column/table (after reading its description) | `objects=[{"objectId": <id>, "objectType": "oecolumn"}]`, `discover_cde_columns=false` — **do not** discover-all |
 | List / assess all CDE columns in a domain | `discover_cde_columns=true` (or explicit multi-object `objects`) |
-| “Create data quality rule” / from business description (default) | `prefer_existing_rule=true` lists every same-function rule; ask user to select an ID or explicitly choose new |
+| “Create data quality rule” / from business description (default) | `prefer_existing_rule=true` associates to a context-matching existing rule when found; otherwise creates |
 | “Create **new** rule” / second rule / different purpose on same object | `prefer_existing_rule=false`; often `skip_duplicate_function_on_object=false` |
 | Criteria only in user message, not in catalog | `supplemental_criteria_text` |
 | Pick a function from assess candidates | `preferred_function_name` |
@@ -356,13 +433,15 @@ End-to-end routing for function-based and custom-SQL data quality workflows.
 **Function recommendation (assess):**
 
 1. Match business metadata (description / rule / term text) against catalog DQ function **names and definitions** → ranked `recommendedFunctionCandidates` (top also in `recommendedFunction`).
-2. Present candidates to the user. If they reject them, re-call `assess_cde_dq` with `excluded_function_names` for the next-closest set.
-3. Only when **no** strong catalog function candidates remain → `recommendedWorkflow=custom_sql` (last resort) with the **best-match OEQUERY SQL function** when available (e.g. **SQL Exact Value** for “equal to X”, **SQL Values Contains** for `IN` / `NOT IN` or allowed-value sets, **SQL Value Range** for ranges) → `generate_dq_queries` / `create_sql_dq_rule` using that `recommendedFunction` verbatim.
-4. Weak catalog matches (low score) do **not** block the custom-SQL last resort. Preserve the returned function family through create; do not replace Values Contains or Value Range with Exact Value.
+2. Present candidates to the user using **exact OE catalog names only** (e.g. **Data Length Range**). Never invent labels such as “Max Length Check”, “Length Check”, or similar non-catalog names.
+3. If they reject candidates, re-call `dq_rule_advisor` step=assess with `excluded_function_names` for the next-closest set. Prefer `create_standard` with an exact candidate name when `recommendedFunction` is Not Identified but candidates are present.
+4. Only when **no** recommendedFunction / candidates remain → ask user to confirm custom SQL → `recommendedWorkflow=custom_sql` (last resort) with the **best-match OEQUERY** `recommendedFunction` when available (e.g. **SQL Exact Value** for “equal to X”, **SQL Values Contains** for `IN` / `NOT IN` or allowed-value sets, **SQL Value Range** for ranges) → `dq_rule_advisor` step=generate_query → validate_query → `dq_rule_manager` step=create_custom_sql using that `recommendedFunction` name verbatim (never invent SQL or placeholders like `CUSTOM_SQL`).
+5. Weak matches (low score) do **not** block the custom-SQL last resort. Preserve the returned `recommendedFunction` through create.
+6. **Retry policy:** on error, auto-retry the last successful ladder step **once**. If it still fails, **stop and ask the user** whether to retry again. Retry again only if the user explicitly says yes; if they decline, stop. Never invent SQL or `recommendedFunction` names.
 
 **`prefer_existing_rule` behavior:**
 
-- **`true` (default):** Assessment returns every active rule with the recommended function in `existingRulesForFunction`. Purpose similarity only sorts the list; it never removes a same-function rule. The MCP preview returns `select_existing_rule` without a create token. Ask the user to choose a `dqruleId`, then use `associate_dq_rule_objects`.
+- **`true` (default):** If assess finds an existing same-function rule whose purpose/criteria match the object's business description or business rule, `create_standard` **associates** that object to the recommended rule (`recommendedRuleId`) instead of creating a new one. Unrelated same-function rules are ignored. If `associatedToDqRule` is already true, skip the write.
 - **`false`:** Explicitly request a **new** data quality rule. The normal create confirmation gate applies.
 - Criteria are parsed from business metadata first. A create response reports `criteriaSource=business_metadata`, `business_metadata_with_defaults`, `function_default`, `not_required`, or `unresolved`; `criteriaMessage` explains partial/failed parsing, defaults applied, or required manual review.
 
@@ -377,7 +456,7 @@ End-to-end routing for function-based and custom-SQL data quality workflows.
 | Associate failed | Could not link to recommended rule |
 | Rule name exists / insert failed | Create collision or server error |
 
-Missing success/input criteria do **not** block create — function defaults are applied when metadata has none.
+Missing success/input criteria do **not** block create — Business Rule, `supplemental_criteria_text`, then function defaults are applied. Create returns `criteriaSource` / `criteriaMessage` instead of `criteria_missing`.
 
 Present skipped/failed rows and `message` to the user; fix prerequisites (CDE, flags) before re-calling.
 
@@ -385,10 +464,10 @@ Present skipped/failed rows and `message` to the user; fix prerequisites (CDE, f
 
 | Step | Tool | Notes |
 |------|------|--------|
-| Assess | `assess_cde_dq` | When workflow is `custom_sql` |
-| Generate SQL | `generate_dq_queries` | Read-only; not for function-based rules (use `create_dq_rules`) |
-| Validate | `validate_dq_queries` | Executes SELECT on connection; **confirm gate** |
-| Create rule | `create_sql_dq_rule` | After validate when `canCreateRule`; **confirm gate** |
+| Assess | `dq_rule_advisor` step=assess | When workflow is `custom_sql` |
+| Generate SQL | `dq_rule_advisor` step=generate_query | Read-only; not for function-based rules (use `dq_rule_manager` step=create_standard) |
+| Validate | `dq_rule_advisor` step=validate_query | Executes SELECT on connection; **confirm gate** |
+| Create rule | `dq_rule_manager` step=create_custom_sql | After validate when `canCreateRule`; **confirm gate** |
 
 **Workflow prompts:** `assess_cde_dq_coverage` (pass `scope` = user question or domain name); `create_custom_sql_dq_workflow` for the full custom-SQL path.
 

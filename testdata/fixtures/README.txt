@@ -9,7 +9,7 @@ How to test in OvalEdge:
   2. Open Business Description in the catalog UI.
   3. Paste plain file into plain-text / wiki plain view (if supported).
   4. Paste HTML file into rich wiki / HTML editor (or API update-asset-descriptions).
-  5. In Cursor, call catalog_asset_details for that object_id + object_type.
+  5. In Cursor, call asset_details for that object_id + object_type.
 
 Expected after MCP slimming (oe_mcp with mcp_response_slim):
   - Tool succeeds (no "Tool result is too large")

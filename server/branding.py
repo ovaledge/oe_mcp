@@ -59,7 +59,9 @@ def resolve_mcp_icon_src() -> str | None:
     """
     Icon URL for MCP ``initialize`` metadata.
 
-    - **stdio**: embedded data URI (Cursor usually shows a letter avatar anyway).
+    - **stdio**: no icon. Cursor shows a letter avatar for command servers, and a
+      data-URI PNG inflates ``initialize`` enough to lose the ``tools/list`` race
+      when the client restarts the process.
     - **HTTP / Lambda**: HTTPS ``GET /brand/...`` when configured. Cursor generally
       **does not** load icons from ``http://127.0.0.1`` — set ``MCP_BRAND_ICON_BASE_URL``
       to your deployed API Gateway URL for local dev.
@@ -68,7 +70,7 @@ def resolve_mcp_icon_src() -> str | None:
     if not icon_file.is_file():
         return None
     if _stdio_transport():
-        return _data_uri_icon_src()
+        return None
 
     public_url = brand_icon_public_url()
     if public_url:
@@ -85,15 +87,15 @@ def mcp_server_icons() -> list[Icon] | None:
     icons = [
         Icon(
             src=src,
-            mimeType="image/png",
+            mime_type="image/png",
             sizes=["48x48"],
         ),
         Icon(
             src=src,
-            mimeType="image/png",
+            mime_type="image/png",
             sizes=["96x96"],
         ),
     ]
     if src.startswith("data:"):
-        icons.append(Icon(src=src, mimeType="image/png", sizes=["any"]))
+        icons.append(Icon(src=src, mime_type="image/png", sizes=["any"]))
     return icons

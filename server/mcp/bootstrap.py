@@ -7,7 +7,7 @@ from fastmcp import FastMCP
 from server.docs import register as register_doc_resources
 from server.prompts import register as register_prompts
 from server.resources import register as register_mcp_resources
-from server.tools import access, catalog, dataquality, docs, governance, rdam
+from server.tools import access, catalog, dataquality, docs, governance, rdam, servicedesk
 
 
 def register_all(mcp: FastMCP) -> None:
@@ -20,3 +20,4 @@ def register_all(mcp: FastMCP) -> None:
     register_prompts(mcp)
     register_doc_resources(mcp)
     dataquality.register(mcp)
+    servicedesk.register(mcp)

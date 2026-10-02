@@ -2,7 +2,7 @@
 
 Guides for connecting **OvalEdge MCP** from common editors and assistants.
 
-**Last reviewed:** July 2026.
+**Last reviewed:** September 2026.
 
 | Client | Local (stdio) | Remote HTTP (`remote_credentials`) | Remote OAuth (`AUTH_MODE=remote` / Okta) |
 | ------ | --------------- | ---------------------------------- | ---------------------------------------- |
@@ -11,8 +11,12 @@ Guides for connecting **OvalEdge MCP** from common editors and assistants.
 | **Claude** (Desktop, Chat, Code) | [SETUP_CLAUDE.md](SETUP_CLAUDE.md) | [SETUP_CLAUDE.md](SETUP_CLAUDE.md) (`mcp-remote` / headers) | [SETUP_CLAUDE.md](SETUP_CLAUDE.md#remote-oauth-auth_moderremote) |
 | **VS Code + GitHub Copilot** | [SETUP_VSCODE_GITHUB_COPILOT.md](SETUP_VSCODE_GITHUB_COPILOT.md#local-stdio-optional) | [SETUP_VSCODE_GITHUB_COPILOT.md](SETUP_VSCODE_GITHUB_COPILOT.md#remote-http-remote_credentials) | [SETUP_VSCODE_GITHUB_COPILOT.md](SETUP_VSCODE_GITHUB_COPILOT.md#remote-oauth-auth_moderremote) |
 | **Microsoft Copilot** (Studio / Teams / M365 agents) | — | [SETUP_MICROSOFT_COPILOT.md](SETUP_MICROSOFT_COPILOT.md) (API key) | [SETUP_MICROSOFT_COPILOT.md](SETUP_MICROSOFT_COPILOT.md#remote-oauth-auth_moderremote) |
+| **Snowflake Cortex** (Agents / Intelligence) | — | — (OAuth only) | [SETUP_SNOWFLAKE_CORTEX.md](SETUP_SNOWFLAKE_CORTEX.md) |
+| **ChatGPT / Codex** | — | — (directories reject header auth) | [SETUP_CODEX.md](SETUP_CODEX.md) |
 
-**Okta Sign-in redirect URI allowlist** (Cursor, Claude, GitHub Copilot, Microsoft Copilot): [README_REMOTE_MCP.md — Okta redirect URIs (all clients)](../../README_REMOTE_MCP.md#okta-redirect-uris-all-clients).
+**Okta Sign-in redirect URI allowlist** (Cursor, Claude, ChatGPT/Codex, GitHub Copilot, Microsoft Copilot, Snowflake Cortex): [README_REMOTE_MCP.md — Okta redirect URIs (all clients)](../../README_REMOTE_MCP.md#okta-redirect-uris-all-clients).
+
+**Public directories** (Claude Connectors, Claude plugin directory, OpenAI/Codex Plugins Directory): [PUBLISH_DIRECTORIES.md](PUBLISH_DIRECTORIES.md).
 
 **Do not mix guides**
 
@@ -22,6 +26,8 @@ Guides for connecting **OvalEdge MCP** from common editors and assistants.
 | **Microsoft Copilot** | Copilot Studio MCP wizard + publish/Agent Store — not `mcp.json` |
 | **Cursor / Kiro** | `mcpServers` in Cursor/Kiro MCP JSON |
 | **Claude Desktop** | `claude_desktop_config.json` (often via `mcp-remote` for remote HTTP) |
+| **ChatGPT / Codex** | ChatGPT Plugins / Codex `mcp.json` or `plugins/codex-ovaledge` — [SETUP_CODEX.md](SETUP_CODEX.md) |
+| **Snowflake Cortex** | External MCP server + API integration in Snowflake — [SETUP_SNOWFLAKE_CORTEX.md](SETUP_SNOWFLAKE_CORTEX.md) (not `mcp.json`) |
 
 **Microsoft Copilot quick path**
 
@@ -29,6 +35,20 @@ Guides for connecting **OvalEdge MCP** from common editors and assistants.
 2. Test in Studio (generative orchestration on).
 3. Enable **Microsoft 365 Copilot** / **Teams** channel → Publish → admin approve for org.
 4. Users open the agent from **Built by your org** / Teams Apps / Studio share link — not default Copilot chat.
+
+**Snowflake Cortex quick path**
+
+1. Deploy MCP with `AUTH_MODE=remote` and `MCP_JSON_RESPONSE=true` (default).
+2. Add Okta redirect `https://identity.snowflake.com/oauth2/callback`.
+3. Create a Snowflake API integration + `EXTERNAL MCP SERVER`, attach it to a Cortex Agent — [SETUP_SNOWFLAKE_CORTEX.md](SETUP_SNOWFLAKE_CORTEX.md).
+4. Users **Connect** the connector in Snowflake Intelligence, then chat.
+
+**ChatGPT / Codex quick path**
+
+1. Deploy MCP with `AUTH_MODE=remote` (HTTPS `/mcp`).
+2. Add Okta redirects (`chatgpt.com/connector_platform_oauth_redirect` plus the per-app callback, and the Codex loopback URI).
+3. Connect in ChatGPT developer mode or Codex — [SETUP_CODEX.md](SETUP_CODEX.md).
+4. Public directory listing is a separate portal — [PUBLISH_DIRECTORIES.md](PUBLISH_DIRECTORIES.md).
 
 **Shared references**
 
@@ -40,8 +60,8 @@ Guides for connecting **OvalEdge MCP** from common editors and assistants.
 - MCP tools, resources, and workflow prompts: [server/docs/mcp_workflows.md](../../server/docs/mcp_workflows.md) (also `docs://ovaledge/mcp_workflows` when the server is connected)
 - Agent routing and human-in-the-loop creates: [README.md](../../README.md#agent-guidance-mirrors-serverapppy-instructions)
 
-**Workflow prompts** (optional): invoke by name in clients that support MCP prompts — e.g. `organizational_knowledge` for data-story questions (uses `lookup_datastory`, not platform docs), `platform_help` for OvalEdge product how-to, `create_governance_tag` / `create_business_glossary_term` for guided writes with **`write_confirmed_by_user`** after you approve the preview.
+**Workflow prompts** (optional): invoke by name in clients that support MCP prompts — e.g. `organizational_knowledge` for data-story questions and `platform_help` for OvalEdge product how-to (both use `knowledge_search`), `create_governance_tag` / `create_business_glossary_term` for guided writes with **`write_confirmed_by_user`** after you approve the preview.
 
-**Quick routing:** organizational policy/playbooks → `lookup_datastory`; physical datasets → `search_catalog_assets`; OvalEdge UI/features → `search_platform_docs`; native Redshift/Snowflake/Tableau grants → `source_system_access`.
+**Quick routing:** organizational policy/playbooks or OvalEdge UI/features → `knowledge_search`; physical datasets → `asset_explorer`; native Redshift/Snowflake/Tableau grants → `access_explorer` with `operation=source_system_access`.
 
 **Placeholders:** in remote HTTP examples, **`YOUR_PUBLIC_MCP_BASE_URL`** is only the **MCP client → MCP server** host (plus you keep **`https://`** and **`/mcp`** as in your deploy **`MCPEndpointUrl`**). It is **not** OvalEdge’s **`OVALEDGE_BASE_URL`**. Local stdio examples use **`YOUR_OVALEDGE_APP_BASE_URL`** for the latter.
