@@ -5,8 +5,7 @@
 [Developer mode and MCP apps in ChatGPT](https://help.openai.com/en/articles/12584461-developer-mode-and-full-mcp-connectors-in-chatgpt) · [Connect and test your plugin](https://developers.openai.com/plugins/deploy/connect-chatgpt) · [Codex plugins](https://developers.openai.com/codex/plugins) · [Package plugins](https://developers.openai.com/plugins/build/plugins)
 
 OpenAI **ChatGPT** and **Codex** share one Plugins Directory (“With MCP”). This
-guide is **day-to-day connection** for a deployed OvalEdge MCP server. Store
-submission and remaining checklist: [PUBLISH_DIRECTORIES.md](PUBLISH_DIRECTORIES.md).
+guide is **day-to-day connection** for a deployed OvalEdge MCP server.
 
 Not for Claude — see [SETUP_CLAUDE.md](SETUP_CLAUDE.md). Not for GitHub Copilot
 in VS Code — see [SETUP_VSCODE_GITHUB_COPILOT.md](SETUP_VSCODE_GITHUB_COPILOT.md).
@@ -117,8 +116,7 @@ resources: deploy, open the connection, **Refresh**, then start a new chat.
 
 - **Workspace Publish** (ChatGPT admin) shares the plugin **inside your OpenAI
   workspace only**.
-- The **public** ChatGPT + Codex Plugins Directory is a separate portal:
-  [PUBLISH_DIRECTORIES.md](PUBLISH_DIRECTORIES.md#d-openai--codex-plugins-directory-chatgpt--codex).
+- The **public** ChatGPT + Codex Plugins Directory is a separate portal.
 
 ---
 
@@ -235,8 +233,6 @@ Studio still receive the **JSON body** and `formattedResponse`. Do not expect
 the widget in Codex. Never show `ovaledge://` URIs to users — use `navLink` or
 `redirectUrl`.
 
-Directory screenshot rules: [PUBLISH_DIRECTORIES.md](PUBLISH_DIRECTORIES.md) (D10).
-
 ---
 
 ## Domain verification (directory only)
@@ -272,9 +268,6 @@ Present `formattedResponse` when the tool returns it. Routing playbook:
 [server/docs/mcp_workflows.md](../../server/docs/mcp_workflows.md)
 (`docs://ovaledge/mcp_workflows` when the server is connected).
 
-Suggested directory cases (5 positive + 3 negative):
-[PUBLISH_DIRECTORIES.md](PUBLISH_DIRECTORIES.md#suggested-directory-test-cases).
-
 ---
 
 ## Troubleshooting
@@ -294,7 +287,6 @@ Suggested directory cases (5 positive + 3 negative):
 
 ## Shared references
 
-- Pending store checklist: [PUBLISH_DIRECTORIES.md](PUBLISH_DIRECTORIES.md)
 - Remote auth and TLS: [README_REMOTE_MCP.md](../../README_REMOTE_MCP.md)
 - Plugin packages: [plugins/README.md](../../plugins/README.md)
 - Client index: [README.md](README.md)

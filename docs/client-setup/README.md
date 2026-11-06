@@ -16,8 +16,6 @@ Guides for connecting **OvalEdge MCP** from common editors and assistants.
 
 **Okta Sign-in redirect URI allowlist** (Cursor, Claude, ChatGPT/Codex, GitHub Copilot, Microsoft Copilot, Snowflake Cortex): [README_REMOTE_MCP.md — Okta redirect URIs (all clients)](../../README_REMOTE_MCP.md#okta-redirect-uris-all-clients).
 
-**Public directories** (Claude Connectors, Claude plugin directory, OpenAI/Codex Plugins Directory): [PUBLISH_DIRECTORIES.md](PUBLISH_DIRECTORIES.md).
-
 **Do not mix guides**
 
 | Product | Config surface |
@@ -48,7 +46,6 @@ Guides for connecting **OvalEdge MCP** from common editors and assistants.
 1. Deploy MCP with `AUTH_MODE=remote` (HTTPS `/mcp`).
 2. Add Okta redirects (`chatgpt.com/connector_platform_oauth_redirect` plus the per-app callback, and the Codex loopback URI).
 3. Connect in ChatGPT developer mode or Codex — [SETUP_CODEX.md](SETUP_CODEX.md).
-4. Public directory listing is a separate portal — [PUBLISH_DIRECTORIES.md](PUBLISH_DIRECTORIES.md).
 
 **Shared references**
 

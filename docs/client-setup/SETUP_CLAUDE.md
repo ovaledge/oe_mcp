@@ -158,7 +158,7 @@ claude plugin marketplace add ./
 
 The marketplace catalog is [`.claude-plugin/marketplace.json`](../../.claude-plugin/marketplace.json). Do not put Okta secrets in the plugin.
 
-Public plugin-directory submission (separate from Claude.ai **Connectors**): [PUBLISH_DIRECTORIES.md](PUBLISH_DIRECTORIES.md#c-claude-plugin-directory-claude-code--cowork).
+Public plugin-directory submission is separate from Claude.ai **Connectors**. Use the plugin commands above for a private install.
 
 ---
 
@@ -166,7 +166,7 @@ Public plugin-directory submission (separate from Claude.ai **Connectors**): [PU
 
 Custom **Connect** (above) works today for any Team/Enterprise user who pastes `https://YOUR_PUBLIC_MCP_BASE_URL/mcp`.
 
-Listing in Anthropic’s **Connectors Directory** is a portal submission (Owners on Team/Enterprise). Skills are not a standalone connector type. Checklist: [PUBLISH_DIRECTORIES.md](PUBLISH_DIRECTORIES.md#b-claude-connectors-directory-claudeai).
+Listing in Anthropic’s **Connectors Directory** is a portal submission (Owners on Team/Enterprise). Skills are not a standalone connector type.
 
 ---
 
@@ -182,6 +182,5 @@ Listing in Anthropic’s **Connectors Directory** is a portal submission (Owners
 ## Shared references
 
 - Remote auth and TLS: [README_REMOTE_MCP.md](../../README_REMOTE_MCP.md)
-- Directory / plugin publish: [PUBLISH_DIRECTORIES.md](PUBLISH_DIRECTORIES.md)
 - Local stdio env: [README_LOCAL_MCP.md](../../README_LOCAL_MCP.md)
 - Client index: [README.md](README.md)
