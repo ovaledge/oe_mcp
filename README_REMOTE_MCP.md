@@ -121,7 +121,6 @@ Then add any **Microsoft Copilot Studio** redirect URLs the wizard shows (per en
 | GitHub Copilot (VS Code) | [SETUP_VSCODE_GITHUB_COPILOT.md](docs/client-setup/SETUP_VSCODE_GITHUB_COPILOT.md#remote-oauth-auth_moderremote) |
 | Microsoft Copilot Studio | [SETUP_MICROSOFT_COPILOT.md](docs/client-setup/SETUP_MICROSOFT_COPILOT.md#remote-oauth-auth_moderremote) |
 | Snowflake Cortex | [SETUP_SNOWFLAKE_CORTEX.md](docs/client-setup/SETUP_SNOWFLAKE_CORTEX.md) |
-| Directory / plugin publish | [PUBLISH_DIRECTORIES.md](docs/client-setup/PUBLISH_DIRECTORIES.md) |
 
 ### Confidential Okta apps (client secret)
 

@@ -8,10 +8,9 @@ The MCP **server** is still this repo’s `AUTH_MODE=remote` HTTPS `/mcp` proces
 | `plugins/claude-ovaledge/` | Claude Code / Cowork | `.claude-plugin/marketplace.json` |
 | `plugins/codex-ovaledge/` | ChatGPT + Codex | `.agents/plugins/marketplace.json` |
 
-How to connect, and what is still required for public directories:
+How to connect:
 [docs/client-setup/SETUP_CLAUDE.md](../docs/client-setup/SETUP_CLAUDE.md),
-[docs/client-setup/SETUP_CODEX.md](../docs/client-setup/SETUP_CODEX.md),
-[docs/client-setup/PUBLISH_DIRECTORIES.md](../docs/client-setup/PUBLISH_DIRECTORIES.md).
+[docs/client-setup/SETUP_CODEX.md](../docs/client-setup/SETUP_CODEX.md).
 
 Do not put secrets, Okta client secrets, or live challenge tokens in these files.
 The Codex `mcp.json` URL uses the placeholder `YOUR_PUBLIC_MCP_BASE_URL` until you
