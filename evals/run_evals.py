@@ -119,7 +119,7 @@ def run_metrics(threshold: float, cases_json: str | None) -> tuple[int, list[Met
         try:
             # MCPUseMetric.measure(async_mode=True) runs a_measure but does not return
             # self.score (library quirk); read score from the metric instance.
-            m_use.measure(case, _log_metric_to_confident=False)
+            m_use.measure(case)
             _append_metric_report(
                 reports,
                 metric=m_use,
@@ -138,7 +138,7 @@ def run_metrics(threshold: float, cases_json: str | None) -> tuple[int, list[Met
     task_m = MCPTaskCompletionMetric(threshold=threshold, model=model, verbose_mode=False)
     try:
         tc = golden_cases.golden_task_completion_discovery()
-        task_m.measure(tc, _log_metric_to_confident=False)
+        task_m.measure(tc)
         _append_metric_report(
             reports,
             metric=task_m,
@@ -158,7 +158,7 @@ def run_metrics(threshold: float, cases_json: str | None) -> tuple[int, list[Met
         multi_m = MultiTurnMCPUseMetric(threshold=threshold, model=model, verbose_mode=False)
         try:
             tc = getattr(golden_cases, fn_name)()
-            multi_m.measure(tc, _log_metric_to_confident=False)
+            multi_m.measure(tc)
             _append_metric_report(
                 reports,
                 metric=multi_m,

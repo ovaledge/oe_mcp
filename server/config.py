@@ -99,6 +99,11 @@ class Settings(BaseSettings):
     # enables GET on ``/mcp`` for long-lived sessions — required for Cursor (and similar)
     # clients that fall back to SSE / GET after Streamable HTTP negotiation.
     mcp_http_stateless: bool = True
+    # POST /mcp replies as ``application/json`` instead of ``text/event-stream``.
+    # Required for clients such as Snowflake Cortex that send
+    # ``Accept: application/json`` only (FastMCP SSE mode then returns -32600 Not Acceptable).
+    # Spec-compliant clients that advertise both types still accept a JSON body.
+    mcp_json_response: bool = True
 
     # ── Local MCP — OvalEdge user token credentials ──────────────
     ovaledge_user_token: str = ""
@@ -125,6 +130,10 @@ class Settings(BaseSettings):
     # Space-separated scopes advertised in discovery / registration (Okta: openid profile email).
     oauth_scopes: str = "openid profile email"
     mcp_public_base_url: str = ""
+    # OpenAI plugin directory domain verification. Served as the exact body of
+    # GET /.well-known/openai-apps-challenge (unauthenticated). Empty → 404.
+    # Paste the portal token at deploy time; never commit the live value.
+    openai_apps_challenge: str = ""
     # Optional HTTPS base for MCP ``initialize`` icon URL only (``GET /brand/...``).
     # Use when MCP runs on localhost but Cursor must fetch the icon from a public URL.
     mcp_brand_icon_base_url: str = ""

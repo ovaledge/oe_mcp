@@ -4,9 +4,10 @@
 
 - [ ] Confirmed OvalEdge API path and method (GET vs POST) with backend team or OpenAPI
 - [ ] No existing tool already calls this path (grep `MCP_PATH_` and path string)
-- [ ] Tool name is verb-led snake_case (`search_*`, `lookup_*`, `create_*`, `update_*`; established nouns like `source_system_access` only when already in the surface)
+- [ ] Tool `name` follows the surface convention: verb-led snake_case for actions (`create_*`, `update_*`, `assess_*`), `<domain>_<facet>` for consolidated reads (`asset_details`, `knowledge_search`)
+- [ ] Human-readable `title` chosen — verb-led plain English, unique across the surface ("Find data assets")
 - [ ] Documented **negative routing** (which existing tools must be used instead)
-- [ ] Decided read-only vs governed write (confirm gate required?)
+- [ ] Decided read-only vs governed write (confirm gate required?) and picked the matching `annotations` profile
 - [ ] Decided what stays in `_DESC_*` vs `mcp_workflows.md` / domain guide (keep `_DESC_*` ≤ 2,500 chars)
 
 ## `server/constants.py`
@@ -25,7 +26,8 @@
 ## `server/tools/<domain>/register.py`
 
 - [ ] Prefer `_invoke_*`: validation → `drop_none` → `ovaledge_client` → `map_ovaledge_error`
-- [ ] `@mcp.tool(description=_DESC_*)` with `Annotated` + **one-line** `Field` per parameter
+- [ ] `@mcp.tool(title=…, description=_DESC_*, annotations=…)` with `Annotated` + **one-line** `Field` per parameter
+- [ ] `annotations` uses a profile from `server/tools/common/annotations.py` (`READ_ONLY`, `GOVERNED_CREATE`, `GOVERNED_UPDATE`, `GOVERNED_EXECUTE`) — never a hand-rolled dict
 - [ ] `register(mcp)` exported from `server/tools/<domain>/__init__.py`
 - [ ] Apply `slim_tool_response()` when tool returns large catalog/glossary payloads
 
@@ -46,7 +48,7 @@
 ## Docs and prompts
 
 - [ ] `server/docs/mcp_workflows.md` — tool routing table row (+ section if multi-param workflow)
-- [ ] `server/docs/governance_model.md` or domain guide if governance/security boundary
+- [ ] `server/docs/governance.md` or domain guide if governance/security boundary
 - [ ] `server/app.py` instructions — only if new top-level agent route (keep brief)
 - [ ] Workflow prompt in `server/prompts/workflows/register.py` if multi-step playbook needed
 - [ ] `tests/prompts/test_workflows.py` — `_PROMPT_REQUIRED_TOOLS` entry

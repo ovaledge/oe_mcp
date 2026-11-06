@@ -1,8 +1,8 @@
 """
 Native source-system access helpers (RDAM harvest).
 
-Queries OvalEdge-harvested RDAM privilege metadata — not OvalEdge catalog ACLs
-(see get_user_object_access) and not catalog data-sources.
+Queries OvalEdge-harvested RDAM privilege metadata — not OvalEdge catalog permissions
+(access_explorer operation=catalog_access) and not catalog data-sources.
 """
 
 from __future__ import annotations
@@ -13,40 +13,93 @@ from typing import Any
 
 from server.client import OvalEdgeError
 from server.constants import (
-    MCP_ACCESS_DISAMBIGUATION_TOOL_LEAD_DOC,
-    MCP_PATH_SOURCE_SYSTEM_ACCESS,
+    MCP_MEMBERSHIP_QUERY_DIRECTIONS,
+    MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
+    MCP_PATH_ACCESS_EXPLORER,
+    MCP_PRIVILEGE_REVERSE_QUERY_DIRECTIONS,
     MCP_QUERY_DIRECTIONS,
-    MCP_QUERY_DIRECTIONS_DOC,
     MCP_RDAM_OBJECT_TYPE_ALL,
     MCP_RDAM_OBJECT_TYPES,
     MCP_RDAM_SCOPE_MODE_DESCENDANTS,
     MCP_RDAM_SCOPE_MODE_EXACT,
-    MCP_RDAM_SCOPE_MODES_DOC,
+    MCP_ROLE_NAME_QUERY_DIRECTIONS,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_CONNECTION_ERROR,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_OBJECT_TYPE_ERROR,
     MCP_SOURCE_SYSTEM_ACCESS_MULTI_SOURCE_ERROR,
     MCP_SOURCE_SYSTEM_DESCENDANTS_CONNECTION_REQUIRED_ERROR,
+    MCP_SOURCE_SYSTEM_GROUP_NAME_REQUIRED_ERROR,
+    MCP_SOURCE_SYSTEM_GROUP_UNSUPPORTED_FOR_SNOWFLAKE_ERROR,
     MCP_SOURCE_SYSTEM_OBJECT_PATH_REQUIRED_ERROR,
     MCP_SOURCE_SYSTEM_OBJECT_TYPE_REQUIRED_ERROR,
+    MCP_SOURCE_SYSTEM_PRIVILEGE_NAME_REQUIRED_ERROR,
+    MCP_SOURCE_SYSTEM_ROLE_NAME_REQUIRED_ERROR,
     MCP_SOURCE_SYSTEM_USERNAME_REQUIRED_ERROR,
     MCP_SOURCE_SYSTEMS,
-    MCP_SOURCE_SYSTEMS_DOC,
     MCP_TABLE_SCHEMA_DISCOVERY_EARLY_EXIT_CANDIDATES,
     MCP_TABLE_SCHEMA_DISCOVERY_MAX_PROBES,
     MCP_TABLE_SCHEMA_DISCOVERY_PROBE_CONCURRENCY,
+    MCP_USER_MEMBERSHIP_QUERY_DIRECTIONS,
 )
 from server.tools.common import error_payload
-from server.tools.common.descriptions import classify_tool_desc
 
-_RDAM_OBJECT_TYPE_ALIASES = {
+CATALOG_TO_RDAM_OBJECT_TYPE = {
+    "oedatabase": "database",
     "oeschema": "schema",
     "oetable": "table",
     "oecolumn": "column",
+    "oechart": "report",
+    "chartchild": "report",
+    "oedomain": "project",
+}
+RDAM_TO_CATALOG_OBJECT_TYPE = {
+    "database": "oedatabase",
+    "schema": "oeschema",
+    "table": "oetable",
+    "column": "oecolumn",
+    "report": "oechart",
+    "project": "oedomain",
 }
 
 _GRANT_SUMMARY_LEVELS = ("database", "schema", "table", "column", "project", "report")
 _GRANT_MECHANISMS = ("direct", "group", "role")
 _FULL_TABLE_PATH_SEGMENTS = 3
+
+
+def is_membership_direction(query_direction: str) -> bool:
+    """True for role/group membership directions (principal or user centric)."""
+    qd = query_direction.strip().lower()
+    return (
+        is_principal_membership_direction(qd)
+        or is_user_membership_direction(qd)
+        or is_privilege_reverse_direction(qd)
+        or qd in MCP_MEMBERSHIP_QUERY_DIRECTIONS
+    )
+
+
+def is_user_membership_direction(query_direction: str) -> bool:
+    """True for user_to_roles / user_to_groups / user_to_privileges."""
+    return query_direction.strip().lower() in MCP_USER_MEMBERSHIP_QUERY_DIRECTIONS
+
+
+def is_privilege_reverse_direction(query_direction: str) -> bool:
+    return query_direction.strip().lower() in MCP_PRIVILEGE_REVERSE_QUERY_DIRECTIONS
+
+
+def is_group_relationship_direction(query_direction: str) -> bool:
+    qd = query_direction.strip().lower()
+    return qd in {
+        "group_to_users",
+        "user_to_groups",
+        "group_to_roles",
+        "role_to_groups",
+        "group_to_privileges",
+        "privilege_to_groups",
+    }
+
+
+def is_principal_membership_direction(query_direction: str) -> bool:
+    """True for role_to_users / group_to_users."""
+    return query_direction.strip().lower() in {"role_to_users", "group_to_users"}
 
 
 def _grant_privilege_set(grant: dict[str, Any]) -> set[str]:
@@ -390,8 +443,9 @@ async def discover_table_schema_candidates(
     hint = grants_hint_result
     if hint is None or not hint.get("ok"):
         hint = await client.get(
-            MCP_PATH_SOURCE_SYSTEM_ACCESS,
+            MCP_PATH_ACCESS_EXPLORER,
             params={
+                "operation": MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
                 "sourceSystem": source_system.strip().lower(),
                 "queryDirection": "object_to_users",
                 "objectPath": table,
@@ -422,8 +476,9 @@ async def discover_table_schema_candidates(
         async with sem:
             try:
                 probe = await client.get(
-                    MCP_PATH_SOURCE_SYSTEM_ACCESS,
+                    MCP_PATH_ACCESS_EXPLORER,
                     params={
+                        "operation": MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
                         "sourceSystem": ss,
                         "queryDirection": "object_to_users",
                         "objectPath": probe_path,
@@ -774,7 +829,7 @@ def normalize_rdam_object_type(object_type: str | None) -> str | None:
         return None
     if normalized == MCP_RDAM_OBJECT_TYPE_ALL:
         return MCP_RDAM_OBJECT_TYPE_ALL
-    return _RDAM_OBJECT_TYPE_ALIASES.get(normalized, normalized)
+    return CATALOG_TO_RDAM_OBJECT_TYPE.get(normalized, normalized)
 
 
 def _grants_at_level(result: dict[str, Any], object_level: str) -> list[dict[str, Any]]:
@@ -848,8 +903,9 @@ async def enrich_column_grants_fallback(
 
     try:
         retry = await client.get(
-            MCP_PATH_SOURCE_SYSTEM_ACCESS,
+            MCP_PATH_ACCESS_EXPLORER,
             params={
+                "operation": MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
                 "sourceSystem": source_system.strip().lower(),
                 "queryDirection": "object_to_users",
                 "objectPath": table_path,
@@ -926,42 +982,6 @@ def filter_grants_by_object_level(
     }
 
 
-_DESC_SOURCE_SYSTEM_ACCESS = classify_tool_desc(
-    MCP_ACCESS_DISAMBIGUATION_TOOL_LEAD_DOC
-    + "Resolve **native** access grants harvested from Redshift, Snowflake, or Tableau (RDAM) — "
-    "independent of OvalEdge catalog ACLs.\n\n"
-    f"Backend: GET {MCP_PATH_SOURCE_SYSTEM_ACCESS}\n\n"
-    "**Not** `get_user_object_access` or `search_catalog_assets`. Never fall back to "
-    "`search_catalog_assets` when RDAM is empty or errors.\n\n"
-    "**Required always:** `source_system` ("
-    + MCP_SOURCE_SYSTEMS_DOC
-    + "), `query_direction` ("
-    + MCP_QUERY_DIRECTIONS_DOC
-    + ") — infer direction from the question.\n"
-    "**browse:** `connection_id` + `object_type`; optional `object_path` as parent scope.\n"
-    "**user_to_objects:** `username` required; with `connection_id` + `object_type=table`, omit "
-    "`object_path` to list all tables on the connector.\n"
-    "**object_to_users:** `object_path` + `object_type` required for exact scope.\n"
-    "Whenever `object_path` is set, `object_type` is required. Do not probe or discover "
-    "`connection_id` — ask the user.\n\n"
-    "**browse** returns DAM inventory objects, not grant rows. **user_to_objects** / "
-    "**object_to_users** return native privileges (grant_mechanism, contributing_role/group, "
-    "privileges). Optional `object_name` composes with `object_path` for table lookups.\n\n"
-    "**scope_mode:** "
-    + MCP_RDAM_SCOPE_MODES_DOC
-    + f" (default {MCP_RDAM_SCOPE_MODE_EXACT}). **descendants** rolls up grants under a "
-    "schema, database, or connector.\n\n"
-    "Partial paths may return `matchCandidates` or `requiresSchemaSelection`; use "
-    "`resolve_all_matches=true` only when the user wants all matches (max 50).\n\n"
-    "Full routing (path formats, grant models, agent rules, DAA): "
-    "docs://ovaledge/rdam_source_access, "
-    "docs://ovaledge/mcp_workflows (Native source access), and workflow prompt "
-    "`native_source_access`.\n\n"
-    "Read-only. Instance/Connector **Data Access Admin** enforced server-side."
-,
-    confidential=True,
-)
-
 def validate_and_normalize_object_type(
     source_system: str,
     object_type: str | None,
@@ -986,9 +1006,10 @@ def validate_and_normalize_object_type(
             f"object_type must be one of {sorted(MCP_RDAM_OBJECT_TYPES)} "
             f"(catalog aliases oeschema/oetable/oecolumn accepted), got {object_type!r}",
         )
-    if normalized_type == "column" and ss != "redshift":
+    known = ss in MCP_SOURCE_SYSTEMS
+    if known and normalized_type == "column" and ss != "redshift":
         return None, error_payload("object_type=column is supported for redshift only.")
-    if normalized_type in {"project", "report"} and ss != "tableau":
+    if known and normalized_type in {"project", "report"} and ss != "tableau":
         return None, error_payload(
             f"object_type={normalized_type!r} is supported for tableau only.",
         )
@@ -1048,6 +1069,7 @@ def validate_source_system_access_args(
     *,
     object_name: str | list[str] | None = None,
     fully_qualified_name: str | None = None,
+    object_id: int | None = None,
     scope_mode: str = MCP_RDAM_SCOPE_MODE_EXACT,
 ) -> dict[str, Any] | None:
     multi_source_err = reject_multiple_source_system(source_system)
@@ -1062,10 +1084,8 @@ def validate_source_system_access_args(
 
     source_values = normalize_string_list(source_system)
     source = source_values[0] if source_values else str(source_system).strip()
-    if source.lower() not in MCP_SOURCE_SYSTEMS:
-        return error_payload(
-            f"source_system must be one of {sorted(MCP_SOURCE_SYSTEMS)}, got {source!r}",
-        )
+    if not source:
+        return error_payload("source_system is required for operation=source_system_access.")
     qd = query_direction.strip().lower()
     if qd not in MCP_QUERY_DIRECTIONS:
         return error_payload(
@@ -1097,6 +1117,23 @@ def validate_source_system_access_args(
             return error_payload(MCP_SOURCE_SYSTEM_OBJECT_TYPE_REQUIRED_ERROR)
         return None
 
+    if is_membership_direction(qd):
+        if is_group_relationship_direction(qd) and source.strip().lower() == "snowflake":
+            return error_payload(MCP_SOURCE_SYSTEM_GROUP_UNSUPPORTED_FOR_SNOWFLAKE_ERROR)
+        if is_user_membership_direction(qd):
+            if not usernames:
+                return error_payload(MCP_SOURCE_SYSTEM_USERNAME_REQUIRED_ERROR)
+            return None
+        if is_privilege_reverse_direction(qd):
+            if not object_paths:
+                return error_payload(MCP_SOURCE_SYSTEM_PRIVILEGE_NAME_REQUIRED_ERROR)
+            return None
+        if not object_paths:
+            if qd in MCP_ROLE_NAME_QUERY_DIRECTIONS:
+                return error_payload(MCP_SOURCE_SYSTEM_ROLE_NAME_REQUIRED_ERROR)
+            return error_payload(MCP_SOURCE_SYSTEM_GROUP_NAME_REQUIRED_ERROR)
+        return None
+
     if qd == "user_to_objects" and not usernames:
         return error_payload(MCP_SOURCE_SYSTEM_USERNAME_REQUIRED_ERROR)
 
@@ -1109,8 +1146,11 @@ def validate_source_system_access_args(
             "object_path is required for user_to_objects with scope_mode=descendants.",
         )
 
+    has_catalog_id = object_id is not None and object_id > 0
+    if has_catalog_id and normalized_type is None:
+        return error_payload(MCP_SOURCE_SYSTEM_OBJECT_TYPE_REQUIRED_ERROR)
     if qd == "object_to_users":
-        if not object_paths:
+        if not object_paths and not has_catalog_id:
             if normalized_scope == MCP_RDAM_SCOPE_MODE_DESCENDANTS:
                 if resolved_connection_id is None:
                     return error_payload(

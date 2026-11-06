@@ -22,7 +22,7 @@ _CDE_TYPE_ALIASES = {
 _DESC_UPDATE_CDE = classify_tool_desc(
     "Update Critical Data Element (CDE) status on one or more catalog assets.\n\n"
     f"Backend: POST {MCP_PATH_UPDATE_CDE_ASSOCIATIONS}\n\n"
-    "Use search_catalog_assets or catalog_asset_details first to resolve object_id "
+    "Use asset_explorer or asset_details first to resolve object_id "
     "and object_type when the user names an asset ambiguously.\n\n"
     "action must be Yes (mark as CDE), No (explicitly not critical), or None "
     "(remove CDE designation). Optional cde_category and cde_justification apply when "

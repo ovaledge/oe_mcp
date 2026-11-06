@@ -1,13 +1,14 @@
 import asyncio
+import base64
 import json
 import time
-from typing import Any, cast
+from typing import Any
 
 import httpx
-from jose import jwt
 
 from server.auth import context as auth_context
 from server.auth.cache_keys import opaque_cache_key
+from server.auth.jwt_util import get_unverified_claims
 from server.config import settings
 from server.constants import (
     CREDENTIALS_REFRESH_LEEWAY_SECONDS,
@@ -16,6 +17,25 @@ from server.constants import (
 )
 
 _local_token_lock: asyncio.Lock | None = None
+
+# OvalEdge ``ApiAuthenticationFilter`` on ``/api/**`` returns 400 INVALID_TOKEN
+# "Prefix missing Token" when Authorization is missing — including on
+# permitAll ``POST /api/user/token/generate``. ``Bearer`` is introspected on
+# oauth2 pods (401 invalid_token). ``Basic`` is allow-listed by the filter and
+# does not trigger opaque-token introspection. Dummy user; JWT comes from body.
+_TOKEN_GENERATE_AUTHORIZATION = "Basic " + base64.b64encode(b"MCP-token-generate:").decode(
+    "ascii"
+)
+
+
+def _token_generate_headers() -> dict[str, str]:
+    return {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "OvalEdge-MCP",
+        "X-OvalEdge-Client": "MCP",
+        "Authorization": _TOKEN_GENERATE_AUTHORIZATION,
+    }
 
 
 def _get_local_token_lock() -> asyncio.Lock:
@@ -34,7 +54,7 @@ class TokenExchangeError(Exception):
 def jwt_exp_epoch(token: str) -> int:
     """Unix seconds from JWT ``exp`` claim, or 0 if missing / unparsable."""
     try:
-        claims = cast(dict[str, Any], jwt.get_unverified_claims(token))
+        claims = get_unverified_claims(token)
         exp = claims.get("exp")
         if exp is None:
             return 0
@@ -125,7 +145,7 @@ def is_token_expiring(token: str, leeway_seconds: int = JWT_REFRESH_LEEWAY_SECON
     call token/generate on every tool invocation. If parsing fails, refresh to be safe.
     """
     try:
-        claims = cast(dict[str, Any], jwt.get_unverified_claims(token))
+        claims = get_unverified_claims(token)
     except Exception:
         return True
     if "exp" not in claims:
@@ -155,12 +175,7 @@ async def exchange_oauth_access_token(oauth_access_token: str) -> str:
             json={
                 "userToken": oauth_access_token,
             },
-            headers={
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "User-Agent": "OvalEdge-MCP",
-                "X-OvalEdge-Client": "MCP",
-            },
+            headers=_token_generate_headers(),
         )
         if response.status_code != 200:
             raise TokenExchangeError(
@@ -231,12 +246,7 @@ async def exchange_client_credentials() -> str:
                 "userToken": settings.ovaledge_user_token,
                 "userSecret": settings.ovaledge_user_secret,
             },
-            headers={
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "User-Agent": "OvalEdge-MCP",
-                "X-OvalEdge-Client": "MCP",
-            },
+            headers=_token_generate_headers(),
         )
         if response.status_code != 200:
             raise TokenExchangeError(
@@ -278,12 +288,7 @@ async def exchange_user_credentials(user_token: str, user_secret: str) -> str:
                 "userToken": user_token,
                 "userSecret": user_secret,
             },
-            headers={
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "User-Agent": "OvalEdge-MCP",
-                "X-OvalEdge-Client": "MCP",
-            },
+            headers=_token_generate_headers(),
         )
         if response.status_code == 401:
             raise TokenExchangeError(

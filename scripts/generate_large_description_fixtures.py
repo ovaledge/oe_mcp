@@ -47,7 +47,7 @@ def _write_wiki_html(path: Path, target_bytes: int) -> int:
     chunks: list[str] = [
         "<div class='oe-wiki-test'>",
         "<h1>Synthetic 5MB business description (wiki HTML)</h1>",
-        "<p>Use this to test MCP <code>catalog_asset_details</code> slimming.</p>",
+        "<p>Use this to test MCP <code>asset_details</code> slimming.</p>",
     ]
     nbytes = sum(len(c.encode("utf-8")) for c in chunks)
     section = 0
@@ -80,7 +80,7 @@ How to test in OvalEdge:
   2. Open Business Description in the catalog UI.
   3. Paste plain file into plain-text / wiki plain view (if supported).
   4. Paste HTML file into rich wiki / HTML editor (or API update-asset-descriptions).
-  5. In Cursor, call catalog_asset_details for that object_id + object_type.
+  5. In Cursor, call asset_details for that object_id + object_type.
 
 Expected after MCP slimming (oe_mcp with mcp_response_slim):
   - Tool succeeds (no "Tool result is too large")
@@ -122,7 +122,7 @@ def main() -> None:
     print(f"  {wiki_path.name}  ({_mib(wiki_size)} MiB)")
     print("  README.txt")
     print()
-    print("Paste into OvalEdge business description, then test catalog_asset_details in Cursor.")
+    print("Paste into OvalEdge business description, then test asset_details in Cursor.")
 
 
 if __name__ == "__main__":

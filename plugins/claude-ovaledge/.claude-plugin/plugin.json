@@ -1,0 +1,23 @@
+{
+  "name": "ovaledge",
+  "displayName": "OvalEdge",
+  "version": "2.0.0",
+  "description": "OvalEdge catalog, governance, knowledge, access, and data quality over remote MCP.",
+  "author": {
+    "name": "OvalEdge",
+    "email": "rohit.anand@ovaledge.com",
+    "url": "https://www.ovaledge.com"
+  },
+  "homepage": "https://www.ovaledge.com",
+  "repository": "https://github.com/ovaledge/oe_mcp",
+  "license": "MIT",
+  "keywords": ["ovaledge", "data-catalog", "governance", "mcp"],
+  "userConfig": {
+    "mcp_url": {
+      "type": "string",
+      "title": "OvalEdge MCP URL",
+      "description": "HTTPS Streamable HTTP endpoint including /mcp (AUTH_MODE=remote). Example: https://mcp.example.com/mcp",
+      "required": true
+    }
+  }
+}

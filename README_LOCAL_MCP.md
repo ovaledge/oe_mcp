@@ -98,6 +98,10 @@ Connect Cursor via **`ovaledge-local-http`** in `mcp.json`; credentials come fro
 
 ## Troubleshooting
 
+### `TokenExchangeError` with HTTP 400 `INVALID_TOKEN` / `Prefix missing Token`
+
+OvalEdge’s REST `ApiAuthenticationFilter` requires an `Authorization` prefix on `/api/**`, including permitAll `POST /api/user/token/generate`. This is **not** a missing `mcp.json` value. Local MCP sends a dummy `Authorization: Basic …` marker on that call so the body (`userToken` / `userSecret`) can be processed. Restart the stdio server after pulling this change. Do **not** send `Authorization: Bearer …` on token/generate against an oauth2 OvalEdge pod — the resource server will introspect it and return 401.
+
 ### `TokenExchangeError` with HTTP 200 empty body
 
 - Check `OVALEDGE_BASE_URL` and `POST /api/user/token/generate` for your OvalEdge build
@@ -141,9 +145,9 @@ Token exchange failures (`INVALID_TOKEN`, duplicate issuance): [infra/TROUBLESHO
 
 After the server starts, clients see:
 
-- **Tools** — catalog, governance (glossary, tags, data stories, writes), platform docs, native access (RDAM)
-- **Resources** — `ovaledge://catalog/table|file/{id}`, `ovaledge://governance/glossary-term|data-story|tag/{id}`
-- **Workflow prompts** — e.g. `data_discovery`, `organizational_knowledge`, `create_governance_tag`, `metadata_drift`, `native_source_access` (16 total; see [mcp_workflows.md](server/docs/mcp_workflows.md))
-- **Doc resources** — `docs://ovaledge/{name}` from `server/docs/*.md` (`mcp_workflows`, `data_stories`, `glossary_guide`, `tags_guide`, …)
+- **Tools** — catalog, governance (glossary, tags, data stories, writes), service desk (`create_service_request`), platform docs, native access (RDAM)
+- **Resources** — `ovaledge://catalog/table|file/{id}`, `ovaledge://governance/glossary-term|data-story|tag/{id}` (tickets are not object resources)
+- **Workflow prompts** — e.g. `data_discovery`, `organizational_knowledge`, `create_governance_tag`, `create_service_desk_request`, `metadata_drift`, `native_source_access` (22 total; see [mcp_workflows.md](server/docs/mcp_workflows.md))
+- **Doc resources** — `docs://ovaledge/{name}` from `server/docs/*.md` (`mcp_workflows`, `governance`, `asset_types`, `overview`, `rdam_source_access`, …)
 
-**Agent behavior** (from `server/app.py` instructions): prefer **`lookup_datastory`** for organizational knowledge; **`search_platform_docs`** for product how-to only; **`write_confirmed_by_user=true`** after user approves create or update previews; native grants via **`source_system_access`**. Full tool list and routing: [README.md](README.md#tools-resources-and-prompts) · [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md).
+**Agent behavior** (from `server/app.py` instructions): use **`knowledge_search`** for organizational knowledge and product how-to; **`write_confirmed_by_user=true`** after user approves create or update previews; native grants via **`access_explorer`** (`operation=source_system_access`). Full tool list and routing: [README.md](README.md#tools-resources-and-prompts) · [server/docs/mcp_workflows.md](server/docs/mcp_workflows.md).

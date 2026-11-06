@@ -54,6 +54,13 @@ Parameters:
     Type: String
     Default: "openid profile email"
     Description: (AUTH_MODE=remote) Scopes advertised in discovery / registration
+  OpenAIAppsChallenge:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: >
+      Token for GET /.well-known/openai-apps-challenge (OpenAI plugin domain
+      verification). Leave empty until the plugin portal issues a token.
   OvalEdgeForwardIdpToken:
     Type: String
     Default: "true"
@@ -222,6 +229,7 @@ Resources:
           OAUTH_CLIENT_SECRET: !Ref OAuthClientSecret
           OAUTH_INTROSPECTION_URL: !Ref OAuthIntrospectionUrl
           OAUTH_SCOPES: !Ref OAuthScopes
+          OPENAI_APPS_CHALLENGE: !Ref OpenAIAppsChallenge
           # Do not set MCP_PUBLIC_BASE_URL from !Ref MCPApi here — it creates a CloudFormation
           # circular dependency (function → API → function). Leave unset; metadata uses
           # Request.base_url (API Gateway / custom domain). Override via Lambda console if needed.
@@ -277,6 +285,12 @@ Resources:
             Path: /.well-known/oauth-protected-resource/mcp
             Method: GET
             ApiId: !Ref MCPApi
+        OpenAIAppsChallengeGet:
+          Type: HttpApi
+          Properties:
+            Path: /.well-known/openai-apps-challenge
+            Method: GET
+            ApiId: !Ref MCPApi
         McpAuthDeclinedGet:
           Type: HttpApi
           Properties:
@@ -326,6 +340,7 @@ Resources:
       CorsConfiguration:
         AllowOrigins:
           - "https://claude.ai"
+          - "https://chatgpt.com"
           - "https://cursor.sh"
         AllowMethods:
           - GET

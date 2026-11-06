@@ -171,6 +171,7 @@ append_if_set OAuthClientId "${OAUTH_CLIENT_ID:-}"
 append_if_set OAuthClientSecret "${OAUTH_CLIENT_SECRET:-}"
 append_if_set OAuthIntrospectionUrl "${OAUTH_INTROSPECTION_URL:-}"
 append_if_set OAuthScopes "${OAUTH_SCOPES:-}"
+append_if_set OpenAIAppsChallenge "${OPENAI_APPS_CHALLENGE:-}"
 OVERRIDES+=("OvalEdgeForwardIdpToken=${OVALEDGE_REMOTE_FORWARD_IDP_TOKEN:-true}")
 
 echo "==> cloudformation deploy stack=${STACK_NAME} region=${AWS_REGION}"

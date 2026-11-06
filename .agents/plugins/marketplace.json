@@ -1,0 +1,20 @@
+{
+  "name": "ovaledge-mcp",
+  "interface": {
+    "displayName": "OvalEdge MCP"
+  },
+  "plugins": [
+    {
+      "name": "ovaledge",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codex-ovaledge"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

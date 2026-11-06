@@ -6,7 +6,7 @@ import logging
 import time
 from collections.abc import Awaitable, Callable
 from functools import wraps
-from typing import Any
+from typing import Any, ParamSpec, TypeVar
 
 from server.client import OvalEdgeError
 from server.mcp_response_slim import slim_tool_response
@@ -20,6 +20,9 @@ from server.telemetry.spans import (
 from server.tools.common.errors import error_payload, map_ovaledge_error
 
 logger = logging.getLogger(__name__)
+
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
 
 
 def _summarize_args(kwargs: dict[str, Any]) -> str:
@@ -42,15 +45,15 @@ def _summarize_args(kwargs: dict[str, Any]) -> str:
     return ", ".join(parts) if parts else "(no logged args)"
 
 
-def _finalize_tool_result[R](result: R) -> R | dict[str, Any]:
+def _finalize_tool_result(result: _R) -> _R | dict[str, Any]:  # noqa: UP047
     if isinstance(result, dict):
         return slim_tool_response(result)
     return result
 
 
-def logged_tool_invocation[**P, R](
-    fn: Callable[P, Awaitable[R]],
-) -> Callable[P, Awaitable[R | dict[str, Any]]]:
+def logged_tool_invocation(  # noqa: UP047
+    fn: Callable[_P, Awaitable[_R]],
+) -> Callable[_P, Awaitable[_R | dict[str, Any]]]:
     """
     Log tool name, duration, and outcome; map OvalEdge errors; slim large dict responses.
 
@@ -60,7 +63,7 @@ def logged_tool_invocation[**P, R](
     tool_name = fn.__name__.removeprefix("_invoke_")
 
     @wraps(fn)
-    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R | dict[str, Any]:
+    async def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _R | dict[str, Any]:
         start = time.monotonic()
         arg_summary = _summarize_args(dict(kwargs))
         with tool_invocation_span(tool_name, arg_summary=arg_summary) as span:

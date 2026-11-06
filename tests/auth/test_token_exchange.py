@@ -2,9 +2,9 @@ import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from jose import jwt as jose_jwt
 
 from server.auth.credentials_cache import reset_default_credentials_cache
+from server.auth.jwt_util import encode_hs256
 from server.auth.token_exchange import (
     TokenExchangeError,
     exchange_client_credentials,
@@ -31,6 +31,7 @@ async def test_exchange_oauth_access_token_extracts_access_token() -> None:
     assert token == "oe-from-okta"
     mock_client.post.assert_awaited_once()
     assert mock_client.post.await_args.kwargs["json"]["userToken"] == "oauth-jwt"
+    assert mock_client.post.await_args.kwargs["headers"]["Authorization"].startswith("Basic ")
 
 
 @pytest.mark.asyncio
@@ -67,6 +68,7 @@ async def test_exchange_client_credentials_extracts_token_field() -> None:
     body = mock_client.post.await_args.kwargs["json"]
     assert body["userToken"] == "test-user-token"
     assert body["userSecret"] == "test-user-secret"
+    assert mock_client.post.await_args.kwargs["headers"]["Authorization"].startswith("Basic ")
 
 
 @pytest.mark.asyncio
@@ -122,6 +124,7 @@ async def test_exchange_user_credentials_extracts_token() -> None:
     body = mock_client.post.await_args.kwargs["json"]
     assert body["userToken"] == "my-token"
     assert body["userSecret"] == "my-secret"
+    assert mock_client.post.await_args.kwargs["headers"]["Authorization"].startswith("Basic ")
 
 
 @pytest.mark.asyncio
@@ -163,7 +166,7 @@ async def test_exchange_user_credentials_5xx_sets_status() -> None:
 @pytest.mark.asyncio
 async def test_get_or_refresh_oauth_exchanged_token_caches() -> None:
     reset_default_credentials_cache()
-    oe_jwt = jose_jwt.encode({"exp": int(time.time()) + 3600}, "s", algorithm="HS256")
+    oe_jwt = encode_hs256({"exp": int(time.time()) + 3600})
     ex = AsyncMock(return_value=oe_jwt)
     try:
         with patch("server.auth.token_exchange.exchange_oauth_access_token", ex):
@@ -178,7 +181,7 @@ async def test_get_or_refresh_oauth_exchanged_token_caches() -> None:
 @pytest.mark.asyncio
 async def test_get_or_refresh_oauth_exchanged_token_distinct_tokens_dont_collide() -> None:
     reset_default_credentials_cache()
-    oe_jwt = jose_jwt.encode({"exp": int(time.time()) + 3600}, "s", algorithm="HS256")
+    oe_jwt = encode_hs256({"exp": int(time.time()) + 3600})
     ex = AsyncMock(return_value=oe_jwt)
     try:
         with patch("server.auth.token_exchange.exchange_oauth_access_token", ex):

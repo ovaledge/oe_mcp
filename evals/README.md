@@ -10,7 +10,7 @@ Main project docs: [README.md](../README.md) (local stdio, remote HTTP, Okta `re
 poetry install --with eval
 ```
 
-Pinned package: `deepeval` (~3.9.9) in the `eval` Poetry group (`pyproject.toml`).
+Pinned package: `deepeval` (`>=3.9.9,<4.2.0`) in the `eval` Poetry group (`pyproject.toml`).
 
 ## Environment
 
@@ -124,9 +124,13 @@ poetry run python -m evals.run_evals --output evals/out/report.json
 
 ## Golden cases
 
-Defined in `golden_cases.py`:
+Defined in `golden_cases.py` (imports extra coverage goldens from `golden_cases_coverage.py`):
 
-- `MCPUseMetric` — five single-turn goldens: catalog search, `data_discovery` prompt + search, `lookup_datastory`, `organizational_knowledge` prompt + datastory, `source_system_access`.
+- `MCPUseMetric` — single-turn goldens: asset exploration (keywords + `context_query`; nested `filters` for certification / `tableType` / open-ended `dqIndex`, `rating`, or `popularity` min, plus `createdDate` `{from,to}` — backend **POST** `/api/v1/mcp/asset-explorer`), `data_discovery` prompt + search, `knowledge_search`, `organizational_knowledge` prompt + knowledge search, `access_explorer` (`operation=source_system_access` and `operation=catalog_access`), first-person “I want access…” → `create_service_request` (not `access_explorer`).
+- Filter-only catalog search is a valid `asset_explorer` call: omit `search_terms`, pass `filters` (and optional `object_type`). Do not flatten extra global-search facets into extra FastMCP fields. JSON examples: `example_catalog_filters_certified_views`, `example_catalog_dq_index_range`, `example_catalog_rating_min_filter`, `example_catalog_rating_more_than_filter`, `example_catalog_rating_max_filter`, `example_catalog_popularity_min_filter`, `example_catalog_created_date_filter`, `example_catalog_null_density_eq`, `example_catalog_sort_popularity_desc`, `example_catalog_filters_no_match`.
+- RDAM membership / privilege-reverse JSON examples: `example_native_role_to_users`, `example_native_user_to_roles`, `example_native_privilege_to_principals` (`query_direction=privilege_to_principals`, no `object_type`).
+- DQ JSON examples: `example_dq_rule_advisor_assess` (includes `recommendedRuleId` when assess finds a context match), `example_dq_rule_manager_create_standard_preview` (`prefer_existing_rule=true` associates to that id), plus lookup / `step=associate` / custom-SQL confirm-gate rows.
+- Coverage conversational goldens (`golden_cases_coverage.py`): `golden_dq_coverage_workflow` (assess → `create_standard` associate-or-create → named-rule `step=associate`), `golden_custom_sql_dq_workflow` (assess first; generate_query only after no `recommendedFunction` remains).
 - `MCPTaskCompletionMetric` — conversational discovery with expected outcome.
 - `MultiTurnMCPUseMetric` — follow-up user turn with resource read.
 
@@ -141,10 +145,10 @@ Typical patterns in reports:
 | Score band | Meaning |
 |------------|---------|
 | **1.0** | Judge fully agrees tool choice, args, and outcome (see `task_completion_discovery`). |
-| **0.75** | Correct primary tool; judge nitpicks optional follow-ups (e.g. “could also call catalog_asset_details”). |
+| **0.75** | Correct primary tool; judge nitpicks optional follow-ups (e.g. “could also call asset_details”). |
 | **0.5** | Passes threshold but judge wanted a different tool or richer args — often because the golden registered **all** MCP tools and the judge prefers alternates. |
 
-Goldens now pass **subset** `tool_names` / `prompt_names` into `ovaledge_eval_mcp_server()` so the judge only sees relevant tools. **`actual_output`** text explicitly states why other tools were *not* used (e.g. data stories vs `search_platform_docs`).
+Goldens now pass **subset** `tool_names` / `prompt_names` into `ovaledge_eval_mcp_server()` so the judge only sees relevant tools. **`actual_output`** text explicitly states why other tools were *not* used (e.g. knowledge search vs asset discovery).
 
 **MultiTurnMCPUseMetric** at `0.5` is common even when passing; treat as advisory ([DeepEval #2579](https://github.com/confident-ai/deepeval/issues/2579)). The lineage golden now calls **`asset_lineage`** plus a catalog resource read.
 

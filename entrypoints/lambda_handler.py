@@ -18,6 +18,7 @@ Routes:
                                                       (``remote_credentials``)
     GET  /.well-known/openid-configuration        → OIDC discovery (``remote``)
     GET  /.well-known/oauth-protected-resource*   → RFC 9728 (``remote``)
+    GET  /.well-known/openai-apps-challenge       → OpenAI plugin domain token (all modes)
     POST /register                                 → Returns configured OAUTH_CLIENT_ID (remote)
     GET  /health                                   → Health check
     POST /mcp                                      → MCP (protected)
@@ -49,6 +50,7 @@ from mangum import Mangum
 from server.app import mcp
 from server.asgi_mcp_observability import McpObservabilityMiddleware
 from server.asgi_normalize_mcp_path import NormalizeMcpMountSlashMiddleware
+from server.auth.directory_well_known import router as directory_well_known_router
 from server.auth.local_lifespan import local_oe_jwt_lifespan
 from server.auth.metadata import router as metadata_router
 from server.auth.middleware import AuthMiddleware
@@ -61,11 +63,17 @@ from server.logging_config import configure_runtime_observability
 
 logger = logging.getLogger(__name__)
 
-mcp_http = mcp.http_app(
-    path="/",
-    transport="streamable-http",
-    stateless_http=settings.mcp_http_stateless,
-)
+def mcp_http_app_kwargs() -> dict[str, Any]:
+    """Kwargs for FastMCP Streamable HTTP (JSON POST bodies for Cortex-style clients)."""
+    return {
+        "path": "/",
+        "transport": "streamable-http",
+        "stateless_http": settings.mcp_http_stateless,
+        "json_response": settings.mcp_json_response,
+    }
+
+
+mcp_http = mcp.http_app(**mcp_http_app_kwargs())
 
 # Icons are resolved at ``server.app`` import; refresh here so HTTP entrypoints pick up
 # ``MCP_PUBLIC_BASE_URL`` from env / ``.env`` (stdio sets ``MCP_STDIO_TRANSPORT`` earlier).
@@ -123,6 +131,8 @@ app = FastAPI(
 app.add_middleware(McpObservabilityMiddleware)
 app.add_middleware(AuthMiddleware)
 app.add_middleware(NormalizeMcpMountSlashMiddleware)
+
+app.include_router(directory_well_known_router)
 
 if settings.auth_mode == "remote":
     app.include_router(metadata_router)

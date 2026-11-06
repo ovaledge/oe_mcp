@@ -1,5 +1,5 @@
 """
-Live integration tests for GET /api/v1/mcp/source-system-access (NFD-48785).
+Live integration tests for GET /api/v1/mcp/access-explorer (operation=source_system_access).
 
 Run:
   poetry run pytest -c tests/integration/pytest.ini tests/integration -m integration
@@ -346,3 +346,27 @@ async def test_unknown_object_not_found(api_get) -> None:
     )
     assert r.status_code == 400
     assert "not found" in r.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_role_to_users_missing_name(api_get) -> None:
+    r = await api_get(
+        {
+            "sourceSystem": "snowflake",
+            "queryDirection": "role_to_users",
+            **_conn_param("snowflake"),
+        }
+    )
+    assert r.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_user_to_roles_missing_username(api_get) -> None:
+    r = await api_get(
+        {
+            "sourceSystem": "snowflake",
+            "queryDirection": "user_to_roles",
+            **_conn_param("snowflake"),
+        }
+    )
+    assert r.status_code == 400

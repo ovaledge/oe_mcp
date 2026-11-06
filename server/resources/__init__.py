@@ -2,12 +2,13 @@
 
 from fastmcp import FastMCP
 
-from server.resources import catalog, governance
+from server.resources import apps, catalog, governance
 
 
 def register(mcp: FastMCP) -> None:
     catalog.register(mcp)
     governance.register(mcp)
+    apps.register(mcp)
 
 
-__all__ = ["register", "catalog", "governance"]
+__all__ = ["register", "apps", "catalog", "governance"]

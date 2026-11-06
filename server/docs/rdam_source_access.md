@@ -1,21 +1,29 @@
-# RDAM native source access (`source_system_access`)
+# RDAM native source access (`access_explorer` operation=source_system_access)
 
-Deep routing reference for **`source_system_access`** — native Redshift, Snowflake, and Tableau grants harvested in RDAM SQL metadata. For workflow steps and a parameter cheat sheet, see [mcp_workflows](mcp_workflows#native-source-access-rdam). For DAA enforcement, see [governance_model](governance_model#data-access-admin-daa).
+Deep routing reference for **`access_explorer`** with **`operation=source_system_access`** — native Redshift, Snowflake, and Tableau grants harvested in RDAM SQL metadata. For workflow steps and a parameter cheat sheet, see [mcp_workflows](mcp_workflows#native-source-access-rdam). For DAA enforcement, see [governance](governance#data-access-admin-daa).
 
 ## Why this tool exists
 
-`get_user_object_access` resolves effective access at the OvalEdge **catalog permission** layer. There is no equivalent for access that exists **natively in the source systems** — Redshift, Snowflake, and Tableau — independent of OvalEdge grants. Customers need answers like "What tables can this service account actually query in Redshift?" or "Which users have native access to this table?" without navigating each source manually.
+`access_explorer` with `operation=catalog_access` resolves effective access at the OvalEdge **catalog permission** layer. There is no equivalent for access that exists **natively in the source systems** — Redshift, Snowflake, and Tableau — independent of OvalEdge grants. Customers need answers like "What tables can this service account actually query in Redshift?" or "Which users have native access to this table?" without navigating each source manually.
 
-| | get_user_object_access (catalog) | source_system_access (native RDAM) |
+| | access_explorer catalog_access | access_explorer source_system_access |
 |---|---|---|
 | Access layer | OvalEdge catalog permissions | Native source-system grants |
-| Grant mechanisms | OvalEdge user grants + OvalEdge roles | Redshift (direct / group / role), Snowflake (role), Tableau (direct / group) |
+| Grant mechanisms | OvalEdge user grants + OvalEdge roles | Redshift (direct / group / role), Snowflake (role), Tableau (direct / indirect group / direct role) |
 | Permission model | metadata-read/write + data permission levels | Native privileges (SELECT, INSERT, ALL, …) |
 | Object scope | All OvalEdge asset types | RS/SF database/schema/table/column; Tableau project/report |
 
-## No catalog / Elasticsearch fallback
+## Unsupported connector type (continue with catalog_access)
 
-`source_system_access` reads RDAM SQL metadata only. Never call `search_catalog_assets`, `catalog_asset_details`, or other catalog tools as a substitute when RDAM returns empty grants, 4xx/5xx, not-found, or not-harvested — catalog search cannot answer native Redshift/Snowflake/Tableau grants. Report the RDAM result (or API error) and suggest RDAM harvest, DAA, object_path / object_type, or native SQL (e.g. Snowflake `SHOW GRANTS`) — do not invoke catalog search.
+If the API returns **400** `mcp.source.system.unsupported` (`Connector type {0} is not supported for native DAM access. Supported connector types: {1}. Continue with operation=catalog_access.`), `{0}` is the requested connector type / `servertype` and `{1}` is the DAM registry CSV. **Continue with `operation=catalog_access`** — native DAM is not available for that connector.
+
+Do **not** treat `mcp.source.system.hint.mismatch` as unsupported. That 400 means `source_system` does not match `connection_id` (e.g. Snowflake hint with a Redshift connection). Both connectors may be DAM-supported; fix the params. Do not continue with `catalog_access`.
+
+`McpSourceSystemAccessCapabilities` extra beans are **validation-only** (object types / mechanism flags). They do not add grant execution. Grant SQL remains RDBMS `rdam_*privilege` harvest tables or Tableau project/report privilege tables. Registering a new connector so `require()` succeeds does not mean native grant rows will be correct.
+
+## No catalog fallback for empty RDAM
+
+Named objects: `asset_explorer` this tool fills `object_id`, `object_type`, `connection_id`, FQN/`object_path`, `object_name`, then DAM API. Known `object_id` and `object_type` → DAM API only. Never call `asset_explorer` **after** RDAM returns empty grants, other 4xx/5xx, not-found, or not-harvested — catalog search cannot answer native grants. Report the RDAM result instead.
 
 ## Mandatory API fields
 
@@ -26,7 +34,18 @@ Deep routing reference for **`source_system_access`** — native Redshift, Snowf
 - **user_to_objects (scope_mode=descendants):** `username`, `object_path`, and `object_type` required; returns grants at the scope level and descendants (e.g. schema → tables/columns).
 - **object_to_users (exact):** `object_path` and `object_type` required.
 - **object_to_users (scope_mode=descendants):** `object_type` required; `object_path` or `connection_id` (connector-wide rollup when path omitted).
-- **Whenever `object_path` is set:** `object_type` required (do not infer from dot segments).
+- **role_to_users:** `object_path` or `object_name` required (role name); `object_type` not used — reads `rdam_userrole` / `rdam_role` (Tableau: workspace role tables).
+- **group_to_users:** `object_path` or `object_name` required (group name); `object_type` not used — Redshift/Tableau only (`rdam_usergroup` / `rdam_group`; Tableau site groups via `rdam_workspace_usergroup`). **Not Snowflake** — use `role_to_users`.
+- **user_to_roles:** `username` required; `object_type` not used — roles assigned to the user (`rdam_userrole` / `rdam_role`).
+- **user_to_groups:** `username` required; `object_type` not used — groups for the user (Redshift/Tableau; **not Snowflake**).
+- **group_to_roles:** `object_path` or `object_name` required (group name); Redshift/Tableau only — roles linked to the group. **Not Snowflake**.
+- **role_to_groups:** `object_path` or `object_name` required (role name); Redshift/Tableau only — groups linked to the role. **Not Snowflake**.
+- **role_to_parent_roles:** `object_path` or `object_name` required (role name); direct parents from `rdam_parentroles` (one hop).
+- **role_to_privileges:** `object_path` or `object_name` required (role name); account-level privileges for the role (`rdam_*privilege` by perm code).
+- **group_to_privileges:** `object_path` or `object_name` required (group name); Redshift/Tableau only. **Not Snowflake**.
+- **user_to_privileges:** `username` required; account-level privileges for the user (direct plus role expansion; group expansion when the source supports groups).
+- **privilege_to_roles / privilege_to_groups / privilege_to_users / privilege_to_principals:** `object_path` or `object_name` required (privilege / perm-code name, e.g. `SELECT`); reverse lookup by **token** (comma-separated `rdam_permcode` parts), not substring — **not** filtered by catalog `object_path`. `privilege_to_groups` is Redshift/Tableau only (**not Snowflake**). `privilege_to_principals` works on Snowflake (roles + users; groups skipped).
+- **Whenever `object_path` is set for grant directions:** `object_type` required (do not infer from dot segments). Membership / relationship / privilege-reverse directions are exempt.
 - **Single value only:** `source_system`, `object_type`, `connection_id`.
 - **Multiple values allowed:** `username` (user_to_objects), `object_path`.
 
@@ -55,7 +74,8 @@ Do not guess `connection_id`, `object_type`, or `object_path` — ask the user, 
 |-------------|---------------------|
 | project | `rdam_reportgroup_privilege` |
 | report | `rdam_report_privilege` |
-| group expansion | `rdam_usergroup` (site-group membership for indirect grants) |
+| group expansion | `rdam_workspace_usergroup` (site-group membership for **indirect** grants) |
+| role expansion | `rdam_userrole` + `rdam_role` (direct role grants on project/report) |
 
 ## object_path formats
 
@@ -78,7 +98,7 @@ Scope with **`connection_id`** (preferred) or optional `connectionName.` prefix 
 | Table | `dbName.schemaName.tableName`, `schemaName.tableName`, `tableName` | `table` |
 | Column | `dbName.schemaName.tableName.columnName`, `schemaName.tableName.columnName`, `tableName.columnName`, `columnName` | `column` |
 
-**source_system_access (browse):** `object_path` is the **parent** scope; `object_type` is the **child level to list** — omit parent to list databases; `dbName` + `schema` lists schemas; `dbName.schemaName` + `table` lists tables; `dbName.schemaName.tableName` + `column` lists columns.
+**access_explorer source_system_access (browse):** `object_path` is the **parent** scope; `object_type` is the **child level to list** — omit parent to list databases; `dbName` + `schema` lists schemas; `dbName.schemaName` + `table` lists tables; `dbName.schemaName.tableName` + `column` lists columns.
 
 ## object_type
 
@@ -109,6 +129,23 @@ Each grant row includes `grant_mechanism` so the bot can explain lineage.
 
 - "What can **user X** access?" / "What permissions does **RACHEL** have?" → `user_to_objects` with `username` = that user only. Present **only that user's** grants from the response — never call `object_to_users` and list all principals.
 - "Who has access to **object Y**?** → `object_to_users` with `object_path` + `object_type`.
+- "Which users are assigned to role **SYSADMIN** in Snowflake?" → `role_to_users`, `object_path=SYSADMIN` or `object_name=SYSADMIN` (no `object_type`).
+- "Which users belong to group **analysts** in Redshift?" → `group_to_users`, `object_path=analysts` or `object_name=analysts`.
+- "Which **roles** is user **bhanu** assigned to?" → `user_to_roles`, `username=bhanu` (no `object_type`).
+- "Which **groups** does user **bhanu** belong to?" → `user_to_groups`, `username=bhanu` (Redshift/Tableau).
+- "Which **roles** are linked to group **analysts**?" → `group_to_roles`, `object_name=analysts` (Redshift/Tableau).
+- "Which **groups** are linked to role **analyst_role**?" → `role_to_groups`, `object_name=analyst_role` (Redshift/Tableau).
+- "What are the **parent roles** of **SYSADMIN**?" → `role_to_parent_roles`, `object_name=SYSADMIN` (direct parents only).
+- "What **privileges** does role **SYSADMIN** have?" → `role_to_privileges`, `object_name=SYSADMIN`.
+- "What **privileges** does group **analysts** have?" → `group_to_privileges`, `object_name=analysts` (Redshift/Tableau).
+- "What **account privileges** does user **bhanu** have?" → `user_to_privileges`, `username=bhanu`. Present **instanceName** / **instanceId** (these are instance-level rows, not connector grants). Do not present `connectionId` as the scope.
+- "Which **roles** have privilege **SELECT**?" → `privilege_to_roles`, `object_name=SELECT` (perm-code name; not object-scoped).
+- "Which **groups** have privilege **SELECT**?" → `privilege_to_groups`, `object_name=SELECT` (Redshift/Tableau).
+- "Which **users** have privilege **SELECT**?" → `privilege_to_users`, `object_name=SELECT`.
+- "Which **principals** (users/roles/groups) have privilege **SELECT**?" → `privilege_to_principals`, `object_name=SELECT`.
+- "Who inherits access through role X?" → `user_to_objects` with `username` and inspect `contributing_role` on grant rows (not a separate membership direction).
+
+Instance-level membership and account privileges (`role_to_users`, `group_to_users`, `user_to_roles`, `user_to_groups`, `group_to_roles`, `role_to_groups`, `role_to_parent_roles`, `role_to_privileges`, `group_to_privileges`, `user_to_privileges`, `privilege_to_*`) live on the RDAM **instance**. Grant rows include `instanceId` and `instanceName`. Do not present `connectionId` as the scope for these directions. Object-level table/schema/database/project/report grants still use `connectionId`. When `connectioninfo.rdam_instanceid` is empty, instance-level queries still resolve the instance by server type (including instances with no connected connector).
 
 ### connection_id
 
@@ -157,6 +194,20 @@ When the response spans more than one `connectionId` and you did not pass `conne
 2. "Who has access to the **orders** table in prod_db in Redshift?" → `object_to_users`, `object_type=table`, `object_path=prod_db`, `object_name=orders` (or full `prod_db.schema.orders` when schema is known).
 3. "What can john.doe query in Snowflake? Which **roles** give him access?" → `user_to_objects`, `username=john.doe`, `object_type=all` (every database/schema/table level). Group by `contributing_role`.
 4. "Does svc_etl have **write** access to the transactions table in Redshift?" → `user_to_objects`, `username=svc_etl`, `object_type=table`, `object_name=transactions`, `privileges=["INSERT","UPDATE","DELETE"]`; answer yes/no from filtered rows.
+5. "Which users are in role **SYSADMIN** on Snowflake?" → `role_to_users`, `object_name=SYSADMIN`, optional `connection_id`.
+6. "Which users are in group **analysts** on Redshift?" → `group_to_users`, `object_name=analysts`, optional `connection_id`.
+7. "Which **roles** is **bhanu** assigned to in Snowflake?" → `user_to_roles`, `username=bhanu`, optional `connection_id`.
+8. "Which **groups** does **bhanu** belong to in Redshift?" → `user_to_groups`, `username=bhanu`, optional `connection_id`.
+9. "Which **roles** does group **analysts** map to in Redshift?" → `group_to_roles`, `object_name=analysts`, optional `connection_id`.
+10. "Which **groups** does role **analyst_role** map to in Redshift?" → `role_to_groups`, `object_name=analyst_role`, optional `connection_id`.
+11. "What are the **parent roles** of **SYSADMIN** in Snowflake?" → `role_to_parent_roles`, `object_name=SYSADMIN`, optional `connection_id`.
+12. "What **privileges** does role **SYSADMIN** have?" → `role_to_privileges`, `object_name=SYSADMIN`, optional `connection_id`.
+13. "What **privileges** does group **analysts** have in Redshift?" → `group_to_privileges`, `object_name=analysts`, optional `connection_id`.
+14. "What **account privileges** does **bhanu** have?" → `user_to_privileges`, `username=bhanu`, optional `connection_id`.
+15. "Which **roles** hold privilege **SELECT**?" → `privilege_to_roles`, `object_name=SELECT`, optional `connection_id`.
+16. "Which **groups** hold privilege **SELECT** in Redshift?" → `privilege_to_groups`, `object_name=SELECT`, optional `connection_id`.
+17. "Which **users** hold privilege **SELECT**?" → `privilege_to_users`, `object_name=SELECT`, optional `connection_id`.
+18. "Which **principals** hold privilege **SELECT**?" → `privilege_to_principals`, `object_name=SELECT`, optional `connection_id`.
 
 When the user gives `username` but not `connection_id`, `object_type`, or `object_path`, call the tool with what you have — do not infer object level from path segment count or discover connector ids; ask the user for missing context if the API response is insufficient.
 

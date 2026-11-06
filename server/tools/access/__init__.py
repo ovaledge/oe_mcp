@@ -1,4 +1,4 @@
-"""Catalog ACL access discovery tools."""
+"""Catalog permissions access discovery tools."""
 
 from server.tools.access.register import register
 

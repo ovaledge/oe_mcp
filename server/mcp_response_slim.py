@@ -158,7 +158,7 @@ def slim_tool_response(payload: dict[str, Any]) -> dict[str, Any]:
         if _payload_bytes(out) > MCP_TOOL_RESPONSE_MAX_BYTES:
             out["_mcpResponseNote"] = (
                 "Response still exceeds MCP client size limits after truncation. "
-                "Retry with search_catalog_assets (smaller limit), fewer assets, "
+                "Retry with asset_explorer (smaller limit), fewer assets, "
                 "or read descriptions in OvalEdge UI."
             )
     return out
