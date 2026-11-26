@@ -10,6 +10,7 @@ from server.constants import (
     MCP_OPERATION_CATALOG_ACCESS,
     MCP_OPERATION_SOURCE_SYSTEM_ACCESS,
     TOOL_ACCESS_EXPLORER,
+    TOOL_AI_ASSET_DETAILS,
     TOOL_ASSET_DETAILS,
     TOOL_ASSET_EXPLORER,
     TOOL_CREATE_SERVICE_REQUEST,
@@ -25,6 +26,7 @@ MCP_SERVER_INSTRUCTION_TOOL_NAMES: frozenset[str] = frozenset(
         TOOL_KNOWLEDGE_SEARCH,
         TOOL_ASSET_EXPLORER,
         TOOL_ASSET_DETAILS,
+        TOOL_AI_ASSET_DETAILS,
         TOOL_ACCESS_EXPLORER,
         TOOL_CREATE_SERVICE_REQUEST,
     }
@@ -56,6 +58,8 @@ _MCP_SERVER_INSTRUCTIONS = (
     f"(search across types; omit object_type unless the query implies a type); "
     f"then {TOOL_ASSET_DETAILS} (View asset details) after shortlist — "
     "not for who-has-access. "
+    f"AI use cases, models, and agents: {TOOL_AI_ASSET_DETAILS} "
+    "(View AI asset details) after shortlist. "
     f"Generic first-person inventory without a named principal "
     f"(e.g. \"What tables can I see/access?\") → {TOOL_ASSET_EXPLORER}; "
     f"named principal or first-person + named Redshift/Snowflake/Tableau → "

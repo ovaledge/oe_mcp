@@ -19,6 +19,9 @@ Use these values when filtering catalog search or specifying `object_type` on de
 | `oeapicolumn` | Parameters or attributes on APIs |
 | `oequery` / `oecode` / `code` | Saved queries / code objects |
 | `dp_product` / `dp_domain` | Data products / data domains |
+| `aig_models` | AI models. Details: `ai_asset_details` |
+| `aig_agents` | AI agents. Details: `ai_asset_details` |
+| `aig_usecases` | AI use cases. Details: `ai_asset_details` |
 | `oedomain` | Report groups |
 | `glossary` | Business glossary terms |
 | `oetag` / `mastertag` | Tags / master tags |

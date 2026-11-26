@@ -6,6 +6,7 @@ Prompts reference tool name constants — rename here, not in prompt strings.
 # ── Tool names ───────────────────────────────────────────────────
 TOOL_ASSET_EXPLORER = "asset_explorer"
 TOOL_ASSET_DETAILS = "asset_details"
+TOOL_AI_ASSET_DETAILS = "ai_asset_details"
 TOOL_ASSET_LINEAGE = "asset_lineage"
 TOOL_KNOWLEDGE_SEARCH = "knowledge_search"
 TOOL_METADATA_CHANGES_BETWEEN_CRAWLS = "metadata_changes_between_crawls"
@@ -62,6 +63,9 @@ MCP_CATALOG_OBJECT_TYPES = frozenset(
         "dp_domain",
         "oedomain",
         "oestory",
+        "aig_models",
+        "aig_agents",
+        "aig_usecases",
     }
 )
 MCP_CATALOG_OBJECT_TYPES_DOC = ", ".join(sorted(MCP_CATALOG_OBJECT_TYPES))
@@ -123,6 +127,24 @@ MCP_UPDATE_CDE_OBJECT_TYPES_DOC = ", ".join(
 # ── OvalEdge MCP HTTP paths (appended to OVALEDGE_BASE_URL) ──────
 MCP_PATH_ASSET_EXPLORER = "/api/v1/mcp/asset-explorer"
 MCP_PATH_ASSET_DETAILS = "/api/v1/mcp/asset-details"
+MCP_PATH_AI_ASSET_DETAILS = "/api/v1/mcp/ai_asset_details"
+MCP_AI_ASSET_OBJECT_TYPES = frozenset({"aig_models", "aig_agents", "aig_usecases"})
+MCP_AI_ASSET_OBJECT_TYPE_ALIASES: dict[str, str] = {
+    "aig_model": "aig_models",
+    "ai_model": "aig_models",
+    "ai model": "aig_models",
+    "aimodel": "aig_models",
+    "aig_agent": "aig_agents",
+    "ai_agent": "aig_agents",
+    "ai agent": "aig_agents",
+    "aiagent": "aig_agents",
+    "aig_usecase": "aig_usecases",
+    "ai_usecase": "aig_usecases",
+    "ai_use_case": "aig_usecases",
+    "ai use case": "aig_usecases",
+    "aiusecase": "aig_usecases",
+}
+MCP_AI_ASSET_OBJECT_TYPES_DOC = "aig_usecases, aig_models, aig_agents"
 MCP_PATH_ASSET_LINEAGE = "/api/v1/mcp/asset-lineage"
 MCP_PATH_KNOWLEDGE_SEARCH = "/api/v1/mcp/knowledge-search"
 MCP_PATH_METADATA_CHANGES_BETWEEN_CRAWLS = (

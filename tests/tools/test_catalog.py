@@ -381,6 +381,26 @@ class TestAssetExplorer:
         await tool_fn(search_terms=["q"], object_type="oequery")
         assert _explorer_body(mock_oe_client)["objectType"] == "oequery"
 
+    async def test_search_accepts_aig_object_types(self, mock_oe_client: AsyncMock) -> None:
+        mock_oe_client.post.return_value = MOCK_SEARCH_RESPONSE
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "asset_explorer")
+        for object_type in ("aig_models", "aig_agents", "aig_usecases"):
+            mock_oe_client.reset_mock()
+            await tool_fn(search_terms=["risk"], object_type=object_type)
+            assert _explorer_body(mock_oe_client)["objectType"] == object_type
+
+    async def test_search_normalizes_aig_object_type_aliases(
+        self, mock_oe_client: AsyncMock
+    ) -> None:
+        mock_oe_client.post.return_value = MOCK_SEARCH_RESPONSE
+        mcp = FastMCP(name="test", version="0.0.1")
+        catalog.register(mcp)
+        tool_fn = await get_tool_fn(mcp, "asset_explorer")
+        await tool_fn(search_terms=["risk"], object_type="ai agent")
+        assert _explorer_body(mock_oe_client)["objectType"] == "aig_agents"
+
     async def test_glossary_placement_filters_forwarded(self, mock_oe_client: AsyncMock) -> None:
         mock_oe_client.post.return_value = MOCK_SEARCH_RESPONSE
         mcp = FastMCP(name="test", version="0.0.1")
