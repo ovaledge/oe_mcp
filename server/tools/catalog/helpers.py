@@ -7,12 +7,16 @@ from typing import Any
 
 from server.constants import (
     MCP_ACCESS_DISAMBIGUATION_SEARCH_GUARD_DOC,
+    MCP_AI_ASSET_OBJECT_TYPE_ALIASES,
+    MCP_AI_ASSET_OBJECT_TYPES,
+    MCP_AI_ASSET_OBJECT_TYPES_DOC,
     MCP_ASSET_EXPLORER_FILTER_KEYS,
     MCP_ASSET_EXPLORER_SORT_DEFAULT_DIRECTION,
     MCP_ASSET_EXPLORER_SORT_DIRECTIONS,
     MCP_ASSET_EXPLORER_SORT_FIELDS,
     MCP_ASSET_EXPLORER_SORT_FIELDS_DOC,
     MCP_CATALOG_OBJECT_TYPES_DOC,
+    MCP_PATH_AI_ASSET_DETAILS,
     MCP_PATH_ASSET_DETAILS,
     MCP_PATH_ASSET_EXPLORER,
     MCP_PATH_ASSET_LINEAGE,
@@ -39,6 +43,15 @@ from server.tools.common.descriptions import classify_tool_desc
 
 _TABLE_FILE_TYPES = frozenset({"oetable", "oefile"})
 
+
+def canonical_ai_asset_type(object_type: str | None) -> str | None:
+    """Map an AI asset alias to aig_models, aig_agents, or aig_usecases."""
+    key = (object_type or "").strip().lower()
+    if key in MCP_AI_ASSET_OBJECT_TYPES:
+        return key
+    return MCP_AI_ASSET_OBJECT_TYPE_ALIASES.get(key)
+
+
 _DESC_ASSET_EXPLORER = classify_tool_desc(
     MCP_ACCESS_DISAMBIGUATION_SEARCH_GUARD_DOC
     + "**Find data assets** (`asset_explorer`) — search the catalog for tables, files, "
@@ -62,9 +75,9 @@ _DESC_ASSET_EXPLORER = classify_tool_desc(
     "sort={field,direction} (omit with keywords) — matrix: "
     "docs://ovaledge/mcp_workflows. "
     f"Semantic ranking: {MCP_SEARCH_CONTEXT_QUERY_PARAM}. "
-    "Look up one term/tag: name + object_type=glossary|oetag "
-    "(include_parent/children for tags). "
-    "Glossary placement: domain_id|domain_name + optional category/subcategory.\n\n"
+    "Term/tag lookup: name + object_type=glossary|oetag. "
+    "AI model, agent, or use case: object_type=aig_models|aig_agents|aig_usecases. "
+    "Glossary placement: domain_id or domain_name.\n\n"
     "Examples: "
     '"What tables can I see/access?" → this tool (not access_explorer); '
     'search_terms=["payment"] + context_query="Find assets related to payment"; '
@@ -82,7 +95,20 @@ _DESC_ASSET_DETAILS = classify_tool_desc(
     "object_type one of: "
     + MCP_CATALOG_OBJECT_TYPES_DOC
     + ". Response: details; optional profile and relationships; navLink/redirectUrl when "
-    "present. Playbooks: docs://ovaledge/mcp_workflows."
+    "present. AI use cases, models, and agents: ai_asset_details. "
+    "Playbooks: docs://ovaledge/mcp_workflows."
+)
+_DESC_AI_ASSET_DETAILS = classify_tool_desc(
+    "**View AI asset details** (`ai_asset_details`) — metadata for one AI use case, AI model, "
+    "or AI agent, read from Elasticsearch. Returns the name, business and technical "
+    "descriptions, governance roles, configured relationships, associated data objects, and "
+    "assessment status. Models and agents also include data boundary and regulatory adherence.\n\n"
+    f"Backend: GET {MCP_PATH_AI_ASSET_DETAILS}\n\n"
+    "**Not** asset_details — that tool is for tables, files, reports, and other catalog types. "
+    "**Not** asset_explorer — resolve the id there first, then call this tool.\n\n"
+    "Requires object_id + object_type ("
+    + MCP_AI_ASSET_OBJECT_TYPES_DOC
+    + "). Playbooks: docs://ovaledge/mcp_workflows. Read-only. RBAC enforced server-side."
 )
 _DESC_ASSET_LINEAGE = classify_tool_desc(
     "**Trace data lineage** (`asset_lineage`) — show where a table or file comes from and "
@@ -124,6 +150,32 @@ def _normalize_search_terms(terms: list[str] | None) -> list[str] | None:
         return None
     out = [t.strip() for t in terms if t and str(t).strip()]
     return out or None
+
+
+# Friendly names for the three AI Governance catalog types. Canonical values stay in
+# MCP_CATALOG_OBJECT_TYPES so tool descriptions do not list every alias.
+_AIG_OBJECT_TYPE_ALIASES: dict[str, str] = {
+    "aig_model": "aig_models",
+    "ai_model": "aig_models",
+    "ai model": "aig_models",
+    "aimodel": "aig_models",
+    "aig_agent": "aig_agents",
+    "ai_agent": "aig_agents",
+    "ai agent": "aig_agents",
+    "aiagent": "aig_agents",
+    "aig_usecase": "aig_usecases",
+    "ai_usecase": "aig_usecases",
+    "ai_use_case": "aig_usecases",
+    "ai use case": "aig_usecases",
+    "aiusecase": "aig_usecases",
+}
+
+
+def _canonical_catalog_object_type(object_type: str | None) -> str | None:
+    """Map AI Governance aliases to aig_models, aig_agents, or aig_usecases."""
+    if object_type is None:
+        return None
+    return _AIG_OBJECT_TYPE_ALIASES.get(object_type.strip().lower(), object_type)
 
 
 _DESCRIPTION_API_KEYS: tuple[tuple[str, str], ...] = (

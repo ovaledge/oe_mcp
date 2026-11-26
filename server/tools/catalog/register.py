@@ -24,6 +24,7 @@ from server.constants import (
 )
 from server.tools.catalog.cde_helpers import _DESC_UPDATE_CDE
 from server.tools.catalog.helpers import (
+    _DESC_AI_ASSET_DETAILS,
     _DESC_ASSET_DETAILS,
     _DESC_ASSET_EXPLORER,
     _DESC_ASSET_LINEAGE,
@@ -31,6 +32,7 @@ from server.tools.catalog.helpers import (
     _DESC_UPDATE_DESCRIPTIONS,
 )
 from server.tools.catalog.invocations import (
+    _invoke_ai_asset_details,
     _invoke_asset_details,
     _invoke_asset_explorer,
     _invoke_asset_lineage,
@@ -329,6 +331,32 @@ def register(mcp: FastMCP) -> None:
     ) -> dict[str, Any]:
         """View full metadata for one chosen catalog asset."""
         return await _invoke_asset_details(
+            object_id=object_id,
+            object_type=object_type,
+        )
+
+    @mcp.tool(
+        title="View AI asset details",
+        description=_DESC_AI_ASSET_DETAILS,
+        annotations=READ_ONLY,
+    )
+    async def ai_asset_details(
+        object_id: Annotated[
+            int,
+            Field(description="AI asset id from Find data assets; required with object_type."),
+        ],
+        object_type: Annotated[
+            str,
+            Field(
+                description=(
+                    "aig_usecases, aig_models, or aig_agents "
+                    "(aliases such as ai use case are accepted)."
+                ),
+            ),
+        ],
+    ) -> dict[str, Any]:
+        """View Elasticsearch metadata for one AI use case, model, or agent."""
+        return await _invoke_ai_asset_details(
             object_id=object_id,
             object_type=object_type,
         )

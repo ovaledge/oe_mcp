@@ -21,6 +21,7 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 |-------------|------------|
 | Find tables, files, reports, columns (incl. first-person “what can I see/view/access?” without a named principal) | `asset_explorer` (Find data assets; omit `object_type` unless query implies a type) → `asset_details` after shortlist |
 | Rich metadata, column profile, or table relationships | `asset_details` (View asset details; after search or when `object_id` known) |
+| AI use case, AI model, or AI agent metadata | `ai_asset_details` (View AI asset details; after `asset_explorer` shortlist) |
 | Org policies, playbooks, narratives, or OvalEdge product how-to | `knowledge_search` (Search knowledge & docs); prompts `organizational_knowledge`, `platform_help` |
 | Business term definition | `asset_explorer` with `name` and `object_type=glossary`; prompt `explain_business_term` |
 | Tag meaning or hierarchy | `asset_explorer` with `name` and `object_type=oetag`; prompt `explain_tag` |
@@ -57,6 +58,7 @@ There is **no MCP protocol “tool priority” field**. Routing is guided by:
 |--------|------|----------------|
 | Catalog | `asset_explorer` | — |
 | Catalog | `asset_details` | — |
+| Catalog | `ai_asset_details` | — |
 | Catalog | `asset_lineage` | — |
 | Catalog | `metadata_changes_between_crawls` | — |
 | Catalog | `update_asset_descriptions` | confirm gate |
@@ -95,6 +97,7 @@ Extended parameter patterns (tool description keeps a short summary; use this se
 | Data products | `data_products=[...]`, `context_query` |
 | Custom field values | `custom_fields=[...]` or `search_terms` fallback |
 | Data Domains (not glossary Global Domain) | `object_type=dp_domain` alone — do not combine with other types; or `filters.dataDomains` names |
+| AI models, agents, or use cases | `object_type=aig_models`, `aig_agents`, or `aig_usecases` (aliases such as `ai model` / `ai agent` / `ai use case` are accepted) |
 | Report Groups | `object_type=oedomain` alone — do not combine with other types |
 | PII / classification | `classifications=["PII"]`, `context_query` |
 | Assets by exact tag name | `tags=["Customer and Sales"]` — exact tag name (case-insensitive), not FQN/description contains |
@@ -121,7 +124,11 @@ Use `name` plus `object_type=glossary` for a business term entity, or `name` plu
 
 ## Asset details (`asset_details`)
 
-**View asset details:** call with `object_id` and `object_type` after shortlisting from `asset_explorer`; `fully_qualified_name` is not supported. Always returns details; auto profile for `oetable`/`oefile`; relationships for `oetable`.
+**View asset details:** call with `object_id` and `object_type` after shortlisting from `asset_explorer`; `fully_qualified_name` is not supported. Always returns details; auto profile for `oetable`/`oefile`; relationships for `oetable`. For AI use cases, models, and agents use `ai_asset_details`.
+
+## AI asset details (`ai_asset_details`)
+
+**View AI asset details:** call with `object_id` and `object_type` (`aig_usecases`, `aig_models`, or `aig_agents`) after shortlisting from `asset_explorer`. Reads the Elasticsearch catalog document. Returns asset name, business and technical descriptions, governance roles, configured relationships, associated data objects, and assessment status. Data boundary and regulatory adherence are included for AI models and AI agents. Configured relationships are ontology links on the catalog document. Associated data objects are the objects assigned on the asset and indexed as associatedObjects.
 
 ## Asset lineage (`asset_lineage`)
 

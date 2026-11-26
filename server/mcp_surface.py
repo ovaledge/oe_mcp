@@ -17,6 +17,7 @@ from server.constants import (
     MCP_UI_ASSET_LINEAGE,
     MCP_UI_METADATA_CHANGES,
     TOOL_ACCESS_EXPLORER,
+    TOOL_AI_ASSET_DETAILS,
     TOOL_ASSET_DETAILS,
     TOOL_ASSET_EXPLORER,
     TOOL_ASSET_LINEAGE,
@@ -50,6 +51,7 @@ MCP_TOOL_NAMES: frozenset[str] = frozenset(
         TOOL_DQ_RULE_ADVISOR,
         TOOL_DQ_RULE_MANAGER,
         TOOL_ACCESS_EXPLORER,
+        TOOL_AI_ASSET_DETAILS,
     }
 )
 

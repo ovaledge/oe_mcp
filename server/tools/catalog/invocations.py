@@ -6,7 +6,9 @@ from typing import Any
 
 from server.client import OvalEdgeError
 from server.constants import (
+    MCP_AI_ASSET_OBJECT_TYPES,
     MCP_CATALOG_OBJECT_TYPES,
+    MCP_PATH_AI_ASSET_DETAILS,
     MCP_PATH_ASSET_DETAILS,
     MCP_PATH_ASSET_EXPLORER,
     MCP_PATH_ASSET_LINEAGE,
@@ -25,6 +27,7 @@ from server.tools.catalog.helpers import (
     _TABLE_FILE_TYPES,
     _build_asset_explorer_body,
     _build_update_descriptions_body,
+    _canonical_catalog_object_type,
     _description_field_hint,
     _enrich_asset_explorer_response,
     _enrich_catalog_details_response,
@@ -35,9 +38,10 @@ from server.tools.catalog.helpers import (
     _resolve_server_type,
     _validate_description_inputs,
     _validate_explorer_sort,
+    canonical_ai_asset_type,
 )
 from server.tools.common import drop_none as _q
-from server.tools.common import map_ovaledge_error, ovaledge_client
+from server.tools.common import error_payload, map_ovaledge_error, ovaledge_client
 from server.tools.common.confirm_gate import verify_write_confirmation
 from server.tools.common.tool_logging import logged_tool_invocation
 
@@ -78,6 +82,7 @@ async def _invoke_asset_explorer(
     sort_err = _validate_explorer_sort(sort)
     if sort_err is not None:
         return sort_err
+    object_type = _canonical_catalog_object_type(object_type)
     if object_type is not None and object_type not in MCP_CATALOG_OBJECT_TYPES:
         return {
             "error": (
@@ -142,6 +147,7 @@ async def _invoke_asset_details(
     object_type: str,
 ) -> dict[str, Any]:
     """GET asset-details — full metadata for one chosen object_id + object_type."""
+    object_type = _canonical_catalog_object_type(object_type) or object_type
     if object_type not in MCP_CATALOG_OBJECT_TYPES:
         return {
             "error": (
@@ -155,6 +161,32 @@ async def _invoke_asset_details(
             body = await client.get(
                 MCP_PATH_ASSET_DETAILS,
                 params={"objectId": object_id, "objectType": object_type},
+            )
+            if not isinstance(body, dict):
+                return {"data": body}
+            return _enrich_catalog_details_response(body)
+    except OvalEdgeError as e:
+        return map_ovaledge_error(e)
+
+
+@logged_tool_invocation
+async def _invoke_ai_asset_details(
+    object_id: int,
+    object_type: str,
+) -> dict[str, Any]:
+    """GET ai_asset_details — Elasticsearch metadata for one AI use case, model, or agent."""
+    canonical = canonical_ai_asset_type(object_type)
+    if object_id <= 0 or canonical is None:
+        return error_payload(
+            "object_id and object_type are required. object_type must be one of "
+            f"{sorted(MCP_AI_ASSET_OBJECT_TYPES)}.",
+            status_code=400,
+        )
+    try:
+        async with ovaledge_client() as client:
+            body = await client.get(
+                MCP_PATH_AI_ASSET_DETAILS,
+                params={"objectId": object_id, "objectType": canonical},
             )
             if not isinstance(body, dict):
                 return {"data": body}
